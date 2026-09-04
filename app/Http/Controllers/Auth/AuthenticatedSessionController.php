@@ -45,6 +45,7 @@ class AuthenticatedSessionController extends Controller
 
     /**
      * Destroy an authenticated session.
+     * Redirects back to login portal (/login) so user can immediately sign in.
      */
     public function destroy(Request $request): RedirectResponse
     {
@@ -54,6 +55,6 @@ class AuthenticatedSessionController extends Controller
 
         $request->session()->regenerateToken();
 
-        return redirect('/');
+        return redirect()->route('login');
     }
 }
