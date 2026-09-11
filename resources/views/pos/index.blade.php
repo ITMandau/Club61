@@ -47,7 +47,14 @@
         </div>
 
         <!-- Cashier Profile & Logout -->
-        <div class="flex items-center gap-4">
+        <div class="flex items-center gap-3">
+            <button type="button" 
+                    onclick="openPosCheckInModal()" 
+                    class="px-3.5 py-1.5 rounded-xl font-bold text-xs flex items-center gap-1.5 transition-all cursor-pointer shadow-sm active:scale-95"
+                    style="background: linear-gradient(180deg, #F0DB9D 0%, #D4AF37 35%, #B38622 100%); color: #281A05; border: 1px solid #FBF0CE; box-shadow: 0 4px 12px rgba(184, 134, 11, 0.25);">
+                <span>🎟️ Check-In Tiket</span>
+            </button>
+
             <div class="text-right hidden sm:block">
                 <div class="text-xs font-bold text-[#1F170D]">{{ Auth::user()->name ?? 'Kasir Frontdesk POS' }}</div>
                 <div class="text-[10px] font-mono font-bold uppercase tracking-wider px-2 py-0.5 rounded-full inline-block mt-0.5 shadow-sm"
@@ -404,6 +411,121 @@
             document.getElementById('tax').innerText = 'Rp ' + tax.toLocaleString('id-ID');
             document.getElementById('grand-total').innerText = 'Rp ' + total.toLocaleString('id-ID');
         }
+
+        function openPosCheckInModal() {
+            document.getElementById('pos-checkin-modal').classList.remove('hidden');
+            document.getElementById('pos-checkin-result').classList.add('hidden');
+            const input = document.getElementById('pos-ticket-input');
+            input.value = '';
+            setTimeout(() => input.focus(), 100);
+        }
+
+        function closePosCheckInModal() {
+            document.getElementById('pos-checkin-modal').classList.add('hidden');
+        }
+
+        async function submitPosCheckIn() {
+            const input = document.getElementById('pos-ticket-input');
+            const code = input.value.trim();
+            if (!code) {
+                alert('Silakan scan barcode atau masukkan kode tiket.');
+                return;
+            }
+
+            const resultContainer = document.getElementById('pos-checkin-result');
+            resultContainer.classList.remove('hidden');
+            resultContainer.className = 'rounded-2xl p-4 border text-xs space-y-2 bg-amber-50 border-amber-200 text-amber-900';
+            resultContainer.innerHTML = '⏳ Memverifikasi tiket ke server...';
+
+            try {
+                const csrfMeta = document.querySelector('meta[name="csrf-token"]');
+                const response = await fetch('/pos/check-in', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRF-TOKEN': csrfMeta ? csrfMeta.content : '{{ csrf_token() }}'
+                    },
+                    body: JSON.stringify({ code: code })
+                });
+
+                const data = await response.json();
+                if (data.success) {
+                    const res = data.data;
+                    let equipmentsHtml = '';
+                    if (res.equipments && res.equipments.length > 0) {
+                        equipmentsHtml = '<div class="mt-2 pt-2 border-t border-emerald-200"><div class="font-bold text-emerald-900 mb-1">🎒 Serah-Terima Alat:</div>' +
+                            res.equipments.map(e => `<div class="flex justify-between py-0.5"><span>🎾 ${e.name}</span><span class="font-bold font-mono">${e.quantity} Pcs</span></div>`).join('') +
+                            '<div class="mt-1 text-[11px] text-emerald-700 font-semibold">👉 Wajib serahkan raket & bola ke pemain.</div></div>';
+                    } else {
+                        equipmentsHtml = '<div class="text-[11px] text-gray-500 italic mt-1">Tidak ada sewa raket/bola tambahan.</div>';
+                    }
+
+                    resultContainer.className = 'rounded-2xl p-4 border text-xs space-y-2 bg-emerald-50 border-emerald-300 text-emerald-900';
+                    resultContainer.innerHTML = `
+                        <div class="flex justify-between items-center">
+                            <span class="px-2 py-0.5 rounded-md font-bold text-[10px] bg-emerald-200 text-emerald-900 uppercase">
+                                ${res.already_checked_in ? '⚠️ Sudah Pernah Check-In' : '✅ Check-In Berhasil'}
+                            </span>
+                            <span class="font-mono text-[10px] text-emerald-700">${res.booking_code}</span>
+                        </div>
+                        <div class="font-bold text-sm text-gray-900">${res.player_name}</div>
+                        <div class="text-xs text-gray-700">🎾 <strong>${res.court_name}</strong> &bull; ${res.schedule}</div>
+                        ${equipmentsHtml}
+                    `;
+                } else {
+                    resultContainer.className = 'rounded-2xl p-4 border text-xs space-y-2 bg-rose-50 border-rose-300 text-rose-900';
+                    resultContainer.innerHTML = `<strong>❌ Gagal Check-In:</strong><br>${data.message || 'Tiket tidak ditemukan.'}`;
+                }
+            } catch (err) {
+                resultContainer.className = 'rounded-2xl p-4 border text-xs space-y-2 bg-rose-50 border-rose-300 text-rose-900';
+                resultContainer.innerHTML = `<strong>❌ Terjadi Kesalahan:</strong><br>${err.message}`;
+            }
+        }
     </script>
+
+    <!-- MODAL CHECK-IN GATE VANTAGE POS -->
+    <div id="pos-checkin-modal" class="hidden fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+        <div class="bg-white rounded-3xl border border-[#DFC387] shadow-2xl w-full max-w-lg overflow-hidden animate-fadeIn">
+            <!-- Header -->
+            <div class="p-5 border-b border-[#DFC387] flex items-center justify-between"
+                 style="background: linear-gradient(135deg, #FAF5E8 0%, #F5E8C7 100%);">
+                <div>
+                    <span class="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase bg-amber-100 text-amber-900 border border-amber-300">
+                        Frontdesk Scanner
+                    </span>
+                    <div class="font-serif font-black text-lg text-[#1F170D] mt-1">🎟️ Check-In Tiket Lapangan</div>
+                </div>
+                <button type="button" onclick="closePosCheckInModal()" class="text-2xl text-[#78350F] hover:text-black leading-none cursor-pointer">&times;</button>
+            </div>
+
+            <!-- Body -->
+            <div class="p-6 space-y-4">
+                <div>
+                    <label class="block text-xs font-bold text-[#1F170D] mb-1.5">Scan Barcode / Input Kode Tiket (BK-PAD-XXXX):</label>
+                    <div class="flex gap-2">
+                        <input type="text" id="pos-ticket-input" 
+                               placeholder="Tembak barcode gun atau ketik kode tiket..." 
+                               class="flex-1 px-3.5 py-2.5 rounded-xl border border-[#D4AF37] text-sm font-mono font-bold text-[#1F170D] bg-[#FFFDF5] outline-none"
+                               onkeydown="if(event.key === 'Enter') submitPosCheckIn();" />
+                        <button type="button" onclick="submitPosCheckIn()" 
+                                class="px-4 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider text-[#281A05] cursor-pointer active:scale-95 transition-all shadow-md"
+                                style="background: linear-gradient(180deg, #F0DB9D 0%, #D4AF37 35%, #B38622 100%); border: 1px solid #FBF0CE;">
+                            Check-In ⚡
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Alert Result Container -->
+                <div id="pos-checkin-result" class="hidden rounded-2xl p-4 border text-xs space-y-2"></div>
+            </div>
+
+            <!-- Footer -->
+            <div class="p-4 bg-[#FAF5E8] border-t border-[#DFC387] flex justify-end gap-2">
+                <button type="button" onclick="closePosCheckInModal()" class="px-4 py-2 rounded-xl text-xs font-bold text-[#5C410F] bg-white border border-[#DFC387]">
+                    Tutup
+                </button>
+            </div>
+        </div>
+    </div>
 </body>
 </html>

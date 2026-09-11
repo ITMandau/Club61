@@ -72,6 +72,11 @@ class KelolaPemesanan extends Page
     public string $refundCategory = 'SALAH_BAYAR';
     public string $refundNotes = '';
 
+    // Check-In Gate Modal State
+    public bool $showCheckInModal = false;
+    public string $checkInQuery = '';
+    public ?array $checkInResult = null;
+
     public function mount(): void
     {
         $this->rescheduleDate = now()->format('Y-m-d');
@@ -343,9 +348,77 @@ class KelolaPemesanan extends Page
         }
     }
 
+    public function openCheckInModal(?string $code = null): void
+    {
+        $this->checkInQuery = $code ?? '';
+        $this->checkInResult = null;
+        $this->showCheckInModal = true;
+    }
+
+    public function closeCheckInModal(): void
+    {
+        $this->showCheckInModal = false;
+        $this->checkInQuery = '';
+        $this->checkInResult = null;
+    }
+
+    public function executeCheckIn(PadelBookingService $service): void
+    {
+        $code = trim($this->checkInQuery);
+        if (empty($code)) {
+            Notification::make()
+                ->title('Input Kosong')
+                ->body('Silakan scan barcode atau masukkan Kode Booking / Hash QR.')
+                ->warning()
+                ->send();
+            return;
+        }
+
+        try {
+            $staffUser = auth()->user() ?? \App\Models\User::where('role', 'ADMIN')->first();
+            $result = $service->checkIn($code, $staffUser);
+            $this->checkInResult = $result;
+
+            Notification::make()
+                ->title($result['already_checked_in'] ? 'Sudah Pernah Check-In' : 'Check-In Berhasil! ✅')
+                ->body($result['message'])
+                ->color($result['already_checked_in'] ? 'warning' : 'success')
+                ->send();
+        } catch (\Throwable $e) {
+            Notification::make()
+                ->title('Gagal Check-In')
+                ->body($e->getMessage())
+                ->danger()
+                ->send();
+        }
+    }
+
+    public function executeComplete(string $bookingId, PadelBookingService $service): void
+    {
+        try {
+            $staffUser = auth()->user() ?? \App\Models\User::where('role', 'ADMIN')->first();
+            $booking = $service->completeBooking($bookingId, $staffUser);
+
+            Notification::make()
+                ->title('Sesi Bermain Selesai')
+                ->body("Sesi untuk tiket {$booking->booking_code} telah ditandai COMPLETED.")
+                ->success()
+                ->send();
+        } catch (\Throwable $e) {
+            Notification::make()
+                ->title('Gagal Menyelesaikan Sesi')
+                ->body($e->getMessage())
+                ->danger()
+                ->send();
+        }
+    }
+
     protected function getViewData(): array
     {
-        $query = PadelBooking::with(['user', 'court', 'order.payments', 'order.refunds'])
+        // 🔄 REAKTIF FAIL-SAFE: Otomatis sinkronkan tiket kedaluwarsa & selesai setiap halaman dibuka
+        app(PadelBookingService::class)->syncExpiredAndCompletedBookings();
+
+        $query = PadelBooking::with(['user', 'court', 'order.payments', 'order.refunds', 'equipments.equipment'])
             ->latest('start_time');
 
         if ($this->activeTab === 'CONFIRMED') {
@@ -355,7 +428,7 @@ class KelolaPemesanan extends Page
         } elseif ($this->activeTab === 'COMPLETED') {
             $query->whereIn('status', ['CHECKED_IN', 'COMPLETED']);
         } elseif ($this->activeTab === 'CANCELLED') {
-            $query->whereIn('status', ['CANCELLED', 'REFUNDED']);
+            $query->whereIn('status', ['CANCELLED', 'REFUNDED', 'EXPIRED']);
         }
 
         if (trim($this->search) !== '') {
@@ -382,7 +455,7 @@ class KelolaPemesanan extends Page
                     SUM(CASE WHEN status = 'PAID' THEN 1 ELSE 0 END) as confirmed,
                     SUM(CASE WHEN status = 'LOCKED' THEN 1 ELSE 0 END) as locked,
                     SUM(CASE WHEN status IN ('CHECKED_IN', 'COMPLETED') THEN 1 ELSE 0 END) as completed,
-                    SUM(CASE WHEN status IN ('CANCELLED', 'REFUNDED') THEN 1 ELSE 0 END) as cancelled
+                    SUM(CASE WHEN status IN ('CANCELLED', 'REFUNDED', 'EXPIRED') THEN 1 ELSE 0 END) as cancelled
                 ")
                 ->first();
 

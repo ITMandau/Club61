@@ -499,14 +499,26 @@ class PadelBookingService
      *
      * @throws HttpException
      */
-    public function checkIn(string $qrCodeHash, User $staffUser): array
+    public function checkIn(string $code, User $staffUser): array
     {
         $booking = PadelBooking::with(['court', 'user', 'equipments.equipment'])
-            ->where('qr_code_hash', $qrCodeHash)
+            ->where(function ($q) use ($code) {
+                $q->where('qr_code_hash', $code)
+                    ->orWhere('booking_code', $code);
+            })
             ->first();
 
         if (! $booking) {
-            throw new HttpException(404, 'Tiket tidak ditemukan atau QR Code tidak valid.');
+            throw new HttpException(404, 'Tiket tidak ditemukan. Pastikan QR Code atau Kode Booking benar.');
+        }
+
+        $now = now();
+
+        // Validasi jika sesi sudah lewat dan pemain belum pernah check-in -> Otomatis EXPIRED
+        if ($now->gt($booking->end_time) && $booking->checked_in_at === null) {
+            $booking->update(['status' => 'EXPIRED']);
+            Cache::forget('kelola_pemesanan_tab_counts');
+            throw new HttpException(400, "Tiket kedaluwarsa (Expired). Sesi bermain pada pukul {$booking->start_time->format('H:i')} - {$booking->end_time->format('H:i')} WIB telah selesai.");
         }
 
         if (in_array($booking->status, ['CANCELLED', 'EXPIRED', 'REFUNDED', 'REFUND_PENDING'])) {
@@ -538,7 +550,6 @@ class PadelBookingService
             }
         }
 
-        $now = now();
         $earliestCheckIn = $booking->start_time->copy()->subMinutes(45);
 
         // Validasi waktu awal check-in (-45 menit)
@@ -569,6 +580,8 @@ class PadelBookingService
             'checked_in_at' => $now,
         ]);
 
+        Cache::forget('kelola_pemesanan_tab_counts');
+
         return [
             'already_checked_in' => false,
             'message' => "Check-in berhasil! Akses lapangan dibuka. Silakan serahkan peralatan sewa kepada pemain.",
@@ -579,6 +592,52 @@ class PadelBookingService
             'checked_in_at' => $now->toISOString(),
             'equipments' => $equipmentList,
             'gate_marshall' => $staffUser->name,
+        ];
+    }
+
+    /**
+     * Tandai sesi bermain selesai (Complete) saat pemain keluar lapangan / mengembalikan raket.
+     */
+    public function completeBooking(string $bookingId, User $staffUser): PadelBooking
+    {
+        $booking = PadelBooking::findOrFail($bookingId);
+        $booking->update(['status' => 'COMPLETED']);
+        Cache::forget('kelola_pemesanan_tab_counts');
+        return $booking;
+    }
+
+    /**
+     * Otomatis menyinkronkan status booking yang telah lewat jadwal bermain:
+     * 1. Status PAID & end_time < now() & checked_in_at IS NULL -> EXPIRED (No-show / Tiket Hangus)
+     * 2. Status CHECKED_IN & end_time < now() -> COMPLETED (Selesai Bermain)
+     * 3. Rilis expired locks (> 10 menit)
+     */
+    public function syncExpiredAndCompletedBookings(): array
+    {
+        $now = now();
+
+        // 1. Booking yang lunas tapi tidak datang sampai sesi berakhir -> EXPIRED (No-Show)
+        $expiredCount = PadelBooking::where('status', 'PAID')
+            ->where('end_time', '<', $now)
+            ->whereNull('checked_in_at')
+            ->update(['status' => 'EXPIRED']);
+
+        // 2. Pemain yang sudah check-in dan sesinya telah lewat -> COMPLETED
+        $completedCount = PadelBooking::where('status', 'CHECKED_IN')
+            ->where('end_time', '<', $now)
+            ->update(['status' => 'COMPLETED']);
+
+        // 3. Rilis slot LOCKED yang kedaluwarsa
+        $releasedLocks = $this->releaseExpiredLocks();
+
+        if ($expiredCount > 0 || $completedCount > 0 || $releasedLocks > 0) {
+            Cache::forget('kelola_pemesanan_tab_counts');
+        }
+
+        return [
+            'expired' => $expiredCount,
+            'completed' => $completedCount,
+            'released_locks' => $releasedLocks,
         ];
     }
 

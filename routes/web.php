@@ -19,6 +19,20 @@ Route::get('/pos', function () {
     return view('pos.index');
 })->name('pos.index');
 
+Route::post('/pos/check-in', function (\Illuminate\Http\Request $request, \App\Services\Padel\PadelBookingService $service) {
+    $code = trim($request->input('code') ?? $request->input('qr_code_hash') ?? $request->input('booking_code') ?? '');
+    if (empty($code)) {
+        return response()->json(['success' => false, 'message' => 'Kode tiket atau QR wajib diisi.'], 422);
+    }
+    $user = auth()->user() ?? \App\Models\User::where('role', 'ADMIN')->first();
+    try {
+        $result = $service->checkIn($code, $user);
+        return response()->json(['success' => true, 'data' => $result]);
+    } catch (\Throwable $e) {
+        return response()->json(['success' => false, 'message' => $e->getMessage()], 400);
+    }
+})->name('pos.checkin');
+
 // 3. Layar Monitor Dapur / KOT (Kitchen Display System)
 Route::get('/kitchen', function () {
     return view('kitchen.kds');

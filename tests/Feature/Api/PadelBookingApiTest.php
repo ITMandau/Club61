@@ -670,7 +670,7 @@ class PadelBookingApiTest extends TestCase
     public function test_multi_hour_consolidated_checkout_and_flat_equipment_and_anti_jadwal_bolong(): void
     {
         // Gunakan hari kerja (weekday) untuk menguji tarif reguler 200.000/jam
-        $bookingDate = now()->addDays(2)->isWeekend() ? now()->addDays(1)->format('Y-m-d') : now()->addDays(2)->format('Y-m-d');
+        $bookingDate = now()->next(Carbon::TUESDAY)->format('Y-m-d');
 
         // Skenario A: Multi-hour nempel / contiguous 3 jam (08:00 - 11:00)
         $holdContinuous = $this->withHeader('Authorization', "Bearer {$this->customerToken}")
