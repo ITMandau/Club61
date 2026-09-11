@@ -249,8 +249,8 @@
                                 <span class="font-serif font-black text-base text-[#B8860B]">Tier Gold III</span>
                             </div>
                             <div class="p-3 rounded-xl bg-[#FAF8F2] border border-[#E8DCC0]">
-                                <span class="text-[9px] uppercase font-bold text-[#8C7A58] block">Poin Reward</span>
-                                <span class="font-serif font-black text-base text-[#1F170D]" x-text="(totalMatchCount * 150) + ' Pts'">0 Pts</span>
+                                <span class="text-[9px] uppercase font-bold text-[#8C7A58] block">Status Akun</span>
+                                <span class="font-serif font-black text-base text-emerald-700">Aktif</span>
                             </div>
                             <div class="p-3 rounded-xl bg-[#FAF8F2] border border-[#E8DCC0]">
                                 <span class="text-[9px] uppercase font-bold text-[#8C7A58] block">Masa Berlaku</span>

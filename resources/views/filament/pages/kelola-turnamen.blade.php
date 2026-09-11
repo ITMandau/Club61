@@ -82,7 +82,7 @@
                 </div>
                 <div>
                     <div style="color: #8C7A58;">Biaya Registrasi:</div>
-                    <div style="font-weight: 700; color: #1F170D;">Gratis (Poin Member)</div>
+                    <div style="font-weight: 700; color: #1F170D;">Gratis (Khusus Member VIP)</div>
                 </div>
             </div>
         </div>

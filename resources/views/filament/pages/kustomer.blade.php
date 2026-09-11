@@ -10,7 +10,7 @@
                 Data Kustomer &amp; Member VIP
             </div>
             <div class="adm-banner-sub">
-                Kelola profil member, saldo poin loyalitas, riwayat booking lapangan, dan penetapan status VIP membership.
+                Kelola profil member, riwayat booking lapangan, dan penetapan status VIP membership.
             </div>
         </div>
 
@@ -31,12 +31,12 @@
         <div class="adm-metric-card">
             <div class="adm-metric-label">VIP Platinum Active</div>
             <div class="adm-metric-val" style="color: #B8860B;">42 Member</div>
-            <div class="adm-metric-foot"><span>Akses prioritas booking 7 hari</span></div>
+            <div class="adm-metric-foot"><span>Akses prioritas booking 14 hari</span></div>
         </div>
         <div class="adm-metric-card">
-            <div class="adm-metric-label">Total Poin Beredar</div>
-            <div class="adm-metric-val">128.450 Pts</div>
-            <div class="adm-metric-foot"><span>Reward F&amp;B &amp; sewa raket</span></div>
+            <div class="adm-metric-label">Gold Member Active</div>
+            <div class="adm-metric-val">128 Member</div>
+            <div class="adm-metric-foot"><span>Diskon 15% & gratis 1 raket</span></div>
         </div>
         <div class="adm-metric-card">
             <div class="adm-metric-label">Member Aktif Main</div>
@@ -59,7 +59,7 @@
                         <th>Email &amp; No Telepon</th>
                         <th>Tier Membership</th>
                         <th>Total Match</th>
-                        <th>Poin Reward</th>
+                        <th>Masa Berlaku</th>
                         <th>Status Akun</th>
                     </tr>
                 </thead>
@@ -75,7 +75,7 @@
                         </td>
                         <td><span class="adm-pill adm-pill-gold">VIP Platinum</span></td>
                         <td style="font-weight: 800;">18 Match</td>
-                        <td style="font-family: var(--font-mono); font-weight: 800; color: #8C6418;">2.450 Pts</td>
+                        <td style="font-weight: 700; color: #8C6418;">31 Des 2026</td>
                         <td><span class="adm-pill adm-pill-green">Active</span></td>
                     </tr>
                     <tr>
@@ -87,9 +87,9 @@
                             <div style="font-weight: 600;">kevin@padelclub.id</div>
                             <div style="font-size: 0.625rem; color: #8C7A58;">081122334455</div>
                         </td>
-                        <td><span class="adm-pill adm-pill-gold">Tier Gold III</span></td>
+                        <td><span class="adm-pill adm-pill-gold">Tier Gold</span></td>
                         <td style="font-weight: 800;">32 Match</td>
-                        <td style="font-family: var(--font-mono); font-weight: 800; color: #8C6418;">4.120 Pts</td>
+                        <td style="font-weight: 700; color: #8C6418;">15 Nov 2026</td>
                         <td><span class="adm-pill adm-pill-green">Active</span></td>
                     </tr>
                 </tbody>
