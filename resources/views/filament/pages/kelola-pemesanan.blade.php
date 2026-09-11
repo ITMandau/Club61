@@ -103,6 +103,9 @@
         </div>
 
         <div style="display: flex; align-items: center; gap: 0.5rem;">
+            <button type="button" wire:click="openCheckInModal()" class="adm-btn-sec" style="background: linear-gradient(180deg, #F0DB9D 0%, #D4AF37 35%, #B38622 100%); color: #281A05; border: 1px solid #FBF0CE; font-weight: 800; cursor: pointer; box-shadow: 0 4px 12px rgba(184, 134, 11, 0.25);">
+                <span>📷 Scan QR / Check-In Gate</span>
+            </button>
             <a href="/admin/booking-system" class="adm-btn-sec">
                 <span>🎾 Lihat Matriks Lapangan</span>
             </a>
@@ -235,13 +238,15 @@
                                         <span class="adm-pill adm-pill-gold">Locked / Waiting</span>
                                     @endif
                                 @elseif($b->status === 'CHECKED_IN')
-                                    <span class="adm-pill adm-pill-gold">Checked In</span>
+                                    <span class="adm-pill adm-pill-gold">🎾 Checked In</span>
                                 @elseif($b->status === 'COMPLETED')
-                                    <span class="adm-pill adm-pill-gold">Completed</span>
+                                    <span class="adm-pill" style="background: #ECFDF5; color: #065F46; border: 1px solid #A7F3D0; font-weight: 700;">✅ Completed</span>
                                 @elseif($b->status === 'REFUNDED')
                                     <span class="adm-pill" style="background: #F3F4F6; color: #374151; border: 1px solid #D1D5DB; font-weight: 700;">💸 Refunded</span>
                                 @elseif($b->status === 'CANCELLED')
                                     <span class="adm-pill" style="background: #FEE2E2; color: #DC2626; border: 1px solid #FECACA; font-weight: 700;">❌ Cancelled</span>
+                                @elseif($b->status === 'EXPIRED')
+                                    <span class="adm-pill" style="background: #FEF2F2; color: #991B1B; border: 1px solid #FCA5A5; font-weight: 700;">⚠️ Expired</span>
                                 @else
                                     <span class="adm-pill">{{ $b->status }}</span>
                                 @endif
@@ -251,6 +256,10 @@
                                     @if($b->cancel_reason)
                                         <div style="background: #FEF2F2; color: #991B1B; border: 1px solid #FECACA; border-radius: 6px; padding: 0.35rem 0.55rem; font-size: 0.71875rem; font-weight: 600; line-height: 1.35; word-break: break-word;" title="{{ $b->cancel_reason }}">
                                             {{ $b->cancel_reason }}
+                                        </div>
+                                    @elseif($b->status === 'EXPIRED')
+                                        <div style="background: #FEF2F2; color: #991B1B; border: 1px solid #FECACA; border-radius: 6px; padding: 0.35rem 0.55rem; font-size: 0.71875rem; font-weight: 600; line-height: 1.35;">
+                                            Lewat Jadwal Main (No-Show)
                                         </div>
                                     @else
                                         <span style="color: #9CA3AF; font-size: 0.75rem; font-style: italic;">Tidak ada catatan</span>
@@ -269,6 +278,20 @@
                                         </button>
                                     @endif
 
+                                    @if($b->status === 'PAID')
+                                        <button type="button" wire:click="openCheckInModal('{{ $b->booking_code }}')" wire:loading.attr="disabled" title="Check-In Customer (Scan QR)" class="adm-btn-icon" style="background: #ECFDF5; border-color: #A7F3D0; color: #065F46;">
+                                            <span wire:loading.remove wire:target="openCheckInModal('{{ $b->booking_code }}')">🎟️</span>
+                                            <span wire:loading wire:target="openCheckInModal('{{ $b->booking_code }}')">⏳</span>
+                                        </button>
+                                    @endif
+
+                                    @if($b->status === 'CHECKED_IN')
+                                        <button type="button" wire:click="executeComplete('{{ $b->id }}')" wire:confirm="Tandai sesi bermain tiket {{ $b->booking_code }} telah selesai (COMPLETED)?" wire:loading.attr="disabled" title="Tandai Selesai (Complete)" class="adm-btn-icon" style="background: #FEF3C7; border-color: #FDE68A; color: #92400E;">
+                                            <span wire:loading.remove wire:target="executeComplete('{{ $b->id }}')">⏱️</span>
+                                            <span wire:loading wire:target="executeComplete('{{ $b->id }}')">⏳</span>
+                                        </button>
+                                    @endif
+
                                     @if(in_array($b->status, ['PAID', 'LOCKED']))
                                         <button type="button" wire:click="openRescheduleModal('{{ $b->id }}')" wire:loading.attr="disabled" title="Pindah Jadwal (Reschedule)" class="adm-btn-icon">
                                             <span wire:loading.remove wire:target="openRescheduleModal('{{ $b->id }}')">📅</span>
@@ -283,9 +306,9 @@
                                         </button>
                                     @endif
 
-                                    @if(in_array($b->status, ['REFUNDED', 'CANCELLED']))
-                                        <span title="Tiket Telah Dinonaktifkan" style="display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: 8px; background: #F3F4F6; border: 1px solid #D1D5DB; color: #6B7280; font-size: 0.875rem; cursor: help;">
-                                            🔒
+                                    @if(in_array($b->status, ['REFUNDED', 'CANCELLED', 'EXPIRED', 'COMPLETED']))
+                                        <span title="{{ $b->status === 'COMPLETED' ? 'Sesi Telah Selesai' : 'Tiket Telah Dinonaktifkan' }}" style="display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: 8px; background: #F3F4F6; border: 1px solid #D1D5DB; color: #6B7280; font-size: 0.875rem; cursor: help;">
+                                            {{ $b->status === 'COMPLETED' ? '✅' : '🔒' }}
                                         </span>
                                     @endif
                                 </div>
@@ -632,6 +655,113 @@
                         <span wire:loading.remove wire:target="executeCancelRefund">⚠️ Konfirmasi &amp; Refund</span>
                         <span wire:loading wire:target="executeCancelRefund">⏳ Membatalkan...</span>
                     </button>
+                </div>
+            </div>
+        </div>
+    @endif
+
+    <!-- MODAL CHECK-IN GATE & HANDOVER ALAT -->
+    @if($showCheckInModal)
+        <div style="position: fixed; inset: 0; z-index: 9999; background: rgba(15, 23, 42, 0.65); backdrop-filter: blur(8px); display: flex; align-items: center; justify-content: center; padding: 1rem;">
+            <div style="background: #FFFFFF; border: 1.5px solid #DFC387; border-radius: 24px; box-shadow: 0 25px 50px -12px rgba(184, 134, 11, 0.35); width: 100%; max-width: 540px; overflow: hidden;">
+                <!-- Header -->
+                <div style="background: linear-gradient(135deg, #FAF5E8 0%, #F5E8C7 100%); border-bottom: 1.5px solid #DFC387; padding: 1.25rem 1.5rem; display: flex; justify-content: space-between; align-items: center;">
+                    <div>
+                        <div class="adm-pill adm-pill-gold" style="font-size: 0.625rem; padding: 0.2rem 0.6rem;">GATE ACCESS &bull; APEX PADEL ARENA</div>
+                        <div style="color: #1F170D; font-size: 1.25rem; font-weight: 900; margin-top: 0.25rem;">📷 Check-In Gate &amp; Scanner</div>
+                    </div>
+                    <button type="button" wire:click="closeCheckInModal" style="background: none; border: none; color: #78350F; font-size: 1.75rem; cursor: pointer; line-height: 1;">&times;</button>
+                </div>
+
+                <!-- Body -->
+                <div style="padding: 1.5rem;">
+                    <!-- Input Scan / Tiket -->
+                    <div style="margin-bottom: 1.25rem;">
+                        <label style="display: block; font-size: 0.8125rem; font-weight: 800; color: #1F170D; margin-bottom: 0.4rem;">
+                            Scan Barcode Gun / Input Kode Tiket:
+                        </label>
+                        <div style="display: flex; gap: 0.5rem;">
+                            <input type="text" 
+                                   wire:model="checkInQuery" 
+                                   wire:keydown.enter="executeCheckIn"
+                                   placeholder="Scan QR atau ketik BK-PAD-XXXX..." 
+                                   autofocus
+                                   style="flex: 1; border: 1.5px solid #D4AF37; border-radius: 12px; padding: 0.65rem 0.85rem; font-size: 0.875rem; font-family: var(--font-mono, monospace); font-weight: 700; background: #FFFDF5; outline: none;">
+                            <button type="button" 
+                                    wire:click="executeCheckIn" 
+                                    wire:loading.attr="disabled"
+                                    class="adm-btn-sec" 
+                                    style="background: linear-gradient(180deg, #F0DB9D 0%, #D4AF37 35%, #B38622 100%); color: #281A05; border: 1px solid #FBF0CE; font-weight: 800; padding: 0.65rem 1rem;">
+                                <span wire:loading.remove wire:target="executeCheckIn">Verifikasi ⚡</span>
+                                <span wire:loading wire:target="executeCheckIn">⏳...</span>
+                            </button>
+                        </div>
+                        <div style="font-size: 0.6875rem; color: #8C7A58; margin-top: 0.35rem;">
+                            Mendukung tembakan Barcode Scanner Gun USB, QR Code Hash, atau input manual kode booking.
+                        </div>
+                    </div>
+
+                    <!-- HASIL VERIFIKASI & HANDOVER ALAT -->
+                    @if($checkInResult)
+                        <div style="border-radius: 16px; border: 1.5px solid {{ $checkInResult['already_checked_in'] ? '#FDE68A' : '#A7F3D0' }}; background: {{ $checkInResult['already_checked_in'] ? '#FFFBEB' : '#F0FDF4' }}; padding: 1.25rem; margin-bottom: 1rem;">
+                            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.75rem;">
+                                <span class="adm-pill" style="background: {{ $checkInResult['already_checked_in'] ? '#FEF3C7' : '#DCFCE7' }}; color: {{ $checkInResult['already_checked_in'] ? '#92400E' : '#166534' }}; font-weight: 800;">
+                                    {{ $checkInResult['already_checked_in'] ? '⚠️ SUDAH PERNAH CHECK-IN' : '✅ CHECK-IN BERHASIL' }}
+                                </span>
+                                <span style="font-size: 0.6875rem; color: #6B7280; font-family: var(--font-mono, monospace);">
+                                    Gate Staff: {{ $checkInResult['gate_marshall'] ?? 'Kasir' }}
+                                </span>
+                            </div>
+
+                            <div style="font-size: 1.125rem; font-weight: 900; color: #1F170D;">
+                                {{ $checkInResult['player_name'] }}
+                            </div>
+                            <div style="font-size: 0.8125rem; color: #374151; font-weight: 600; margin-top: 0.2rem;">
+                                🎾 {{ $checkInResult['court_name'] }} &bull; {{ $checkInResult['schedule'] }}
+                            </div>
+                            <div style="font-size: 0.75rem; color: #6B7280; margin-top: 0.2rem; font-family: var(--font-mono, monospace);">
+                                Tiket: <strong>{{ $checkInResult['booking_code'] }}</strong>
+                            </div>
+
+                            <!-- EQUIPMENT HANDOVER CHECKLIST -->
+                            <div style="margin-top: 1rem; border-top: 1px dashed {{ $checkInResult['already_checked_in'] ? '#FCD34D' : '#86EFAC' }}; padding-top: 0.75rem;">
+                                <div style="font-size: 0.75rem; font-weight: 800; color: #1F170D; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.4rem;">
+                                    🎒 Serah-Terima Peralatan (Equipment Handover):
+                                </div>
+                                @if(!empty($checkInResult['equipments']))
+                                    <div style="display: flex; flex-direction: column; gap: 0.35rem;">
+                                        @foreach($checkInResult['equipments'] as $eq)
+                                            <div style="background: #FFFFFF; border: 1px solid #D1D5DB; border-radius: 8px; padding: 0.5rem 0.75rem; display: flex; align-items: center; justify-content: space-between; font-size: 0.8125rem;">
+                                                <span style="font-weight: 700; color: #1F170D;">🎾 {{ $eq['name'] }}</span>
+                                                <span style="background: #FAF5E8; border: 1px solid #DFC387; color: #8C6418; font-weight: 800; padding: 0.15rem 0.5rem; border-radius: 6px; font-size: 0.75rem;">
+                                                    {{ $eq['quantity'] }} Pcs
+                                                </span>
+                                            </div>
+                                        @endforeach
+                                    </div>
+                                    <div style="margin-top: 0.5rem; font-size: 0.6875rem; color: #047857; font-weight: 700;">
+                                        👉 Harap serahkan raket &amp; bola di atas kepada pemain sebelum memasuki lapangan.
+                                    </div>
+                                @else
+                                    <div style="font-size: 0.75rem; color: #6B7280; font-style: italic;">
+                                        Tidak ada tambahan sewa raket atau bola pada tiket ini.
+                                    </div>
+                                @endif
+                            </div>
+                        </div>
+                    @endif
+                </div>
+
+                <!-- Footer -->
+                <div style="background: #FAF5E8; border-top: 1px solid #DFC387; padding: 1rem 1.5rem; display: flex; justify-content: flex-end; gap: 0.5rem;">
+                    <button type="button" wire:click="closeCheckInModal" class="adm-btn-sec" style="background: #FFFFFF;">
+                        Tutup
+                    </button>
+                    @if($checkInResult)
+                        <button type="button" wire:click="closeCheckInModal" class="adm-btn-sec" style="background: linear-gradient(180deg, #F0DB9D 0%, #D4AF37 35%, #B38622 100%); color: #281A05; border: 1px solid #FBF0CE; font-weight: 800;">
+                            Selesai &amp; Buka Akses Gate ✅
+                        </button>
+                    @endif
                 </div>
             </div>
         </div>

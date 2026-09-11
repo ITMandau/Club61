@@ -12,14 +12,22 @@ class ReleaseExpiredPadelSlots extends Command
 
     public function handle(PadelBookingService $bookingService): int
     {
-        $this->info('Memeriksa slot padel kedaluwarsa...');
+        $this->info('Memeriksa slot dan tiket padel kedaluwarsa...');
 
-        $releasedCount = $bookingService->releaseExpiredLocks();
+        $result = $bookingService->syncExpiredAndCompletedBookings();
 
-        if ($releasedCount > 0) {
-            $this->info("Berhasil merilis {$releasedCount} slot padel kedaluwarsa kembali ke publik.");
-        } else {
-            $this->line('Tidak ada slot kedaluwarsa yang ditemukan.');
+        if ($result['released_locks'] > 0) {
+            $this->info("Berhasil merilis {$result['released_locks']} slot padel terkunci (LOCKED) yang kedaluwarsa.");
+        }
+        if ($result['expired'] > 0) {
+            $this->info("Berhasil mengubah {$result['expired']} tiket PAID lewat jadwal tanpa check-in menjadi EXPIRED.");
+        }
+        if ($result['completed'] > 0) {
+            $this->info("Berhasil mengubah {$result['completed']} sesi CHECKED_IN yang telah usai menjadi COMPLETED.");
+        }
+
+        if ($result['released_locks'] === 0 && $result['expired'] === 0 && $result['completed'] === 0) {
+            $this->line('Semua slot dan tiket padel sudah sinkron.');
         }
 
         return Command::SUCCESS;

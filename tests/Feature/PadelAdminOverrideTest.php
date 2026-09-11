@@ -544,6 +544,90 @@ class PadelAdminOverrideTest extends TestCase
             ->call('openRescheduleModal', $booking->id)
             ->assertSet('showRescheduleModal', true)
             ->assertSet('rescheduleDurationHours', 3)
-            ->assertSee('Durasi Terkunci: 3 Jam');
+            ->assertSee('Durasi Terkunci: 3 Jam')
+            ->call('openCheckInModal', 'BK-TEST-LIVEWIRE')
+            ->assertSet('showCheckInModal', true)
+            ->assertSet('checkInQuery', 'BK-TEST-LIVEWIRE')
+            ->call('closeCheckInModal')
+            ->assertSet('showCheckInModal', false);
+    }
+
+    /**
+     * Invarian 9: Booking System Livewire Page & Live Court Status.
+     */
+    public function test_booking_system_livewire_page(): void
+    {
+        $this->actingAs($this->admin);
+
+        \Livewire\Livewire::test(\App\Filament\Pages\BookingSystem::class)
+            ->assertStatus(200)
+            ->assertSee('Booking System &amp; Monitoring Lapangan', false)
+            ->assertSee('Scan QR / Check-In Gate')
+            ->call('openCheckInModal')
+            ->assertSet('showCheckInModal', true)
+            ->call('closeCheckInModal')
+            ->assertSet('showCheckInModal', false);
+    }
+
+    /**
+     * Invarian 10: Analytics PM Financial Report Aggregates Gross, Refund, and Net Revenue.
+     */
+    public function test_analytics_financial_pm_report(): void
+    {
+        $this->actingAs($this->admin);
+
+        \Livewire\Livewire::test(\App\Filament\Pages\Analytics::class)
+            ->assertStatus(200)
+            ->assertSee('Laporan Uang Masuk &amp; Analisis Finansial', false)
+            ->assertSee('Total Uang Masuk Kotor (Gross)')
+            ->assertSee('Total Refund Dikeluarkan')
+            ->assertSee('Pendapatan Bersih (Net Revenue)')
+            ->call('setPeriod', 'THIS_MONTH')
+            ->assertSet('period', 'THIS_MONTH')
+            ->call('setPeriod', 'ALL')
+            ->assertSet('period', 'ALL');
+    }
+
+    /**
+     * Invarian 11: POS Kasir Check-In Endpoint.
+     */
+    public function test_pos_cashier_checkin_endpoint(): void
+    {
+        $today = now()->format('Y-m-d');
+        $startTime = now()->addMinutes(15);
+        $endTime = $startTime->copy()->addHours(1);
+
+        $booking = PadelBooking::create([
+            'booking_code' => 'BK-POS-CHECKIN',
+            'user_id' => $this->customer->id,
+            'court_id' => $this->court1->id,
+            'booking_date' => $today,
+            'start_time' => $startTime,
+            'end_time' => $endTime,
+            'court_fee' => 200000.00,
+            'total_amount' => 200000.00,
+            'status' => 'PAID',
+            'qr_code_hash' => 'hash_pos_valid',
+        ]);
+
+        $this->actingAs($this->admin);
+
+        // Scan by booking_code
+        $response = $this->postJson('/pos/check-in', [
+            'code' => 'BK-POS-CHECKIN',
+        ]);
+
+        $response->assertStatus(200)
+            ->assertJson([
+                'success' => true,
+                'data' => [
+                    'already_checked_in' => false,
+                    'booking_code' => 'BK-POS-CHECKIN',
+                ],
+            ]);
+
+        $this->assertEquals('CHECKED_IN', $booking->fresh()->status);
+        $this->assertNotNull($booking->fresh()->checked_in_at);
     }
 }
+

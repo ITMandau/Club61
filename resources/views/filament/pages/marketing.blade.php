@@ -56,7 +56,7 @@
                 MEMBERGETMEMBER
             </div>
             <div style="font-size: 0.75rem; color: #1F170D; font-weight: 700; margin-top: 0.25rem;">Ajak Teman Gabung VIP</div>
-            <div style="font-size: 0.6875rem; color: #7A643E; margin-top: 0.5rem;">Dapat 500 Poin per Member Baru</div>
+            <div style="font-size: 0.6875rem; color: #7A643E; margin-top: 0.5rem;">Dapat Ekstra Diskon per Member Baru</div>
         </div>
     </div>
 </div>
