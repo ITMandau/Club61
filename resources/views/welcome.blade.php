@@ -3,45 +3,59 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>VANTAGE - Racquet & Social Club</title>
-    <!-- Fonts -->
+    <title>VANTAGE - Sports & Social Club</title>
+    <!-- Luxury Typography -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Alex+Brush&family=Cinzel:wght@600;700;800;900&family=Plus+Jakarta+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;1,400&display=swap" rel="stylesheet">
     @vite(['resources/css/app.css', 'resources/js/app.js'])
 </head>
-<body class="min-h-full font-sans antialiased text-slate-100 bg-[#04160F] selection:bg-[#CCFF00] selection:text-[#04160F] flex flex-col justify-between">
+<body class="min-h-full font-sans antialiased text-[#1F170D] bg-[#FBF9F5] selection:bg-[#D4AF37] selection:text-[#1E160A] relative overflow-x-hidden flex flex-col justify-between"
+      style="background-image: url('{{ asset('images/white-gold-marble.jpg') }}'); background-size: cover; background-position: center; background-repeat: no-repeat; background-attachment: fixed;">
+
+    <!-- Ambient Warm Gold Luxury Lighting -->
+    <div class="fixed inset-0 pointer-events-none z-0 overflow-hidden">
+        <div class="absolute -top-32 left-1/4 w-[850px] h-[550px] bg-gradient-to-b from-amber-300/20 via-yellow-500/10 to-transparent blur-3xl rounded-full"></div>
+        <div class="absolute -bottom-32 right-1/4 w-[700px] h-[500px] bg-[#D4AF37]/15 blur-3xl rounded-full"></div>
+    </div>
 
     <!-- Top Navigation Header -->
-    <header class="sticky top-0 z-50 bg-[#061E15]/90 backdrop-blur-xl border-b border-emerald-600/30 px-6 sm:px-10 py-4 flex items-center justify-between shadow-2xl">
+    <header class="sticky top-0 z-50 bg-white/85 backdrop-blur-xl border-b border-[#D4AF37]/40 px-6 sm:px-10 py-4 flex items-center justify-between shadow-sm">
         <div class="flex items-center gap-3">
-            <div class="w-10 h-10 rounded-2xl bg-[#092B20] border border-[#CCFF00]/40 flex items-center justify-center text-[#CCFF00] shadow-md">
-                <svg class="w-6 h-6 text-[#CCFF00]" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+            <div class="w-10 h-10 rounded-2xl flex items-center justify-center shadow-sm"
+                 style="background: linear-gradient(135deg, #2D210F 0%, #171006 100%); border: 1.5px solid #E5C378;">
+                <svg class="w-5 h-5 text-[#E5C378]" viewBox="0 0 24 24" fill="none" stroke="currentColor">
                     <circle cx="12" cy="12" r="9" stroke-width="2" />
                     <path d="M12 3a9 9 0 0 1 9 9" stroke-width="2.5" stroke-linecap="round" />
                     <path d="M7 10l5 5 5-5" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
                 </svg>
             </div>
             <div>
-                <div class="font-serif text-xl sm:text-2xl font-black tracking-[0.25em] text-white uppercase">
+                <div class="font-serif text-xl sm:text-2xl font-black tracking-[0.25em] text-[#1F170D] uppercase">
                     VANTAGE
                 </div>
-                <div class="text-[9px] tracking-[0.35em] text-emerald-300 font-semibold uppercase -mt-0.5">
-                    RACQUET &amp; SOCIAL CLUB
+                <div class="text-[9px] tracking-[0.35em] text-[#8C6418] font-bold uppercase -mt-0.5">
+                    SPORTS &amp; SOCIAL CLUB
                 </div>
             </div>
         </div>
 
         <nav class="flex items-center gap-3 sm:gap-4">
             @auth
-                <a href="{{ url('/dashboard') }}" class="px-5 py-2.5 rounded-full bg-[#CCFF00] hover:bg-[#d8ff33] text-[#051811] text-xs font-extrabold uppercase tracking-wider transition-all shadow-md shadow-lime-400/20">
+                <a href="{{ url('/dashboard') }}" 
+                   class="px-5 py-2.5 rounded-full text-xs font-black uppercase tracking-wider transition-all shadow-md transform active:scale-95"
+                   style="background: linear-gradient(180deg, #F0DB9D 0%, #D4AF37 35%, #B38622 100%); border: 1.5px solid #FBF0CE; color: #281A05; box-shadow: 0 4px 15px rgba(184, 134, 11, 0.35);">
                     Buka Dashboard
                 </a>
             @else
-                <a href="{{ route('login') }}" class="px-5 py-2.5 rounded-full bg-[#CCFF00] hover:bg-[#d8ff33] text-[#051811] text-xs font-extrabold uppercase tracking-wider transition-all shadow-md shadow-lime-400/20">
+                <a href="{{ route('login') }}" 
+                   class="px-5 py-2.5 rounded-full text-xs font-black uppercase tracking-wider transition-all shadow-md transform active:scale-95"
+                   style="background: linear-gradient(180deg, #F0DB9D 0%, #D4AF37 35%, #B38622 100%); border: 1.5px solid #FBF0CE; color: #281A05; box-shadow: 0 4px 15px rgba(184, 134, 11, 0.35);">
                     Masuk ke Club
                 </a>
-                <a href="{{ route('register') }}" class="hidden sm:inline-flex px-5 py-2.5 rounded-full bg-white/[0.08] hover:bg-white/[0.15] border border-emerald-500/30 text-white text-xs font-bold uppercase tracking-wider transition-all">
+                <a href="{{ route('register') }}" 
+                   class="hidden sm:inline-flex px-5 py-2.5 rounded-full text-xs font-bold uppercase tracking-wider transition-all shadow-sm"
+                   style="background: rgba(255, 255, 255, 0.9); border: 1.5px solid #C59B46; color: #5C410F;">
                     Daftar Member
                 </a>
             @endauth
@@ -49,74 +63,92 @@
     </header>
 
     <!-- Main Hero Landing -->
-    <main class="flex-1 flex flex-col justify-center relative overflow-hidden px-6 sm:px-10 py-12 lg:py-20">
-        <!-- Background Image with Dark Emerald Luxury Overlay -->
-        <div class="absolute inset-0 z-0">
-            <img src="{{ asset('images/club-hero.jpg') }}" alt="Vantage Club Court" class="w-full h-full object-cover object-center scale-105" />
-            <div class="absolute inset-0 bg-gradient-to-t from-[#04160F] via-[#04160F]/85 to-[#06261A]/75"></div>
-            <div class="absolute inset-0 bg-[radial-gradient(ellipse_at_top,#0F4C38_0%,transparent_70%)] opacity-60"></div>
-        </div>
-
-        <!-- Ambient Glow -->
-        <div class="absolute -top-40 left-1/2 -translate-x-1/2 w-[700px] h-[500px] bg-emerald-600/15 blur-3xl rounded-full pointer-events-none"></div>
-
-        <div class="relative z-10 max-w-4xl mx-auto text-center space-y-6">
-            <div class="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-black/40 backdrop-blur-md border border-[#CCFF00]/40 text-xs text-[#CCFF00] font-bold uppercase tracking-widest">
-                <span class="w-2 h-2 rounded-full bg-[#CCFF00] animate-ping"></span>
+    <main class="flex-1 flex flex-col justify-center relative z-10 px-6 sm:px-10 py-12 lg:py-20">
+        <div class="max-w-4xl mx-auto text-center space-y-6">
+            <div class="inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-xs font-bold uppercase tracking-widest shadow-sm"
+                 style="background: #FAF2DE; border: 1.5px solid #D9BE84; color: #7A5818;">
+                <span class="w-2 h-2 rounded-full animate-pulse" style="background-color: #D4AF37; box-shadow: 0 0 8px #D4AF37;"></span>
                 <span>Jakarta Selatan Flagship Venue &bull; Live &amp; Open Daily</span>
             </div>
 
-            <h1 class="text-4xl sm:text-6xl lg:text-7xl font-extrabold text-white tracking-tight leading-[1.1] drop-shadow-2xl">
+            <h1 class="text-4xl sm:text-6xl lg:text-7xl font-extrabold text-[#1F170D] tracking-tight leading-[1.1] drop-shadow-sm font-serif">
                 The Sanctuary for <br />
-                <span class="italic font-serif text-[#CCFF00] font-normal drop-shadow-[0_4px_20px_rgba(204,255,0,0.35)]">Modern Racquet</span> Athletes.
+                <span class="italic font-normal" style="color: #8C6418; text-shadow: 0 0 25px rgba(212,175,55,0.4);">Modern Racquet</span> Athletes.
             </h1>
 
-            <p class="text-sm sm:text-lg text-emerald-100/80 max-w-2xl mx-auto leading-relaxed drop-shadow">
+            <p class="text-sm sm:text-lg text-[#5A4523] max-w-2xl mx-auto leading-relaxed font-medium">
                 Fasilitas terpadu berstandar internasional: 4 Lapangan Padel Panoramic ber-AC, Thermal Wellness Recovery (Sauna &amp; Ice Bath 4&deg;C), Specialty Artisan Lounge, dan Sistem POS Kasir terintegrasi.
             </p>
 
             <!-- CTA Action Buttons -->
             <div class="flex flex-col sm:flex-row items-center justify-center gap-4 pt-4">
-                <a href="{{ route('login') }}" class="w-full sm:w-auto px-8 py-4 rounded-full bg-[#CCFF00] hover:bg-[#d8ff33] text-[#051811] font-black text-sm uppercase tracking-wider transition-all transform active:scale-95 shadow-xl shadow-lime-400/25 flex items-center justify-center gap-2">
-                    <span>Masuk ke Club Portal</span>
-                    <svg class="w-4 h-4 stroke-[3]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M14 5l7 7m0 0l-7 7m7-7H3" />
-                    </svg>
-                </a>
+                @auth
+                    <a href="{{ route('dashboard') }}" 
+                       class="w-full sm:w-auto px-8 py-4 rounded-full font-black text-sm uppercase tracking-wider transition-all transform active:scale-95 shadow-xl flex items-center justify-center gap-2 cursor-pointer"
+                       style="background: linear-gradient(180deg, #F0DB9D 0%, #D4AF37 35%, #B38622 100%); border: 1.5px solid #FBF0CE; color: #281A05; box-shadow: 0 10px 30px rgba(184, 134, 11, 0.4);">
+                        <span>Buka Member Dashboard</span>
+                        <svg class="w-4 h-4 stroke-[3]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M14 5l7 7m0 0l-7 7m7-7H3" />
+                        </svg>
+                    </a>
 
-                <a href="{{ route('register') }}" class="w-full sm:w-auto px-8 py-4 rounded-full bg-white/10 hover:bg-white/20 border border-white/20 text-white font-bold text-sm uppercase tracking-wider backdrop-blur-md transition-all">
-                    Gabung Membership VIP
-                </a>
+                    <form method="POST" action="{{ route('logout') }}" class="w-full sm:w-auto">
+                        @csrf
+                        <button type="submit" 
+                                class="w-full sm:w-auto px-8 py-4 rounded-full font-bold text-sm uppercase tracking-wider transition-all shadow-md backdrop-blur-md cursor-pointer text-rose-700 bg-rose-50/80 hover:bg-rose-100 border border-rose-200">
+                            Keluar / Logout
+                        </button>
+                    </form>
+                @else
+                    <a href="{{ route('login') }}" 
+                       class="w-full sm:w-auto px-8 py-4 rounded-full font-black text-sm uppercase tracking-wider transition-all transform active:scale-95 shadow-xl flex items-center justify-center gap-2 cursor-pointer"
+                       style="background: linear-gradient(180deg, #F0DB9D 0%, #D4AF37 35%, #B38622 100%); border: 1.5px solid #FBF0CE; color: #281A05; box-shadow: 0 10px 30px rgba(184, 134, 11, 0.4);">
+                        <span>Masuk ke Club Portal</span>
+                        <svg class="w-4 h-4 stroke-[3]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M14 5l7 7m0 0l-7 7m7-7H3" />
+                        </svg>
+                    </a>
+
+                    <a href="{{ route('register') }}" 
+                       class="w-full sm:w-auto px-8 py-4 rounded-full font-bold text-sm uppercase tracking-wider transition-all shadow-md backdrop-blur-md cursor-pointer"
+                       style="background: rgba(255, 255, 255, 0.92); border: 1.5px solid #C59B46; color: #5C410F;">
+                        Gabung Membership VIP
+                    </a>
+                @endauth
             </div>
 
             <!-- 4 Feature Highlights Grid -->
             <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-8 max-w-3xl mx-auto text-left">
-                <div class="p-4 rounded-2xl bg-black/40 backdrop-blur-md border border-emerald-500/20">
-                    <div class="text-[#CCFF00] text-xl mb-1">🎾</div>
-                    <div class="font-extrabold text-xs text-white">4 Lapangan Padel</div>
-                    <div class="text-[10px] text-emerald-300/70">Panoramic Glass Arena</div>
+                <div class="p-4 rounded-2xl backdrop-blur-md shadow-md hover:-translate-y-0.5 transition-all"
+                     style="background: rgba(255, 255, 255, 0.9); border: 1.5px solid #DFC387; box-shadow: 0 10px 25px -10px rgba(160, 120, 30, 0.15);">
+                    <div class="text-xl mb-1">🎾</div>
+                    <div class="font-extrabold text-xs text-[#1F170D]">4 Lapangan Padel</div>
+                    <div class="text-[10px] text-[#7A5818] font-medium">Panoramic Glass Arena</div>
                 </div>
-                <div class="p-4 rounded-2xl bg-black/40 backdrop-blur-md border border-emerald-500/20">
-                    <div class="text-[#CCFF00] text-xl mb-1">❄️</div>
-                    <div class="font-extrabold text-xs text-white">Thermal Wellness</div>
-                    <div class="text-[10px] text-emerald-300/70">Ice Bath &amp; Sauna</div>
+                <div class="p-4 rounded-2xl backdrop-blur-md shadow-md hover:-translate-y-0.5 transition-all"
+                     style="background: rgba(255, 255, 255, 0.9); border: 1.5px solid #DFC387; box-shadow: 0 10px 25px -10px rgba(160, 120, 30, 0.15);">
+                    <div class="text-xl mb-1">❄️</div>
+                    <div class="font-extrabold text-xs text-[#1F170D]">Thermal Wellness</div>
+                    <div class="text-[10px] text-[#7A5818] font-medium">Ice Bath &amp; Sauna</div>
                 </div>
-                <div class="p-4 rounded-2xl bg-black/40 backdrop-blur-md border border-emerald-500/20">
-                    <div class="text-[#CCFF00] text-xl mb-1">☕</div>
-                    <div class="font-extrabold text-xs text-white">Artisan Lounge</div>
-                    <div class="text-[10px] text-emerald-300/70">Specialty Coffee &amp; Bar</div>
+                <div class="p-4 rounded-2xl backdrop-blur-md shadow-md hover:-translate-y-0.5 transition-all"
+                     style="background: rgba(255, 255, 255, 0.9); border: 1.5px solid #DFC387; box-shadow: 0 10px 25px -10px rgba(160, 120, 30, 0.15);">
+                    <div class="text-xl mb-1">☕</div>
+                    <div class="font-extrabold text-xs text-[#1F170D]">Artisan Lounge</div>
+                    <div class="text-[10px] text-[#7A5818] font-medium">Specialty Coffee &amp; Bar</div>
                 </div>
-                <div class="p-4 rounded-2xl bg-black/40 backdrop-blur-md border border-emerald-500/20">
-                    <div class="text-[#CCFF00] text-xl mb-1">💳</div>
-                    <div class="font-extrabold text-xs text-white">Frontdesk POS</div>
-                    <div class="text-[10px] text-emerald-300/70">Split Bill &amp; KDS Sync</div>
+                <div class="p-4 rounded-2xl backdrop-blur-md shadow-md hover:-translate-y-0.5 transition-all"
+                     style="background: rgba(255, 255, 255, 0.9); border: 1.5px solid #DFC387; box-shadow: 0 10px 25px -10px rgba(160, 120, 30, 0.15);">
+                    <div class="text-xl mb-1">💳</div>
+                    <div class="font-extrabold text-xs text-[#1F170D]">Frontdesk POS</div>
+                    <div class="text-[10px] text-[#7A5818] font-medium">Split Bill &amp; KDS Sync</div>
                 </div>
             </div>
         </div>
     </main>
 
     <!-- Bottom Footer -->
-    <footer class="bg-[#03110C] border-t border-emerald-800/40 px-6 py-4 text-center text-xs text-emerald-400/50">
+    <footer class="relative z-10 bg-white/75 backdrop-blur-md border-t border-[#D4AF37]/30 px-6 py-4 text-center text-xs text-[#7A643E]">
         &copy; {{ date('Y') }} VANTAGE Racquet &amp; Social Club. Powered by Laravel 11 &amp; Sanctum.
     </footer>
 

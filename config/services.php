@@ -31,4 +31,23 @@ return [
         ],
     ],
 
+    'payment' => [
+        'driver' => env('PAYMENT_GATEWAY_DRIVER', 'midtrans'),
+    ],
+
+    'midtrans' => [
+        'server_key' => env('MIDTRANS_SERVER_KEY'),
+        'client_key' => env('MIDTRANS_CLIENT_KEY', 'SB-Mid-client-demo-61'),
+        'is_production' => env('MIDTRANS_IS_PRODUCTION', false),
+        'is_sanitized' => true,
+        'is_3ds' => true,
+    ],
+
+    'xendit' => [
+        'secret_key' => env('XENDIT_SECRET_KEY'),
+        'public_key' => env('XENDIT_PUBLIC_KEY'),
+        'callback_token' => env('XENDIT_CALLBACK_TOKEN', 'xendit_webhook_token_club61'),
+        'is_production' => env('XENDIT_IS_PRODUCTION', false),
+    ],
+
 ];

@@ -29,6 +29,28 @@ Route::get('/dashboard', function () {
     return view('dashboard');
 })->middleware(['auth', 'verified'])->name('dashboard');
 
+Route::middleware(['auth', 'verified'])->group(function () {
+    Route::get('/booking', function () {
+        return view('customer.booking');
+    })->name('customer.booking');
+
+    Route::get('/cart', function () {
+        return view('customer.cart');
+    })->name('customer.cart');
+
+    Route::get('/checkout', function () {
+        return view('customer.checkout');
+    })->name('customer.checkout');
+
+    Route::get('/my-club', function () {
+        return view('customer.my-club');
+    })->name('customer.my-club');
+
+    Route::get('/invoice', function () {
+        return view('customer.invoice');
+    })->name('customer.invoice');
+});
+
 Route::middleware('auth')->group(function () {
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');

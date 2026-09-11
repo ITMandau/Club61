@@ -65,4 +65,14 @@ class Order extends Model
     {
         return $this->hasMany(Payment::class, 'order_id');
     }
+
+    public function refunds()
+    {
+        return $this->hasMany(Refund::class, 'order_id');
+    }
+
+    public function padelBookings()
+    {
+        return $this->hasMany(\App\Models\Padel\PadelBooking::class, 'order_id');
+    }
 }

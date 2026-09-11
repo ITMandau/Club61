@@ -14,6 +14,7 @@ class PadelBooking extends Model
 
     protected $fillable = [
         'booking_code',
+        'order_id',
         'user_id',
         'court_id',
         'coach_id',
@@ -26,6 +27,7 @@ class PadelBooking extends Model
         'total_amount',
         'status',
         'qr_code_hash',
+        'checked_in_at',
         'reschedule_count',
         'cancel_reason',
     ];
@@ -36,6 +38,7 @@ class PadelBooking extends Model
             'booking_date' => 'date',
             'start_time' => 'datetime',
             'end_time' => 'datetime',
+            'checked_in_at' => 'datetime',
             'court_fee' => 'decimal:2',
             'coach_fee' => 'decimal:2',
             'equipment_fee' => 'decimal:2',
@@ -62,5 +65,10 @@ class PadelBooking extends Model
     public function equipments()
     {
         return $this->hasMany(PadelBookingEquipment::class, 'booking_id');
+    }
+
+    public function order()
+    {
+        return $this->belongsTo(\App\Models\Pos\Order::class, 'order_id');
     }
 }

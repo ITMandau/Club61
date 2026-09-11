@@ -15,20 +15,13 @@
         <!-- Scripts & Styles -->
         @vite(['resources/css/app.css', 'resources/js/app.js'])
     </head>
-    <body class="min-h-full font-sans antialiased text-slate-100 bg-[#04160F] selection:bg-[#CCFF00] selection:text-[#04160F] relative overflow-x-hidden flex flex-col justify-center">
-        <!-- Ambient Sports Club Glow & Court Geometry Background -->
+    <body class="min-h-full font-sans antialiased text-slate-800 bg-[#FBF9F5] selection:bg-[#D4AF37] selection:text-[#1E160A] relative overflow-x-hidden flex flex-col justify-center"
+          style="background-image: url('{{ asset('images/white-gold-marble.jpg') }}'); background-size: cover; background-position: center; background-repeat: no-repeat; background-attachment: fixed;">
+        
+        <!-- Ambient Warm Gold Luxury Lighting -->
         <div class="fixed inset-0 pointer-events-none z-0 overflow-hidden">
-            <div class="absolute -top-40 left-1/4 w-[750px] h-[500px] bg-gradient-to-b from-emerald-600/15 via-emerald-800/10 to-transparent blur-3xl rounded-full"></div>
-            <div class="absolute -bottom-40 right-1/4 w-[600px] h-[450px] bg-[#CCFF00]/5 blur-3xl rounded-full"></div>
-            
-            <svg class="absolute inset-0 w-full h-full opacity-[0.03] stroke-white" xmlns="http://www.w3.org/2000/svg">
-                <defs>
-                    <pattern id="court-grid" width="120" height="120" patternUnits="userSpaceOnUse">
-                        <path d="M 120 0 L 0 0 0 120" fill="none" stroke="currentColor" stroke-width="1.2" />
-                    </pattern>
-                </defs>
-                <rect width="100%" height="100%" fill="url(#court-grid)" />
-            </svg>
+            <div class="absolute -top-32 left-1/4 w-[850px] h-[550px] bg-gradient-to-b from-amber-300/20 via-yellow-500/10 to-transparent blur-3xl rounded-full"></div>
+            <div class="absolute -bottom-32 right-1/4 w-[700px] h-[500px] bg-[#D4AF37]/15 blur-3xl rounded-full"></div>
         </div>
 
         <!-- Main Content Area: Responsive container for desktop & mobile -->

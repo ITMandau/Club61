@@ -2,16 +2,15 @@
 
 namespace App\Providers\Filament;
 
+use App\Filament\Pages\Dashboard;
 use Filament\Http\Middleware\Authenticate;
 use Filament\Http\Middleware\AuthenticateSession;
 use Filament\Http\Middleware\DisableBladeIconComponents;
 use Filament\Http\Middleware\DispatchServingFilamentEvent;
-use Filament\Pages\Dashboard;
+use Filament\Navigation\NavigationItem;
 use Filament\Panel;
 use Filament\PanelProvider;
 use Filament\Support\Colors\Color;
-use Filament\Widgets\AccountWidget;
-use Filament\Widgets\FilamentInfoWidget;
 use Illuminate\Cookie\Middleware\AddQueuedCookiesToResponse;
 use Illuminate\Cookie\Middleware\EncryptCookies;
 use Illuminate\Foundation\Http\Middleware\VerifyCsrfToken;
@@ -28,19 +27,30 @@ class AdminPanelProvider extends PanelProvider
             ->id('admin')
             ->path('admin')
             ->login()
+            ->darkMode(false)
+            ->brandName('APEX Padel Arena Admin')
+            ->maxContentWidth('full')
             ->colors([
                 'primary' => Color::Amber,
             ])
-            ->discoverResources(in: app_path('Filament/Resources'), for: 'App\Filament\Resources')
-            ->discoverPages(in: app_path('Filament/Pages'), for: 'App\Filament\Pages')
+            ->spa()
+            ->renderHook(
+                'panels::head.end',
+                fn () => view('filament.custom-styles')
+            )
             ->pages([
-                Dashboard::class,
+                \App\Filament\Pages\Dashboard::class,
+                \App\Filament\Pages\Analytics::class,
+                \App\Filament\Pages\BookingSystem::class,
+                \App\Filament\Pages\KelolaPemesanan::class,
+                \App\Filament\Pages\Kustomer::class,
+                \App\Filament\Pages\KelolaKaryawan::class,
+                \App\Filament\Pages\KelolaTurnamen::class,
+                \App\Filament\Pages\KelolaClub::class,
+                \App\Filament\Pages\Marketing::class,
+                \App\Filament\Pages\MasterData::class,
             ])
-            ->discoverWidgets(in: app_path('Filament/Widgets'), for: 'App\Filament\Widgets')
-            ->widgets([
-                AccountWidget::class,
-                FilamentInfoWidget::class,
-            ])
+            ->widgets([])
             ->middleware([
                 EncryptCookies::class,
                 AddQueuedCookiesToResponse::class,

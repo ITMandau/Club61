@@ -1,0 +1,765 @@
+<?php
+
+namespace Tests\Feature\Api;
+
+use App\Models\Padel\CourtEquipment;
+use App\Models\Padel\PadelBooking;
+use App\Models\Padel\PadelCourt;
+use App\Models\User;
+use Carbon\Carbon;
+use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Str;
+use Tests\TestCase;
+
+class PadelBookingApiTest extends TestCase
+{
+    use RefreshDatabase;
+
+    protected User $customer;
+    protected User $customerB;
+    protected User $cashier;
+    protected PadelCourt $court1;
+    protected PadelCourt $court2;
+    protected CourtEquipment $racket;
+    protected string $customerToken;
+    protected string $customerBToken;
+    protected string $cashierToken;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        $this->customer = User::factory()->create([
+            'role' => 'CUSTOMER',
+            'is_active' => true,
+        ]);
+        $this->customerToken = $this->customer->createToken('test-app')->plainTextToken;
+
+        $this->customerB = User::factory()->create([
+            'role' => 'CUSTOMER',
+            'is_active' => true,
+        ]);
+        $this->customerBToken = $this->customerB->createToken('test-app-b')->plainTextToken;
+
+        $this->cashier = User::factory()->create([
+            'role' => 'CASHIER',
+            'is_active' => true,
+        ]);
+        $this->cashierToken = $this->cashier->createToken('test-pos')->plainTextToken;
+
+        $this->court1 = PadelCourt::create([
+            'name' => 'Lapangan 1 (Panoramic Pro)',
+            'type' => 'INDOOR',
+            'hourly_rate_regular' => 200000,
+            'hourly_rate_prime' => 300000,
+            'is_active' => true,
+        ]);
+
+        $this->court2 = PadelCourt::create([
+            'name' => 'Lapangan 2 (Tournament Std)',
+            'type' => 'INDOOR',
+            'hourly_rate_regular' => 200000,
+            'hourly_rate_prime' => 300000,
+            'is_active' => true,
+        ]);
+
+        $this->racket = CourtEquipment::create([
+            'name' => 'Raket Carbon Pro',
+            'type' => 'RACKET',
+            'rental_price' => 50000,
+            'stock_quantity' => 10,
+        ]);
+    }
+
+    /**
+     * 1. Test Endpoint Publik: Courts, Schedule, Equipments
+     */
+    public function test_public_can_access_courts_schedule_and_equipments(): void
+    {
+        $this->getJson('/api/v1/padel/courts')
+            ->assertStatus(200)
+            ->assertJson(['success' => true])
+            ->assertJsonCount(2, 'data');
+
+        $tomorrow = now()->addDay()->format('Y-m-d');
+        $this->getJson("/api/v1/padel/schedule?date={$tomorrow}")
+            ->assertStatus(200)
+            ->assertJson(['success' => true])
+            ->assertJsonStructure([
+                'data' => [
+                    'date',
+                    'timezone',
+                    'courts' => [
+                        '*' => [
+                            'court_id',
+                            'court_name',
+                            'type',
+                            'slots',
+                        ],
+                    ],
+                ],
+            ]);
+
+        $this->getJson('/api/v1/padel/equipments')
+            ->assertStatus(200)
+            ->assertJson(['success' => true])
+            ->assertJsonCount(1, 'data');
+    }
+
+    /**
+     * 2. Test Member Bisa Hold Multi-Slot secara Atomik (All-or-Nothing Sukses)
+     */
+    public function test_member_can_hold_multi_slot_atomic_success(): void
+    {
+        $bookingDate = now()->addDays(2)->format('Y-m-d');
+
+        $payload = [
+            'booking_date' => $bookingDate,
+            'slots' => [
+                [
+                    'court_id' => $this->court1->id,
+                    'start_time' => '08:00',
+                    'end_time' => '09:00',
+                ],
+                [
+                    'court_id' => $this->court1->id,
+                    'start_time' => '09:00',
+                    'end_time' => '10:00',
+                ],
+            ],
+        ];
+
+        $response = $this->withHeader('Authorization', "Bearer {$this->customerToken}")
+            ->postJson('/api/v1/padel/hold-slot', $payload);
+
+        $response->assertStatus(201)
+            ->assertJson(['success' => true])
+            ->assertJsonPath('data.hold_seconds_remaining', 600)
+            ->assertJsonCount(2, 'data.bookings');
+
+        $this->assertDatabaseCount('padel_bookings', 2);
+        $this->assertDatabaseHas('padel_bookings', [
+            'court_id' => $this->court1->id,
+            'status' => 'LOCKED',
+        ]);
+    }
+
+    /**
+     * 3. Test Atomicity: All-or-Nothing Rollback saat 1 Slot Tabrakan
+     */
+    public function test_atomic_multi_slot_all_or_nothing_when_one_slot_collides(): void
+    {
+        $bookingDate = now()->addDays(3)->format('Y-m-d');
+
+        // Customer A duluan hold jam 08:00 - 09:00
+        $this->withHeader('Authorization', "Bearer {$this->customerToken}")
+            ->postJson('/api/v1/padel/hold-slot', [
+                'booking_date' => $bookingDate,
+                'slots' => [
+                    [
+                        'court_id' => $this->court1->id,
+                        'start_time' => '08:00',
+                        'end_time' => '09:00',
+                    ],
+                ],
+            ])
+            ->assertStatus(201);
+
+        // Customer B mencoba hold 2 slot: (08:00 - 09:00) DAN (09:00 - 10:00)
+        $responseB = $this->withHeader('Authorization', "Bearer {$this->customerBToken}")
+            ->postJson('/api/v1/padel/hold-slot', [
+                'booking_date' => $bookingDate,
+                'slots' => [
+                    [
+                        'court_id' => $this->court1->id,
+                        'start_time' => '08:00',
+                        'end_time' => '09:00',
+                    ],
+                    [
+                        'court_id' => $this->court1->id,
+                        'start_time' => '09:00',
+                        'end_time' => '10:00',
+                    ],
+                ],
+            ]);
+
+        // Customer B WAJIB DITOLAK 409 Conflict
+        $responseB->assertStatus(409)
+            ->assertJson([
+                'success' => false,
+                'errors' => [
+                    'code' => 'SLOT_CONFLICT',
+                ],
+            ]);
+
+        // VERIFIKASI KRUSIAL: Slot kedua (09:00 - 10:00) TIDAK BOLEH tersimpan di DB karena All-or-Nothing!
+        $this->assertDatabaseMissing('padel_bookings', [
+            'user_id' => $this->customerB->id,
+        ]);
+        $this->assertDatabaseCount('padel_bookings', 1); // Hanya booking Customer A yang ada
+    }
+
+    /**
+     * 4. Test Batas Jam Berurutan (Consecutive Boundaries: 08-09 vs 09-10) TIDAK BENTROK
+     */
+    public function test_consecutive_boundary_slots_do_not_conflict(): void
+    {
+        $bookingDate = now()->addDays(4)->format('Y-m-d');
+
+        // Customer A: 08:00 - 09:00
+        $this->withHeader('Authorization', "Bearer {$this->customerToken}")
+            ->postJson('/api/v1/padel/hold-slot', [
+                'booking_date' => $bookingDate,
+                'slots' => [
+                    [
+                        'court_id' => $this->court1->id,
+                        'start_time' => '08:00',
+                        'end_time' => '09:00',
+                    ],
+                ],
+            ])
+            ->assertStatus(201);
+
+        // Customer B: 09:00 - 10:00 (tepat di batas menit ke 09:00) WAJIB BERHASIL!
+        $this->withHeader('Authorization', "Bearer {$this->customerBToken}")
+            ->postJson('/api/v1/padel/hold-slot', [
+                'booking_date' => $bookingDate,
+                'slots' => [
+                    [
+                        'court_id' => $this->court1->id,
+                        'start_time' => '09:00',
+                        'end_time' => '10:00',
+                    ],
+                ],
+            ])
+            ->assertStatus(201);
+
+        $this->assertDatabaseCount('padel_bookings', 2);
+    }
+
+    /**
+     * 5. Test Overlap Parsial Ditolak (08:00-10:00 vs 09:00-11:00)
+     */
+    public function test_partial_overlap_is_strictly_rejected(): void
+    {
+        $bookingDate = now()->addDays(5)->format('Y-m-d');
+
+        // Customer A: 08:00 - 10:00 (2 jam)
+        $this->withHeader('Authorization', "Bearer {$this->customerToken}")
+            ->postJson('/api/v1/padel/hold-slot', [
+                'booking_date' => $bookingDate,
+                'slots' => [
+                    [
+                        'court_id' => $this->court1->id,
+                        'start_time' => '08:00',
+                        'end_time' => '10:00',
+                    ],
+                ],
+            ])
+            ->assertStatus(201);
+
+        // Customer B: 09:00 - 11:00 (tabrakan di jam 09:00-10:00)
+        $this->withHeader('Authorization', "Bearer {$this->customerBToken}")
+            ->postJson('/api/v1/padel/hold-slot', [
+                'booking_date' => $bookingDate,
+                'slots' => [
+                    [
+                        'court_id' => $this->court1->id,
+                        'start_time' => '09:00',
+                        'end_time' => '11:00',
+                    ],
+                ],
+            ])
+            ->assertStatus(409);
+    }
+
+    /**
+     * 6. Test Validasi Waktu Terbalik & Tanggal Lampau
+     */
+    public function test_invalid_time_and_past_date_are_rejected(): void
+    {
+        // Tanggal kemarin
+        $yesterday = now()->subDay()->format('Y-m-d');
+        $this->withHeader('Authorization', "Bearer {$this->customerToken}")
+            ->postJson('/api/v1/padel/hold-slot', [
+                'booking_date' => $yesterday,
+                'slots' => [
+                    ['court_id' => $this->court1->id, 'start_time' => '08:00', 'end_time' => '09:00'],
+                ],
+            ])
+            ->assertStatus(422);
+
+        // Jam terbalik (selesai lebih kecil dari mulai)
+        $future = now()->addDays(2)->format('Y-m-d');
+        $this->withHeader('Authorization', "Bearer {$this->customerToken}")
+            ->postJson('/api/v1/padel/hold-slot', [
+                'booking_date' => $future,
+                'slots' => [
+                    ['court_id' => $this->court1->id, 'start_time' => '10:00', 'end_time' => '08:00'],
+                ],
+            ])
+            ->assertStatus(422);
+    }
+
+    /**
+     * 7. Test Checkout Idempotent dengan X-Idempotency-Key
+     */
+    public function test_checkout_with_idempotency_key_and_equipment_addons(): void
+    {
+        $bookingDate = now()->addDays(6)->format('Y-m-d');
+
+        $holdResponse = $this->withHeader('Authorization', "Bearer {$this->customerToken}")
+            ->postJson('/api/v1/padel/hold-slot', [
+                'booking_date' => $bookingDate,
+                'slots' => [
+                    ['court_id' => $this->court1->id, 'start_time' => '10:00', 'end_time' => '11:00'],
+                ],
+            ])
+            ->assertStatus(201);
+
+        $bookingId = $holdResponse->json('data.bookings.0.id');
+        $idempotencyKey = (string) Str::uuid();
+
+        // 1. Checkout tanpa header Idempotency -> Ditolak 400
+        $this->withHeader('Authorization', "Bearer {$this->customerToken}")
+            ->postJson('/api/v1/padel/checkout', [
+                'booking_ids' => [$bookingId],
+                'payment_method' => 'QRIS',
+            ])
+            ->assertStatus(400);
+
+        // 2. Checkout dengan header Idempotency -> Berhasil 200
+        $checkoutResponse1 = $this->withHeader('Authorization', "Bearer {$this->customerToken}")
+            ->withHeader('X-Idempotency-Key', $idempotencyKey)
+            ->postJson('/api/v1/padel/checkout', [
+                'booking_ids' => [$bookingId],
+                'equipments' => [
+                    ['equipment_id' => $this->racket->id, 'quantity' => 2],
+                ],
+                'voucher_code' => 'HEMAT10',
+                'payment_method' => 'QRIS',
+            ]);
+
+        $checkoutResponse1->assertStatus(200)
+            ->assertJson(['success' => true])
+            ->assertJsonPath('data.payment_status', 'PAID');
+
+        $this->assertDatabaseHas('padel_bookings', [
+            'id' => $bookingId,
+            'status' => 'PAID',
+        ]);
+        $this->assertDatabaseHas('padel_booking_equipments', [
+            'booking_id' => $bookingId,
+            'quantity' => 2,
+        ]);
+
+        // 3. Retry request dengan Idempotency-Key yang sama persis -> Mengembalikan response identik
+        $checkoutResponse2 = $this->withHeader('Authorization', "Bearer {$this->customerToken}")
+            ->withHeader('X-Idempotency-Key', $idempotencyKey)
+            ->postJson('/api/v1/padel/checkout', [
+                'booking_ids' => [$bookingId],
+                'payment_method' => 'QRIS',
+            ]);
+
+        $checkoutResponse2->assertStatus(200)
+            ->assertJsonPath('data.order_id', $checkoutResponse1->json('data.order_id'));
+    }
+
+    /**
+     * 8. Test Single-Use QR Check-In & Anti-Replay Rejection
+     */
+    public function test_single_use_qr_check_in_and_replay_rejection(): void
+    {
+        $bookingDate = now()->format('Y-m-d');
+        $startTime = now()->addMinutes(15);
+        $endTime = $startTime->copy()->addHour();
+
+        $booking = PadelBooking::create([
+            'booking_code' => 'BK-PAD-TEST01',
+            'user_id' => $this->customer->id,
+            'court_id' => $this->court1->id,
+            'booking_date' => $bookingDate,
+            'start_time' => $startTime,
+            'end_time' => $endTime,
+            'court_fee' => 200000,
+            'total_amount' => 200000,
+            'status' => 'PAID',
+            'qr_code_hash' => hash_hmac('sha256', 'BK-PAD-TEST01' . $this->customer->id, config('app.key')),
+        ]);
+
+        // Scan Pertama oleh Kasir -> Berhasil 200 OK (Alert Hijau)
+        $response1 = $this->withHeader('Authorization', "Bearer {$this->cashierToken}")
+            ->postJson('/api/v1/padel/check-in', [
+                'qr_code_hash' => $booking->qr_code_hash,
+            ]);
+
+        $response1->assertStatus(200)
+            ->assertJson([
+                'success' => true,
+                'data' => [
+                    'already_checked_in' => false,
+                    'booking_code' => 'BK-PAD-TEST01',
+                ],
+            ]);
+
+        $this->assertDatabaseHas('padel_bookings', [
+            'id' => $booking->id,
+            'status' => 'CHECKED_IN',
+        ]);
+        $this->assertNotNull($booking->fresh()->checked_in_at);
+
+        // Scan Kedua (Double-Scan Kasir / Shift Change) -> Ramah Kasir 200 OK (Alert Kuning)
+        $response2 = $this->withHeader('Authorization', "Bearer {$this->cashierToken}")
+            ->postJson('/api/v1/padel/check-in', [
+                'qr_code_hash' => $booking->qr_code_hash,
+            ]);
+
+        $response2->assertStatus(200)
+            ->assertJson([
+                'success' => true,
+                'data' => [
+                    'already_checked_in' => true,
+                    'booking_code' => 'BK-PAD-TEST01',
+                ],
+            ]);
+    }
+
+    /**
+     * 9. Test Auto-Expiry Garbage Collector Command
+     */
+    public function test_auto_expiry_garbage_collector_releases_locked_slots(): void
+    {
+        $bookingDate = now()->addDays(7)->format('Y-m-d');
+
+        // Buat booking LOCKED
+        $expiredBooking = PadelBooking::create([
+            'booking_code' => 'BK-PAD-EXP01',
+            'user_id' => $this->customer->id,
+            'court_id' => $this->court1->id,
+            'booking_date' => $bookingDate,
+            'start_time' => Carbon::parse("{$bookingDate} 14:00"),
+            'end_time' => Carbon::parse("{$bookingDate} 15:00"),
+            'court_fee' => 200000,
+            'total_amount' => 200000,
+            'status' => 'LOCKED',
+        ]);
+
+        // Simulasikan waktu maju 11 menit (melewati 10 menit hold TTL)
+        $this->travel(11)->minutes();
+
+        // Jalankan Artisan Command
+        Artisan::call('padel:release-expired-slots');
+
+        // Status harus berubah menjadi EXPIRED
+        $this->assertDatabaseHas('padel_bookings', [
+            'id' => $expiredBooking->id,
+            'status' => 'EXPIRED',
+        ]);
+    }
+
+    /**
+     * 10. 🛡️ QA DEFENSE 1: Test Midtrans Webhook Signature Verification and Settlement
+     */
+    public function test_midtrans_webhook_settlement_and_valid_signature(): void
+    {
+        config(['services.midtrans.server_key' => 'SB-Mid-server-TEST-KEY']);
+
+        $booking = PadelBooking::create([
+            'booking_code' => 'BK-PAD-MID01',
+            'user_id' => $this->customer->id,
+            'court_id' => $this->court1->id,
+            'booking_date' => now()->addDays(2)->format('Y-m-d'),
+            'start_time' => Carbon::parse(now()->addDays(2)->format('Y-m-d') . ' 10:00'),
+            'end_time' => Carbon::parse(now()->addDays(2)->format('Y-m-d') . ' 11:00'),
+            'court_fee' => 300000,
+            'total_amount' => 302800,
+            'status' => 'PENDING_PAYMENT',
+        ]);
+
+        $orderId = 'ORD-PAD-TEST888';
+        \Illuminate\Support\Facades\Cache::put("order_bookings:{$orderId}", [$booking->id], 3600);
+
+        $grossAmount = '302800.00';
+        $statusCode = '200';
+        $signature = hash('sha512', $orderId . $statusCode . $grossAmount . 'SB-Mid-server-TEST-KEY');
+
+        $response = $this->postJson('/api/v1/padel/webhook/midtrans', [
+            'order_id' => $orderId,
+            'status_code' => $statusCode,
+            'gross_amount' => $grossAmount,
+            'signature_key' => $signature,
+            'transaction_status' => 'settlement',
+            'fraud_status' => 'accept',
+        ]);
+
+        $response->assertStatus(200)
+            ->assertJson([
+                'success' => true,
+            ]);
+
+        $this->assertDatabaseHas('padel_bookings', [
+            'id' => $booking->id,
+            'status' => 'PAID',
+        ]);
+
+        $refreshed = $booking->fresh();
+        $this->assertNotNull($refreshed->qr_code_hash);
+    }
+
+    /**
+     * 11. 🛡️ QA DEFENSE 1: Test Spoofing Attack with Forged Signature is Rejected (HTTP 400)
+     */
+    public function test_midtrans_webhook_spoofing_is_rejected(): void
+    {
+        config(['services.midtrans.server_key' => 'SB-Mid-server-REAL-SECRET']);
+
+        $orderId = 'ORD-PAD-HACK01';
+        $fakeSignature = 'completely-forged-signature-hash-123456';
+
+        $response = $this->postJson('/api/v1/padel/webhook/midtrans', [
+            'order_id' => $orderId,
+            'status_code' => '200',
+            'gross_amount' => '500000.00',
+            'signature_key' => $fakeSignature,
+            'transaction_status' => 'settlement',
+            'fraud_status' => 'accept',
+        ]);
+
+        $response->assertStatus(400)
+            ->assertJson([
+                'success' => false,
+                'message' => 'Akses ditolak: Signature Key tidak valid (Spoofing rejected).',
+            ]);
+    }
+
+    /**
+     * 12. Test Xendit Webhook Settlement with Valid Callback Token
+     */
+    public function test_xendit_webhook_settlement_and_valid_token(): void
+    {
+        config(['services.xendit.callback_token' => 'test-xendit-secret-token-123']);
+
+        $booking = PadelBooking::create([
+            'user_id' => $this->customer->id,
+            'court_id' => $this->court1->id,
+            'booking_date' => now()->format('Y-m-d'),
+            'start_time' => now()->format('Y-m-d 14:00:00'),
+            'end_time' => now()->format('Y-m-d 15:00:00'),
+            'status' => 'PENDING_PAYMENT',
+            'court_fee' => 300000.00,
+            'total_amount' => 300000.00,
+            'booking_code' => 'BK-PAD-XEN01',
+        ]);
+
+        $orderId = 'ORD-PAD-XEN01';
+        \Illuminate\Support\Facades\Cache::put("order_bookings:{$orderId}", [$booking->id], 86400);
+
+        $response = $this->withHeader('x-callback-token', 'test-xendit-secret-token-123')
+            ->postJson('/api/v1/padel/webhook/xendit', [
+                'id' => 'xen_inv_123',
+                'external_id' => $orderId,
+                'status' => 'PAID',
+                'amount' => 300000,
+            ]);
+
+        $response->assertStatus(200)
+            ->assertJson([
+                'success' => true,
+            ]);
+
+        $this->assertDatabaseHas('padel_bookings', [
+            'id' => $booking->id,
+            'status' => 'PAID',
+        ]);
+
+        $this->assertNotNull($booking->fresh()->qr_code_hash);
+    }
+
+    /**
+     * 13. Test Xendit Webhook Spoofing with Invalid Callback Token is Rejected (HTTP 400)
+     */
+    public function test_xendit_webhook_spoofing_is_rejected(): void
+    {
+        config(['services.xendit.callback_token' => 'real-secret-token']);
+
+        $response = $this->withHeader('x-callback-token', 'fake-spoofed-token')
+            ->postJson('/api/v1/padel/webhook/xendit', [
+                'external_id' => 'ORD-PAD-HACK02',
+                'status' => 'PAID',
+                'amount' => 300000,
+            ]);
+
+        $response->assertStatus(400)
+            ->assertJson([
+                'success' => false,
+                'message' => 'Invalid Xendit callback token.',
+            ]);
+    }
+
+    /**
+     * 14. Test Check-In Kasir Mengembalikan Rincian Alat Sewa (Handover) & Scan Kepagian Ditolak (400)
+     */
+    public function test_checkin_returns_equipment_handover_and_early_checkin_is_rejected(): void
+    {
+        $bookingDate = now()->addDays(8)->format('Y-m-d');
+        // Jadwal main 3 jam lagi (kepagian > 45 menit)
+        $startTime = now()->addHours(3);
+        $endTime = $startTime->copy()->addHour();
+
+        $booking = PadelBooking::create([
+            'booking_code' => 'BK-PAD-HANDOVER',
+            'order_id' => 'ORD-PAD-HO1',
+            'user_id' => $this->customer->id,
+            'court_id' => $this->court1->id,
+            'booking_date' => $bookingDate,
+            'start_time' => $startTime,
+            'end_time' => $endTime,
+            'court_fee' => 200000,
+            'total_amount' => 250000,
+            'status' => 'PAID',
+            'qr_code_hash' => hash_hmac('sha256', 'BK-PAD-HANDOVER' . $this->customer->id, config('app.key')),
+        ]);
+
+        \App\Models\Padel\PadelBookingEquipment::create([
+            'order_id' => 'ORD-PAD-HO1',
+            'booking_id' => $booking->id,
+            'equipment_id' => $this->racket->id,
+            'quantity' => 2,
+            'unit_price' => 25000,
+            'subtotal' => 50000,
+        ]);
+
+        // 1. Scan Kepagian (> 45 menit sebelum start_time) -> Ditolak 400
+        $responseEarly = $this->withHeader('Authorization', "Bearer {$this->cashierToken}")
+            ->postJson('/api/v1/padel/check-in', [
+                'qr_code_hash' => $booking->qr_code_hash,
+            ]);
+
+        $responseEarly->assertStatus(400);
+
+        // 2. Sesuaikan waktu ke 15 menit sebelum start_time (jendela check-in valid)
+        $booking->update([
+            'start_time' => now()->addMinutes(15),
+            'end_time' => now()->addMinutes(75),
+        ]);
+
+        $responseValid = $this->withHeader('Authorization', "Bearer {$this->cashierToken}")
+            ->postJson('/api/v1/padel/check-in', [
+                'qr_code_hash' => $booking->qr_code_hash,
+            ]);
+
+        $responseValid->assertStatus(200)
+            ->assertJson([
+                'success' => true,
+                'data' => [
+                    'already_checked_in' => false,
+                    'equipments' => [
+                        [
+                            'name' => 'Raket Carbon Pro',
+                            'quantity' => 2,
+                        ],
+                    ],
+                ],
+            ]);
+    }
+
+    /**
+     * 15. Test Multi-Hour Consolidated Order, Flat Equipment (Celah 2), and Anti-Jadwal Bolong (Celah 1)
+     */
+    public function test_multi_hour_consolidated_checkout_and_flat_equipment_and_anti_jadwal_bolong(): void
+    {
+        // Gunakan hari kerja (weekday) untuk menguji tarif reguler 200.000/jam
+        $bookingDate = now()->addDays(2)->isWeekend() ? now()->addDays(1)->format('Y-m-d') : now()->addDays(2)->format('Y-m-d');
+
+        // Skenario A: Multi-hour nempel / contiguous 3 jam (08:00 - 11:00)
+        $holdContinuous = $this->withHeader('Authorization', "Bearer {$this->customerToken}")
+            ->postJson('/api/v1/padel/hold-slot', [
+                'booking_date' => $bookingDate,
+                'slots' => [
+                    ['court_id' => $this->court1->id, 'start_time' => '08:00', 'end_time' => '11:00'],
+                ],
+            ])
+            ->assertStatus(201);
+
+        $bookingIdContinuous = $holdContinuous->json('data.bookings.0.id');
+
+        // Checkout 3 jam + 1 Raket Carbon flat (Celah 2)
+        $checkoutA = $this->withHeader('Authorization', "Bearer {$this->customerToken}")
+            ->withHeader('X-Idempotency-Key', (string) Str::uuid())
+            ->postJson('/api/v1/padel/checkout', [
+                'booking_ids' => [$bookingIdContinuous],
+                'equipments' => [
+                    ['equipment_id' => $this->racket->id, 'quantity' => 1],
+                ],
+                'payment_method' => 'QRIS',
+            ])
+            ->assertStatus(200);
+
+        $orderIdA = $checkoutA->json('data.order_id');
+        $this->assertNotEmpty($orderIdA);
+
+        // Biaya lapangan 3 jam regular (3 x 200.000 = 600.000), Flat raket 1x (1 x 50.000 = 50.000), QRIS Fee (2.800)
+        // Grand total = 652.800 (tidak ada bug perkalian berulang)
+        $this->assertEquals(600000, $checkoutA->json('data.court_fee'));
+        $this->assertEquals(50000, $checkoutA->json('data.equipment_fee'));
+        $this->assertEquals(652800, $checkoutA->json('data.grand_total'));
+
+        // Query ticket by order_id
+        $ticketA = $this->withHeader('Authorization', "Bearer {$this->customerToken}")
+            ->getJson("/api/v1/padel/bookings/{$orderIdA}/ticket")
+            ->assertStatus(200);
+
+        $this->assertEquals('08:00', Carbon::parse($ticketA->json('data.start_time'))->timezone('Asia/Jakarta')->format('H:i'));
+        $this->assertEquals('11:00', Carbon::parse($ticketA->json('data.end_time'))->timezone('Asia/Jakarta')->format('H:i'));
+        $this->assertEquals(650000, $ticketA->json('data.order_grand_total'));
+
+        // Skenario B: Jadwal Bolong / Non-Contiguous (08:00-09:00 dan 10:00-11:00, jam 09:00 dilewati)
+        $bookingDateB = Carbon::parse($bookingDate)->next(Carbon::TUESDAY)->format('Y-m-d');
+        $holdBolong = $this->withHeader('Authorization', "Bearer {$this->customerToken}")
+            ->postJson('/api/v1/padel/hold-slot', [
+                'booking_date' => $bookingDateB,
+                'slots' => [
+                    ['court_id' => $this->court1->id, 'start_time' => '08:00', 'end_time' => '09:00'],
+                    ['court_id' => $this->court1->id, 'start_time' => '10:00', 'end_time' => '11:00'],
+                ],
+            ])
+            ->assertStatus(201);
+
+        $bookingIdsBolong = collect($holdBolong->json('data.bookings'))->pluck('id')->all();
+        $this->assertCount(2, $bookingIdsBolong);
+
+        // Checkout kedua slot bolong dalam 1 Order ID
+        $checkoutB = $this->withHeader('Authorization', "Bearer {$this->customerToken}")
+            ->withHeader('X-Idempotency-Key', (string) Str::uuid())
+            ->postJson('/api/v1/padel/checkout', [
+                'booking_ids' => $bookingIdsBolong,
+                'equipments' => [
+                    ['equipment_id' => $this->racket->id, 'quantity' => 2],
+                ],
+                'payment_method' => 'QRIS',
+            ])
+            ->assertStatus(200);
+
+        $orderIdB = $checkoutB->json('data.order_id');
+        $this->assertNotEmpty($orderIdB);
+        $this->assertEquals(502800, $checkoutB->json('data.grand_total'));
+
+        // Tiket per order tetap menjaga 2 sesi terpisah (anti jadwal bolong)
+        $ticketB = $this->withHeader('Authorization', "Bearer {$this->customerToken}")
+            ->getJson("/api/v1/padel/bookings/{$orderIdB}/ticket")
+            ->assertStatus(200);
+
+        // order_bookings memiliki 2 item terpisah sehingga frontend memunculkan tab sesi terpisah
+        $this->assertCount(2, $ticketB->json('data.order_bookings'));
+        $this->assertEquals('08:00', Carbon::parse($ticketB->json('data.order_bookings.0.start_time'))->timezone('Asia/Jakarta')->format('H:i'));
+        $this->assertEquals('09:00', Carbon::parse($ticketB->json('data.order_bookings.0.end_time'))->timezone('Asia/Jakarta')->format('H:i'));
+        $this->assertEquals('10:00', Carbon::parse($ticketB->json('data.order_bookings.1.start_time'))->timezone('Asia/Jakarta')->format('H:i'));
+        $this->assertEquals('11:00', Carbon::parse($ticketB->json('data.order_bookings.1.end_time'))->timezone('Asia/Jakarta')->format('H:i'));
+
+        // Flat equipment tetap 1x per order (2 x 50.000 = 100.000)
+        $this->assertEquals(100000, $ticketB->json('data.order_equipment_fee'));
+        $this->assertEquals(500000, $ticketB->json('data.order_grand_total'));
+    }
+}
+

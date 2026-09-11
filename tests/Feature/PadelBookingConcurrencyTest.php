@@ -34,27 +34,32 @@ class PadelBookingConcurrencyTest extends TestCase
         // 3. Player 1 requests slot hold
         $response1 = $this->actingAs($player1, 'sanctum')
             ->postJson('/api/v1/padel/hold-slot', [
-                'court_id' => $court->id,
                 'booking_date' => $bookingDate,
-                'start_time' => $startTime,
-                'end_time' => $endTime,
+                'slots' => [
+                    [
+                        'court_id' => $court->id,
+                        'start_time' => $startTime,
+                        'end_time' => $endTime,
+                    ],
+                ],
             ]);
 
         $response1->assertStatus(201)
             ->assertJson([
                 'success' => true,
-                'data' => [
-                    'status' => 'LOCKED',
-                ],
             ]);
 
         // 4. Player 2 attempts to claim overlapping slot -> Must fail with 409 Conflict
         $response2 = $this->actingAs($player2, 'sanctum')
             ->postJson('/api/v1/padel/hold-slot', [
-                'court_id' => $court->id,
                 'booking_date' => $bookingDate,
-                'start_time' => $startTime,
-                'end_time' => $endTime,
+                'slots' => [
+                    [
+                        'court_id' => $court->id,
+                        'start_time' => $startTime,
+                        'end_time' => $endTime,
+                    ],
+                ],
             ]);
 
         $response2->assertStatus(409)
@@ -65,10 +70,14 @@ class PadelBookingConcurrencyTest extends TestCase
         // 5. Player 3 attempts to claim overlapping partial slot (19:30 - 20:30) -> Must also fail with 409 Conflict
         $response3 = $this->actingAs($player3, 'sanctum')
             ->postJson('/api/v1/padel/hold-slot', [
-                'court_id' => $court->id,
                 'booking_date' => $bookingDate,
-                'start_time' => '19:30',
-                'end_time' => '20:30',
+                'slots' => [
+                    [
+                        'court_id' => $court->id,
+                        'start_time' => '19:30',
+                        'end_time' => '20:30',
+                    ],
+                ],
             ]);
 
         $response3->assertStatus(409)

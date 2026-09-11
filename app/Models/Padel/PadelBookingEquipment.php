@@ -12,6 +12,7 @@ class PadelBookingEquipment extends Model
     protected $table = 'padel_booking_equipments';
 
     protected $fillable = [
+        'order_id',
         'booking_id',
         'equipment_id',
         'quantity',
