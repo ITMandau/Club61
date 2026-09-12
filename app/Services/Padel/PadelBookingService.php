@@ -437,8 +437,16 @@ class PadelBookingService
             Cache::put("order_bookings:{$orderId}", $bookings->pluck('id')->toArray(), 86400);
 
             // Tentukan status awal transaksi
-            $isMockOrCash = $paymentResult['is_mock'] || strtoupper($paymentMethod) === 'CASH';
-            $initialStatus = $isMockOrCash ? 'PAID' : 'PENDING_PAYMENT';
+            $isStaff = in_array($user->role, ['SUPER_ADMIN', 'ADMIN', 'CASHIER']);
+            $isCash = strtoupper($paymentMethod) === 'CASH';
+
+            if ($isCash && ! $isStaff) {
+                // 🛡️ ANTI-EXPLOIT CASH: Customer checkout tunai dari web/mobile wajib PENDING_PAYMENT
+                $initialStatus = 'PENDING_PAYMENT';
+            } else {
+                // Tunai hanya langsung PAID jika diproses oleh staf kasir di meja POS, atau gateway mock aktif (non-CASH)
+                $initialStatus = ($paymentResult['is_mock'] || ($isCash && $isStaff)) ? 'PAID' : 'PENDING_PAYMENT';
+            }
 
             // Update semua booking dengan order_id dan simpan hash tiket QR
             foreach ($bookings as $booking) {
@@ -450,12 +458,13 @@ class PadelBookingService
             }
 
             $primaryBooking = $bookings->first();
+            $isConfirmed = $initialStatus === 'PAID';
 
             $response = [
                 'success' => true,
-                'message' => $isMockOrCash
+                'message' => $isConfirmed
                     ? 'Pembayaran berhasil dikonfirmasi. E-Tiket aktif.'
-                    : 'Sesi transaksi pembayaran berhasil dibuat. Silakan selesaikan pembayaran.',
+                    : ($isCash ? 'Reservasi berhasil dibuat. Silakan selesaikan pembayaran tunai di kasir venue.' : 'Sesi transaksi pembayaran berhasil dibuat. Silakan selesaikan pembayaran.'),
                 'data' => [
                     'driver' => $paymentResult['driver'] ?? $paymentManager->getDefaultDriver(),
                     'order_id' => $orderId,

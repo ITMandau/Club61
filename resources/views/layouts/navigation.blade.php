@@ -261,7 +261,7 @@
 
             syncCart() {
                 try {
-                    const raw = sessionStorage.getItem('club61_cart') || sessionStorage.getItem('vantage_cart');
+                    const raw = localStorage.getItem('club61_cart') || sessionStorage.getItem('club61_cart') || sessionStorage.getItem('vantage_cart');
                     if (raw) {
                         const parsed = JSON.parse(raw);
                         if (Array.isArray(parsed) && parsed.length > 0) {

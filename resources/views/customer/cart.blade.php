@@ -199,19 +199,47 @@
                 showExpiredModal: false,
 
                 init() {
-                    const saved = sessionStorage.getItem('club61_cart') || sessionStorage.getItem('vantage_cart');
-                    const holdSaved = sessionStorage.getItem('club61_hold_data') || sessionStorage.getItem('vantage_hold_data');
+                    this.syncFromStorage();
+
+                    // Multi-tab synchronizer: saat tab lain memutasi keranjang, tab ini otomatis sinkron
+                    window.addEventListener('storage', (e) => {
+                        if (!e.key || e.key.includes('cart') || e.key.includes('hold_data')) {
+                            this.syncFromStorage();
+                        }
+                    });
+
+                    window.addEventListener('cart-updated', () => {
+                        this.syncFromStorage();
+                    });
+
+                    document.addEventListener('visibilitychange', () => {
+                        if (document.visibilityState === 'visible') {
+                            this.syncFromStorage();
+                            this.checkExpiry();
+                        }
+                    });
+                },
+
+                syncFromStorage() {
+                    const saved = localStorage.getItem('club61_cart') || sessionStorage.getItem('club61_cart') || sessionStorage.getItem('vantage_cart');
+                    const holdSaved = localStorage.getItem('club61_hold_data') || sessionStorage.getItem('club61_hold_data') || sessionStorage.getItem('vantage_hold_data');
 
                     if (saved) {
                         try {
                             const parsed = JSON.parse(saved);
-                            if (parsed && parsed.length > 0) {
+                            if (Array.isArray(parsed) && parsed.length > 0) {
                                 this.items = parsed;
                                 if (parsed[0].booking_date) {
                                     this.bookingDateFormatted = parsed[0].booking_date;
                                 }
+                            } else {
+                                this.items = [];
                             }
-                        } catch(e) {}
+                        } catch(e) {
+                            this.items = [];
+                        }
+                    } else {
+                        this.items = [];
                     }
 
                     if (holdSaved) {
@@ -228,15 +256,11 @@
                         this.expiresAtTime = Date.now() + (10 * 60 * 1000);
                     }
 
-                    // GUARDRAIL 1: Jalankan Timer & Pasang VisibilityChange Listener (Tab Switching Aware)
+                    // GUARDRAIL 1: Jalankan Timer (Tab Switching Aware)
                     if (this.items.length > 0) {
                         this.startCountdown();
-
-                        document.addEventListener('visibilitychange', () => {
-                            if (document.visibilityState === 'visible') {
-                                this.checkExpiry();
-                            }
-                        });
+                    } else if (this.timerInterval) {
+                        clearInterval(this.timerInterval);
                     }
 
                     window.dispatchEvent(new CustomEvent('cart-updated'));
@@ -271,6 +295,8 @@
                 },
 
                 handleExpiredRedirect() {
+                    localStorage.removeItem('club61_cart');
+                    localStorage.removeItem('club61_hold_data');
                     sessionStorage.removeItem('club61_cart');
                     sessionStorage.removeItem('club61_hold_data');
                     sessionStorage.removeItem('vantage_cart');
@@ -285,6 +311,7 @@
                 async removeItem(idx) {
                     const removedItem = this.items[idx];
                     this.items.splice(idx, 1);
+                    localStorage.setItem('club61_cart', JSON.stringify(this.items));
                     sessionStorage.setItem('club61_cart', JSON.stringify(this.items));
                     window.dispatchEvent(new CustomEvent('cart-updated'));
 
@@ -328,6 +355,8 @@
                         }
 
                         this.items = [];
+                        localStorage.removeItem('club61_cart');
+                        localStorage.removeItem('club61_hold_data');
                         sessionStorage.removeItem('club61_cart');
                         sessionStorage.removeItem('club61_hold_data');
                         sessionStorage.removeItem('vantage_cart');
@@ -346,6 +375,7 @@
                         this.showExpiredModal = true;
                         return;
                     }
+                    localStorage.setItem('club61_cart', JSON.stringify(this.items));
                     sessionStorage.setItem('club61_cart', JSON.stringify(this.items));
                     window.location.href = "{{ route('customer.checkout') }}";
                 }

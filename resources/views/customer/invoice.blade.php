@@ -119,20 +119,44 @@
                         <!-- QR Code Body for Check-in -->
                         <div class="p-6 sm:p-8 text-center space-y-5">
                             
-                            <!-- Dynamic QR Turnstile -->
-                            <div class="p-4 bg-white rounded-3xl border-2 border-dashed border-[#DFC387] inline-block shadow-inner">
-                                <img :src="'https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=' + encodeURIComponent(currentTicket.qr_code_hash || 'CLUB61-DEMO')" 
-                                     alt="QR Check-in" 
-                                     class="w-48 h-48 mx-auto rounded-xl" />
-                                <div class="mt-3 font-mono font-black text-xs text-[#8C6418] tracking-widest" x-text="currentTicket.qr_code_hash || currentTicket.booking_code"></div>
-                            </div>
+                            <!-- Dynamic QR Turnstile: Hanya aktif jika status PAID atau CHECKED_IN -->
+                            <template x-if="currentTicket.status === 'PAID' || currentTicket.status === 'CHECKED_IN'">
+                                <div>
+                                    <div class="p-4 bg-white rounded-3xl border-2 border-dashed border-[#DFC387] inline-block shadow-inner">
+                                        <img :src="'https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=' + encodeURIComponent(currentTicket.qr_code_hash || 'CLUB61-DEMO')" 
+                                             alt="QR Check-in" 
+                                             class="w-48 h-48 mx-auto rounded-xl" />
+                                        <div class="mt-3 font-mono font-black text-xs text-[#8C6418] tracking-widest" x-text="currentTicket.qr_code_hash || currentTicket.booking_code"></div>
+                                    </div>
 
-                            <div class="max-w-md mx-auto">
-                                <h4 class="font-serif font-black text-base text-[#1F170D]">Tunjukkan Pada Kasir Frontdesk</h4>
-                                <p class="text-xs text-[#7A643E] mt-1 leading-relaxed">
-                                    Tunjukkan QR Code ini kepada kasir saat tiba di venue untuk check-in lapangan sekaligus mengambil peralatan sewa (raket &amp; bola).
-                                </p>
-                            </div>
+                                    <div class="max-w-md mx-auto mt-4">
+                                        <h4 class="font-serif font-black text-base text-[#1F170D]">Tunjukkan Pada Kasir Frontdesk</h4>
+                                        <p class="text-xs text-[#7A643E] mt-1 leading-relaxed">
+                                            Tunjukkan QR Code ini kepada kasir saat tiba di venue untuk check-in lapangan sekaligus mengambil peralatan sewa (raket &amp; bola).
+                                        </p>
+                                    </div>
+                                </div>
+                            </template>
+
+                            <!-- Placeholder Edukatif Jika Belum Lunas (PENDING_PAYMENT / Belum Bayar) -->
+                            <template x-if="currentTicket.status !== 'PAID' && currentTicket.status !== 'CHECKED_IN'">
+                                <div class="max-w-md mx-auto p-6 rounded-3xl border-2 border-dashed border-amber-300 bg-amber-50/70 text-center space-y-3">
+                                    <div class="w-14 h-14 rounded-2xl bg-amber-100 border border-amber-300 flex items-center justify-center mx-auto text-amber-700">
+                                        <svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                                        </svg>
+                                    </div>
+                                    <div>
+                                        <h4 class="font-serif font-black text-base text-[#1F170D]">QR Tiket Terkunci</h4>
+                                        <p class="text-xs text-[#7A643E] mt-1 leading-relaxed">
+                                            Selesaikan pembayaran terlebih dahulu untuk membuka QR Code pass turnstile lapangan. QR Code akan aktif otomatis setelah status pembayaran terverifikasi lunas.
+                                        </p>
+                                    </div>
+                                    <div class="inline-block px-3 py-1 rounded-full text-[11px] font-mono font-bold bg-amber-200/80 text-amber-900 border border-amber-300">
+                                        Status: <span x-text="currentTicket.status"></span>
+                                    </div>
+                                </div>
+                            </template>
 
                             <!-- Breakdown Details -->
                             <div class="bg-[#FAF8F2] p-5 rounded-2xl border border-[#DFC387]/70 text-left text-xs space-y-2.5">
