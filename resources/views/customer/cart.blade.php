@@ -23,7 +23,7 @@
                 </a>
             </div>
 
-            <!-- 🛡️ GUARDRAIL 1: Countdown Timer Banner (10 Menit Live Sync) -->
+            <!-- GUARDRAIL 1: Countdown Timer Banner (10 Menit Live Sync) -->
             <div x-show="items.length > 0 && !isExpired" 
                  class="p-4 rounded-2xl bg-gradient-to-r from-[#183428] via-[#12241C] to-[#0A1611] text-white border border-[#DFC387] shadow-md flex items-center justify-between gap-4">
                 <div class="flex items-center gap-3">
@@ -42,8 +42,8 @@
 
             <!-- Empty State -->
             <div x-show="items.length === 0" class="bg-white/95 backdrop-blur-xl rounded-3xl border border-[#DFC387] p-12 text-center space-y-4 shadow-sm">
-                <div class="w-20 h-20 mx-auto rounded-full bg-[#FAF2DE] flex items-center justify-center text-3xl border border-[#DFC387] shadow-sm">
-                    🎾
+                <div class="w-20 h-20 mx-auto rounded-full bg-[#FAF2DE] flex items-center justify-center text-xs font-black border border-[#DFC387] shadow-sm tracking-wider text-[#7A5818]">
+                    KOSONG
                 </div>
                 <h3 class="font-serif font-black text-xl text-[#1F170D]">Keranjang Booking Anda Kosong</h3>
                 <p class="text-xs text-[#7A643E] max-w-sm mx-auto">Anda belum memilih slot jadwal lapangan padel. Kunjungi halaman booking untuk memilih jam main.</p>
@@ -73,8 +73,8 @@
                             <template x-for="(item, index) in items" :key="index">
                                 <div class="py-4 flex items-center justify-between gap-4">
                                     <div class="flex items-center gap-3.5">
-                                        <div class="w-12 h-12 rounded-2xl bg-[#FAF2DE] border border-[#DFC387] flex items-center justify-center text-xl shrink-0 shadow-sm">
-                                            🎾
+                                        <div class="w-12 h-12 rounded-2xl bg-[#FAF2DE] border border-[#DFC387] flex items-center justify-center text-xs font-black shrink-0 shadow-sm tracking-wider text-[#7A5818]">
+                                            COURT
                                         </div>
                                         <div>
                                             <h4 class="font-serif font-black text-base text-[#1F170D]" x-text="item.court || 'Court Arena'"></h4>
@@ -162,13 +162,13 @@
 
         </div>
 
-        <!-- 🛡️ GUARDRAIL 1 MODAL: Waktu Sesi Habis Pop-up -->
+        <!-- GUARDRAIL 1 MODAL: Waktu Sesi Habis Pop-up -->
         <div x-show="showExpiredModal" 
              style="display: none;"
              class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
             <div class="bg-white rounded-3xl border-2 border-[#D4AF37] max-w-md w-full p-6 text-center space-y-4 shadow-2xl animate-scaleIn">
-                <div class="w-16 h-16 rounded-full bg-rose-100 border border-rose-300 text-rose-600 flex items-center justify-center mx-auto text-2xl">
-                    ⏳
+                <div class="w-16 h-16 rounded-full bg-rose-100 border border-rose-300 text-rose-600 flex items-center justify-center mx-auto text-xs font-black tracking-wider">
+                    EXPIRED
                 </div>
                 <h3 class="font-serif font-black text-xl text-[#1F170D]">Waktu Sesi Habis!</h3>
                 <p class="text-xs text-[#7A643E] leading-relaxed">
@@ -199,8 +199,8 @@
                 showExpiredModal: false,
 
                 init() {
-                    const saved = sessionStorage.getItem('vantage_cart');
-                    const holdSaved = sessionStorage.getItem('vantage_hold_data');
+                    const saved = sessionStorage.getItem('club61_cart') || sessionStorage.getItem('vantage_cart');
+                    const holdSaved = sessionStorage.getItem('club61_hold_data') || sessionStorage.getItem('vantage_hold_data');
 
                     if (saved) {
                         try {
@@ -228,7 +228,7 @@
                         this.expiresAtTime = Date.now() + (10 * 60 * 1000);
                     }
 
-                    // 🛡️ GUARDRAIL 1: Jalankan Timer & Pasang VisibilityChange Listener (Tab Switching Aware)
+                    // GUARDRAIL 1: Jalankan Timer & Pasang VisibilityChange Listener (Tab Switching Aware)
                     if (this.items.length > 0) {
                         this.startCountdown();
 
@@ -238,6 +238,8 @@
                             }
                         });
                     }
+
+                    window.dispatchEvent(new CustomEvent('cart-updated'));
                 },
 
                 startCountdown() {
@@ -269,8 +271,11 @@
                 },
 
                 handleExpiredRedirect() {
+                    sessionStorage.removeItem('club61_cart');
+                    sessionStorage.removeItem('club61_hold_data');
                     sessionStorage.removeItem('vantage_cart');
                     sessionStorage.removeItem('vantage_hold_data');
+                    window.dispatchEvent(new CustomEvent('cart-updated'));
                 },
 
                 get subtotal() {
@@ -280,10 +285,8 @@
                 async removeItem(idx) {
                     const removedItem = this.items[idx];
                     this.items.splice(idx, 1);
-                    sessionStorage.setItem('vantage_cart', JSON.stringify(this.items));
-
-                    const badge = document.getElementById('nav-cart-badge');
-                    if (badge) badge.innerText = this.items.length;
+                    sessionStorage.setItem('club61_cart', JSON.stringify(this.items));
+                    window.dispatchEvent(new CustomEvent('cart-updated'));
 
                     // Release slot di backend via API
                     if (this.holdData && this.holdData.bookings) {
@@ -293,9 +296,9 @@
                                 await fetch('/api/v1/padel/release-slot', {
                                     method: 'POST',
                                     headers: {
-                                        'Content-Type': 'application/json',
-                                        'Accept': 'application/json',
-                                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
+                                         'Content-Type': 'application/json',
+                                         'Accept': 'application/json',
+                                         'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
                                     },
                                     body: JSON.stringify({ booking_ids: [bookingMatch.id] })
                                 });
@@ -315,9 +318,9 @@
                                 await fetch('/api/v1/padel/release-slot', {
                                     method: 'POST',
                                     headers: {
-                                        'Content-Type': 'application/json',
-                                        'Accept': 'application/json',
-                                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
+                                         'Content-Type': 'application/json',
+                                         'Accept': 'application/json',
+                                         'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
                                     },
                                     body: JSON.stringify({ booking_ids: bookingIds })
                                 });
@@ -325,10 +328,11 @@
                         }
 
                         this.items = [];
+                        sessionStorage.removeItem('club61_cart');
+                        sessionStorage.removeItem('club61_hold_data');
                         sessionStorage.removeItem('vantage_cart');
                         sessionStorage.removeItem('vantage_hold_data');
-                        const badge = document.getElementById('nav-cart-badge');
-                        if (badge) badge.innerText = 0;
+                        window.dispatchEvent(new CustomEvent('cart-updated'));
                     }
                 },
 
@@ -342,7 +346,7 @@
                         this.showExpiredModal = true;
                         return;
                     }
-                    sessionStorage.setItem('vantage_cart', JSON.stringify(this.items));
+                    sessionStorage.setItem('club61_cart', JSON.stringify(this.items));
                     window.location.href = "{{ route('customer.checkout') }}";
                 }
             }

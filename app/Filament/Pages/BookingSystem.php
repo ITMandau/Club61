@@ -62,7 +62,7 @@ class BookingSystem extends Page
             $this->checkInResult = $result;
 
             Notification::make()
-                ->title($result['already_checked_in'] ? 'Sudah Pernah Check-In' : 'Check-In Berhasil! ✅')
+                ->title($result['already_checked_in'] ? 'Sudah Pernah Check-In' : 'Check-In Berhasil!')
                 ->body($result['message'])
                 ->color($result['already_checked_in'] ? 'warning' : 'success')
                 ->send();

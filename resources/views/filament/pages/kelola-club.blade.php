@@ -24,28 +24,28 @@
     <!-- Facility Cards -->
     <div class="adm-metrics-grid">
         <div class="adm-card" style="padding: 1.25rem;">
-            <div style="font-size: 2rem;">🎾</div>
+            <span class="adm-pill adm-pill-gold">COURT</span>
             <div style="font-weight: 900; font-size: 1.125rem; color: #1F170D; margin-top: 0.5rem;">4 Padel Arena</div>
             <div style="font-size: 0.6875rem; color: #7A643E; margin-top: 0.25rem;">Kaca Panoramic 12mm, Karpet Mondo Turf Resmi, Lampu LED 2000 Lux.</div>
             <div style="margin-top: 1rem;"><span class="adm-pill adm-pill-green">Operasional Aktif</span></div>
         </div>
 
         <div class="adm-card" style="padding: 1.25rem;">
-            <div style="font-size: 2rem;">🧖</div>
+            <span class="adm-pill adm-pill-gold">SAUNA</span>
             <div style="font-weight: 900; font-size: 1.125rem; color: #1F170D; margin-top: 0.5rem;">Finnish Cedar Sauna</div>
             <div style="font-size: 0.6875rem; color: #7A643E; margin-top: 0.25rem;">Kapasitas 8 orang, suhu 85&deg;C, aroma eucalyptus terapi relaksasi otot.</div>
             <div style="margin-top: 1rem;"><span class="adm-pill adm-pill-green">Suhu Optimal</span></div>
         </div>
 
         <div class="adm-card" style="padding: 1.25rem;">
-            <div style="font-size: 2rem;">🧊</div>
+            <span class="adm-pill adm-pill-gold">WELLNESS</span>
             <div style="font-weight: 900; font-size: 1.125rem; color: #1F170D; margin-top: 0.5rem;">Cold Plunge Ice Bath</div>
             <div style="font-size: 0.6875rem; color: #7A643E; margin-top: 0.25rem;">Sirkulasi ozon UV, suhu 4&deg;C stabil untuk recovery atlet setelah tanding.</div>
             <div style="margin-top: 1rem;"><span class="adm-pill adm-pill-green">4&deg;C Ready</span></div>
         </div>
 
         <div class="adm-card" style="padding: 1.25rem;">
-            <div style="font-size: 2rem;">☕</div>
+            <span class="adm-pill adm-pill-gold">LOUNGE</span>
             <div style="font-weight: 900; font-size: 1.125rem; color: #1F170D; margin-top: 0.5rem;">Artisan Cafe &amp; Lounge</div>
             <div style="font-size: 0.6875rem; color: #7A643E; margin-top: 0.25rem;">Kapasitas 45 tempat duduk, WiFi 300 Mbps, specialty coffee &amp; recovery meals.</div>
             <div style="margin-top: 1rem;"><span class="adm-pill adm-pill-green">Buka Setiap Hari</span></div>

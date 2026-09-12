@@ -3,7 +3,8 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>VANTAGE KDS - Kitchen &amp; Bar Display Monitor</title>
+    <title>CLUB 61 KDS - Kitchen &amp; Bar Display Monitor</title>
+    <link rel="icon" type="image/png" href="{{ asset('images/club61-logo.png') }}">
     <!-- Google Fonts: Luxury Serif, Athletic Sans, and Monospace -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -23,19 +24,19 @@
     <header class="relative z-20 bg-white/90 backdrop-blur-xl border-b border-[#D4AF37]/40 px-6 py-3 flex items-center justify-between shadow-sm shrink-0">
         <div class="flex items-center gap-4">
             <div class="flex items-center gap-3">
-                <div class="w-10 h-10 rounded-2xl flex items-center justify-center font-black text-xl shadow-md"
+                <div class="w-10 h-10 rounded-2xl flex items-center justify-center shadow-md overflow-hidden p-1"
                      style="background: linear-gradient(135deg, #2D210F 0%, #171006 100%); border: 1.5px solid #E5C378;">
-                    🍳
+                    <img src="{{ asset('images/club61-logo.png') }}" alt="Club 61 Logo" class="w-full h-full object-contain">
                 </div>
                 <div>
                     <div class="font-serif font-black text-[#1F170D] text-base tracking-wider flex items-center gap-2">
-                        <span>VANTAGE KDS</span>
+                        <span>CLUB 61 KDS</span>
                         <span class="px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-widest shadow-sm"
                               style="background: #FAF2DE; border: 1px solid #D9BE84; color: #7A5818;">
                             Live Monitor
                         </span>
                     </div>
-                    <div class="text-[11px] text-[#7A643E] font-medium -mt-0.5">Kitchen &amp; Barista Order Dispatch System</div>
+                    <div class="text-[11px] text-[#7A643E] font-medium -mt-0.5">Kitchen &amp; Barista Order Dispatch System &bull; Club 61 Medan</div>
                 </div>
             </div>
 
@@ -47,14 +48,14 @@
                 </button>
                 <button class="px-3.5 py-1.5 rounded-xl text-xs font-bold uppercase tracking-wider transition-all shadow-sm hover:bg-white cursor-pointer"
                         style="background: rgba(255, 255, 255, 0.85); border: 1.5px solid #DFC387; color: #5C410F;">
-                    ☕ Bar Kopi (2)
+                    Bar Kopi (2)
                 </button>
                 <button class="px-3.5 py-1.5 rounded-xl text-xs font-bold uppercase tracking-wider transition-all shadow-sm hover:bg-white cursor-pointer"
                         style="background: rgba(255, 255, 255, 0.85); border: 1.5px solid #DFC387; color: #5C410F;">
-                    🍳 Dapur Masak (1)
+                    Dapur Masak (1)
                 </button>
             </div>
-        </div>
+        </div>  </div>
 
         <!-- Operator & Logout -->
         <div class="flex items-center gap-4">
@@ -99,7 +100,7 @@
                         <div>
                             <span class="font-mono text-base font-black text-[#1F170D]">#TKT-041</span>
                             <div class="text-xs font-bold text-[#8C6418] flex items-center gap-1 mt-0.5">
-                                <span>☕ Meja 01 (Table 01)</span>
+                                <span>Meja 01 (Table 01)</span>
                             </div>
                         </div>
                         <div class="text-right">
@@ -171,7 +172,7 @@
                         <div>
                             <span class="font-mono text-base font-black text-[#1F170D]">#TKT-042</span>
                             <div class="text-xs font-bold text-rose-700 flex items-center gap-1 mt-0.5">
-                                <span>🎾 Lapangan 02 (Court 2)</span>
+                                <span>Lapangan 02 (Court 2)</span>
                             </div>
                         </div>
                         <div class="text-right">
@@ -228,7 +229,7 @@
                         <div>
                             <span class="font-mono text-base font-black text-[#1F170D]">#TKT-043</span>
                             <div class="text-xs font-bold text-[#8C6418] flex items-center gap-1 mt-0.5">
-                                <span>☕ VIP Lounge 1</span>
+                                <span>VIP Lounge 1</span>
                             </div>
                         </div>
                         <div class="text-right">
@@ -282,7 +283,7 @@
             ticket.style.transform = 'scale(0.97)';
             ticket.innerHTML = `
                 <div class="p-8 text-center my-auto">
-                    <div class="text-4xl mb-3">✅</div>
+                    <div class="w-12 h-12 mx-auto mb-3 rounded-full bg-emerald-100 border border-emerald-300 flex items-center justify-center text-emerald-700 font-bold text-lg">OK</div>
                     <div class="font-serif font-black text-base text-[#1F170D]">Pesanan Selesai Disajikan!</div>
                     <div class="text-xs text-[#7A643E] font-medium mt-1">Status KDS terupdate otomatis ke kasir POS.</div>
                 </div>
@@ -298,7 +299,7 @@
                 <div class="pb-3 border-b border-[#DFC387]/60 flex items-center justify-between">
                     <div>
                         <span class="font-mono text-base font-black text-[#1F170D]">#TKT-042</span>
-                        <div class="text-xs font-bold text-[#8C6418] mt-0.5">🎾 Lapangan 02</div>
+                        <div class="text-xs font-bold text-[#8C6418] mt-0.5">Lapangan 02</div>
                     </div>
                     <span class="text-[9px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full inline-block shadow-sm"
                           style="background: #FAF2DE; border: 1px solid #D9BE84; color: #7A5818;">
@@ -313,7 +314,7 @@
                 <button onclick="serveTicket('${id}')" 
                         class="w-full py-3 rounded-2xl font-black text-xs uppercase tracking-wider transition-all duration-200 transform active:scale-95 hover:brightness-105 flex items-center justify-center gap-2 cursor-pointer shadow-lg"
                         style="background: linear-gradient(180deg, #F0DB9D 0%, #D4AF37 35%, #B38622 100%); border: 1.5px solid #FBF0CE; color: #281A05; box-shadow: 0 6px 20px rgba(184, 134, 11, 0.35);">
-                    <span>✅ Selesai &amp; Siap Sajikan</span>
+                    <span>Selesai &amp; Siap Sajikan</span>
                 </button>
             `;
         }

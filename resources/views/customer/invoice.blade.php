@@ -36,7 +36,7 @@
                 </div>
             </div>
 
-            <!-- 🛡️ QA DEFENSE 2: Auto-Polling Banner saat Status masih Pending (Race Condition Guard) -->
+            <!-- QA DEFENSE 2: Auto-Polling Banner saat Status masih Pending (Race Condition Guard) -->
             <div x-show="isPolling" 
                  style="display: none;"
                  class="p-4 rounded-2xl bg-amber-500/15 border border-amber-400 text-amber-900 flex items-center justify-between gap-4 shadow-sm animate-pulse">
@@ -92,7 +92,7 @@
                                 </span>
                                 <h2 class="font-serif font-black text-xl sm:text-2xl text-white" x-text="currentTicket.court ? currentTicket.court.name : 'Court Arena'"></h2>
                                 <p class="text-xs text-emerald-100/80 mt-1 font-mono">
-                                    📅 <span x-text="formatDate(currentTicket.booking_date)"></span> &bull; <span x-text="formatTime(currentTicket.start_time) + ' - ' + formatTime(currentTicket.end_time)"></span> WIB 
+                                    <span x-text="formatDate(currentTicket.booking_date)"></span> &bull; <span x-text="formatTime(currentTicket.start_time) + ' - ' + formatTime(currentTicket.end_time)"></span> WIB 
                                     <span class="text-amber-300 font-bold" x-text="'(' + calculateDuration(currentTicket.start_time, currentTicket.end_time) + ' Jam)'"></span>
                                 </p>
                             </div>
@@ -121,7 +121,7 @@
                             
                             <!-- Dynamic QR Turnstile -->
                             <div class="p-4 bg-white rounded-3xl border-2 border-dashed border-[#DFC387] inline-block shadow-inner">
-                                <img :src="'https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=' + encodeURIComponent(currentTicket.qr_code_hash || 'VNT-DEMO')" 
+                                <img :src="'https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=' + encodeURIComponent(currentTicket.qr_code_hash || 'CLUB61-DEMO')" 
                                      alt="QR Check-in" 
                                      class="w-48 h-48 mx-auto rounded-xl" />
                                 <div class="mt-3 font-mono font-black text-xs text-[#8C6418] tracking-widest" x-text="currentTicket.qr_code_hash || currentTicket.booking_code"></div>
@@ -207,7 +207,6 @@
                         <div class="pt-2">
                             <div class="p-3 rounded-2xl bg-[#FAF8F2] border border-[#DFC387]/70 flex items-center justify-between">
                                 <div class="flex items-center gap-2">
-                                    <span class="text-base">💳</span>
                                     <span class="text-xs font-bold text-[#1F170D]">Midtrans Payment Gateway</span>
                                 </div>
                                 <span :class="ticket.status === 'PAID' || ticket.status === 'CHECKED_IN' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'"
@@ -321,7 +320,7 @@
                             this.ticket = json.data;
                             this.currentTicket = json.data;
 
-                            // 🛡️ QA DEFENSE 2: Jika status masih PENDING / PENDING_PAYMENT, lakukan Auto-Polling
+                            // QA DEFENSE 2: Jika status masih PENDING / PENDING_PAYMENT, lakukan Auto-Polling
                             if (this.ticket.status === 'PENDING' || this.ticket.status === 'PENDING_PAYMENT') {
                                 this.startAutoPolling(id);
                             }
@@ -379,7 +378,7 @@
                 },
 
                 /**
-                 * 🛡️ QA DEFENSE 2: Auto-Polling anti race condition Webhook vs Redirect
+                 * QA DEFENSE 2: Auto-Polling anti race condition Webhook vs Redirect
                  */
                 startAutoPolling(id) {
                     this.isPolling = true;

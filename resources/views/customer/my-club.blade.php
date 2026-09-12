@@ -12,16 +12,16 @@
                     </a>
                     <div>
                         <div class="flex items-center gap-2">
-                            <h1 class="font-serif font-black text-xl sm:text-2xl text-[#1F170D]">My Club &bull; VANTAGE 61</h1>
-                            <span class="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase bg-[#FAF2DE] text-[#7A5818] border border-[#DFC387]">Senopati Sanctuary</span>
+                            <h1 class="font-serif font-black text-xl sm:text-2xl text-[#1F170D]">My Club &bull; CLUB 61 Padel Court</h1>
+                            <span class="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase bg-[#FAF2DE] text-[#7A5818] border border-[#DFC387]">Medan Venue</span>
                         </div>
-                        <p class="text-xs text-[#7A643E] mt-0.5">Informasi fasilitas eksklusif, jam operasional venue, dan privilese keanggotaan VIP</p>
+                        <p class="text-xs text-[#7A643E] mt-0.5">Informasi fasilitas eksklusif, jam operasional venue, dan privilese keanggotaan</p>
                     </div>
                 </div>
 
                 <div class="flex items-center gap-3">
                     <span class="px-4 py-2 rounded-2xl text-xs font-black bg-[#FAF2DE] text-[#7A5818] border border-[#DFC387] shadow-sm">
-                        👑 VIP Platinum Member
+                        Club 61 Member
                     </span>
                     <a href="{{ route('customer.booking') }}" 
                        class="px-5 py-2.5 rounded-2xl bg-gradient-to-b from-[#F5DE9B] to-[#D4AF37] text-[#1E160A] text-xs font-black uppercase tracking-wider shadow-md hover:brightness-105 active:scale-95 transition-all">
@@ -39,13 +39,13 @@
 
                 <div class="relative z-10 max-w-2xl">
                     <div class="inline-flex items-center gap-1.5 px-3.5 py-1 rounded-full text-[10px] font-extrabold uppercase tracking-widest bg-[#DFC387]/20 text-[#F5E6BE] border border-[#DFC387]/40 mb-3 backdrop-blur-md shadow-sm">
-                        <span>🏛️ Club Profile &bull; Senopati, Kebayoran Baru, Jakarta Selatan</span>
+                        <span>Club Profile &bull; Gedung Indosat, Medan, Sumatera Utara</span>
                     </div>
                     <h2 class="font-serif text-2xl sm:text-4xl font-extrabold tracking-tight text-[#FAF5E6] leading-tight">
-                        Club 61 Padel &amp; Wellness Sanctuary
+                        Club 61 Padel Court Medan
                     </h2>
                     <p class="text-xs sm:text-sm text-emerald-100/80 mt-3 font-medium leading-relaxed">
-                        Venue olahraga padel paling prestisius di Jakarta dengan 4 lapangan panoramic indoor berstandar World Padel Tour, sauna kayu cedar Finlandia, cold plunge 4°C, recovery suite privat, dan specialty café lounge.
+                        Venue olahraga padel modern di Medan dengan 4 lapangan panoramic indoor ber-AC standar World Padel Tour, sauna kayu cedar, cold plunge 4°C, dan specialty cafe lounge.
                     </p>
 
                     <div class="mt-6 flex flex-wrap items-center gap-3">
@@ -55,7 +55,7 @@
                         </div>
                         <a href="https://wa.me/6281261617233" target="_blank" 
                            class="inline-flex items-center gap-2 px-4 py-2 rounded-2xl bg-[#DFC387]/20 hover:bg-[#DFC387]/30 border border-[#DFC387]/50 text-xs font-bold text-[#F5E6BE] backdrop-blur-md transition-colors">
-                            <span>💬 Hubungi Concierge via WhatsApp</span>
+                            <span>Hubungi Concierge via WhatsApp</span>
                         </a>
                     </div>
                 </div>
@@ -64,8 +64,10 @@
             <!-- Key Info Bar (3 Cards) -->
             <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div class="p-5 rounded-3xl bg-white/95 backdrop-blur-xl border border-[#DFC387] shadow-sm flex items-start gap-4">
-                    <div class="w-12 h-12 rounded-2xl bg-[#FAF2DE] border border-[#DFC387] flex items-center justify-center text-xl shrink-0 text-[#7A5818]">
-                        ⏰
+                    <div class="w-12 h-12 rounded-2xl bg-[#FAF2DE] border border-[#DFC387] flex items-center justify-center shrink-0 text-[#7A5818]">
+                        <svg class="w-6 h-6 text-[#8C6418]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
                     </div>
                     <div>
                         <div class="text-[10px] uppercase font-extrabold tracking-wider text-[#7A5818]">Jam Operasional</div>
@@ -75,19 +77,24 @@
                 </div>
 
                 <div class="p-5 rounded-3xl bg-white/95 backdrop-blur-xl border border-[#DFC387] shadow-sm flex items-start gap-4">
-                    <div class="w-12 h-12 rounded-2xl bg-[#FAF2DE] border border-[#DFC387] flex items-center justify-center text-xl shrink-0 text-[#7A5818]">
-                        📍
+                    <div class="w-12 h-12 rounded-2xl bg-[#FAF2DE] border border-[#DFC387] flex items-center justify-center shrink-0 text-[#7A5818]">
+                        <svg class="w-6 h-6 text-[#8C6418]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                        </svg>
                     </div>
                     <div>
                         <div class="text-[10px] uppercase font-extrabold tracking-wider text-[#7A5818]">Lokasi Strategis</div>
-                        <div class="font-serif font-black text-base text-[#1F170D] mt-0.5">Vantage Arena 61 Senopati</div>
-                        <div class="text-xs text-[#8C7A58] mt-1">Jl. Senopati No. 61, Kebayoran Baru, Jakarta Selatan</div>
+                        <div class="font-serif font-black text-base text-[#1F170D] mt-0.5">Club 61 Padel Court Medan</div>
+                        <div class="text-xs text-[#8C7A58] mt-1">Gedung Indosat, Jl. Perintis Kemerdekaan No. 39, Medan, Sumatera Utara</div>
                     </div>
                 </div>
 
                 <div class="p-5 rounded-3xl bg-white/95 backdrop-blur-xl border border-[#DFC387] shadow-sm flex items-start gap-4">
-                    <div class="w-12 h-12 rounded-2xl bg-[#FAF2DE] border border-[#DFC387] flex items-center justify-center text-xl shrink-0 text-[#7A5818]">
-                        🛎️
+                    <div class="w-12 h-12 rounded-2xl bg-[#FAF2DE] border border-[#DFC387] flex items-center justify-center shrink-0 text-[#7A5818]">
+                        <svg class="w-6 h-6 text-[#8C6418]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 5v2m0 4v2m0 4v2M5 5a2 2 0 00-2 2v3a2 2 0 110 4v3a2 2 0 002 2h14a2 2 0 002-2v-3a2 2 0 110-4V7a2 2 0 00-2-2H5z" />
+                        </svg>
                     </div>
                     <div>
                         <div class="text-[10px] uppercase font-extrabold tracking-wider text-[#7A5818]">Concierge &amp; Valet</div>
@@ -112,8 +119,8 @@
                     <!-- Facility 1 -->
                     <div class="p-6 rounded-3xl bg-white/95 backdrop-blur-xl border border-[#DFC387] shadow-sm flex flex-col justify-between hover:border-[#D4AF37] hover:shadow-[0_10px_25px_rgba(212,175,55,0.2)] transition-all group">
                         <div class="flex items-start gap-4">
-                            <div class="w-12 h-12 rounded-2xl bg-[#FAF2DE] border border-[#DFC387] flex items-center justify-center text-2xl shrink-0 group-hover:scale-110 transition-transform">
-                                🎾
+                            <div class="w-12 h-12 rounded-2xl bg-[#FAF2DE] border border-[#DFC387] flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform">
+                                <span class="text-[10px] font-black tracking-widest text-[#8C6418] uppercase">COURT</span>
                             </div>
                             <div>
                                 <h4 class="font-serif font-black text-sm text-[#1F170D]">4 Panoramic Padel Courts</h4>
@@ -131,8 +138,8 @@
                     <!-- Facility 2 -->
                     <div class="p-6 rounded-3xl bg-white/95 backdrop-blur-xl border border-[#DFC387] shadow-sm flex flex-col justify-between hover:border-[#D4AF37] hover:shadow-[0_10px_25px_rgba(212,175,55,0.2)] transition-all group">
                         <div class="flex items-start gap-4">
-                            <div class="w-12 h-12 rounded-2xl bg-[#FAF2DE] border border-[#DFC387] flex items-center justify-center text-2xl shrink-0 group-hover:scale-110 transition-transform">
-                                ❄️
+                            <div class="w-12 h-12 rounded-2xl bg-[#FAF2DE] border border-[#DFC387] flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform">
+                                <span class="text-[10px] font-black tracking-widest text-[#8C6418] uppercase">SAUNA</span>
                             </div>
                             <div>
                                 <h4 class="font-serif font-black text-sm text-[#1F170D]">Cold Plunge 4°C &amp; Sauna</h4>
@@ -150,11 +157,11 @@
                     <!-- Facility 3 -->
                     <div class="p-6 rounded-3xl bg-white/95 backdrop-blur-xl border border-[#DFC387] shadow-sm flex flex-col justify-between hover:border-[#D4AF37] hover:shadow-[0_10px_25px_rgba(212,175,55,0.2)] transition-all group">
                         <div class="flex items-start gap-4">
-                            <div class="w-12 h-12 rounded-2xl bg-[#FAF2DE] border border-[#DFC387] flex items-center justify-center text-2xl shrink-0 group-hover:scale-110 transition-transform">
-                                ☕
+                            <div class="w-12 h-12 rounded-2xl bg-[#FAF2DE] border border-[#DFC387] flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform">
+                                <span class="text-[10px] font-black tracking-widest text-[#8C6418] uppercase">CAFE</span>
                             </div>
                             <div>
-                                <h4 class="font-serif font-black text-sm text-[#1F170D]">Vantage Lounge &amp; Bar</h4>
+                                <h4 class="font-serif font-black text-sm text-[#1F170D]">Club 61 Cafe &amp; Lounge</h4>
                                 <p class="text-xs text-[#7A643E] mt-1.5 leading-relaxed">
                                     Artisan protein smoothie bar, specialty single-origin espresso, menu brunch sehat, serta panoramic viewing deck menghadap ke court arena.
                                 </p>
@@ -169,8 +176,8 @@
                     <!-- Facility 4 -->
                     <div class="p-6 rounded-3xl bg-white/95 backdrop-blur-xl border border-[#DFC387] shadow-sm flex flex-col justify-between hover:border-[#D4AF37] hover:shadow-[0_10px_25px_rgba(212,175,55,0.2)] transition-all group">
                         <div class="flex items-start gap-4">
-                            <div class="w-12 h-12 rounded-2xl bg-[#FAF2DE] border border-[#DFC387] flex items-center justify-center text-2xl shrink-0 group-hover:scale-110 transition-transform">
-                                🚿
+                            <div class="w-12 h-12 rounded-2xl bg-[#FAF2DE] border border-[#DFC387] flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform">
+                                <span class="text-[10px] font-black tracking-widest text-[#8C6418] uppercase">LOCKER</span>
                             </div>
                             <div>
                                 <h4 class="font-serif font-black text-sm text-[#1F170D]">Smart Locker &amp; Rain Shower</h4>
@@ -188,8 +195,8 @@
                     <!-- Facility 5 -->
                     <div class="p-6 rounded-3xl bg-white/95 backdrop-blur-xl border border-[#DFC387] shadow-sm flex flex-col justify-between hover:border-[#D4AF37] hover:shadow-[0_10px_25px_rgba(212,175,55,0.2)] transition-all group">
                         <div class="flex items-start gap-4">
-                            <div class="w-12 h-12 rounded-2xl bg-[#FAF2DE] border border-[#DFC387] flex items-center justify-center text-2xl shrink-0 group-hover:scale-110 transition-transform">
-                                🛍️
+                            <div class="w-12 h-12 rounded-2xl bg-[#FAF2DE] border border-[#DFC387] flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform">
+                                <span class="text-[10px] font-black tracking-widest text-[#8C6418] uppercase">SHOP</span>
                             </div>
                             <div>
                                 <h4 class="font-serif font-black text-sm text-[#1F170D]">Pro Shop &amp; Custom Gear</h4>
@@ -207,8 +214,8 @@
                     <!-- Facility 6 -->
                     <div class="p-6 rounded-3xl bg-white/95 backdrop-blur-xl border border-[#DFC387] shadow-sm flex flex-col justify-between hover:border-[#D4AF37] hover:shadow-[0_10px_25px_rgba(212,175,55,0.2)] transition-all group">
                         <div class="flex items-start gap-4">
-                            <div class="w-12 h-12 rounded-2xl bg-[#FAF2DE] border border-[#DFC387] flex items-center justify-center text-2xl shrink-0 group-hover:scale-110 transition-transform">
-                                🚗
+                            <div class="w-12 h-12 rounded-2xl bg-[#FAF2DE] border border-[#DFC387] flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform">
+                                <span class="text-[10px] font-black tracking-widest text-[#8C6418] uppercase">VALET</span>
                             </div>
                             <div>
                                 <h4 class="font-serif font-black text-sm text-[#1F170D]">Dedicated Valet &amp; EV Charger</h4>
@@ -232,8 +239,10 @@
                 <!-- Left: Club Etiquette & Rules (Col 7) -->
                 <div class="lg:col-span-7 bg-white/95 backdrop-blur-xl rounded-3xl border border-[#DFC387] p-6 shadow-sm space-y-4">
                     <div class="flex items-center gap-2.5 border-b border-[#DFC387]/50 pb-3">
-                        <div class="w-8 h-8 rounded-xl bg-[#FAF2DE] border border-[#DFC387] flex items-center justify-center text-sm font-bold text-[#7A5818]">
-                            📋
+                        <div class="w-8 h-8 rounded-xl bg-[#FAF2DE] border border-[#DFC387] flex items-center justify-center shrink-0">
+                            <svg class="w-4 h-4 text-[#8C6418]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                            </svg>
                         </div>
                         <div>
                             <h3 class="font-serif font-black text-base text-[#1F170D]">Etiket &amp; Peraturan Club</h3>
@@ -282,19 +291,19 @@
                         
                         <ul class="space-y-2.5 text-xs text-emerald-100/85 font-medium">
                             <li class="flex items-center gap-2">
-                                <span class="text-[#E5C378]">✓</span>
+                                <span class="text-[#E5C378] font-bold">&bull;</span>
                                 <span>Prioritas booking lapangan hingga H-7</span>
                             </li>
                             <li class="flex items-center gap-2">
-                                <span class="text-[#E5C378]">✓</span>
+                                <span class="text-[#E5C378] font-bold">&bull;</span>
                                 <span>Diskon 25% sewa lapangan &amp; rental raket</span>
                             </li>
                             <li class="flex items-center gap-2">
-                                <span class="text-[#E5C378]">✓</span>
+                                <span class="text-[#E5C378] font-bold">&bull;</span>
                                 <span>Akses tak terbatas ke Finnish Sauna &amp; Ice Bath</span>
                             </li>
                             <li class="flex items-center gap-2">
-                                <span class="text-[#E5C378]">✓</span>
+                                <span class="text-[#E5C378] font-bold">&bull;</span>
                                 <span>Undangan eksklusif turnamen internal member</span>
                             </li>
                         </ul>

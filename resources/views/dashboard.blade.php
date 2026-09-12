@@ -18,13 +18,13 @@
                         <div class="relative z-10 flex flex-col xl:flex-row xl:items-center justify-between gap-6">
                             <div class="max-w-2xl">
                                 <div class="inline-flex items-center gap-1.5 px-3.5 py-1 rounded-full text-[10px] font-extrabold uppercase tracking-widest bg-[#DFC387]/20 text-[#F5E6BE] border border-[#DFC387]/40 mb-3 backdrop-blur-md shadow-sm">
-                                    <span>✨ Member Portal &bull; VIP Platinum Experience</span>
+                                    <span>Member Portal &bull; Club 61 Experience</span>
                                 </div>
                                 <h1 class="font-serif text-2xl sm:text-4xl font-extrabold tracking-tight leading-tight text-[#FAF5E6]">
-                                    VANTAGE <span class="text-[#E5C378] font-alex font-normal text-3xl sm:text-5xl block sm:inline">Sports &amp; Social</span>
+                                    CLUB 61 <span class="text-[#E5C378] font-alex font-normal text-3xl sm:text-5xl block sm:inline">Padel Court</span>
                                 </h1>
                                 <p class="text-xs sm:text-sm text-emerald-100/80 mt-2.5 font-medium leading-relaxed">
-                                    Selamat datang kembali, <span class="font-bold text-white">{{ Auth::user()->name }}</span>. Pesan lapangan padel panoramic standar WPT, nikmati sauna kayu cedar &amp; ice bath 4°C, serta specialty cafe lounge.
+                                    Selamat datang kembali, <span class="font-bold text-white">{{ Auth::user()->name }}</span>. Pesan lapangan padel panoramic standar WPT di Gedung Indosat Medan, nikmati sauna kayu cedar &amp; ice bath 4°C, serta specialty cafe lounge.
                                 </p>
 
                                 <div class="mt-6 flex flex-wrap items-center gap-3">
@@ -107,7 +107,7 @@
                             </div>
 
                             <!-- Action 4: Turnamen -->
-                            <div onclick="alert('Turnamen Mendatang: VANTAGE Padel Open 2026! Total Hadiah Rp 50.000.000. Pendaftaran dibuka untuk member.')"
+                            <div onclick="alert('Turnamen Mendatang: CLUB 61 Padel Championship 2026! Total Hadiah Rp 50.000.000. Pendaftaran dibuka untuk member.')"
                                  class="flex flex-col items-center justify-center p-4 sm:p-5 rounded-2xl bg-white/95 backdrop-blur-xl border border-[#DFC387]/80 hover:border-[#D4AF37] hover:shadow-[0_10px_25px_rgba(212,175,55,0.25)] transition-all group cursor-pointer active:scale-95">
                                 <div class="w-12 h-12 rounded-2xl flex items-center justify-center shadow-sm transition-transform group-hover:scale-110"
                                      style="background: linear-gradient(135deg, #FAF2DE 0%, #F3DFAD 100%); border: 1.5px solid #DFC387;">
@@ -125,9 +125,9 @@
                     <template x-if="activeMatch">
                         <div class="p-5 sm:p-6 rounded-3xl bg-white/95 backdrop-blur-xl border-2 border-[#D4AF37] shadow-[0_12px_35px_rgba(160,120,30,0.18)] flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
                             <div class="flex items-center gap-4">
-                                <div class="w-14 h-14 rounded-2xl flex items-center justify-center text-2xl shadow-inner shrink-0"
+                                <div class="w-14 h-14 rounded-2xl flex items-center justify-center p-2 shadow-inner shrink-0"
                                      style="background: linear-gradient(145deg, #FBF6EB 0%, #EBD5A4 60%, #D4AF37 100%); border: 1.5px solid #BD923E;">
-                                    🎾
+                                    <img src="{{ asset('images/club61-logo.png') }}" alt="Club 61" class="w-full h-full object-contain">
                                 </div>
                                 <div>
                                     <div class="flex flex-wrap items-center gap-2">
@@ -151,8 +151,10 @@
                     <template x-if="!activeMatch && !isLoadingBookings">
                         <div class="p-5 rounded-3xl bg-white/95 backdrop-blur-xl border border-[#DFC387] shadow-sm flex items-center justify-between gap-4">
                             <div class="flex items-center gap-3.5">
-                                <div class="w-12 h-12 rounded-2xl bg-[#FAF8F2] border border-[#DFC387] flex items-center justify-center text-xl shrink-0">
-                                    📅
+                                <div class="w-12 h-12 rounded-2xl bg-[#FAF8F2] border border-[#DFC387] flex items-center justify-center shrink-0">
+                                    <svg class="w-6 h-6 text-[#8C6418]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                    </svg>
                                 </div>
                                 <div>
                                     <h4 class="font-serif font-black text-sm text-[#1F170D]">Belum Ada Tiket Pertandingan Aktif</h4>
@@ -274,7 +276,7 @@
                                 Privilege VIP
                             </div>
                             <h3 class="font-serif text-lg font-black text-white leading-tight">
-                                Upgrade Membership Diamond Club 🎾
+                                Upgrade Membership Diamond Club
                             </h3>
                             <p class="text-xs text-emerald-100/80 leading-relaxed font-medium">
                                 Dapatkan prioritas booking H-7, diskon 25% sewa lapangan, dan akses tak terbatas sauna &amp; cold plunge setiap pekan!
@@ -291,11 +293,11 @@
                     <!-- Venue Operating Info & Concierge -->
                     <div class="p-5 rounded-3xl bg-white/95 backdrop-blur-xl border border-[#DFC387] shadow-sm space-y-3 text-xs">
                         <div class="font-serif font-black text-sm text-[#1F170D] flex items-center gap-2">
-                            <span>🏛️</span>
-                            <span>VANTAGE Club 61 Senopati</span>
+                            <span>Club 61 Padel Court Medan</span>
                         </div>
                         <div class="text-[#7A643E] space-y-1.5 leading-relaxed">
-                            <div><strong class="text-[#3B2B11]">Alamat:</strong> Jl. Senopati No. 61, Kebayoran Baru, Jakarta Selatan</div>
+                            <div><strong class="text-[#3B2B11]">Alamat:</strong> Gedung Indosat, Jl. Perintis Kemerdekaan No. 39, Medan, Sumatera Utara</div>
+                            <div><strong class="text-[#3B2B11]">Tagline:</strong> Play. Compete. Connect.</div>
                             <div><strong class="text-[#3B2B11]">Jam Buka:</strong> Setiap Hari &bull; 06:00 - 23:00 WIB</div>
                             <div><strong class="text-[#3B2B11]">WhatsApp Concierge:</strong> 0812-6161-PADEL</div>
                         </div>

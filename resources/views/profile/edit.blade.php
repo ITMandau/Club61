@@ -2,9 +2,9 @@
     <x-slot name="header">
         <div class="flex items-center justify-between">
             <div class="flex items-center gap-3">
-                <div class="w-10 h-10 rounded-2xl flex items-center justify-center shadow-md font-bold text-lg"
+                <div class="w-10 h-10 rounded-2xl flex items-center justify-center shadow-md font-bold text-sm tracking-wider"
                      style="background: linear-gradient(135deg, #2D210F 0%, #171006 100%); border: 1.5px solid #E5C378; color: #E5C378;">
-                    👤
+                    61
                 </div>
                 <div>
                     <h2 class="font-serif font-extrabold text-xl text-[#1F170D] tracking-wide">

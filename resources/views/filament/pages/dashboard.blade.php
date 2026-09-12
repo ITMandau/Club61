@@ -4,19 +4,19 @@
         <div>
             <div class="adm-pill adm-pill-gold">
                 <span style="display:inline-block; width:6px; height:6px; border-radius:50%; background-color:#D4AF37;"></span>
-                <span>APEX Padel Arena &bull; Live Operations</span>
+                <span>Club 61 Padel Court &bull; Live Operations</span>
             </div>
             <div class="adm-banner-title">
-                Selamat datang di APEX Padel Arena Dashboard
+                Selamat datang di Club 61 Padel Court Dashboard
             </div>
             <div class="adm-banner-sub">
-                Pantau kinerja lapangan dan kelola operasional bisnis Anda dengan mudah.
+                Pantau kinerja lapangan dan kelola operasional bisnis Club 61 Medan dengan mudah.
             </div>
         </div>
 
         <div style="display: flex; align-items: center; gap: 0.75rem;">
             <div style="background: rgba(255, 255, 255, 0.85); border: 1.5px solid #DFC387; border-radius: 14px; padding: 0.5rem 0.85rem; display: flex; align-items: center; gap: 0.5rem;">
-                <span style="font-size: 1.25rem;">🎾</span>
+                <div style="width: 10px; height: 10px; border-radius: 50%; background: #10B981;"></div>
                 <div>
                     <div style="font-size: 0.625rem; font-weight: 800; text-transform: uppercase; color: #8C6418;">Venue Status</div>
                     <div style="font-size: 0.75rem; font-weight: 800; color: #1F170D;">4 Lapangan Beroperasi Penuh</div>

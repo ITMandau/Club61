@@ -376,7 +376,7 @@ class PadelBookingService
             $discountAmount = 0;
             if ($voucherCode) {
                 $code = strtoupper(trim($voucherCode));
-                if (in_array($code, ['HEMAT10', 'VANTAGE20', 'GOLDVIP'])) {
+                if (in_array($code, ['HEMAT10', 'VANTAGE20', 'CLUB61', 'GOLDVIP'])) {
                     $discountAmount = 40000;
                 }
             }

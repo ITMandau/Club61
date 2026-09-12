@@ -74,8 +74,8 @@
             <!-- Duration Preset Selector (Pilihan Durasi Cepat: 1 Jam, 2 Jam, 3 Jam, 4 Jam) -->
             <div class="bg-white/95 backdrop-blur-xl p-4 sm:p-5 rounded-3xl border border-[#DFC387] shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div class="flex items-center gap-3.5">
-                    <div class="w-11 h-11 rounded-2xl bg-[#FAF2DE] border border-[#DFC387] flex items-center justify-center text-xl shrink-0 text-[#7A5818] shadow-sm">
-                        ⏱️
+                    <div class="w-11 h-11 rounded-2xl bg-[#FAF2DE] border border-[#DFC387] flex items-center justify-center text-[11px] font-black shrink-0 text-[#7A5818] shadow-sm tracking-wider">
+                        JAM
                     </div>
                     <div>
                         <div class="text-xs font-black text-[#1F170D] uppercase tracking-wider flex items-center gap-2">
@@ -96,7 +96,7 @@
                                     : 'bg-white text-[#5C410F] hover:bg-[#FAF2DE] border-transparent font-bold'"
                                 class="px-3.5 sm:px-4 py-2 rounded-xl text-xs border transition-all cursor-pointer flex items-center gap-1.5">
                             <span x-text="d + ' Jam'"></span>
-                            <span x-show="d === 2" class="hidden sm:inline text-[9px] text-amber-400 font-bold">★ Populer</span>
+                            <span x-show="d === 2" class="hidden sm:inline text-[9px] text-amber-500 font-bold">Populer</span>
                         </button>
                     </template>
                 </div>
@@ -355,7 +355,7 @@
                 },
 
                 /**
-                 * 🛡️ CELAH 1 QA: Konsolidasi Sesi Multi-Jam Bersambung
+                 * CELAH 1 QA: Konsolidasi Sesi Multi-Jam Bersambung
                  */
                 handleSlotClick(courtId, courtName, startTime, endTime, price, rowIndex, courtKey) {
                     // Jika durasi 1 jam, gunakan toggle biasa
@@ -428,7 +428,7 @@
                 },
 
                 /**
-                 * 🛡️ CELAH 1 QA DEFENSE: Algoritma Contiguous Grouping
+                 * CELAH 1 QA DEFENSE: Algoritma Contiguous Grouping
                  * Menggabungkan jam yang nempel tanpa putus menjadi 1 E-Tiket,
                  * dan memisahkan jadwal bolong (non-contiguous) menjadi E-Tiket terpisah.
                  */
@@ -529,8 +529,9 @@
 
                         if (res.status === 201 && json.success) {
                             // Simpan detail booking yang telah dikonsolidasi ke session storage untuk cart
-                            sessionStorage.setItem('vantage_cart', JSON.stringify(consolidatedSlots));
-                            sessionStorage.setItem('vantage_hold_data', JSON.stringify(json.data));
+                            sessionStorage.setItem('club61_cart', JSON.stringify(consolidatedSlots));
+                            sessionStorage.setItem('club61_hold_data', JSON.stringify(json.data));
+                            window.dispatchEvent(new CustomEvent('cart-updated'));
                             window.location.href = "{{ route('customer.cart') }}";
                         } else {
                             alert(json.message || 'Gagal mengunci slot lapangan. Silakan coba jam lain.');

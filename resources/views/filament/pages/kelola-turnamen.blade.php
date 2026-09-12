@@ -28,11 +28,10 @@
                 <div>
                     <span class="adm-pill adm-pill-gold">Pendaftaran Dibuka</span>
                     <div style="font-family: var(--font-serif); font-size: 1.25rem; font-weight: 900; color: #1F170D; margin-top: 0.5rem;">
-                        Vantage Open Championship 2026
+                        Club 61 Open Championship 2026
                     </div>
                     <div style="font-size: 0.75rem; color: #8C6418; font-weight: 600;">Kategori: Men's Doubles &bull; Open Grade A</div>
                 </div>
-                <span style="font-size: 2rem;">🏆</span>
             </div>
             
             <div style="margin-top: 1.25rem; padding: 1rem; background: #FAF5E8; border-radius: 14px; font-size: 0.75rem; display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem;">
@@ -64,7 +63,6 @@
                     </div>
                     <div style="font-size: 0.75rem; color: #8C6418; font-weight: 600;">Kategori: Mixed Doubles &bull; Member Only</div>
                 </div>
-                <span style="font-size: 2rem;">🎾</span>
             </div>
             
             <div style="margin-top: 1.25rem; padding: 1rem; background: #FAF5E8; border-radius: 14px; font-size: 0.75rem; display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem;">

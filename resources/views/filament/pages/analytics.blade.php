@@ -4,7 +4,7 @@
         <div>
             <div class="adm-pill adm-pill-gold">
                 <span style="display:inline-block; width:6px; height:6px; border-radius:50%; background-color:#D4AF37;"></span>
-                <span>Financial Business Intelligence &bull; APEX Padel Arena</span>
+                <span>Financial Business Intelligence &bull; Club 61 Padel Court</span>
             </div>
             <div class="adm-banner-title">
                 Laporan Uang Masuk &amp; Analisis Finansial
@@ -34,7 +34,7 @@
 
     <!-- Periode Aktif Banner -->
     <div style="margin-bottom: 1.25rem; font-size: 0.8125rem; color: #7A643E; font-weight: 700; display: flex; align-items: center; gap: 0.5rem;">
-        <span>📅 Menampilkan data periode:</span>
+        <span>Menampilkan data periode:</span>
         <span class="adm-pill adm-pill-gold" style="font-size: 0.75rem;">{{ $periodLabel }}</span>
     </div>
 
@@ -102,7 +102,7 @@
                         {{ $occupancyRate }}%
                     </div>
                 </div>
-                <span class="adm-pill adm-pill-green">🎾 Lapangan</span>
+                <span class="adm-pill adm-pill-green">Lapangan</span>
             </div>
             <div class="adm-metric-foot">
                 <span>{{ $totalHoursBooked }} Jam sewa terpakai</span>
@@ -126,7 +126,7 @@
             <div style="display: flex; flex-direction: column; gap: 0.75rem;">
                 <div style="display: flex; align-items: center; justify-content: space-between; padding: 0.75rem 1rem; background: #FAF5E8; border-radius: 12px; border: 1px solid #DFC387;">
                     <div>
-                        <div style="font-weight: 800; font-size: 0.875rem; color: #1F170D;">💵 Tunai Kasir Frontdesk / Transfer</div>
+                        <div style="font-weight: 800; font-size: 0.875rem; color: #1F170D;">Tunai Kasir Frontdesk / Transfer</div>
                         <div style="font-size: 0.6875rem; color: #7A643E;">Settlement langsung di kasir / transfer manual</div>
                     </div>
                     <div style="font-family: var(--font-mono, monospace); font-weight: 900; font-size: 1rem; color: #1F170D;">
@@ -136,7 +136,7 @@
 
                 <div style="display: flex; align-items: center; justify-content: space-between; padding: 0.75rem 1rem; background: #FFFDF5; border-radius: 12px; border: 1px solid #DFC387;">
                     <div>
-                        <div style="font-weight: 800; font-size: 0.875rem; color: #1F170D;">⚡ Midtrans Gateway (QRIS, GoPay, VA)</div>
+                        <div style="font-weight: 800; font-size: 0.875rem; color: #1F170D;">Midtrans Gateway (QRIS, GoPay, VA)</div>
                         <div style="font-size: 0.6875rem; color: #7A643E;">Pembayaran otomatis instant settlement online</div>
                     </div>
                     <div style="font-family: var(--font-mono, monospace); font-weight: 900; font-size: 1rem; color: #8C6418;">
@@ -146,7 +146,7 @@
 
                 <div style="display: flex; align-items: center; justify-content: space-between; padding: 0.75rem 1rem; background: #FFFDF5; border-radius: 12px; border: 1px solid #DFC387;">
                     <div>
-                        <div style="font-weight: 800; font-size: 0.875rem; color: #1F170D;">💳 Xendit Gateway (Kartu Kredit &amp; E-Wallet)</div>
+                        <div style="font-weight: 800; font-size: 0.875rem; color: #1F170D;">Xendit Gateway (Kartu Kredit &amp; E-Wallet)</div>
                         <div style="font-size: 0.6875rem; color: #7A643E;">Kartu kredit internasional &amp; invoice virtual account</div>
                     </div>
                     <div style="font-family: var(--font-mono, monospace); font-weight: 900; font-size: 1rem; color: #8C6418;">
@@ -169,7 +169,7 @@
             <div style="display: flex; flex-direction: column; gap: 0.75rem;">
                 <div style="display: flex; align-items: center; justify-content: space-between; padding: 0.75rem 1rem; background: #FAF5E8; border-radius: 12px; border: 1px solid #DFC387;">
                     <div>
-                        <div style="font-weight: 800; font-size: 0.875rem; color: #1F170D;">🎾 Sewa Lapangan Padel (Court Rental)</div>
+                        <div style="font-weight: 800; font-size: 0.875rem; color: #1F170D;">Sewa Lapangan Padel (Court Rental)</div>
                         <div style="font-size: 0.6875rem; color: #7A643E;">Sewa slot jam 4 lapangan panoramic</div>
                     </div>
                     <div style="font-family: var(--font-mono, monospace); font-weight: 900; font-size: 1rem; color: #1F170D;">
@@ -179,7 +179,7 @@
 
                 <div style="display: flex; align-items: center; justify-content: space-between; padding: 0.75rem 1rem; background: #FFFDF5; border-radius: 12px; border: 1px solid #DFC387;">
                     <div>
-                        <div style="font-weight: 800; font-size: 0.875rem; color: #1F170D;">🎒 Sewa Alat &amp; Add-on Bola (Equipment)</div>
+                        <div style="font-weight: 800; font-size: 0.875rem; color: #1F170D;">Sewa Alat &amp; Add-on Bola (Equipment)</div>
                         <div style="font-size: 0.6875rem; color: #7A643E;">Sewa raket Babolat/Nox &amp; can bola padel</div>
                     </div>
                     <div style="font-family: var(--font-mono, monospace); font-weight: 900; font-size: 1rem; color: #8C6418;">
@@ -189,7 +189,7 @@
 
                 <div style="display: flex; align-items: center; justify-content: space-between; padding: 0.75rem 1rem; background: #FFFDF5; border-radius: 12px; border: 1px solid #DFC387;">
                     <div>
-                        <div style="font-weight: 800; font-size: 0.875rem; color: #1F170D;">🥇 Pelatih &amp; Coaching Session</div>
+                        <div style="font-weight: 800; font-size: 0.875rem; color: #1F170D;">Pelatih &amp; Coaching Session</div>
                         <div style="font-size: 0.6875rem; color: #7A643E;">Sesi privat pelatih bersertifikasi WPT</div>
                     </div>
                     <div style="font-family: var(--font-mono, monospace); font-weight: 900; font-size: 1rem; color: #8C6418;">
@@ -243,11 +243,11 @@
                                 @if($tx->status === 'PAID')
                                     <span class="adm-pill adm-pill-green">Lunas (Paid)</span>
                                 @elseif($tx->status === 'CHECKED_IN')
-                                    <span class="adm-pill adm-pill-gold">🎾 Sedang Main</span>
+                                    <span class="adm-pill adm-pill-gold">Sedang Main</span>
                                 @elseif($tx->status === 'COMPLETED')
-                                    <span class="adm-pill" style="background: #ECFDF5; color: #065F46; border: 1px solid #A7F3D0; font-weight: 700;">✅ Selesai</span>
+                                    <span class="adm-pill" style="background: #ECFDF5; color: #065F46; border: 1px solid #A7F3D0; font-weight: 700;">Selesai</span>
                                 @elseif($tx->status === 'EXPIRED')
-                                    <span class="adm-pill" style="background: #FEF3C7; color: #92400E; border: 1px solid #FDE68A; font-weight: 700;">⚠️ Expired (Hangus)</span>
+                                    <span class="adm-pill" style="background: #FEF3C7; color: #92400E; border: 1px solid #FDE68A; font-weight: 700;">Expired (Hangus)</span>
                                 @else
                                     <span class="adm-pill">{{ $tx->status }}</span>
                                 @endif
