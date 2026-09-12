@@ -9,7 +9,7 @@
                 <!-- Background Cinematic Imagery with Warm Golden Architectural Overlay -->
                 <div class="absolute inset-0 z-0">
                     <img src="{{ asset('images/club-hero.jpg') }}" 
-                         alt="Vantage Racquet & Social Club" 
+                         alt="Club 61 Padel Court" 
                          class="w-full h-full object-cover object-center scale-105 transition-transform duration-1000 hover:scale-100" />
                     <!-- Rich Warm Espresso / Bronze Charcoal Gradient Overlay for Ultimate Readability -->
                     <div class="absolute inset-0 bg-gradient-to-t from-[#0E0A04]/98 via-[#181105]/85 to-[#0E0A04]/75"></div>
@@ -19,23 +19,15 @@
                 <!-- Top Header: Crest & Live Status Badge -->
                 <div class="relative z-10 p-6 sm:p-8 flex items-center justify-between">
                     <div class="flex items-center gap-3.5">
-                        <!-- Custom Polished Gold Crest Icon -->
-                        <div class="w-12 h-12 rounded-2xl flex items-center justify-center shadow-lg shadow-black/60"
-                             style="background: linear-gradient(135deg, #2D210F 0%, #171006 100%); border: 1.5px solid #E5C378;">
-                            <svg class="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="#E5C378" style="stroke: #E5C378;">
-                                <circle cx="12" cy="12" r="9" stroke-width="2" />
-                                <path d="M12 3a9 9 0 0 1 9 9" stroke-width="2.5" stroke-linecap="round" />
-                                <path d="M7 10l5 5 5-5" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
-                            </svg>
-                        </div>
+                        <img src="{{ asset('images/club61-logo.png') }}" alt="Club 61 Padel Court" class="w-12 h-12 object-contain rounded-2xl shadow-lg border border-[#E5C378] bg-white p-0.5">
                         <div>
                             <div class="font-serif text-2xl font-black tracking-[0.25em] uppercase drop-shadow-md"
                                  style="color: #FFFFFF !important; text-shadow: 0 2px 10px rgba(0,0,0,0.9);">
-                                VANTAGE
+                                CLUB 61
                             </div>
                             <div class="text-[10px] tracking-[0.38em] font-bold uppercase -mt-0.5"
                                  style="color: #F5E2B5 !important; text-shadow: 0 1px 6px rgba(0,0,0,0.9);">
-                                RACQUET &amp; SOCIAL CLUB
+                                PADEL COURT
                             </div>
                         </div>
                     </div>
@@ -128,10 +120,10 @@
                      style="background: rgba(10, 7, 3, 0.85); border-top: 1.5px solid #C59B46; color: #FFFFFF !important;">
                     <div class="flex items-center gap-2">
                         <span class="w-2 h-2 rounded-full" style="background-color: #D4AF37; box-shadow: 0 0 8px #D4AF37;"></span>
-                        <span style="color: #FFFFFF !important; font-weight: 500;">Jakarta Selatan Flagship Venue &bull; Open 06:00 &ndash; 23:00</span>
+                        <span style="color: #FFFFFF !important; font-weight: 500;">Gedung Indosat Medan &bull; Open 06:00 &ndash; 23:00</span>
                     </div>
                     <div class="font-mono text-[11px]" style="color: #F5E2B5 !important; font-weight: 700; letter-spacing: 0.05em;">
-                        portal.vantageclub.id
+                        portal.club61padel.com
                     </div>
                 </div>
             </div>
@@ -169,11 +161,8 @@
                     <div class="relative z-10 mb-6 p-3.5 bg-white/70 shadow-inner backdrop-blur-sm"
                          style="border: 1.5px solid #DFC387; border-radius: 20px;">
                         <div class="flex items-center justify-between mb-2.5">
-                            <span class="text-[11px] font-bold uppercase tracking-wider text-[#634812] flex items-center gap-1.5">
-                                <svg class="w-3.5 h-3.5 text-[#B8860B]" fill="currentColor" viewBox="0 0 20 20">
-                                    <path fill-rule="evenodd" d="M11.3 1.046A1 1 0 0112 2v5h4a1 1 0 01.82 1.573l-7 10A1 1 0 018 18v-5H4a1 1 0 01-.82-1.573l7-10a1 1 0 011.12-.38z" clip-rule="evenodd" />
-                                </svg>
-                                ⚡ CARA CEPAT (PILIH AKUN):
+                            <span class="text-[11px] font-bold uppercase tracking-wider text-[#634812]">
+                                CARA CEPAT (PILIH AKUN):
                             </span>
                             <span id="role-destination" class="text-[10px] font-semibold px-2.5 py-0.5 rounded-full bg-[#EEDBB2] text-[#5C410F] border border-[#C59B46]/50">
                                 Siap Masuk
@@ -182,41 +171,37 @@
 
                         <!-- 4 Quick Metallic Gold Role Buttons -->
                         <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                            <button type="button" onclick="selectRole('budi@gmail.com', 'Password123!', 'Dashboard Member (/dashboard)', '🎾')" 
+                            <button type="button" onclick="selectRole('budi@gmail.com', 'Password123!', 'Dashboard Member (/dashboard)')" 
                                     class="role-btn text-left p-2 transition-all duration-200 text-xs active:scale-95 group shadow-sm hover:shadow-md cursor-pointer"
                                     style="background: linear-gradient(145deg, #FDF9EE 0%, #EEDBB0 55%, #CF9E46 100%); border: 1.5px solid #BD923E; border-radius: 14px;">
-                                <div class="flex items-center gap-1 mb-0.5">
-                                    <span class="text-sm">🎾</span>
+                                <div class="mb-0.5">
                                     <span class="font-bold text-[11px] text-[#241808]">Member</span>
                                 </div>
                                 <div class="text-[9px] text-[#6B4E15] font-medium truncate">Customer VIP</div>
                             </button>
 
-                            <button type="button" onclick="selectRole('cashier@club61.com', 'Password123!', 'Layar Kasir Frontdesk (/pos)', '💼')" 
+                            <button type="button" onclick="selectRole('cashier@club61.com', 'Password123!', 'Layar Kasir Frontdesk (/pos)')" 
                                     class="role-btn text-left p-2 transition-all duration-200 text-xs active:scale-95 group shadow-sm hover:shadow-md cursor-pointer"
                                     style="background: linear-gradient(145deg, #FDF9EE 0%, #EEDBB0 55%, #CF9E46 100%); border: 1.5px solid #BD923E; border-radius: 14px;">
-                                <div class="flex items-center gap-1 mb-0.5">
-                                    <span class="text-sm">💼</span>
+                                <div class="mb-0.5">
                                     <span class="font-bold text-[11px] text-[#241808]">Kasir</span>
                                 </div>
                                 <div class="text-[9px] text-[#6B4E15] font-medium truncate">POS Venue</div>
                             </button>
 
-                            <button type="button" onclick="selectRole('barista@club61.com', 'Password123!', 'Monitor KOT Kitchen (/kitchen)', '🍳')" 
+                            <button type="button" onclick="selectRole('barista@club61.com', 'Password123!', 'Monitor KOT Kitchen (/kitchen)')" 
                                     class="role-btn text-left p-2 transition-all duration-200 text-xs active:scale-95 group shadow-sm hover:shadow-md cursor-pointer"
                                     style="background: linear-gradient(145deg, #FDF9EE 0%, #EEDBB0 55%, #CF9E46 100%); border: 1.5px solid #BD923E; border-radius: 14px;">
-                                <div class="flex items-center gap-1 mb-0.5">
-                                    <span class="text-sm">🍳</span>
+                                <div class="mb-0.5">
                                     <span class="font-bold text-[11px] text-[#241808]">Kitchen</span>
                                 </div>
                                 <div class="text-[9px] text-[#6B4E15] font-medium truncate">Display KDS</div>
                             </button>
 
-                            <button type="button" onclick="selectRole('admin@club61.com', 'Password123!', 'Admin Panel Filament (/admin)', '⚡')" 
+                            <button type="button" onclick="selectRole('admin@club61.com', 'Password123!', 'Admin Panel Filament (/admin)')" 
                                     class="role-btn text-left p-2 transition-all duration-200 text-xs active:scale-95 group shadow-sm hover:shadow-md cursor-pointer"
                                     style="background: linear-gradient(145deg, #FDF9EE 0%, #EEDBB0 55%, #CF9E46 100%); border: 1.5px solid #BD923E; border-radius: 14px;">
-                                <div class="flex items-center gap-1 mb-0.5">
-                                    <span class="text-sm">⚡</span>
+                                <div class="mb-0.5">
                                     <span class="font-bold text-[11px] text-[#241808]">Admin</span>
                                 </div>
                                 <div class="text-[9px] text-[#6B4E15] font-medium truncate">Super Admin</div>
@@ -340,7 +325,7 @@
 
                 <!-- Footer Tagline Under Card -->
                 <div class="text-center mt-4 text-[11px] text-[#7A643E]/70 font-medium">
-                    &copy; {{ date('Y') }} Vantage Racquet &amp; Social Club. All Rights Reserved.
+                    &copy; {{ date('Y') }} Club 61 Padel Court. Gedung Indosat Medan. All Rights Reserved.
                 </div>
             </div>
 
@@ -349,13 +334,13 @@
 
     <!-- Interactive Script for Quick Role Fill and Password Visibility -->
     <script>
-        function selectRole(email, password, destinationLabel, emoji) {
+        function selectRole(email, password, destinationLabel) {
             document.getElementById('email').value = email;
             document.getElementById('password').value = password;
             
             const destBadge = document.getElementById('role-destination');
             if (destBadge) {
-                destBadge.innerHTML = emoji + ' ' + destinationLabel;
+                destBadge.innerHTML = destinationLabel;
                 destBadge.className = 'text-[10px] font-semibold px-2.5 py-0.5 rounded-full bg-[#D4AF37] text-[#1E1508] transition-all scale-105 shadow-md shadow-amber-500/30';
                 setTimeout(() => {
                     destBadge.className = 'text-[10px] font-semibold px-2.5 py-0.5 rounded-full bg-[#EEDBB2] text-[#5C410F] border border-[#C59B46]/50 transition-all';

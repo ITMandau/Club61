@@ -5,7 +5,8 @@
         <meta name="viewport" content="width=device-width, initial-scale=1">
         <meta name="csrf-token" content="{{ csrf_token() }}">
 
-        <title>{{ config('app.name', 'VANTAGE') }} - Sports & Social Club</title>
+        <title>{{ config('app.name', 'Club 61 Padel Court') }} - Play. Compete. Connect.</title>
+        <link rel="icon" type="image/png" href="{{ asset('images/club61-logo.png') }}">
 
         <!-- Google Fonts: Luxury Serif & Athletic Sans -->
         <link rel="preconnect" href="https://fonts.googleapis.com">

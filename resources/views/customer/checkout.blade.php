@@ -42,8 +42,8 @@
                             <template x-for="(item, idx) in bookingItems" :key="idx">
                                 <div class="py-3.5 flex items-center justify-between">
                                     <div class="flex items-center gap-3">
-                                        <div class="w-8 h-8 rounded-xl bg-[#FAF2DE] border border-[#DFC387] flex items-center justify-center text-sm">
-                                            🎾
+                                        <div class="w-8 h-8 rounded-xl bg-[#FAF2DE] border border-[#DFC387] flex items-center justify-center text-[10px] font-black text-[#7A5818]">
+                                            COURT
                                         </div>
                                         <div>
                                             <div class="font-bold text-sm text-[#1F170D]" x-text="item.court || 'Court Arena'"></div>
@@ -84,7 +84,7 @@
                                     </div>
                                     <div class="flex items-center gap-3">
                                         <span class="font-mono font-bold text-[#1F170D]" x-text="'Rp ' + formatNumber(addon.price * (addon.quantity || 1))"></span>
-                                        <button type="button" @click="removeAddon(idx)" class="text-rose-500 hover:text-rose-700 text-xs">✕</button>
+                                        <button type="button" @click="removeAddon(idx)" class="text-rose-500 hover:text-rose-700 text-xs font-bold">Hapus</button>
                                     </div>
                                 </div>
                             </template>
@@ -136,7 +136,7 @@
                                 <input type="text" 
                                        x-model="promoCode" 
                                        :disabled="promoApplied"
-                                       placeholder="HEMAT10 / VANTAGE20" 
+                                       placeholder="HEMAT10 / CLUB61" 
                                        class="flex-1 px-3.5 py-2.5 rounded-xl border border-[#DFC387] text-xs font-mono uppercase focus:ring-1 focus:ring-[#D4AF37] focus:outline-none bg-white">
                                 <button type="button" 
                                         x-show="!promoApplied"
@@ -152,7 +152,7 @@
                                 </button>
                             </div>
                             <div x-show="promoApplied" class="text-[10px] text-emerald-700 font-bold">
-                                ✓ Kupon Berhasil Digunakan: Hemat Rp 40.000
+                                Kupon Berhasil Digunakan: Hemat Rp 40.000
                             </div>
                         </div>
 
@@ -185,7 +185,7 @@
                             </div>
                         </div>
 
-                        <!-- 🛡️ GUARDRAIL 2: CTA Pay Button with Disabled State & Spinner -->
+                        <!-- GUARDRAIL 2: CTA Pay Button with Disabled State & Spinner -->
                         <div class="pt-2">
                             <button type="button" 
                                     :disabled="isSubmitting || isExpired"
@@ -215,7 +215,7 @@
                         </div>
 
                         <div class="text-[10px] text-center text-[#7A643E]">
-                            🔒 Transaksi diamankan enkripsi SSL 256-bit dan Midtrans 3D-Secure.
+                            Transaksi diamankan enkripsi SSL 256-bit dan Midtrans 3D-Secure.
                         </div>
 
                     </div>
@@ -225,13 +225,13 @@
 
         </div>
 
-        <!-- 🛡️ GUARDRAIL 1 MODAL: Waktu Sesi Habis -->
+        <!-- GUARDRAIL 1 MODAL: Waktu Sesi Habis -->
         <div x-show="showExpiredModal" 
              style="display: none;"
              class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
             <div class="bg-white rounded-3xl border-2 border-[#D4AF37] max-w-md w-full p-6 text-center space-y-4 shadow-2xl animate-scaleIn">
-                <div class="w-16 h-16 rounded-full bg-rose-100 border border-rose-300 text-rose-600 flex items-center justify-center mx-auto text-2xl">
-                    ⏳
+                <div class="w-16 h-16 rounded-full bg-rose-100 border border-rose-300 text-rose-600 flex items-center justify-center mx-auto text-xs font-black tracking-wider">
+                    EXPIRED
                 </div>
                 <h3 class="font-serif font-black text-xl text-[#1F170D]">Waktu Sesi Habis!</h3>
                 <p class="text-xs text-[#7A643E] leading-relaxed">
@@ -253,7 +253,7 @@
             <div class="w-full max-w-md bg-white rounded-3xl border-2 border-[#DFC387] shadow-2xl p-6 space-y-4">
                 <div class="flex items-center justify-between border-b border-[#DFC387]/50 pb-3">
                     <h3 class="font-serif font-black text-base text-[#1F170D]">Pilih Metode Pembayaran</h3>
-                    <button type="button" @click="showPaymentModal = false" class="text-xs text-[#8C7A58] hover:text-[#1F170D]">✕</button>
+                    <button type="button" @click="showPaymentModal = false" class="text-xs text-[#8C7A58] hover:text-[#1F170D] font-bold">Tutup</button>
                 </div>
 
                 <div class="space-y-2.5 max-h-96 overflow-y-auto pr-1">
@@ -283,7 +283,7 @@
             <div class="w-full max-w-md bg-white rounded-3xl border-2 border-[#DFC387] shadow-2xl p-6 space-y-4">
                 <div class="flex items-center justify-between border-b border-[#DFC387]/50 pb-3">
                     <h3 class="font-serif font-black text-base text-[#1F170D]">Katalog Alat &amp; Add-ons</h3>
-                    <button type="button" @click="showAddOnsModal = false" class="text-xs text-[#8C7A58] hover:text-[#1F170D]">✕ Selesai</button>
+                    <button type="button" @click="showAddOnsModal = false" class="text-xs text-[#8C7A58] hover:text-[#1F170D] font-bold">Selesai</button>
                 </div>
 
                 <div class="space-y-2.5 max-h-96 overflow-y-auto pr-1">
@@ -313,8 +313,8 @@
              class="fixed inset-0 z-50 overflow-y-auto bg-black/70 backdrop-blur-md flex items-center justify-center p-4">
             
             <div class="w-full max-w-sm bg-white rounded-3xl border-2 border-[#D4AF37] shadow-2xl p-6 text-center space-y-4">
-                <div class="w-14 h-14 mx-auto rounded-2xl bg-[#FAF2DE] border border-[#DFC387] flex items-center justify-center text-2xl shadow-sm">
-                    📲
+                <div class="w-14 h-14 mx-auto rounded-2xl bg-[#FAF2DE] border border-[#DFC387] flex items-center justify-center text-xs font-black text-[#7A5818] shadow-sm tracking-wider">
+                    QRIS
                 </div>
                 
                 <div>
@@ -326,7 +326,7 @@
                 </div>
 
                 <div class="p-4 bg-white rounded-2xl border-2 border-dashed border-[#DFC387] inline-block shadow-inner">
-                    <img src="https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=VANTAGE-MIDTRANS-DEMO" 
+                    <img src="https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=CLUB61-MIDTRANS-DEMO" 
                          alt="QR Code Pembayaran" 
                          class="w-44 h-44 mx-auto rounded-lg" />
                     <div class="mt-2 text-[10px] font-mono font-bold text-[#8C6418]">IDEMPOTENT &bull; PROTECTED</div>
@@ -362,7 +362,7 @@
                 timerInterval: null,
                 isExpired: false,
                 showExpiredModal: false,
-                isSubmitting: false, // 🛡️ GUARDRAIL 2: Loading state anti-double click
+                isSubmitting: false, // GUARDRAIL 2: Loading state anti-double click
                 createdBookingId: null,
 
                 showPaymentModal: false,
@@ -390,8 +390,8 @@
                 ],
 
                 init() {
-                    const saved = sessionStorage.getItem('vantage_cart');
-                    const holdSaved = sessionStorage.getItem('vantage_hold_data');
+                    const saved = sessionStorage.getItem('club61_cart') || sessionStorage.getItem('vantage_cart');
+                    const holdSaved = sessionStorage.getItem('club61_hold_data') || sessionStorage.getItem('vantage_hold_data');
 
                     if (saved) {
                         try {
@@ -419,7 +419,7 @@
                         this.expiresAtTime = Date.now() + (10 * 60 * 1000);
                     }
 
-                    // 🛡️ GUARDRAIL 1: Countdown Timer & Visibility Listener
+                    // GUARDRAIL 1: Countdown Timer & Visibility Listener
                     if (this.bookingItems.length > 0) {
                         this.startCountdown();
 
@@ -517,11 +517,11 @@
 
                 applyPromo() {
                     const code = this.promoCode.trim().toUpperCase();
-                    if (code === 'HEMAT10' || code === 'VANTAGE20' || code === 'GOLDVIP') {
+                    if (code === 'HEMAT10' || code === 'VANTAGE20' || code === 'CLUB61' || code === 'GOLDVIP') {
                         this.promoApplied = true;
                         this.promoDiscount = 40000;
                     } else {
-                        alert('Kode promo tidak valid. Coba gunakan: HEMAT10 atau VANTAGE20');
+                        alert('Kode promo tidak valid. Coba gunakan: HEMAT10 atau CLUB61');
                     }
                 },
 
@@ -537,12 +537,12 @@
                 },
 
                 /**
-                 * 💳 FASE 1 & 2: Request Snap Token & Eksekusi Midtrans Pop-Up
+                 * FASE 1 & 2: Request Snap Token & Eksekusi Midtrans Pop-Up
                  */
                 async executePayment() {
                     if (this.isSubmitting || this.isExpired) return;
 
-                    // 🛡️ GUARDRAIL 2: Kunci tombol & aktifkan spinner
+                    // GUARDRAIL 2: Kunci tombol & aktifkan spinner
                     this.isSubmitting = true;
 
                     try {
@@ -593,7 +593,7 @@
                             this.createdBookingId = data.booking_id || (data.bookings && data.bookings[0] ? data.bookings[0].booking_id : '');
                             this.createdOrderId = data.order_id || '';
 
-                            // 💳 FASE 2: Multi-Driver Gateway Execution
+                            // FASE 2: Multi-Driver Gateway Execution
                             if (data.driver === 'midtrans' && window.snap && typeof window.snap.pay === 'function' && !data.is_mock && data.snap_token) {
                                 // Eksekusi Midtrans Snap Pop-Up
                                 window.snap.pay(data.snap_token, {
@@ -613,8 +613,11 @@
                                 });
                             } else if (data.driver === 'xendit' && data.payment_url && !data.is_mock) {
                                 // Eksekusi Xendit Invoice Redirect
+                                sessionStorage.removeItem('club61_cart');
+                                sessionStorage.removeItem('club61_hold_data');
                                 sessionStorage.removeItem('vantage_cart');
                                 sessionStorage.removeItem('vantage_hold_data');
+                                window.dispatchEvent(new CustomEvent('cart-updated'));
                                 window.location.href = data.payment_url;
                             } else {
                                 // Mode Sandbox Mock Simulator / Tunai
@@ -630,8 +633,11 @@
                 },
 
                 clearSessionAndRedirect(bookingId, orderId) {
+                    sessionStorage.removeItem('club61_cart');
+                    sessionStorage.removeItem('club61_hold_data');
                     sessionStorage.removeItem('vantage_cart');
                     sessionStorage.removeItem('vantage_hold_data');
+                    window.dispatchEvent(new CustomEvent('cart-updated'));
                     let target = "{{ route('customer.invoice') }}";
                     const params = [];
                     if (bookingId) params.push(`booking_id=${bookingId}`);

@@ -10,20 +10,13 @@
 
             <!-- Top Header & Crest -->
             <div class="text-center mb-8">
-                <div class="inline-flex items-center justify-center w-14 h-14 rounded-2xl mb-3 shadow-md"
-                     style="background: linear-gradient(135deg, #2D210F 0%, #171006 100%); border: 1.5px solid #E5C378;">
-                    <svg class="w-7 h-7 text-[#E5C378]" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                        <circle cx="12" cy="12" r="9" stroke-width="2" />
-                        <path d="M12 3a9 9 0 0 1 9 9" stroke-width="2.5" stroke-linecap="round" />
-                        <path d="M7 10l5 5 5-5" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
-                    </svg>
-                </div>
+                <img src="{{ asset('images/club61-logo.png') }}" alt="Club 61 Padel Court" class="w-14 h-14 object-contain rounded-2xl shadow-md border border-[#E5C378] bg-white p-1 mb-2 mx-auto">
                 <div class="inline-block px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider mb-2 shadow-sm"
                      style="background: #FAF2DE; border: 1px solid #D9BE84; color: #7A5818;">
-                    VIP Membership Registration
+                    Club 61 Registration
                 </div>
                 <h1 class="font-serif text-2xl sm:text-3xl font-black text-[#1F170D] tracking-wide">
-                    Bergabung ke Vantage Club
+                    Bergabung ke Club 61 Padel Court
                 </h1>
                 <p class="text-xs sm:text-sm text-[#7A643E] mt-1 font-medium">
                     Daftarkan akun member eksklusif Anda untuk menikmati seluruh fasilitas venue.

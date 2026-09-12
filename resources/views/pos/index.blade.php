@@ -3,39 +3,36 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>VANTAGE POS - Frontdesk &amp; Cashier Terminal</title>
-    <!-- Google Fonts: Luxury Serif, Athletic Sans, & Mono -->
+    <title>CLUB 61 POS - Frontdesk & Cashier Terminal</title>
+    <link rel="icon" type="image/png" href="{{ asset('images/club61-logo.png') }}">
+    <!-- Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@700;800;900&family=JetBrains+Mono:wght@500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Alex+Brush&family=Cinzel:wght@600;700;800;900&family=Plus+Jakarta+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;1,400&family=JetBrains+Mono:wght@500;700;800&display=swap" rel="stylesheet">
     @vite(['resources/css/app.css', 'resources/js/app.js'])
 </head>
-<body class="h-full font-sans antialiased text-[#1F170D] bg-[#FBF9F5] selection:bg-[#D4AF37] selection:text-[#1E160A] overflow-hidden flex flex-col relative"
-      style="background-image: url('{{ asset('images/white-gold-marble.jpg') }}'); background-size: cover; background-position: center; background-repeat: no-repeat; background-attachment: fixed;">
+<body class="h-full font-sans antialiased text-[#1F170D] bg-[#FBF9F5] selection:bg-[#D4AF37] selection:text-[#1E160A] flex flex-col overflow-hidden"
+      style="background-image: url('{{ asset('images/white-gold-marble.jpg') }}'); background-size: cover; background-position: center;">
 
-    <!-- Ambient Warm Gold Luxury Lighting -->
+    <!-- Top Ambient Lighting -->
     <div class="fixed inset-0 pointer-events-none z-0 overflow-hidden">
-        <div class="absolute -top-32 left-1/4 w-[850px] h-[550px] bg-gradient-to-b from-amber-300/20 via-yellow-500/10 to-transparent blur-3xl rounded-full"></div>
-        <div class="absolute -bottom-32 right-1/4 w-[700px] h-[500px] bg-[#D4AF37]/15 blur-3xl rounded-full"></div>
+        <div class="absolute -top-40 left-1/4 w-[800px] h-[400px] bg-gradient-to-b from-amber-200/20 via-[#D4AF37]/10 to-transparent blur-3xl rounded-full"></div>
     </div>
 
     <!-- Top POS Navigation Header -->
     <header class="relative z-20 bg-white/90 backdrop-blur-xl border-b border-[#D4AF37]/50 px-5 py-3 flex items-center justify-between shadow-sm shrink-0">
         <div class="flex items-center gap-4">
             <div class="flex items-center gap-2.5">
-                <div class="w-9 h-9 rounded-xl flex items-center justify-center font-black text-lg shadow-sm"
-                     style="background: linear-gradient(135deg, #2D210F 0%, #171006 100%); border: 1.5px solid #E5C378; color: #E5C378;">
-                    VP
-                </div>
+                <img src="{{ asset('images/club61-logo.png') }}" alt="Club 61 POS" class="w-10 h-10 object-contain rounded-xl shadow-sm border border-[#E5C378] bg-white p-0.5">
                 <div>
                     <div class="font-serif font-black text-[#1F170D] text-base tracking-wider flex items-center gap-2">
-                        <span>VANTAGE POS</span>
+                        <span>CLUB 61 POS</span>
                         <span class="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-widest shadow-sm"
                               style="background: #FAF2DE; border: 1px solid #D9BE84; color: #7A5818;">
                             Terminal 01
                         </span>
                     </div>
-                    <div class="text-[11px] text-[#7A643E] font-medium -mt-0.5">Frontdesk, Sewa Alat &amp; Cafe Cashier</div>
+                    <div class="text-[11px] text-[#7A643E] font-medium -mt-0.5">Club 61 Padel Court &bull; Gedung Indosat Medan</div>
                 </div>
             </div>
 
@@ -52,7 +49,7 @@
                     onclick="openPosCheckInModal()" 
                     class="px-3.5 py-1.5 rounded-xl font-bold text-xs flex items-center gap-1.5 transition-all cursor-pointer shadow-sm active:scale-95"
                     style="background: linear-gradient(180deg, #F0DB9D 0%, #D4AF37 35%, #B38622 100%); color: #281A05; border: 1px solid #FBF0CE; box-shadow: 0 4px 12px rgba(184, 134, 11, 0.25);">
-                <span>🎟️ Check-In Tiket</span>
+                <span>Check-In Tiket</span>
             </button>
 
             <div class="text-right hidden sm:block">
@@ -95,19 +92,19 @@
                     </button>
                     <button class="px-3.5 py-2 rounded-xl text-xs font-bold uppercase tracking-wider transition-all shadow-sm hover:bg-white whitespace-nowrap cursor-pointer"
                             style="background: rgba(255, 255, 255, 0.9); border: 1.5px solid #DFC387; color: #5C410F;">
-                        ☕ Coffee &amp; Drinks
+                        Coffee &amp; Drinks
                     </button>
                     <button class="px-3.5 py-2 rounded-xl text-xs font-bold uppercase tracking-wider transition-all shadow-sm hover:bg-white whitespace-nowrap cursor-pointer"
                             style="background: rgba(255, 255, 255, 0.9); border: 1.5px solid #DFC387; color: #5C410F;">
-                        🥪 Toast &amp; Meals
+                        Toast &amp; Meals
                     </button>
                     <button class="px-3.5 py-2 rounded-xl text-xs font-bold uppercase tracking-wider transition-all shadow-sm hover:bg-white whitespace-nowrap cursor-pointer"
                             style="background: rgba(255, 255, 255, 0.9); border: 1.5px solid #DFC387; color: #5C410F;">
-                        🎾 Sewa Raket &amp; Bola
+                        Sewa Raket &amp; Bola
                     </button>
                     <button class="px-3.5 py-2 rounded-xl text-xs font-bold uppercase tracking-wider transition-all shadow-sm hover:bg-white whitespace-nowrap cursor-pointer"
                             style="background: rgba(255, 255, 255, 0.9); border: 1.5px solid #DFC387; color: #5C410F;">
-                        👕 Jersey &amp; Merch
+                        Jersey &amp; Merch
                     </button>
                 </div>
 
@@ -128,7 +125,7 @@
             <div class="flex-1 overflow-y-auto p-4 grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-3.5">
                 
                 <!-- Item 1: Spanish Latte -->
-                <div onclick="addToCart('Iced Spanish Latte', 38000, '☕ BAR')" 
+                <div onclick="addToCart('Iced Spanish Latte', 38000, 'BAR')" 
                      class="p-3.5 rounded-2xl transition-all cursor-pointer hover:scale-[1.02] active:scale-[0.98] shadow-md group flex flex-col justify-between"
                      style="background: linear-gradient(135deg, rgba(255, 255, 255, 0.96) 0%, rgba(253, 249, 240, 0.92) 100%); border: 1.5px solid #DFC387; box-shadow: 0 8px 20px -8px rgba(160, 120, 30, 0.12);">
                     <div>
@@ -147,7 +144,7 @@
                 </div>
 
                 <!-- Item 2: Oat Matcha Latte -->
-                <div onclick="addToCart('Ceremonial Oat Matcha', 45000, '☕ BAR')" 
+                <div onclick="addToCart('Ceremonial Oat Matcha', 45000, 'BAR')" 
                      class="p-3.5 rounded-2xl transition-all cursor-pointer hover:scale-[1.02] active:scale-[0.98] shadow-md group flex flex-col justify-between"
                      style="background: linear-gradient(135deg, rgba(255, 255, 255, 0.96) 0%, rgba(253, 249, 240, 0.92) 100%); border: 1.5px solid #DFC387; box-shadow: 0 8px 20px -8px rgba(160, 120, 30, 0.12);">
                     <div>
@@ -166,7 +163,7 @@
                 </div>
 
                 <!-- Item 3: Avocado Sourdough -->
-                <div onclick="addToCart('Smashed Avocado Toast', 55000, '🍳 KITCHEN')" 
+                <div onclick="addToCart('Smashed Avocado Toast', 55000, 'KITCHEN')" 
                      class="p-3.5 rounded-2xl transition-all cursor-pointer hover:scale-[1.02] active:scale-[0.98] shadow-md group flex flex-col justify-between"
                      style="background: linear-gradient(135deg, rgba(255, 255, 255, 0.96) 0%, rgba(253, 249, 240, 0.92) 100%); border: 1.5px solid #DFC387; box-shadow: 0 8px 20px -8px rgba(160, 120, 30, 0.12);">
                     <div>
@@ -185,7 +182,7 @@
                 </div>
 
                 <!-- Item 4: Babolat Viper Racket -->
-                <div onclick="addToCart('Sewa Raket Babolat Viper', 50000, '🎾 RENTAL')" 
+                <div onclick="addToCart('Sewa Raket Babolat Viper', 50000, 'RENTAL')" 
                      class="p-3.5 rounded-2xl transition-all cursor-pointer hover:scale-[1.02] active:scale-[0.98] shadow-md group flex flex-col justify-between"
                      style="background: linear-gradient(135deg, rgba(255, 255, 255, 0.96) 0%, rgba(253, 249, 240, 0.92) 100%); border: 1.5px solid #DFC387; box-shadow: 0 8px 20px -8px rgba(160, 120, 30, 0.12);">
                     <div>
@@ -204,7 +201,7 @@
                 </div>
 
                 <!-- Item 5: Nox AT10 Genius -->
-                <div onclick="addToCart('Sewa Raket Nox AT10 Genius', 65000, '🎾 RENTAL')" 
+                <div onclick="addToCart('Sewa Raket Nox AT10 Genius', 65000, 'RENTAL')" 
                      class="p-3.5 rounded-2xl transition-all cursor-pointer hover:scale-[1.02] active:scale-[0.98] shadow-md group flex flex-col justify-between"
                      style="background: linear-gradient(135deg, rgba(255, 255, 255, 0.96) 0%, rgba(253, 249, 240, 0.92) 100%); border: 1.5px solid #DFC387; box-shadow: 0 8px 20px -8px rgba(160, 120, 30, 0.12);">
                     <div>
@@ -223,7 +220,7 @@
                 </div>
 
                 <!-- Item 6: Bola Padel Pro Can -->
-                <div onclick="addToCart('Bola Padel Pro (3 Pcs)', 35000, '🎾 PROSHOP')" 
+                <div onclick="addToCart('Bola Padel Pro (3 Pcs)', 35000, 'PROSHOP')" 
                      class="p-3.5 rounded-2xl transition-all cursor-pointer hover:scale-[1.02] active:scale-[0.98] shadow-md group flex flex-col justify-between"
                      style="background: linear-gradient(135deg, rgba(255, 255, 255, 0.96) 0%, rgba(253, 249, 240, 0.92) 100%); border: 1.5px solid #DFC387; box-shadow: 0 8px 20px -8px rgba(160, 120, 30, 0.12);">
                     <div>
@@ -242,7 +239,7 @@
                 </div>
 
                 <!-- Item 7: Club 61 Pro Jersey -->
-                <div onclick="addToCart('Club 61 Pro Match Jersey', 299000, '👕 MERCH')" 
+                <div onclick="addToCart('Club 61 Pro Match Jersey', 299000, 'MERCH')" 
                      class="p-3.5 rounded-2xl transition-all cursor-pointer hover:scale-[1.02] active:scale-[0.98] shadow-md group flex flex-col justify-between"
                      style="background: linear-gradient(135deg, rgba(255, 255, 255, 0.96) 0%, rgba(253, 249, 240, 0.92) 100%); border: 1.5px solid #DFC387; box-shadow: 0 8px 20px -8px rgba(160, 120, 30, 0.12);">
                     <div>
@@ -261,7 +258,7 @@
                 </div>
 
                 <!-- Item 8: Ice Bath Session -->
-                <div onclick="addToCart('Sesi Cold Plunge (45 Mnt)', 125000, '❄️ WELLNESS')" 
+                <div onclick="addToCart('Sesi Cold Plunge (45 Mnt)', 125000, 'WELLNESS')" 
                      class="p-3.5 rounded-2xl transition-all cursor-pointer hover:scale-[1.02] active:scale-[0.98] shadow-md group flex flex-col justify-between"
                      style="background: linear-gradient(135deg, rgba(255, 255, 255, 0.96) 0%, rgba(253, 249, 240, 0.92) 100%); border: 1.5px solid #DFC387; box-shadow: 0 8px 20px -8px rgba(160, 120, 30, 0.12);">
                     <div>
@@ -302,13 +299,14 @@
                 
                 <!-- Table / Customer Selector -->
                 <div class="grid grid-cols-2 gap-2 mt-2.5">
-                    <select class="px-2.5 py-1.5 rounded-xl text-xs font-semibold text-[#1C150B] outline-none"
-                            style="background: #FAF5E8; border: 1.5px solid #DFC387;">
-                        <option>🎾 Lapangan 01 (Court 1)</option>
-                        <option selected>🎾 Lapangan 02 (Court 2)</option>
-                        <option>☕ Meja 01 (Table 01)</option>
-                        <option>☕ VIP Lounge 1</option>
-                        <option>🛍️ Bawa Pulang (Takeaway)</option>
+                    <select id="pos-table-select" 
+                            class="w-full px-3 py-2 rounded-xl text-xs font-bold text-[#1C150B] bg-[#FFFDF5] transition-all outline-none"
+                            style="border: 1.5px solid #DFC387;">
+                        <option>Lapangan 01 (Court 1)</option>
+                        <option selected>Lapangan 02 (Court 2)</option>
+                        <option>Meja 01 (Table 01)</option>
+                        <option>VIP Lounge 1</option>
+                        <option>Bawa Pulang (Takeaway)</option>
                     </select>
                     <input type="text" value="Member: Andi Wijaya" 
                            class="px-2.5 py-1.5 rounded-xl text-xs font-semibold text-[#1C150B] outline-none"
@@ -435,7 +433,7 @@
             const resultContainer = document.getElementById('pos-checkin-result');
             resultContainer.classList.remove('hidden');
             resultContainer.className = 'rounded-2xl p-4 border text-xs space-y-2 bg-amber-50 border-amber-200 text-amber-900';
-            resultContainer.innerHTML = '⏳ Memverifikasi tiket ke server...';
+            resultContainer.innerHTML = 'Memverifikasi tiket ke server...';
 
             try {
                 const csrfMeta = document.querySelector('meta[name="csrf-token"]');
@@ -453,9 +451,9 @@
                     const res = data.data;
                     let equipmentsHtml = '';
                     if (res.equipments && res.equipments.length > 0) {
-                        equipmentsHtml = '<div class="mt-2 pt-2 border-t border-emerald-200"><div class="font-bold text-emerald-900 mb-1">🎒 Serah-Terima Alat:</div>' +
-                            res.equipments.map(e => `<div class="flex justify-between py-0.5"><span>🎾 ${e.name}</span><span class="font-bold font-mono">${e.quantity} Pcs</span></div>`).join('') +
-                            '<div class="mt-1 text-[11px] text-emerald-700 font-semibold">👉 Wajib serahkan raket & bola ke pemain.</div></div>';
+                        equipmentsHtml = '<div class="mt-2 pt-2 border-t border-emerald-200"><div class="font-bold text-emerald-900 mb-1">Serah-Terima Alat:</div>' +
+                            res.equipments.map(e => `<div class="flex justify-between py-0.5"><span>${e.name}</span><span class="font-bold font-mono">${e.quantity} Pcs</span></div>`).join('') +
+                            '<div class="mt-1 text-[11px] text-emerald-700 font-semibold">Wajib serahkan raket &amp; bola ke pemain.</div></div>';
                     } else {
                         equipmentsHtml = '<div class="text-[11px] text-gray-500 italic mt-1">Tidak ada sewa raket/bola tambahan.</div>';
                     }
@@ -464,26 +462,26 @@
                     resultContainer.innerHTML = `
                         <div class="flex justify-between items-center">
                             <span class="px-2 py-0.5 rounded-md font-bold text-[10px] bg-emerald-200 text-emerald-900 uppercase">
-                                ${res.already_checked_in ? '⚠️ Sudah Pernah Check-In' : '✅ Check-In Berhasil'}
+                                ${res.already_checked_in ? 'Sudah Pernah Check-In' : 'Check-In Berhasil'}
                             </span>
                             <span class="font-mono text-[10px] text-emerald-700">${res.booking_code}</span>
                         </div>
                         <div class="font-bold text-sm text-gray-900">${res.player_name}</div>
-                        <div class="text-xs text-gray-700">🎾 <strong>${res.court_name}</strong> &bull; ${res.schedule}</div>
+                        <div class="text-xs text-gray-700"><strong>${res.court_name}</strong> &bull; ${res.schedule}</div>
                         ${equipmentsHtml}
                     `;
                 } else {
                     resultContainer.className = 'rounded-2xl p-4 border text-xs space-y-2 bg-rose-50 border-rose-300 text-rose-900';
-                    resultContainer.innerHTML = `<strong>❌ Gagal Check-In:</strong><br>${data.message || 'Tiket tidak ditemukan.'}`;
+                    resultContainer.innerHTML = `<strong>Gagal Check-In:</strong><br>${data.message || 'Tiket tidak ditemukan.'}`;
                 }
             } catch (err) {
                 resultContainer.className = 'rounded-2xl p-4 border text-xs space-y-2 bg-rose-50 border-rose-300 text-rose-900';
-                resultContainer.innerHTML = `<strong>❌ Terjadi Kesalahan:</strong><br>${err.message}`;
+                resultContainer.innerHTML = `<strong>Terjadi Kesalahan:</strong><br>${err.message}`;
             }
         }
     </script>
 
-    <!-- MODAL CHECK-IN GATE VANTAGE POS -->
+    <!-- MODAL CHECK-IN GATE CLUB 61 POS -->
     <div id="pos-checkin-modal" class="hidden fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
         <div class="bg-white rounded-3xl border border-[#DFC387] shadow-2xl w-full max-w-lg overflow-hidden animate-fadeIn">
             <!-- Header -->
@@ -491,9 +489,9 @@
                  style="background: linear-gradient(135deg, #FAF5E8 0%, #F5E8C7 100%);">
                 <div>
                     <span class="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase bg-amber-100 text-amber-900 border border-amber-300">
-                        Frontdesk Scanner
+                        Frontdesk Scanner &bull; Club 61 Medan
                     </span>
-                    <div class="font-serif font-black text-lg text-[#1F170D] mt-1">🎟️ Check-In Tiket Lapangan</div>
+                    <div class="font-serif font-black text-lg text-[#1F170D] mt-1">Check-In Tiket Lapangan</div>
                 </div>
                 <button type="button" onclick="closePosCheckInModal()" class="text-2xl text-[#78350F] hover:text-black leading-none cursor-pointer">&times;</button>
             </div>
@@ -508,9 +506,9 @@
                                class="flex-1 px-3.5 py-2.5 rounded-xl border border-[#D4AF37] text-sm font-mono font-bold text-[#1F170D] bg-[#FFFDF5] outline-none"
                                onkeydown="if(event.key === 'Enter') submitPosCheckIn();" />
                         <button type="button" onclick="submitPosCheckIn()" 
-                                class="px-4 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider text-[#281A05] cursor-pointer active:scale-95 transition-all shadow-md"
-                                style="background: linear-gradient(180deg, #F0DB9D 0%, #D4AF37 35%, #B38622 100%); border: 1px solid #FBF0CE;">
-                            Check-In ⚡
+                                 class="px-4 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider text-[#281A05] cursor-pointer active:scale-95 transition-all shadow-md"
+                                 style="background: linear-gradient(180deg, #F0DB9D 0%, #D4AF37 35%, #B38622 100%); border: 1px solid #FBF0CE;">
+                            Check-In
                         </button>
                     </div>
                 </div>

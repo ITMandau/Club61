@@ -28,7 +28,10 @@ class AdminPanelProvider extends PanelProvider
             ->path('admin')
             ->login()
             ->darkMode(false)
-            ->brandName('APEX Padel Arena Admin')
+            ->brandName('Club 61 Padel Court')
+            ->brandLogo(asset('images/club61-logo.png'))
+            ->brandLogoHeight('2.25rem')
+            ->favicon(asset('images/club61-logo.png'))
             ->maxContentWidth('full')
             ->colors([
                 'primary' => Color::Amber,

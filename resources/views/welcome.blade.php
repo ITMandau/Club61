@@ -3,7 +3,8 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>VANTAGE - Sports & Social Club</title>
+    <title>CLUB 61 - Padel Court Medan</title>
+    <link rel="icon" type="image/png" href="{{ asset('images/club61-logo.png') }}">
     <!-- Luxury Typography -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -22,20 +23,13 @@
     <!-- Top Navigation Header -->
     <header class="sticky top-0 z-50 bg-white/85 backdrop-blur-xl border-b border-[#D4AF37]/40 px-6 sm:px-10 py-4 flex items-center justify-between shadow-sm">
         <div class="flex items-center gap-3">
-            <div class="w-10 h-10 rounded-2xl flex items-center justify-center shadow-sm"
-                 style="background: linear-gradient(135deg, #2D210F 0%, #171006 100%); border: 1.5px solid #E5C378;">
-                <svg class="w-5 h-5 text-[#E5C378]" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                    <circle cx="12" cy="12" r="9" stroke-width="2" />
-                    <path d="M12 3a9 9 0 0 1 9 9" stroke-width="2.5" stroke-linecap="round" />
-                    <path d="M7 10l5 5 5-5" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
-                </svg>
-            </div>
+            <img src="{{ asset('images/club61-logo.png') }}" alt="Club 61 Padel Court" class="w-11 h-11 object-contain rounded-2xl shadow-sm border border-[#E5C378] bg-white p-0.5">
             <div>
                 <div class="font-serif text-xl sm:text-2xl font-black tracking-[0.25em] text-[#1F170D] uppercase">
-                    VANTAGE
+                    CLUB 61
                 </div>
                 <div class="text-[9px] tracking-[0.35em] text-[#8C6418] font-bold uppercase -mt-0.5">
-                    SPORTS &amp; SOCIAL CLUB
+                    PADEL COURT
                 </div>
             </div>
         </div>
@@ -68,16 +62,16 @@
             <div class="inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-xs font-bold uppercase tracking-widest shadow-sm"
                  style="background: #FAF2DE; border: 1.5px solid #D9BE84; color: #7A5818;">
                 <span class="w-2 h-2 rounded-full animate-pulse" style="background-color: #D4AF37; box-shadow: 0 0 8px #D4AF37;"></span>
-                <span>Jakarta Selatan Flagship Venue &bull; Live &amp; Open Daily</span>
+                <span>Medan Flagship Venue &bull; Gedung Indosat &bull; Open Daily</span>
             </div>
 
             <h1 class="text-4xl sm:text-6xl lg:text-7xl font-extrabold text-[#1F170D] tracking-tight leading-[1.1] drop-shadow-sm font-serif">
                 The Sanctuary for <br />
-                <span class="italic font-normal" style="color: #8C6418; text-shadow: 0 0 25px rgba(212,175,55,0.4);">Modern Racquet</span> Athletes.
+                <span class="italic font-normal" style="color: #8C6418; text-shadow: 0 0 25px rgba(212,175,55,0.4);">Padel Athletes</span> in Medan.
             </h1>
 
             <p class="text-sm sm:text-lg text-[#5A4523] max-w-2xl mx-auto leading-relaxed font-medium">
-                Fasilitas terpadu berstandar internasional: 4 Lapangan Padel Panoramic ber-AC, Thermal Wellness Recovery (Sauna &amp; Ice Bath 4&deg;C), Specialty Artisan Lounge, dan Sistem POS Kasir terintegrasi.
+                Fasilitas terpadu berstandar internasional di Gedung Indosat Medan: 4 Lapangan Padel Panoramic ber-AC, Thermal Wellness Recovery (Sauna &amp; Ice Bath 4&deg;C), Specialty Artisan Lounge, dan Sistem POS Kasir terintegrasi.
             </p>
 
             <!-- CTA Action Buttons -->
@@ -121,25 +115,25 @@
             <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-8 max-w-3xl mx-auto text-left">
                 <div class="p-4 rounded-2xl backdrop-blur-md shadow-md hover:-translate-y-0.5 transition-all"
                      style="background: rgba(255, 255, 255, 0.9); border: 1.5px solid #DFC387; box-shadow: 0 10px 25px -10px rgba(160, 120, 30, 0.15);">
-                    <div class="text-xl mb-1">🎾</div>
+                    <div class="text-[10px] font-black tracking-widest text-[#8C6418] uppercase mb-1">ARENA</div>
                     <div class="font-extrabold text-xs text-[#1F170D]">4 Lapangan Padel</div>
                     <div class="text-[10px] text-[#7A5818] font-medium">Panoramic Glass Arena</div>
                 </div>
                 <div class="p-4 rounded-2xl backdrop-blur-md shadow-md hover:-translate-y-0.5 transition-all"
                      style="background: rgba(255, 255, 255, 0.9); border: 1.5px solid #DFC387; box-shadow: 0 10px 25px -10px rgba(160, 120, 30, 0.15);">
-                    <div class="text-xl mb-1">❄️</div>
+                    <div class="text-[10px] font-black tracking-widest text-[#8C6418] uppercase mb-1">WELLNESS</div>
                     <div class="font-extrabold text-xs text-[#1F170D]">Thermal Wellness</div>
                     <div class="text-[10px] text-[#7A5818] font-medium">Ice Bath &amp; Sauna</div>
                 </div>
                 <div class="p-4 rounded-2xl backdrop-blur-md shadow-md hover:-translate-y-0.5 transition-all"
                      style="background: rgba(255, 255, 255, 0.9); border: 1.5px solid #DFC387; box-shadow: 0 10px 25px -10px rgba(160, 120, 30, 0.15);">
-                    <div class="text-xl mb-1">☕</div>
+                    <div class="text-[10px] font-black tracking-widest text-[#8C6418] uppercase mb-1">CAFE</div>
                     <div class="font-extrabold text-xs text-[#1F170D]">Artisan Lounge</div>
                     <div class="text-[10px] text-[#7A5818] font-medium">Specialty Coffee &amp; Bar</div>
                 </div>
                 <div class="p-4 rounded-2xl backdrop-blur-md shadow-md hover:-translate-y-0.5 transition-all"
                      style="background: rgba(255, 255, 255, 0.9); border: 1.5px solid #DFC387; box-shadow: 0 10px 25px -10px rgba(160, 120, 30, 0.15);">
-                    <div class="text-xl mb-1">💳</div>
+                    <div class="text-[10px] font-black tracking-widest text-[#8C6418] uppercase mb-1">GATE</div>
                     <div class="font-extrabold text-xs text-[#1F170D]">Frontdesk POS</div>
                     <div class="text-[10px] text-[#7A5818] font-medium">Split Bill &amp; KDS Sync</div>
                 </div>
@@ -149,7 +143,7 @@
 
     <!-- Bottom Footer -->
     <footer class="relative z-10 bg-white/75 backdrop-blur-md border-t border-[#D4AF37]/30 px-6 py-4 text-center text-xs text-[#7A643E]">
-        &copy; {{ date('Y') }} VANTAGE Racquet &amp; Social Club. Powered by Laravel 11 &amp; Sanctum.
+        &copy; {{ date('Y') }} Club 61 Padel Court. Gedung Indosat, Jl. Perintis Kemerdekaan No. 39, Medan, Sumatera Utara.
     </footer>
 
 </body>

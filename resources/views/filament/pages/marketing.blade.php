@@ -26,7 +26,7 @@
         <div class="adm-card" style="padding: 1.25rem;">
             <span class="adm-pill adm-pill-green">Aktif &bull; Diskon 20%</span>
             <div style="font-family: var(--font-mono); font-size: 1.25rem; font-weight: 900; color: #8C6418; margin-top: 0.5rem;">
-                VANTAGE20
+                CLUB61
             </div>
             <div style="font-size: 0.75rem; color: #1F170D; font-weight: 700; margin-top: 0.25rem;">Promo Welcome New Member</div>
             <div style="font-size: 0.6875rem; color: #7A643E; margin-top: 0.5rem;">Terpakai: 48 / 100 Kuota &bull; Exp: 31 Des 2026</div>

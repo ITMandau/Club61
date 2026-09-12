@@ -1,4 +1,4 @@
-<nav x-data="{ open: false }" class="bg-white/85 backdrop-blur-xl border-b border-[#DFC387]/70 sticky top-0 z-50 shadow-sm">
+<nav x-data="customerNav()" x-init="init()" class="bg-white/85 backdrop-blur-xl border-b border-[#DFC387]/70 sticky top-0 z-50 shadow-sm">
     <!-- Primary Navigation Menu -->
     <div class="w-full px-4 sm:px-8 lg:px-12 2xl:px-16">
         <div class="flex justify-between h-16">
@@ -6,17 +6,10 @@
                 <!-- Logo -->
                 <div class="shrink-0 flex items-center">
                     <a href="{{ route('dashboard') }}" class="flex items-center gap-2.5">
-                        <div class="w-9 h-9 rounded-xl flex items-center justify-center shadow-sm shrink-0"
-                             style="background: linear-gradient(135deg, #2D210F 0%, #171006 100%); border: 1.5px solid #E5C378;">
-                            <svg class="w-5 h-5 text-[#E5C378]" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                                <circle cx="12" cy="12" r="9" stroke-width="2" />
-                                <path d="M12 3a9 9 0 0 1 9 9" stroke-width="2.5" stroke-linecap="round" />
-                                <path d="M7 10l5 5 5-5" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
-                            </svg>
-                        </div>
+                        <img src="{{ asset('images/club61-logo.png') }}" alt="Club 61 Padel Court" class="w-10 h-10 object-contain rounded-xl shadow-sm shrink-0 border border-[#DFC387]/60 bg-white p-0.5">
                         <div>
-                            <span class="font-serif font-extrabold text-[#1F170D] text-base sm:text-lg tracking-[0.15em] sm:tracking-[0.2em] uppercase">VANTAGE</span>
-                            <span class="block text-[8px] tracking-[0.25em] sm:tracking-[0.3em] text-[#8C6418] font-bold uppercase -mt-1">SPORTS &amp; SOCIAL</span>
+                            <span class="font-serif font-extrabold text-[#1F170D] text-base sm:text-lg tracking-[0.15em] sm:tracking-[0.2em] uppercase">CLUB 61</span>
+                            <span class="block text-[8px] tracking-[0.25em] sm:tracking-[0.3em] text-[#8C6418] font-bold uppercase -mt-1">PADEL COURT</span>
                         </div>
                     </a>
                 </div>
@@ -45,25 +38,167 @@
             <!-- Right Actions (Cart, Notifications, Profile) -->
             <div class="flex items-center gap-2 sm:gap-4">
                 
-                <!-- Notification Bell (Screen 1 header) -->
-                <button type="button" 
-                        class="p-2 rounded-xl text-[#7A5818] hover:text-[#1F170D] hover:bg-[#FAF2DE] relative transition-colors"
-                        title="Notifikasi">
-                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
-                    </svg>
-                    <span class="absolute top-1.5 right-1.5 w-2 h-2 bg-amber-500 rounded-full ring-2 ring-white"></span>
-                </button>
+                <!-- Notification Bell with Interactive Dropdown (Screen 1 header) -->
+                <div class="relative" @click.outside="notifOpen = false">
+                    <button type="button" 
+                            @click="toggleNotif()"
+                            class="p-2 rounded-xl text-[#7A5818] hover:text-[#1F170D] hover:bg-[#FAF2DE] relative transition-colors focus:outline-none cursor-pointer"
+                            title="Notifikasi & Aktivitas">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+                        </svg>
+                        <span x-show="unreadNotifs" 
+                              x-cloak
+                              class="absolute top-1.5 right-1.5 w-2.5 h-2.5 bg-amber-500 rounded-full ring-2 ring-white animate-pulse"
+                              style="display: none;"></span>
+                    </button>
 
-                <!-- Cart Button with Counter Badge (Screen 2 & 3) -->
+                    <!-- Luxury Notification Dropdown Panel -->
+                    <div x-show="notifOpen"
+                         x-cloak
+                         x-transition:enter="transition ease-out duration-200"
+                         x-transition:enter-start="opacity-0 translate-y-2 scale-95"
+                         x-transition:enter-end="opacity-100 translate-y-0 scale-100"
+                         x-transition:leave="transition ease-in duration-150"
+                         x-transition:leave-start="opacity-100 translate-y-0 scale-100"
+                         x-transition:leave-end="opacity-0 translate-y-2 scale-95"
+                         class="absolute right-0 mt-3 w-80 sm:w-96 bg-white/95 backdrop-blur-2xl rounded-3xl border border-[#DFC387] shadow-[0_20px_50px_rgba(160,120,30,0.2)] p-4 text-[#1F170D] z-50 space-y-3"
+                         style="display: none;">
+                        
+                        <!-- Panel Header -->
+                        <div class="flex items-center justify-between border-b border-[#DFC387]/50 pb-2.5 px-1">
+                            <div>
+                                <h4 class="font-serif font-black text-sm text-[#1F170D]">Notifikasi &amp; Aktivitas</h4>
+                                <span class="text-[10px] text-[#8C6418] font-bold uppercase tracking-wider">Club 61 Concierge</span>
+                            </div>
+                            <button type="button" 
+                                    @click="markAllRead()"
+                                    class="text-[10px] font-bold text-[#8C6418] hover:text-[#1F170D] hover:underline px-2 py-1 rounded-lg hover:bg-[#FAF2DE] transition-colors cursor-pointer">
+                                Tandai Dibaca
+                            </button>
+                        </div>
+
+                        <!-- Notification Cards List -->
+                        <div class="space-y-2.5 max-h-[380px] overflow-y-auto pr-1">
+
+                            <!-- 1. Jadwal Pertandingan Aktif (Jika Ada di Database) -->
+                            <template x-if="activeBooking">
+                                <a :href="'{{ route('customer.invoice') }}?booking_id=' + activeBooking.id"
+                                   class="block p-3 rounded-2xl bg-emerald-50/90 border border-emerald-300 hover:bg-emerald-100 transition-all">
+                                    <div class="flex items-start gap-3">
+                                        <div class="w-8 h-8 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0 mt-0.5 shadow-sm">
+                                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                                            </svg>
+                                        </div>
+                                        <div class="flex-1 min-w-0">
+                                            <div class="flex items-center justify-between">
+                                                <span class="text-xs font-black text-emerald-900">Jadwal Main Terkonfirmasi</span>
+                                                <span class="text-[9px] font-mono font-bold text-emerald-700 bg-emerald-200/70 px-1.5 py-0.5 rounded">Confirmed</span>
+                                            </div>
+                                            <p class="text-[11px] text-emerald-800 mt-1 leading-snug">
+                                                <span class="font-bold" x-text="activeBooking.court_name || 'Lapangan Padel'"></span>
+                                                &bull; <span x-text="activeBooking.booking_date"></span>
+                                                (<span x-text="formatTime(activeBooking.start_time)"></span> WIB)
+                                            </p>
+                                            <span class="text-[10px] font-bold text-emerald-700 underline mt-1 inline-block">Buka E-Ticket &amp; QR Code &rarr;</span>
+                                        </div>
+                                    </div>
+                                </a>
+                            </template>
+
+                            <!-- 2. Slot di Keranjang Sedang Di-Hold (Jika Ada di Session Storage) -->
+                            <template x-if="cartCount > 0">
+                                <a href="{{ route('customer.cart') }}" 
+                                   class="block p-3 rounded-2xl bg-[#FFF8E7] border border-[#E5C378] hover:bg-[#FDF0CF] transition-all">
+                                    <div class="flex items-start gap-3">
+                                        <div class="w-8 h-8 rounded-xl bg-[#D4AF37] text-[#1E160A] flex items-center justify-center shrink-0 mt-0.5 shadow-sm">
+                                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                            </svg>
+                                        </div>
+                                        <div class="flex-1 min-w-0">
+                                            <div class="flex items-center justify-between">
+                                                <span class="text-xs font-black text-[#5C410F]">Slot Lapangan Terkunci</span>
+                                                <span class="text-[9px] font-bold text-amber-800 bg-amber-200/80 px-1.5 py-0.5 rounded animate-pulse">Hold 10 Mnt</span>
+                                            </div>
+                                            <p class="text-[11px] text-[#7A643E] mt-1 leading-snug">
+                                                Tersedia <strong class="text-[#3B2B11]" x-text="cartCount"></strong> slot di keranjang booking Anda. Selesaikan pemesanan sebelum batas waktu habis!
+                                            </p>
+                                            <span class="text-[10px] font-bold text-[#8C6418] underline mt-1 inline-block">Buka Keranjang Booking &rarr;</span>
+                                        </div>
+                                    </div>
+                                </a>
+                            </template>
+
+                            <!-- 3. Sambutan & Info Venue Club 61 Medan -->
+                            <div class="p-3 rounded-2xl bg-[#FAF8F2] border border-[#E8DCC0] transition-all">
+                                <div class="flex items-start gap-3">
+                                    <div class="w-8 h-8 rounded-xl bg-[#1F170D] text-[#D4AF37] flex items-center justify-center shrink-0 mt-0.5 shadow-sm font-serif font-black text-xs">
+                                        61
+                                    </div>
+                                    <div class="flex-1 min-w-0">
+                                        <div class="flex items-center justify-between">
+                                            <span class="text-xs font-black text-[#1F170D]">Selamat Datang di Club 61</span>
+                                            <span class="text-[9px] text-[#8C7A58]">Gedung Indosat</span>
+                                        </div>
+                                        <p class="text-[11px] text-[#7A643E] mt-1 leading-snug">
+                                            Nikmati 4 lapangan panoramic standar WPT di Gedung Indosat Medan, lengkap dengan cafe &amp; lounge eksklusif.
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- 4. Fasilitas Wellness Suite VIP -->
+                            <div class="p-3 rounded-2xl bg-[#FAF8F2] border border-[#E8DCC0] transition-all">
+                                <div class="flex items-start gap-3">
+                                    <div class="w-8 h-8 rounded-xl bg-[#FAF2DE] border border-[#DFC387] text-[#8C6418] flex items-center justify-center shrink-0 mt-0.5 shadow-sm">
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                                        </svg>
+                                    </div>
+                                    <div class="flex-1 min-w-0">
+                                        <div class="flex items-center justify-between">
+                                            <span class="text-xs font-black text-[#1F170D]">Wellness &amp; Recovery Suite</span>
+                                            <span class="text-[9px] font-mono text-emerald-700 font-bold bg-emerald-100 px-1 py-0.5 rounded">VIP Plat</span>
+                                        </div>
+                                        <p class="text-[11px] text-[#7A643E] mt-1 leading-snug">
+                                            Fasilitas sauna kayu cedar &amp; ice bath 4&deg;C siap dinikmati gratis bagi member Platinum usai bertanding.
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+
+                        </div>
+
+                        <!-- Panel Footer -->
+                        <div class="pt-2.5 border-t border-[#DFC387]/50 text-center">
+                            <a href="https://wa.me/6281261617233?text=Halo%20Club%2061%20Padel,%20saya%20butuh%20bantuan%20booking" 
+                               target="_blank" 
+                               class="inline-flex items-center justify-center gap-1.5 text-[11px] font-bold text-[#8C6418] hover:text-[#1F170D] transition-colors">
+                                <svg class="w-3.5 h-3.5 text-emerald-600" fill="currentColor" viewBox="0 0 24 24">
+                                    <path d="M12.031 6.172c-3.181 0-5.767 2.586-5.768 5.766-.001 1.298.38 2.27 1.019 3.287l-.711 2.598 2.669-.699c.969.54 1.771.82 2.791.82 3.181 0 5.767-2.587 5.767-5.766.001-3.181-2.585-5.766-5.767-5.766zm9.969 5.766c0 5.514-4.486 10-10 10-1.823 0-3.528-.49-4.996-1.344l-5.004 1.309 1.334-4.877c-.958-1.517-1.503-3.308-1.503-5.088 0-5.514 4.486-10 10-10s10 4.486 10 10z"/>
+                                </svg>
+                                <span>Hubungi WhatsApp Concierge</span>
+                            </a>
+                        </div>
+
+                    </div>
+                </div>
+
+                <!-- Cart Button with Dynamic Counter Badge (Screen 2 & 3) -->
                 <a href="{{ route('customer.cart') }}" 
                    class="p-2 rounded-xl text-[#7A5818] hover:text-[#1F170D] hover:bg-[#FAF2DE] relative transition-colors"
                    title="Keranjang Booking">
                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
                     </svg>
-                    <span id="nav-cart-badge" class="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 bg-[#D4AF37] text-[#1E160A] text-[10px] font-black rounded-full flex items-center justify-center shadow-sm border border-white">
-                        2
+                    <span x-show="cartCount > 0" 
+                          x-text="cartCount"
+                          x-cloak
+                          id="nav-cart-badge" 
+                          class="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 bg-[#D4AF37] text-[#1E160A] text-[10px] font-black rounded-full flex items-center justify-center shadow-sm border border-white transition-all animate-pulse"
+                          style="display: none;">
                     </span>
                 </a>
 
@@ -99,3 +234,80 @@
         </div>
     </div>
 </nav>
+
+<script>
+    function customerNav() {
+        return {
+            open: false,
+            notifOpen: false,
+            cartCount: 0,
+            unreadNotifs: true,
+            activeBooking: null,
+
+            init() {
+                this.syncCart();
+                this.syncNotifications();
+
+                // Listener realtime saat ada mutasi di session/local storage atau event window
+                window.addEventListener('storage', () => this.syncCart());
+                window.addEventListener('cart-updated', () => this.syncCart());
+
+                // Cek status apakah user sudah pernah menandai notifikasi dibaca dalam 1 jam terakhir
+                const lastRead = localStorage.getItem('club61_notifs_read_time');
+                if (lastRead && (Date.now() - parseInt(lastRead)) < 3600000) {
+                    this.unreadNotifs = false;
+                }
+            },
+
+            syncCart() {
+                try {
+                    const raw = sessionStorage.getItem('club61_cart') || sessionStorage.getItem('vantage_cart');
+                    if (raw) {
+                        const parsed = JSON.parse(raw);
+                        if (Array.isArray(parsed) && parsed.length > 0) {
+                            this.cartCount = parsed.length;
+                            return;
+                        }
+                    }
+                } catch(e) {}
+                this.cartCount = 0;
+            },
+
+            async syncNotifications() {
+                try {
+                    const res = await fetch('/api/v1/padel/my-bookings');
+                    const json = await res.json();
+                    if (json.success && Array.isArray(json.data)) {
+                        const active = json.data.find(b => b.status === 'PAID' || b.status === 'CONFIRMED');
+                        if (active) {
+                            this.activeBooking = active;
+                            if (!localStorage.getItem('club61_notifs_read_time')) {
+                                this.unreadNotifs = true;
+                            }
+                        }
+                    }
+                } catch(e) {}
+            },
+
+            toggleNotif() {
+                this.notifOpen = !this.notifOpen;
+            },
+
+            markAllRead() {
+                this.unreadNotifs = false;
+                localStorage.setItem('club61_notifs_read_time', Date.now().toString());
+            },
+
+            formatTime(isoString) {
+                if (!isoString) return '--:--';
+                try {
+                    const d = new Date(isoString);
+                    if (!isNaN(d.getTime())) {
+                        return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+                    }
+                } catch(e) {}
+                return (isoString.substring(11, 16) || isoString);
+            }
+        };
+    }
+</script>
