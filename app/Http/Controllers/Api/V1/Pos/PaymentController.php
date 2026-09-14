@@ -100,6 +100,50 @@ class PaymentController extends Controller
                         ]);
                     }
                 }
+
+                // 🛡️ QA DEFENSE: Idempotent Payment & Order Recording for Analytics & Financial Auditing
+                $paymentStatus = match ($newStatus) {
+                    'PAID' => 'SUCCESS',
+                    'CANCELLED' => 'FAILED',
+                    default => 'PENDING',
+                };
+
+                $primaryBooking = $bookings->first();
+                $order = Order::firstOrCreate(
+                    ['order_number' => $orderId],
+                    [
+                        'user_id' => $primaryBooking->user_id,
+                        'order_type' => 'ONLINE_BOOKING',
+                        'subtotal' => $bookings->sum('total_amount'),
+                        'grand_total' => (float) ($grossAmount ?: $bookings->sum('total_amount')),
+                        'payment_status' => ($newStatus === 'PAID') ? 'PAID' : 'PENDING',
+                    ]
+                );
+
+                if ($order->payment_status !== ($newStatus === 'PAID' ? 'PAID' : 'PENDING')) {
+                    $order->update(['payment_status' => ($newStatus === 'PAID') ? 'PAID' : 'PENDING']);
+                }
+
+                $paymentType = $request->input('payment_type', 'qris');
+                $paymentMethod = match (strtolower((string) $paymentType)) {
+                    'qris', 'gopay', 'shopeepay' => 'QRIS',
+                    'bank_transfer', 'echannel' => 'BANK_TRANSFER',
+                    'credit_card' => 'CREDIT_CARD',
+                    'cst' => 'CASH',
+                    default => strtoupper((string) $paymentType),
+                };
+
+                Payment::updateOrCreate(
+                    ['transaction_id' => $orderId],
+                    [
+                        'order_id' => $order->id,
+                        'payment_gateway' => 'MIDTRANS',
+                        'amount' => (float) ($grossAmount ?: $bookings->sum('total_amount')),
+                        'payment_method' => $paymentMethod,
+                        'status' => $paymentStatus,
+                        'payload_log' => $request->all(),
+                    ]
+                );
             }
         }
 

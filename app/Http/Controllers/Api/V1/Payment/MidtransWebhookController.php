@@ -4,6 +4,8 @@ namespace App\Http\Controllers\Api\V1\Payment;
 
 use App\Http\Controllers\Controller;
 use App\Models\Padel\PadelBooking;
+use App\Models\Pos\Order;
+use App\Models\Pos\Payment;
 use App\Services\Payment\MidtransService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -76,21 +78,70 @@ class MidtransWebhookController extends Controller
         }
 
         // Status State Machine Midtrans
+        $newBookingStatus = null;
         if ($transactionStatus === 'capture') {
             if ($fraudStatus === 'challenge') {
-                $this->updateBookingsStatus($bookings, 'PENDING_PAYMENT');
+                $newBookingStatus = 'PENDING_PAYMENT';
             } elseif ($fraudStatus === 'accept') {
-                $this->updateBookingsStatus($bookings, 'PAID');
+                $newBookingStatus = 'PAID';
             }
         } elseif ($transactionStatus === 'settlement') {
             // Lunas (QRIS, VA Transfer Sukses)
-            $this->updateBookingsStatus($bookings, 'PAID');
+            $newBookingStatus = 'PAID';
         } elseif ($transactionStatus === 'pending') {
             // Menunggu pembayaran (VA / QRIS baru di-generate)
-            $this->updateBookingsStatus($bookings, 'PENDING_PAYMENT');
+            $newBookingStatus = 'PENDING_PAYMENT';
         } elseif (in_array($transactionStatus, ['deny', 'expire', 'cancel'])) {
             // Batal / Kedaluwarsa
-            $this->updateBookingsStatus($bookings, 'CANCELLED');
+            $newBookingStatus = 'CANCELLED';
+        }
+
+        if ($newBookingStatus) {
+            $this->updateBookingsStatus($bookings, $newBookingStatus);
+
+            // 🛡️ QA DEFENSE: Idempotent Payment & Order Recording for Analytics & Financial Auditing
+            $paymentStatus = match ($newBookingStatus) {
+                'PAID' => 'SUCCESS',
+                'CANCELLED' => 'FAILED',
+                default => 'PENDING',
+            };
+
+            $primaryBooking = $bookings->first();
+            $order = Order::firstOrCreate(
+                ['order_number' => $orderId],
+                [
+                    'user_id' => $primaryBooking->user_id,
+                    'order_type' => 'ONLINE_BOOKING',
+                    'subtotal' => $bookings->sum('total_amount'),
+                    'grand_total' => (float) ($grossAmount ?: $bookings->sum('total_amount')),
+                    'payment_status' => ($newBookingStatus === 'PAID') ? 'PAID' : 'PENDING',
+                ]
+            );
+
+            if ($order->payment_status !== ($newBookingStatus === 'PAID' ? 'PAID' : 'PENDING')) {
+                $order->update(['payment_status' => ($newBookingStatus === 'PAID' ? 'PAID' : 'PENDING')]);
+            }
+
+            $paymentType = $request->input('payment_type', 'qris');
+            $paymentMethod = match (strtolower((string) $paymentType)) {
+                'qris', 'gopay', 'shopeepay' => 'QRIS',
+                'bank_transfer', 'echannel' => 'BANK_TRANSFER',
+                'credit_card' => 'CREDIT_CARD',
+                'cst' => 'CASH',
+                default => strtoupper((string) $paymentType),
+            };
+
+            Payment::updateOrCreate(
+                ['transaction_id' => $orderId],
+                [
+                    'order_id' => $order->id,
+                    'payment_gateway' => 'MIDTRANS',
+                    'amount' => (float) ($grossAmount ?: $bookings->sum('total_amount')),
+                    'payment_method' => $paymentMethod,
+                    'status' => $paymentStatus,
+                    'payload_log' => $request->all(),
+                ]
+            );
         }
 
         return response()->json([
