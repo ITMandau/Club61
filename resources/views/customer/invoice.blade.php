@@ -3,15 +3,15 @@
         <div class="w-full px-4 sm:px-8 lg:px-12 2xl:px-16 space-y-6">
 
             <!-- Top Header & Breadcrumb -->
-            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white/95 backdrop-blur-xl p-5 rounded-3xl border border-[#DFC387] shadow-sm">
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white/95 backdrop-blur-xl p-4 sm:p-5 rounded-3xl border border-[#DFC387] shadow-sm">
                 <div class="flex items-center gap-3.5">
-                    <a href="{{ route('dashboard') }}" class="p-2.5 rounded-2xl bg-[#FAF2DE] hover:bg-[#F3DFAD] border border-[#DFC387] text-[#7A5818] transition-colors" title="Kembali ke Beranda">
+                    <a href="{{ route('dashboard') }}" class="p-2.5 rounded-2xl bg-[#FAF2DE] hover:bg-[#F3DFAD] border border-[#DFC387] text-[#7A5818] transition-colors shrink-0" title="Kembali ke Beranda">
                         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M15 19l-7-7 7-7" />
                         </svg>
                     </a>
                     <div>
-                        <div class="flex items-center gap-2">
+                        <div class="flex items-center gap-2 flex-wrap">
                             <h1 class="font-serif font-black text-xl sm:text-2xl text-[#1F170D]">Invoice &amp; E-Tiket Digital</h1>
                             <span :class="ticket && (ticket.status === 'PAID' || ticket.status === 'CONFIRMED') ? 'bg-emerald-100 text-emerald-800 border-emerald-300' : 'bg-amber-100 text-amber-800 border-amber-300'"
                                   class="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase border"
@@ -22,15 +22,15 @@
                     </div>
                 </div>
 
-                <div class="flex items-center gap-3">
-                    <button onclick="window.print()" class="px-4 py-2.5 rounded-2xl bg-[#FAF2DE] hover:bg-[#F3DFAD] border border-[#DFC387] text-[#7A5818] text-xs font-bold transition-all shadow-sm flex items-center gap-2">
+                <div class="flex items-center gap-2.5 sm:gap-3 w-full sm:w-auto">
+                    <button onclick="window.print()" class="flex-1 sm:flex-none justify-center px-4 py-2.5 rounded-2xl bg-[#FAF2DE] hover:bg-[#F3DFAD] border border-[#DFC387] text-[#7A5818] text-xs font-bold transition-all shadow-sm flex items-center gap-2">
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
                         </svg>
                         <span>Cetak E-Tiket</span>
                     </button>
                     <a href="{{ route('customer.booking') }}" 
-                       class="px-5 py-2.5 rounded-2xl bg-gradient-to-b from-[#F5DE9B] to-[#D4AF37] text-[#1E160A] text-xs font-black uppercase tracking-wider shadow-md hover:brightness-105 active:scale-95 transition-all">
+                       class="flex-1 sm:flex-none text-center px-5 py-2.5 rounded-2xl bg-gradient-to-b from-[#F5DE9B] to-[#D4AF37] text-[#1E160A] text-xs font-black uppercase tracking-wider shadow-md hover:brightness-105 active:scale-95 transition-all">
                         + Booking Baru
                     </a>
                 </div>
@@ -57,12 +57,11 @@
             </div>
 
             <!-- Multi-Column Desktop Layout (Col 7 / Col 5) -->
-            <!-- Multi-Column Desktop Layout (Col 7 / Col 5) -->
             <template x-if="!isLoading && currentTicket">
                 <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
 
                 <!-- Left Column: Active E-Ticket Card (Col 7) -->
-                <div class="lg:col-span-7 space-y-4">
+                <div class="lg:col-span-7 flex flex-col gap-4">
 
                     <!-- Session Switcher Tabs if Order has Multiple Sesi (e.g. Non-Contiguous Jadwal Bolong) -->
                     <template x-if="ticket.order_bookings && ticket.order_bookings.length > 1">
@@ -85,7 +84,7 @@
                     <div class="bg-white/95 backdrop-blur-xl rounded-3xl border-2 border-[#D4AF37] shadow-[0_20px_50px_rgba(160,120,30,0.22)] overflow-hidden">
                         
                         <!-- Ticket Header Banner -->
-                        <div class="p-6 bg-gradient-to-r from-[#183428] via-[#10241B] to-[#0A1812] text-white flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                        <div class="p-4 sm:p-6 bg-gradient-to-r from-[#183428] via-[#10241B] to-[#0A1812] text-white flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
                             <div>
                                 <span class="px-3 py-1 rounded-full text-[10px] font-extrabold uppercase tracking-wider bg-[#DFC387]/20 text-[#F5E6BE] border border-[#DFC387]/40 inline-block mb-1.5">
                                     Official Boarding Pass &bull; Padel Court
@@ -107,7 +106,7 @@
                         </div>
 
                         <!-- Ticket Perforated Divider Bar -->
-                        <div class="relative py-2.5 bg-[#FAF6EC] border-t border-b border-dashed border-[#DFC387] px-6 flex items-center justify-between text-xs text-[#7A5818] font-bold">
+                        <div class="relative py-2.5 bg-[#FAF6EC] border-t border-b border-dashed border-[#DFC387] px-4 sm:px-6 flex items-center justify-between text-xs text-[#7A5818] font-bold">
                             <div class="flex items-center gap-2">
                                 <span x-text="currentTicket.status === 'PAID' || currentTicket.status === 'CHECKED_IN' ? 'STATUS: VALID ENTRY PASS' : 'STATUS: MENUNGGU PEMBAYARAN'"></span>
                                 <span class="text-[#DFC387]">&bull;</span>
@@ -117,48 +116,83 @@
                         </div>
 
                         <!-- QR Code Body for Check-in -->
-                        <div class="p-6 sm:p-8 text-center space-y-5">
+                        <div class="p-4 sm:p-6 lg:p-8 text-center flex flex-col gap-5 items-stretch">
                             
-                            <!-- Dynamic QR Turnstile -->
-                            <div class="p-4 bg-white rounded-3xl border-2 border-dashed border-[#DFC387] inline-block shadow-inner">
-                                <img :src="'https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=' + encodeURIComponent(currentTicket.qr_code_hash || 'CLUB61-DEMO')" 
-                                     alt="QR Check-in" 
-                                     class="w-48 h-48 mx-auto rounded-xl" />
-                                <div class="mt-3 font-mono font-black text-xs text-[#8C6418] tracking-widest" x-text="currentTicket.qr_code_hash || currentTicket.booking_code"></div>
-                            </div>
+                            <!-- Dynamic QR Turnstile: Hanya aktif jika status PAID atau CHECKED_IN -->
+                            <template x-if="currentTicket.status === 'PAID' || currentTicket.status === 'CHECKED_IN'">
+                                <div class="w-full">
+                                    <div class="p-4 bg-white rounded-3xl border-2 border-dashed border-[#DFC387] inline-block shadow-inner">
+                                        <img :src="'https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=' + encodeURIComponent(currentTicket.qr_code_hash || 'CLUB61-DEMO')" 
+                                             alt="QR Check-in" 
+                                             class="w-44 h-44 sm:w-48 sm:h-48 mx-auto rounded-xl" />
+                                        <div class="mt-3 font-mono font-black text-xs text-[#8C6418] tracking-widest break-all" x-text="currentTicket.qr_code_hash || currentTicket.booking_code"></div>
+                                    </div>
 
-                            <div class="max-w-md mx-auto">
-                                <h4 class="font-serif font-black text-base text-[#1F170D]">Tunjukkan Pada Kasir Frontdesk</h4>
-                                <p class="text-xs text-[#7A643E] mt-1 leading-relaxed">
-                                    Tunjukkan QR Code ini kepada kasir saat tiba di venue untuk check-in lapangan sekaligus mengambil peralatan sewa (raket &amp; bola).
-                                </p>
-                            </div>
+                                    <div class="max-w-md mx-auto mt-4">
+                                        <h4 class="font-serif font-black text-base text-[#1F170D]">Tunjukkan Pada Kasir Frontdesk</h4>
+                                        <p class="text-xs text-[#7A643E] mt-1 leading-relaxed">
+                                            Tunjukkan QR Code ini kepada kasir saat tiba di venue untuk check-in lapangan sekaligus mengambil peralatan sewa (raket &amp; bola).
+                                        </p>
+                                    </div>
+                                </div>
+                            </template>
 
-                            <!-- Breakdown Details -->
-                            <div class="bg-[#FAF8F2] p-5 rounded-2xl border border-[#DFC387]/70 text-left text-xs space-y-2.5">
-                                <div class="flex justify-between text-[#5C410F]">
-                                    <span>Nama Pemegang Tiket:</span>
-                                    <span class="font-bold text-[#1F170D]">{{ Auth::user()->name }} (VIP Platinum)</span>
+                            <!-- Placeholder Edukatif Jika Belum Lunas (PENDING_PAYMENT / Belum Bayar) -->
+                            <template x-if="currentTicket.status !== 'PAID' && currentTicket.status !== 'CHECKED_IN'">
+                                <div class="max-w-md mx-auto p-5 sm:p-6 rounded-3xl border-2 border-dashed border-amber-300 bg-amber-50/70 text-center space-y-3">
+                                    <div class="w-14 h-14 rounded-2xl bg-amber-100 border border-amber-300 flex items-center justify-center mx-auto text-amber-700">
+                                        <svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-4a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                                        </svg>
+                                    </div>
+                                    <div>
+                                        <h4 class="font-serif font-black text-base text-[#1F170D]">QR Tiket Terkunci</h4>
+                                        <p class="text-xs text-[#7A643E] mt-1 leading-relaxed">
+                                            Selesaikan pembayaran terlebih dahulu untuk membuka QR Code pass turnstile lapangan. QR Code akan aktif otomatis setelah status pembayaran terverifikasi lunas.
+                                        </p>
+                                    </div>
+                                    <div class="inline-block px-3 py-1 rounded-full text-[11px] font-mono font-bold bg-amber-200/80 text-amber-900 border border-amber-300">
+                                        Status: <span x-text="currentTicket.status"></span>
+                                    </div>
                                 </div>
-                                <div class="flex justify-between text-[#5C410F]">
-                                    <span>Waktu Booking:</span>
-                                    <span class="font-mono font-bold text-[#1F170D]" x-text="formatTime(currentTicket.start_time) + ' - ' + formatTime(currentTicket.end_time) + ' WIB (' + calculateDuration(currentTicket.start_time, currentTicket.end_time) + ' Jam)'"></span>
+                            </template>
+
+                            <!-- Breakdown Details: Fully Responsive on Mobile & Desktop -->
+                            <div class="bg-[#FAF8F2] p-4 sm:p-5 rounded-2xl border border-[#DFC387]/70 text-left text-xs space-y-2.5 sm:space-y-2">
+                                <!-- Nama Pemegang Tiket -->
+                                <div class="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-1 sm:gap-4 pb-2 sm:pb-1.5 border-b border-[#DFC387]/30 text-[#5C410F]">
+                                    <span class="text-[11px] sm:text-xs font-semibold text-[#8C6418] uppercase tracking-wider shrink-0">Nama Pemegang Tiket:</span>
+                                    <span class="font-bold text-xs sm:text-sm text-[#1F170D] sm:text-right break-words leading-snug">{{ Auth::user()->name }} (VIP Platinum)</span>
                                 </div>
-                                <div class="flex justify-between text-[#5C410F]">
-                                    <span>Lokasi Lapangan:</span>
-                                    <span class="font-bold text-[#1F170D]" x-text="(currentTicket.court ? currentTicket.court.name : 'Court 1') + ' &bull; Indoor Central AC'"></span>
+
+                                <!-- Waktu Booking -->
+                                <div class="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-1 sm:gap-4 pb-2 sm:pb-1.5 border-b border-[#DFC387]/30 text-[#5C410F]">
+                                    <span class="text-[11px] sm:text-xs font-semibold text-[#8C6418] uppercase tracking-wider shrink-0">Waktu Booking:</span>
+                                    <span class="font-mono font-bold text-xs sm:text-sm text-[#1F170D] sm:text-right" x-text="formatTime(currentTicket.start_time) + ' - ' + formatTime(currentTicket.end_time) + ' WIB (' + calculateDuration(currentTicket.start_time, currentTicket.end_time) + ' Jam)'"></span>
                                 </div>
-                                <div class="flex justify-between text-[#5C410F]">
-                                    <span>Biaya Sesi Ini:</span>
-                                    <span class="font-mono font-bold text-[#1F170D]" x-text="'Rp ' + formatNumber(currentTicket.court_fee)"></span>
+
+                                <!-- Lokasi Lapangan -->
+                                <div class="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-1 sm:gap-4 pb-2 sm:pb-1.5 border-b border-[#DFC387]/30 text-[#5C410F]">
+                                    <span class="text-[11px] sm:text-xs font-semibold text-[#8C6418] uppercase tracking-wider shrink-0">Lokasi Lapangan:</span>
+                                    <span class="font-bold text-xs sm:text-sm text-[#1F170D] sm:text-right leading-snug" x-text="(currentTicket.court ? currentTicket.court.name : 'Court 1') + ' &bull; Indoor Central AC'"></span>
                                 </div>
-                                <div class="flex justify-between text-[#5C410F]" x-show="currentTicket.equipment_fee > 0">
-                                    <span>Sewa Alat (Add-ons):</span>
-                                    <span class="font-mono font-bold text-[#1F170D]" x-text="'Rp ' + formatNumber(currentTicket.equipment_fee)"></span>
+
+                                <!-- Biaya Sesi Ini -->
+                                <div class="flex justify-between items-center gap-3 pb-2 sm:pb-1.5 border-b border-[#DFC387]/30 text-[#5C410F]">
+                                    <span class="text-[11px] sm:text-xs font-semibold text-[#8C6418] uppercase tracking-wider shrink-0">Biaya Sesi Ini:</span>
+                                    <span class="font-mono font-bold text-xs sm:text-sm text-[#1F170D] whitespace-nowrap text-right" x-text="'Rp ' + formatNumber(currentTicket.court_fee)"></span>
                                 </div>
-                                <div class="pt-3 border-t border-[#DFC387]/60 flex justify-between items-center text-sm">
-                                    <span class="font-serif font-black text-[#1F170D]">Total Pembayaran Tiket:</span>
-                                    <span class="font-mono font-black text-base text-[#1F170D]" x-text="'Rp ' + formatNumber(currentTicket.total_amount)"></span>
+
+                                <!-- Sewa Alat (Add-ons) jika ada -->
+                                <div class="flex justify-between items-center gap-3 pb-2 sm:pb-1.5 border-b border-[#DFC387]/30 text-[#5C410F]" x-show="currentTicket.equipment_fee > 0">
+                                    <span class="text-[11px] sm:text-xs font-semibold text-[#8C6418] uppercase tracking-wider shrink-0">Sewa Alat (Add-ons):</span>
+                                    <span class="font-mono font-bold text-xs sm:text-sm text-[#1F170D] whitespace-nowrap text-right" x-text="'Rp ' + formatNumber(currentTicket.equipment_fee)"></span>
+                                </div>
+
+                                <!-- Total Pembayaran Tiket -->
+                                <div class="pt-2.5 sm:pt-3 border-t border-[#DFC387]/60 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-1.5 sm:gap-4">
+                                    <span class="font-serif font-black text-xs sm:text-sm text-[#1F170D] uppercase tracking-wider shrink-0">Total Pembayaran Tiket:</span>
+                                    <span class="font-mono font-black text-base sm:text-lg text-[#1F170D] whitespace-nowrap sm:text-right" x-text="'Rp ' + formatNumber(currentTicket.total_amount)"></span>
                                 </div>
                             </div>
                         </div>
@@ -168,10 +202,10 @@
                 </div>
 
                 <!-- Right Column: Invoice Details & Past History (Col 5) -->
-                <div class="lg:col-span-5 space-y-6">
+                <div class="lg:col-span-5 flex flex-col gap-6">
 
                     <!-- Official Tax Invoice Card -->
-                    <div class="bg-white/95 backdrop-blur-xl rounded-3xl border border-[#DFC387] shadow-[0_12px_35px_rgba(160,120,30,0.15)] p-6 space-y-4">
+                    <div class="bg-white/95 backdrop-blur-xl rounded-3xl border border-[#DFC387] shadow-[0_12px_35px_rgba(160,120,30,0.15)] p-4 sm:p-6 space-y-4">
                         <div class="flex items-center justify-between border-b border-[#DFC387]/50 pb-3">
                             <div>
                                 <span class="text-[10px] font-extrabold uppercase tracking-wider text-[#7A5818]">Bukti Bayar Resmi</span>
@@ -181,26 +215,26 @@
                         </div>
 
                         <div class="space-y-2.5 text-xs text-[#5C410F]">
-                            <div class="flex justify-between">
+                            <div class="flex justify-between items-center gap-3">
                                 <span>Tanggal Reservasi:</span>
-                                <span class="font-mono text-[#1F170D] font-bold" x-text="formatDate(ticket.booking_date)"></span>
+                                <span class="font-mono text-[#1F170D] font-bold whitespace-nowrap text-right" x-text="formatDate(ticket.booking_date)"></span>
                             </div>
-                            <div class="flex justify-between">
+                            <div class="flex justify-between items-center gap-3">
                                 <span>Total Sewa Lapangan:</span>
-                                <span class="font-mono text-[#1F170D]" x-text="'Rp ' + formatNumber(displayCourtFee)"></span>
+                                <span class="font-mono text-[#1F170D] whitespace-nowrap text-right" x-text="'Rp ' + formatNumber(displayCourtFee)"></span>
                             </div>
-                            <div class="flex justify-between">
+                            <div class="flex justify-between items-center gap-3">
                                 <span>Peralatan Sewa (Flat):</span>
-                                <span class="font-mono text-[#1F170D]" x-text="'Rp ' + formatNumber(displayEquipmentFee)"></span>
+                                <span class="font-mono text-[#1F170D] whitespace-nowrap text-right" x-text="'Rp ' + formatNumber(displayEquipmentFee)"></span>
                             </div>
-                            <div class="flex justify-between">
+                            <div class="flex justify-between items-center gap-3">
                                 <span>Status Settlement:</span>
-                                <span class="font-mono text-emerald-700 font-bold" x-text="ticket.status"></span>
+                                <span class="font-mono text-emerald-700 font-bold whitespace-nowrap text-right" x-text="ticket.status"></span>
                             </div>
 
-                            <div class="pt-3 border-t border-[#DFC387]/60 flex justify-between items-center text-sm">
-                                <span class="font-serif font-black text-[#1F170D]">Total Transaksi (Invoice):</span>
-                                <span class="font-mono font-black text-lg text-[#1F170D]" x-text="'Rp ' + formatNumber(displayGrandTotal)"></span>
+                            <div class="pt-3 border-t border-[#DFC387]/60 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-1.5 sm:gap-4 text-sm">
+                                <span class="font-serif font-black text-xs sm:text-sm text-[#1F170D] shrink-0">Total Transaksi (Invoice):</span>
+                                <span class="font-mono font-black text-base sm:text-lg text-[#1F170D] whitespace-nowrap sm:text-right" x-text="'Rp ' + formatNumber(displayGrandTotal)"></span>
                             </div>
                         </div>
 
@@ -218,7 +252,7 @@
                     </div>
 
                     <!-- Past Booking History (Real Database, Excludes Current Order) -->
-                    <div class="bg-white/95 backdrop-blur-xl rounded-3xl border border-[#DFC387] shadow-[0_12px_35px_rgba(160,120,30,0.15)] p-6 space-y-4">
+                    <div class="bg-white/95 backdrop-blur-xl rounded-3xl border border-[#DFC387] shadow-[0_12px_35px_rgba(160,120,30,0.15)] p-4 sm:p-6 space-y-4">
                         <div class="flex items-center justify-between border-b border-[#DFC387]/50 pb-3">
                             <h3 class="font-serif font-black text-base text-[#1F170D]">Riwayat Booking Lainnya</h3>
                             <span class="text-[11px] text-[#7A643E] font-medium" x-text="pastBookings.length + ' Riwayat'"></span>
@@ -237,7 +271,7 @@
                                         <div class="text-[10px] text-[#7A643E]" x-text="formatDate(item.booking_date) + ' &bull; #' + (item.booking_code || item.id.substring(0, 8))"></div>
                                     </div>
                                     <div class="text-right">
-                                        <div class="font-mono font-bold text-[#1F170D]" x-text="'Rp ' + formatNumber(item.total_amount)"></div>
+                                        <div class="font-mono font-bold text-[#1F170D] whitespace-nowrap" x-text="'Rp ' + formatNumber(item.total_amount)"></div>
                                         <span :class="item.status === 'PAID' || item.status === 'CHECKED_IN' ? 'text-emerald-700' : 'text-amber-700'"
                                               class="text-[9px] font-bold uppercase"
                                               x-text="item.status">
@@ -249,7 +283,7 @@
                     </div>
 
                     <!-- Need Help & Support -->
-                    <div class="p-5 rounded-3xl bg-gradient-to-r from-[#FAF2DE] via-[#F5E6BE] to-[#FAF2DE] border border-[#DFC387] flex items-center justify-between gap-4">
+                    <div class="p-4 sm:p-5 rounded-3xl bg-gradient-to-r from-[#FAF2DE] via-[#F5E6BE] to-[#FAF2DE] border border-[#DFC387] flex items-center justify-between gap-4">
                         <div>
                             <h4 class="font-serif font-black text-sm text-[#1F170D]">Butuh Bantuan Check-In?</h4>
                             <p class="text-xs text-[#7A643E]">Frontdesk concierge kami siap membantu 24/7 di turnstile gate.</p>

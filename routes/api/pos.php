@@ -5,5 +5,9 @@ use Illuminate\Support\Facades\Route;
 
 Route::prefix('v1/payments')->group(function () {
     Route::post('/webhook', [PaymentController::class, 'webhook']);
-    Route::post('/simulate', [PaymentController::class, 'simulate']);
+
+    // Simulator hanya aktif pada lingkungan pengembangan lokal atau testing
+    if (app()->environment('local', 'testing')) {
+        Route::post('/simulate', [PaymentController::class, 'simulate']);
+    }
 });

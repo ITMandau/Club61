@@ -14,29 +14,45 @@ Route::get('/', function () {
     return view('welcome');
 });
 
-// 2. Layar POS Kasir Frontdesk
-Route::get('/pos', function () {
-    return view('pos.index');
-})->name('pos.index');
+// 2. Layar POS Kasir Frontdesk & KDS Dapur (Wajib Auth & Otorisasi Staf)
+Route::middleware(['auth'])->group(function () {
+    Route::get('/pos', function () {
+        if (! in_array(auth()->user()->role, ['SUPER_ADMIN', 'ADMIN', 'CASHIER'])) {
+            abort(403, 'Akses Ditolak: Hanya staf kasir atau admin yang dapat mengakses terminal POS.');
+        }
+        return view('pos.index');
+    })->name('pos.index');
 
-Route::post('/pos/check-in', function (\Illuminate\Http\Request $request, \App\Services\Padel\PadelBookingService $service) {
-    $code = trim($request->input('code') ?? $request->input('qr_code_hash') ?? $request->input('booking_code') ?? '');
-    if (empty($code)) {
-        return response()->json(['success' => false, 'message' => 'Kode tiket atau QR wajib diisi.'], 422);
-    }
-    $user = auth()->user() ?? \App\Models\User::where('role', 'ADMIN')->first();
-    try {
-        $result = $service->checkIn($code, $user);
-        return response()->json(['success' => true, 'data' => $result]);
-    } catch (\Throwable $e) {
-        return response()->json(['success' => false, 'message' => $e->getMessage()], 400);
-    }
-})->name('pos.checkin');
+    Route::post('/pos/check-in', function (\Illuminate\Http\Request $request, \App\Services\Padel\PadelBookingService $service) {
+        $user = auth()->user();
+        if (! $user || ! in_array($user->role, ['SUPER_ADMIN', 'ADMIN', 'CASHIER'])) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Akses Ditolak: Hanya staf kasir atau admin yang berhak melakukan check-in tiket.',
+            ], 403);
+        }
 
-// 3. Layar Monitor Dapur / KOT (Kitchen Display System)
-Route::get('/kitchen', function () {
-    return view('kitchen.kds');
-})->name('kitchen.kds');
+        $code = trim($request->input('code') ?? $request->input('qr_code_hash') ?? $request->input('booking_code') ?? '');
+        if (empty($code)) {
+            return response()->json(['success' => false, 'message' => 'Kode tiket atau QR wajib diisi.'], 422);
+        }
+
+        try {
+            $result = $service->checkIn($code, $user);
+            return response()->json(['success' => true, 'data' => $result]);
+        } catch (\Throwable $e) {
+            return response()->json(['success' => false, 'message' => $e->getMessage()], 400);
+        }
+    })->name('pos.checkin');
+
+    // 3. Layar Monitor Dapur / KOT (Kitchen Display System)
+    Route::get('/kitchen', function () {
+        if (! in_array(auth()->user()->role, ['SUPER_ADMIN', 'ADMIN', 'KITCHEN'])) {
+            abort(403, 'Akses Ditolak: Hanya staf dapur atau admin yang dapat mengakses KDS.');
+        }
+        return view('kitchen.kds');
+    })->name('kitchen.kds');
+});
 
 // 4. Dashboard Member / Customer
 Route::get('/dashboard', function () {

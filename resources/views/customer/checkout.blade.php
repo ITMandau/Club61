@@ -310,42 +310,104 @@
         <!-- Success QRIS Instant Simulation Modal (Sandbox Mode) -->
         <div x-show="showPaymentSuccessModal" 
              style="display: none;"
-             class="fixed inset-0 z-50 overflow-y-auto bg-black/70 backdrop-blur-md flex items-center justify-center p-4">
+             class="fixed inset-0 z-50 overflow-y-auto bg-black/75 backdrop-blur-md flex items-center justify-center p-4 sm:p-6">
             
-            <div class="w-full max-w-sm bg-white rounded-3xl border-2 border-[#D4AF37] shadow-2xl p-6 text-center space-y-4">
-                <div class="w-14 h-14 mx-auto rounded-2xl bg-[#FAF2DE] border border-[#DFC387] flex items-center justify-center text-xs font-black text-[#7A5818] shadow-sm tracking-wider">
-                    QRIS
-                </div>
+            <div class="w-full max-w-2xl bg-white rounded-3xl border-2 border-[#D4AF37] shadow-2xl p-6 sm:p-8 space-y-6 animate-scaleIn">
                 
-                <div>
-                    <span class="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wider bg-emerald-100 text-emerald-800 border border-emerald-300">
-                        Midtrans Sandbox Mode
-                    </span>
-                    <h3 class="font-serif font-black text-lg text-[#1F170D] mt-1.5">Selesaikan Pembayaran</h3>
-                    <p class="text-xs text-[#7A643E]">Simulasi pembayaran Midtrans Snap sandbox berhasil dibuat.</p>
-                </div>
-
-                <div class="p-4 bg-white rounded-2xl border-2 border-dashed border-[#DFC387] inline-block shadow-inner">
-                    <img src="https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=CLUB61-MIDTRANS-DEMO" 
-                         alt="QR Code Pembayaran" 
-                         class="w-44 h-44 mx-auto rounded-lg" />
-                    <div class="mt-2 text-[10px] font-mono font-bold text-[#8C6418]">IDEMPOTENT &bull; PROTECTED</div>
-                </div>
-
-                <div class="font-mono font-black text-lg text-[#1F170D]" x-text="'Rp ' + formatNumber(grandTotal)"></div>
-
-                <div class="space-y-2">
+                <!-- Modal Header -->
+                <div class="flex items-center justify-between border-b border-[#DFC387]/50 pb-4">
+                    <div class="flex items-center gap-3">
+                        <div class="w-10 h-10 rounded-xl bg-[#FAF2DE] border border-[#DFC387] flex items-center justify-center font-serif font-black text-xs text-[#7A5818] shadow-sm">
+                            61
+                        </div>
+                        <div>
+                            <div class="flex items-center gap-2">
+                                <h3 class="font-serif font-black text-base sm:text-lg text-[#1F170D]">Selesaikan Pembayaran</h3>
+                                <span class="px-2 py-0.5 rounded-full text-[9px] font-extrabold uppercase tracking-wider bg-emerald-100 text-emerald-800 border border-emerald-300">
+                                    Midtrans Sandbox
+                                </span>
+                            </div>
+                            <p class="text-xs text-[#7A643E]">Pindai QRIS atau selesaikan simulasi pembayaran pesanan Anda</p>
+                        </div>
+                    </div>
                     <button type="button" 
-                            @click="completePaymentAndRedirect()"
-                            class="w-full py-3 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black uppercase tracking-wider shadow-lg active:scale-95 transition-all cursor-pointer">
-                        Konfirmasi Lunas &amp; Lihat E-Tiket &rarr;
-                    </button>
-                    <button type="button" 
-                            @click="showPaymentSuccessModal = false"
-                            class="w-full py-2 text-xs font-bold text-[#8C7A58] hover:text-[#1F170D] cursor-pointer">
-                        Tutup
+                            @click="showPaymentSuccessModal = false" 
+                            class="p-2 text-[#8C7A58] hover:text-[#1F170D] rounded-xl hover:bg-[#FAF2DE] transition-colors cursor-pointer"
+                            title="Tutup">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                        </svg>
                     </button>
                 </div>
+
+                <!-- Modal Body: 2-Column Responsive Layout -->
+                <div class="grid grid-cols-1 md:grid-cols-12 gap-6 items-center">
+                    
+                    <!-- Left Column: Bill Summary & Action (Col 7) -->
+                    <div class="md:col-span-7 space-y-4">
+                        <div class="p-4 rounded-2xl bg-[#FAF8F2] border border-[#E8DCC0] space-y-3">
+                            <div class="flex justify-between items-center text-xs text-[#5C410F]">
+                                <span>Metode Dipilih:</span>
+                                <span class="font-bold text-[#1F170D]" x-text="selectedMethod.name || 'QRIS Instant'"></span>
+                            </div>
+                            <div class="flex justify-between items-center text-xs text-[#5C410F]">
+                                <span>Status Sistem:</span>
+                                <span class="font-mono text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">Menunggu Pembayaran</span>
+                            </div>
+                            <div class="pt-2 border-t border-[#DFC387]/60 flex justify-between items-baseline">
+                                <span class="text-xs font-serif font-black text-[#1F170D]">Total Tagihan:</span>
+                                <span class="font-mono font-black text-xl text-[#8C6418]" x-text="'Rp ' + formatNumber(grandTotal)"></span>
+                            </div>
+                        </div>
+
+                        <div class="space-y-1 text-[11px] text-[#7A643E]">
+                            <div class="flex items-center gap-1.5 font-medium">
+                                <svg class="w-4 h-4 text-emerald-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                                </svg>
+                                <span>Mendukung BCA, Mandiri, GoPay, OVO, Dana, ShopeePay.</span>
+                            </div>
+                            <div class="flex items-center gap-1.5 font-medium">
+                                <svg class="w-4 h-4 text-[#8C6418] shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                                </svg>
+                                <span>Terproteksi SHA-512 Signature &amp; Idempotent Key.</span>
+                            </div>
+                        </div>
+
+                        <div class="space-y-2 pt-2">
+                            <button type="button" 
+                                    @click="completePaymentAndRedirect()"
+                                    class="w-full py-3.5 px-4 rounded-2xl text-xs font-black uppercase tracking-wider shadow-lg active:scale-95 transition-all cursor-pointer flex items-center justify-center gap-2"
+                                    style="background: linear-gradient(180deg, #F5DE9B 0%, #D4AF37 50%, #A87D18 100%); color: #1E160A; border: 1.5px solid #FFF3CD;">
+                                <span>Konfirmasi Lunas &amp; Lihat E-Tiket</span>
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M9 5l7 7-7 7" />
+                                </svg>
+                            </button>
+                            <button type="button" 
+                                    @click="showPaymentSuccessModal = false"
+                                    class="w-full py-2 text-xs font-bold text-[#8C7A58] hover:text-[#1F170D] cursor-pointer text-center">
+                                Tutup Jendela
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Right Column: Big QRIS Display (Col 5) -->
+                    <div class="md:col-span-5 flex flex-col items-center justify-center p-4 bg-[#FAF8F2] rounded-2xl border border-[#DFC387]/70">
+                        <div class="p-3 bg-white rounded-2xl border-2 border-dashed border-[#DFC387] shadow-md inline-block">
+                            <img src="https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=CLUB61-MIDTRANS-DEMO" 
+                                 alt="QRIS Pembayaran Club 61" 
+                                 class="w-48 h-48 sm:w-52 sm:h-52 mx-auto rounded-lg object-contain" />
+                        </div>
+                        <div class="mt-3 text-center">
+                            <div class="text-[10px] font-mono font-bold tracking-widest text-[#8C6418] uppercase">QRIS STANDAR NASIONAL</div>
+                            <div class="text-[10px] text-[#7A643E] mt-0.5">NMID: ID102061617233 &bull; Club 61</div>
+                        </div>
+                    </div>
+
+                </div>
+
             </div>
         </div>
 
@@ -390,8 +452,8 @@
                 ],
 
                 init() {
-                    const saved = sessionStorage.getItem('club61_cart') || sessionStorage.getItem('vantage_cart');
-                    const holdSaved = sessionStorage.getItem('club61_hold_data') || sessionStorage.getItem('vantage_hold_data');
+                    const saved = localStorage.getItem('club61_cart') || sessionStorage.getItem('club61_cart') || sessionStorage.getItem('vantage_cart');
+                    const holdSaved = localStorage.getItem('club61_hold_data') || sessionStorage.getItem('club61_hold_data') || sessionStorage.getItem('vantage_hold_data');
 
                     if (saved) {
                         try {
@@ -613,6 +675,8 @@
                                 });
                             } else if (data.driver === 'xendit' && data.payment_url && !data.is_mock) {
                                 // Eksekusi Xendit Invoice Redirect
+                                localStorage.removeItem('club61_cart');
+                                localStorage.removeItem('club61_hold_data');
                                 sessionStorage.removeItem('club61_cart');
                                 sessionStorage.removeItem('club61_hold_data');
                                 sessionStorage.removeItem('vantage_cart');
@@ -633,6 +697,8 @@
                 },
 
                 clearSessionAndRedirect(bookingId, orderId) {
+                    localStorage.removeItem('club61_cart');
+                    localStorage.removeItem('club61_hold_data');
                     sessionStorage.removeItem('club61_cart');
                     sessionStorage.removeItem('club61_hold_data');
                     sessionStorage.removeItem('vantage_cart');

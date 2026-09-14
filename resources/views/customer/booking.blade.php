@@ -528,7 +528,9 @@
                         const json = await res.json();
 
                         if (res.status === 201 && json.success) {
-                            // Simpan detail booking yang telah dikonsolidasi ke session storage untuk cart
+                            // Simpan detail booking yang telah dikonsolidasi ke local & session storage untuk sinkronisasi multi-tab
+                            localStorage.setItem('club61_cart', JSON.stringify(consolidatedSlots));
+                            localStorage.setItem('club61_hold_data', JSON.stringify(json.data));
                             sessionStorage.setItem('club61_cart', JSON.stringify(consolidatedSlots));
                             sessionStorage.setItem('club61_hold_data', JSON.stringify(json.data));
                             window.dispatchEvent(new CustomEvent('cart-updated'));

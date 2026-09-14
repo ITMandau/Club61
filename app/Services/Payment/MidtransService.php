@@ -115,14 +115,16 @@ class MidtransService
      *
      * Rumus: SHA512(order_id + status_code + gross_amount + server_key)
      */
-    public function verifySignature(string $orderId, string $statusCode, string $grossAmount, string $incomingSignature): bool
+    public static function verifySignature(string $orderId, string $statusCode, string $grossAmount, string $incomingSignature, ?string $serverKey = null): bool
     {
-        if (empty($this->serverKey)) {
+        $key = $serverKey ?? (config('services.midtrans.server_key') ?? '');
+
+        if (empty($key)) {
             // Jika belum ada server key (dev lokal), izinkan hash mock
             return true;
         }
 
-        $calculated = hash('sha512', $orderId . $statusCode . $grossAmount . $this->serverKey);
+        $calculated = hash('sha512', $orderId . $statusCode . $grossAmount . $key);
 
         return hash_equals($calculated, $incomingSignature);
     }
