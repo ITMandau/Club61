@@ -203,7 +203,9 @@
                             if ($duration < 1) $duration = 1;
 
                             $pendingPayment = $b->order?->payments?->firstWhere('status', 'PENDING');
-                            $pendingAmount = $pendingPayment ? (float) $pendingPayment->amount : 0;
+                            $pendingAmount = $pendingPayment 
+                                ? (float) $pendingPayment->amount 
+                                : ($b->status === 'PENDING_PAYMENT' ? (float) ($b->order?->grand_total ?: $b->total_amount) : 0);
                         @endphp
                         <tr>
                             <td style="font-family: var(--font-mono, monospace); font-weight: 700; color: #8C6418;">
@@ -227,6 +229,8 @@
                             <td>
                                 @if($b->status === 'PAID')
                                     <span class="adm-pill adm-pill-green">Confirmed / Lunas</span>
+                                @elseif($b->status === 'PENDING_PAYMENT')
+                                    <span class="adm-pill" style="background: #FEF3C7; color: #92400E; border: 1px solid #FCD34D; font-weight: 700;">Pending Payment</span>
                                 @elseif($b->status === 'LOCKED')
                                     <span class="adm-pill adm-pill-gold">Locked / Waiting</span>
                                 @elseif($b->status === 'CHECKED_IN')
@@ -263,8 +267,8 @@
                             </td>
                             <td style="text-align: center; white-space: nowrap;">
                                 <div style="display: inline-flex; gap: 0.4rem; align-items: center; justify-content: center;">
-                                    @if($b->status === 'LOCKED' && $pendingAmount > 0)
-                                        <button type="button" wire:click="openSettleModal('{{ $b->id }}')" wire:loading.attr="disabled" title="Lunasi Sisa Tagihan (Rp {{ number_format($pendingAmount, 0, ',', '.') }})" class="adm-btn-icon adm-btn-icon-settle">
+                                    @if(($b->status === 'LOCKED' && $pendingAmount > 0) || $b->status === 'PENDING_PAYMENT')
+                                        <button type="button" wire:click="openSettleModal('{{ $b->id }}')" wire:loading.attr="disabled" title="Pelunasan Kasir / Settle Tunai (Rp {{ number_format($pendingAmount ?: $b->total_amount, 0, ',', '.') }})" class="adm-btn-icon adm-btn-icon-settle">
                                             <span wire:loading.remove wire:target="openSettleModal('{{ $b->id }}')">
                                                 <svg style="width: 15px; height: 15px;" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
@@ -592,7 +596,7 @@
                 <div style="background: #991B1B; padding: 1.25rem 1.5rem; display: flex; justify-content: space-between; align-items: center;">
                     <div>
                         <div style="color: #FECACA; font-size: 0.6875rem; font-weight: 700; text-transform: uppercase;">Frontdesk Cashier &bull; Settlement</div>
-                        <div style="color: #FFFFFF; font-size: 1.125rem; font-weight: 800; margin-top: 0.25rem;">Pelunasan Sisa Tagihan Reschedule</div>
+                        <div style="color: #FFFFFF; font-size: 1.125rem; font-weight: 800; margin-top: 0.25rem;">Pelunasan Kasir Frontdesk (Cashier Settle)</div>
                     </div>
                     <button type="button" wire:click="$set('showSettleModal', false)" style="background: none; border: none; color: #FFFFFF; font-size: 1.5rem; cursor: pointer;">&times;</button>
                 </div>
@@ -615,6 +619,7 @@
                         <select wire:model="settlePaymentMethod" style="width: 100%; border: 1px solid #D4AF37; border-radius: 8px; padding: 0.5rem; font-size: 0.8125rem;">
                             <option value="CASH">Tunai Kasir Frontdesk</option>
                             <option value="EDC_BCA">Mesin EDC BCA / Mandiri</option>
+                            <option value="TRANSFER">Transfer Rekening Kasir</option>
                             <option value="QRIS">QRIS Kasir Frontdesk</option>
                         </select>
                     </div>

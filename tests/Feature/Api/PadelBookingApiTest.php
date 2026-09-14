@@ -761,5 +761,236 @@ class PadelBookingApiTest extends TestCase
         $this->assertEquals(100000, $ticketB->json('data.order_equipment_fee'));
         $this->assertEquals(500000, $ticketB->json('data.order_grand_total'));
     }
+
+    /**
+     * 16. Test Ganti Metode Pembayaran (Retry Payment via On-the-Fly Suffix).
+     */
+    public function test_retry_payment_generates_suffixed_snap_token_and_updates_fee(): void
+    {
+        $tomorrow = now()->addDays(2)->format('Y-m-d');
+        $hold = $this->withHeader('Authorization', "Bearer {$this->customerToken}")
+            ->postJson('/api/v1/padel/hold-slot', [
+                'booking_date' => $tomorrow,
+                'slots' => [
+                    [
+                        'court_id' => $this->court1->id,
+                        'start_time' => '14:00',
+                        'end_time' => '15:00',
+                    ],
+                ],
+            ])
+            ->assertStatus(201);
+
+        $bookingId = $hold->json('data.bookings.0.id');
+
+        // Checkout awal menggunakan BCA_VA (Gateway Fee: Rp 4.440)
+        $checkout = $this->withHeaders([
+            'Authorization' => "Bearer {$this->customerToken}",
+            'X-Idempotency-Key' => (string) Str::uuid(),
+        ])->postJson('/api/v1/padel/checkout', [
+            'booking_ids' => [$bookingId],
+            'payment_method' => 'BCA_VA',
+        ])->assertStatus(200);
+
+        $orderId = $checkout->json('data.order_id');
+        $this->assertEquals(204440, $checkout->json('data.grand_total'));
+
+        // Simulasikan status PENDING_PAYMENT saat menunggu pembayaran customer
+        PadelBooking::where('id', $bookingId)->update(['status' => 'PENDING_PAYMENT']);
+        \App\Models\Pos\Order::where('order_number', $orderId)->update(['payment_status' => 'PENDING']);
+
+        // Customer menutup Snap dan ganti metode ke QRIS (Gateway Fee: Rp 2.800)
+        $retry = $this->withHeader('Authorization', "Bearer {$this->customerToken}")
+            ->postJson("/api/v1/padel/bookings/{$bookingId}/retry-payment", [
+                'payment_method' => 'QRIS',
+            ])
+            ->assertStatus(200)
+            ->assertJson([
+                'success' => true,
+                'is_cash' => false,
+                'order_id' => $orderId,
+                'gateway_fee' => 2800,
+                'payment_method' => 'QRIS',
+            ]);
+
+        // Pastikan order_id yang dikirim ke Midtrans memiliki suffix waktu (_timestamp)
+        $suffixedOrderId = $retry->json('suffixed_order_id');
+        $this->assertStringStartsWith($orderId . '_', $suffixedOrderId);
+        $this->assertNotEmpty($retry->json('snap_token'));
+        $this->assertEquals(202800, $retry->json('grand_total'));
+
+        // Database orders tetap memiliki order_number bersih
+        $this->assertDatabaseHas('orders', [
+            'order_number' => $orderId,
+            'grand_total' => 202800,
+        ]);
+    }
+
+    /**
+     * 17. Test Ganti Metode Pembayaran ke Tunai di Meja Kasir (CASH).
+     */
+    public function test_retry_payment_with_cash_returns_frontdesk_instruction(): void
+    {
+        $tomorrow = now()->addDays(2)->format('Y-m-d');
+        $hold = $this->withHeader('Authorization', "Bearer {$this->customerToken}")
+            ->postJson('/api/v1/padel/hold-slot', [
+                'booking_date' => $tomorrow,
+                'slots' => [
+                    [
+                        'court_id' => $this->court1->id,
+                        'start_time' => '15:00',
+                        'end_time' => '16:00',
+                    ],
+                ],
+            ])
+            ->assertStatus(201);
+
+        $bookingId = $hold->json('data.bookings.0.id');
+
+        $checkout = $this->withHeaders([
+            'Authorization' => "Bearer {$this->customerToken}",
+            'X-Idempotency-Key' => (string) Str::uuid(),
+        ])->postJson('/api/v1/padel/checkout', [
+            'booking_ids' => [$bookingId],
+            'payment_method' => 'QRIS',
+        ])->assertStatus(200);
+
+        $orderId = $checkout->json('data.order_id');
+
+        // Simulasikan status PENDING_PAYMENT saat menunggu pembayaran customer
+        PadelBooking::where('id', $bookingId)->update(['status' => 'PENDING_PAYMENT']);
+        \App\Models\Pos\Order::where('order_number', $orderId)->update(['payment_status' => 'PENDING']);
+
+        // Ganti ke CASH
+        $retry = $this->withHeader('Authorization', "Bearer {$this->customerToken}")
+            ->postJson("/api/v1/padel/bookings/{$bookingId}/retry-payment", [
+                'payment_method' => 'CASH',
+            ])
+            ->assertStatus(200)
+            ->assertJson([
+                'success' => true,
+                'is_cash' => true,
+                'order_id' => $orderId,
+                'grand_total' => 200000,
+                'payment_method' => 'CASH',
+            ]);
+
+        $this->assertStringContainsString('kasir', strtolower($retry->json('message')));
+    }
+
+    /**
+     * 18. Test Midtrans Webhook dengan On-the-Fly Suffix (ORD-PAD-XXXX_timestamp).
+     */
+    public function test_midtrans_webhook_with_suffixed_order_id_updates_clean_order_and_records_payment(): void
+    {
+        config(['services.midtrans.server_key' => 'SB-Mid-server-TEST-KEY']);
+
+        $cleanOrderId = 'ORD-PAD-CLEAN999';
+        $order = \App\Models\Pos\Order::create([
+            'order_number' => $cleanOrderId,
+            'user_id' => $this->customer->id,
+            'order_type' => 'ONLINE_BOOKING',
+            'subtotal' => 200000,
+            'grand_total' => 202800,
+            'payment_status' => 'PENDING',
+        ]);
+
+        $booking = PadelBooking::create([
+            'booking_code' => 'BK-PAD-SUF01',
+            'order_id' => $order->id,
+            'user_id' => $this->customer->id,
+            'court_id' => $this->court1->id,
+            'booking_date' => now()->addDays(2)->format('Y-m-d'),
+            'start_time' => Carbon::parse(now()->addDays(2)->format('Y-m-d') . ' 16:00'),
+            'end_time' => Carbon::parse(now()->addDays(2)->format('Y-m-d') . ' 17:00'),
+            'court_fee' => 200000,
+            'total_amount' => 202800,
+            'status' => 'PENDING_PAYMENT',
+        ]);
+
+        // Simulasikan Midtrans mengirim webhook dengan suffix ID
+        $suffixedOrderId = $cleanOrderId . '_1700000000';
+        \Illuminate\Support\Facades\Cache::put("order_bookings:{$suffixedOrderId}", [$booking->id], 3600);
+
+        $grossAmount = '202800.00';
+        $statusCode = '200';
+        // Signature dihitung Midtrans menggunakan full suffixed order ID
+        $signature = hash('sha512', $suffixedOrderId . $statusCode . $grossAmount . 'SB-Mid-server-TEST-KEY');
+
+        $response = $this->postJson('/api/v1/padel/webhook/midtrans', [
+            'order_id' => $suffixedOrderId,
+            'status_code' => $statusCode,
+            'gross_amount' => $grossAmount,
+            'signature_key' => $signature,
+            'transaction_status' => 'settlement',
+            'fraud_status' => 'accept',
+            'payment_type' => 'qris',
+        ]);
+
+        $response->assertStatus(200)->assertJson(['success' => true]);
+
+        // Verifikasi status booking dan QR code
+        $this->assertDatabaseHas('padel_bookings', [
+            'id' => $booking->id,
+            'status' => 'PAID',
+        ]);
+        $this->assertNotNull($booking->fresh()->qr_code_hash);
+
+        // Verifikasi Order tabel lokal tetap bersih
+        $this->assertDatabaseHas('orders', [
+            'id' => $order->id,
+            'order_number' => $cleanOrderId,
+            'payment_status' => 'PAID',
+        ]);
+
+        // Verifikasi tabel payments mencatat transaction_id utuh bersuffix
+        $this->assertDatabaseHas('payments', [
+            'order_id' => $order->id,
+            'transaction_id' => $suffixedOrderId,
+            'payment_gateway' => 'MIDTRANS',
+            'payment_method' => 'QRIS',
+            'amount' => 202800,
+            'status' => 'SUCCESS',
+        ]);
+    }
+
+    /**
+     * 19. Test Modul Pelunasan Kasir Frontdesk (Cashier Settle).
+     */
+    public function test_cashier_can_settle_pending_payment_booking(): void
+    {
+        $booking = PadelBooking::create([
+            'booking_code' => 'BK-PAD-CASH01',
+            'user_id' => $this->customer->id,
+            'court_id' => $this->court1->id,
+            'booking_date' => now()->addDays(2)->format('Y-m-d'),
+            'start_time' => Carbon::parse(now()->addDays(2)->format('Y-m-d') . ' 17:00'),
+            'end_time' => Carbon::parse(now()->addDays(2)->format('Y-m-d') . ' 18:00'),
+            'court_fee' => 300000,
+            'total_amount' => 300000,
+            'status' => 'PENDING_PAYMENT',
+        ]);
+
+        $service = app(\App\Services\Padel\PadelBookingService::class);
+        $result = $service->adminSettleCashierPayment(
+            bookingId: $booking->id,
+            paymentMethod: 'CASH',
+            amountReceived: 300000,
+            cashierUser: $this->cashier
+        );
+
+        $this->assertTrue($result['success']);
+        $this->assertEquals('PAID', $result['booking']->status);
+        $this->assertNotNull($result['booking']->qr_code_hash);
+
+        // Verifikasi data payment tercatat untuk Analytics Kasir
+        $this->assertDatabaseHas('payments', [
+            'order_id' => $result['booking']->order_id,
+            'payment_gateway' => 'CASH',
+            'payment_method' => 'CASH',
+            'amount' => 300000,
+            'status' => 'SUCCESS',
+        ]);
+    }
 }
 

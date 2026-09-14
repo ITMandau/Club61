@@ -382,7 +382,11 @@ class PadelBookingService
             }
 
             // Biaya Layanan Gateway
-            $gatewayFee = strtoupper($paymentMethod) === 'QRIS' ? 2800 : 4440;
+            $gatewayFee = match (strtoupper($paymentMethod)) {
+                'CASH' => 0,
+                'QRIS' => 2800,
+                default => 4440,
+            };
             $grandTotal = max(0, $courtTotal + $equipmentTotal + $gatewayFee - $discountAmount);
 
             // 🛡️ QA DEFENSE 3: Susun Item Details Persis Sama dengan Gross Amount untuk Midtrans
@@ -431,6 +435,7 @@ class PadelBookingService
                     'email' => $user->email,
                     'phone' => $user->phone ?? '081261617233',
                 ],
+                'payment_method' => $paymentMethod,
             ]);
 
             // Petakan Order ID ke ID Bookings di Cache selama 24 Jam
@@ -499,6 +504,139 @@ class PadelBookingService
             Cache::put($cacheIdempotencyKey, $response, self::IDEMPOTENCY_TTL_SECONDS);
 
             return $response;
+        });
+    }
+
+    /**
+     * Regenerasi pembayaran untuk booking yang pending (Ganti Metode Bayar via On-the-Fly Suffix).
+     */
+    public function retryPayment(string $bookingId, string $paymentMethod, User $user): array
+    {
+        return DB::transaction(function () use ($bookingId, $paymentMethod, $user) {
+            $booking = PadelBooking::with(['court', 'user', 'order'])
+                ->where('id', $bookingId)
+                ->orWhere('booking_code', $bookingId)
+                ->orWhere('order_id', $bookingId)
+                ->lockForUpdate()
+                ->first();
+
+            if (! $booking) {
+                throw new HttpException(404, 'Data booking tidak ditemukan.');
+            }
+
+            $isStaff = in_array($user->role, ['SUPER_ADMIN', 'ADMIN', 'CASHIER']);
+            if (! $isStaff && $booking->user_id !== $user->id) {
+                throw new HttpException(403, 'Akses ditolak: Anda tidak memiliki akses ke pesanan ini.');
+            }
+
+            if (! in_array($booking->status, ['PENDING_PAYMENT', 'LOCKED', 'PENDING'])) {
+                throw new HttpException(400, "Booking dengan status {$booking->status} tidak dapat diproses ulang pembayarannya.");
+            }
+
+            $order = $this->ensureBookingOrder($booking);
+
+            // Ambil seluruh booking yang tergabung dalam order yang sama
+            $bookings = PadelBooking::with(['court', 'equipments.equipment'])
+                ->where('order_id', $order->id)
+                ->orWhere('order_id', $order->order_number)
+                ->get();
+
+            if ($bookings->isEmpty()) {
+                $bookings = collect([$booking]);
+            }
+
+            $courtTotal = $bookings->sum('court_fee');
+            $equipmentTotal = $bookings->sum('equipment_fee');
+
+            // Hitung Biaya Layanan Gateway Baru
+            $newGatewayFee = match (strtoupper($paymentMethod)) {
+                'CASH' => 0,
+                'QRIS' => 2800,
+                default => 4440,
+            };
+
+            $baseAmount = $courtTotal + $equipmentTotal;
+            $grandTotal = max(0, $baseAmount + $newGatewayFee);
+
+            $order->update([
+                'subtotal' => $baseAmount,
+                'grand_total' => $grandTotal,
+            ]);
+
+            // Jika memilih CASH (Bayar di Kasir)
+            $isCash = strtoupper($paymentMethod) === 'CASH';
+            if ($isCash) {
+                return [
+                    'success' => true,
+                    'is_cash' => true,
+                    'order_id' => $order->order_number,
+                    'booking_code' => $booking->booking_code,
+                    'grand_total' => $grandTotal,
+                    'payment_method' => 'CASH',
+                    'message' => 'Metode pembayaran diubah ke Tunai di Kasir. Silakan tunjukkan Kode Booking ke kasir venue Club61.',
+                ];
+            }
+
+            // On-the-Fly Suffix Logic untuk Midtrans Snap
+            $orderNumber = $order->order_number ?: ('ORD-PAD-' . strtoupper(Str::random(8)));
+            $suffixedOrderId = $orderNumber . '_' . time();
+
+            // Susun item details Midtrans yang presisi
+            $midtransItems = [];
+            foreach ($bookings as $b) {
+                $midtransItems[] = [
+                    'id' => substr($b->id, 0, 50),
+                    'price' => (int) $b->court_fee,
+                    'quantity' => 1,
+                    'name' => substr('Sewa ' . ($b->court?->name ?? 'Lapangan'), 0, 50),
+                ];
+            }
+            if ($equipmentTotal > 0) {
+                $midtransItems[] = [
+                    'id' => 'EQ-RENTAL',
+                    'price' => (int) $equipmentTotal,
+                    'quantity' => 1,
+                    'name' => 'Sewa Peralatan',
+                ];
+            }
+            if ($newGatewayFee > 0) {
+                $midtransItems[] = [
+                    'id' => 'FEE-GATEWAY',
+                    'price' => (int) $newGatewayFee,
+                    'quantity' => 1,
+                    'name' => 'Biaya Layanan Gerbang',
+                ];
+            }
+
+            // Panggil Payment Manager
+            $paymentManager = app(\App\Services\Payment\PaymentManager::class);
+            $paymentResult = $paymentManager->createPayment([
+                'order_id' => $suffixedOrderId,
+                'gross_amount' => (int) $grandTotal,
+                'item_details' => $midtransItems,
+                'customer_details' => [
+                    'first_name' => $user->name,
+                    'email' => $user->email,
+                    'phone' => $user->phone ?? '081261617233',
+                ],
+                'payment_method' => $paymentMethod,
+            ]);
+
+            // Petakan suffixed order id ke bookings di Cache selama 24 jam
+            Cache::put("order_bookings:{$suffixedOrderId}", $bookings->pluck('id')->toArray(), 86400);
+
+            return [
+                'success' => true,
+                'is_cash' => false,
+                'order_id' => $order->order_number,
+                'suffixed_order_id' => $suffixedOrderId,
+                'snap_token' => $paymentResult['snap_token'] ?? null,
+                'redirect_url' => $paymentResult['redirect_url'] ?? null,
+                'grand_total' => $grandTotal,
+                'gateway_fee' => $newGatewayFee,
+                'payment_method' => $paymentMethod,
+                'message' => 'Token pembayaran baru berhasil dibuat.',
+            ];
         });
     }
 
@@ -1082,38 +1220,107 @@ class PadelBookingService
      */
     public function adminSettleSupplementalPayment(string $bookingId, string $paymentMethod, User $adminUser): array
     {
-        return DB::transaction(function () use ($bookingId, $paymentMethod, $adminUser) {
-            $booking = PadelBooking::with(['order', 'court'])->where('id', $bookingId)->lockForUpdate()->firstOrFail();
+        return $this->adminSettleCashierPayment($bookingId, $paymentMethod, 0, $adminUser);
+    }
+
+    /**
+     * Pelunasan pembayaran oleh kasir/admin di meja frontdesk (Cashier Settle Module).
+     * Dapat melunasi booking berstatus PENDING_PAYMENT maupun tagihan sisa LOCKED.
+     */
+    public function adminSettleCashierPayment(
+        string $bookingId,
+        string $paymentMethod,
+        float $amountReceived,
+        User $cashierUser
+    ): array {
+        return DB::transaction(function () use ($bookingId, $paymentMethod, $amountReceived, $cashierUser) {
+            $booking = PadelBooking::with(['order', 'court', 'user'])
+                ->where('id', $bookingId)
+                ->lockForUpdate()
+                ->firstOrFail();
+
+            if (! in_array($booking->status, ['PENDING_PAYMENT', 'LOCKED', 'PENDING'])) {
+                throw new HttpException(400, "Booking dengan status {$booking->status} tidak dapat dilunasi via kasir.");
+            }
+
             $order = $this->ensureBookingOrder($booking);
 
+            // Ambil semua booking yang tergabung dalam order ini
+            $bookings = PadelBooking::where('order_id', $order->id)
+                ->orWhere('order_id', $order->order_number)
+                ->get();
+
+            if ($bookings->isEmpty()) {
+                $bookings = collect([$booking]);
+            }
+
+            // Update status seluruh booking menjadi PAID dan rilis QR turnstile
+            foreach ($bookings as $b) {
+                $newQrCodeHash = hash_hmac(
+                    'sha256',
+                    $b->booking_code . $b->user_id . $b->court_id . $b->start_time->toISOString(),
+                    config('app.key')
+                );
+
+                $b->update([
+                    'status' => 'PAID',
+                    'qr_code_hash' => $newQrCodeHash,
+                ]);
+            }
+
+            // Update Order
+            $order->update([
+                'payment_status' => 'PAID',
+            ]);
+
+            // Cek apakah ada pending payment sebelumnya untuk diupdate atau buat mutasi CASH baru
             $pendingPayment = Payment::where('order_id', $order->id)
                 ->where('status', 'PENDING')
                 ->latest()
                 ->first();
 
+            $gateway = in_array(strtoupper($paymentMethod), ['CASH', 'TUNAI']) ? 'CASH' : strtoupper($paymentMethod);
+            $settleAmount = $amountReceived > 0 
+                ? $amountReceived 
+                : ($pendingPayment ? (float) $pendingPayment->amount : (float) ($order->grand_total ?: $booking->total_amount));
+
             if ($pendingPayment) {
                 $pendingPayment->update([
                     'status' => 'SUCCESS',
                     'payment_method' => $paymentMethod,
-                    'payment_gateway' => $paymentMethod,
+                    'payment_gateway' => $gateway,
+                    'amount' => $settleAmount,
                     'payload_log' => array_merge($pendingPayment->payload_log ?? [], [
-                        'settled_by' => $adminUser->id,
+                        'settled_by' => $cashierUser->id,
+                        'settled_by_name' => $cashierUser->name,
                         'settled_at' => now()->toIso8601String(),
+                        'channel' => 'FRONTDESK_CASHIER',
                     ]),
+                ]);
+            } else {
+                Payment::create([
+                    'order_id' => $order->id,
+                    'transaction_id' => 'CASH-' . strtoupper(Str::random(12)),
+                    'payment_gateway' => $gateway,
+                    'payment_method' => $paymentMethod,
+                    'amount' => $settleAmount,
+                    'status' => 'SUCCESS',
+                    'payload_log' => [
+                        'settled_by' => $cashierUser->id,
+                        'settled_by_name' => $cashierUser->name,
+                        'settled_at' => now()->toIso8601String(),
+                        'channel' => 'FRONTDESK_CASHIER',
+                    ],
                 ]);
             }
 
-            // Rilis QR code dan ubah status menjadi PAID
-            $newQrCodeHash = hash_hmac('sha256', $booking->booking_code . $booking->user_id . $booking->court_id . $booking->start_time->toISOString(), config('app.key'));
-            $booking->update([
-                'status' => 'PAID',
-                'qr_code_hash' => $newQrCodeHash,
-            ]);
+            // Bersihkan cache kuncian dan counter tab
+            Cache::forget('kelola_pemesanan_tab_counts');
 
             return [
                 'success' => true,
-                'message' => 'Pelunasan tagihan berhasil! Tiket QR telah dirilis.',
-                'booking' => $booking->fresh(['court', 'order']),
+                'message' => 'Pelunasan kasir berhasil diverifikasi! E-Tiket QR telah aktif.',
+                'booking' => $booking->fresh(['court', 'order', 'user']),
             ];
         });
     }

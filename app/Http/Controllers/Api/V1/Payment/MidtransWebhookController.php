@@ -57,20 +57,27 @@ class MidtransWebhookController extends Controller
 
         Log::info("Midtrans Webhook verified for Order {$orderId}: Status = {$transactionStatus}");
 
-        // Temukan booking dari Database berdasarkan order_id, Cache, atau booking_code
-        $bookings = PadelBooking::where('order_id', $orderId)->get();
+        $incomingOrderId = $orderId;
+        $realOrderId = explode('_', $incomingOrderId)[0];
+
+        // Temukan booking dari Database berdasarkan incomingOrderId, realOrderId, Cache, atau booking_code
+        $bookings = PadelBooking::where('order_id', $incomingOrderId)
+            ->orWhere('order_id', $realOrderId)
+            ->get();
 
         if ($bookings->isEmpty()) {
-            $bookingIds = Cache::get("order_bookings:{$orderId}");
+            $bookingIds = Cache::get("order_bookings:{$incomingOrderId}") ?? Cache::get("order_bookings:{$realOrderId}");
             if (! empty($bookingIds) && is_array($bookingIds)) {
                 $bookings = PadelBooking::whereIn('id', $bookingIds)->get();
             } else {
-                $bookings = PadelBooking::where('booking_code', $orderId)->get();
+                $bookings = PadelBooking::where('booking_code', $incomingOrderId)
+                    ->orWhere('booking_code', $realOrderId)
+                    ->get();
             }
         }
 
         if ($bookings->isEmpty()) {
-            Log::warning("Midtrans Webhook: No bookings found for order {$orderId}");
+            Log::warning("Midtrans Webhook: No bookings found for order {$incomingOrderId} (Real: {$realOrderId})");
             return response()->json([
                 'success' => true,
                 'message' => 'Webhook diterima, tetapi data pesanan tidak ditemukan.',
@@ -107,19 +114,31 @@ class MidtransWebhookController extends Controller
             };
 
             $primaryBooking = $bookings->first();
-            $order = Order::firstOrCreate(
-                ['order_number' => $orderId],
-                [
+            $order = Order::where('order_number', $realOrderId)
+                ->orWhere('order_number', $incomingOrderId)
+                ->first();
+
+            if (! $order) {
+                $order = Order::create([
+                    'order_number' => $realOrderId,
                     'user_id' => $primaryBooking->user_id,
                     'order_type' => 'ONLINE_BOOKING',
                     'subtotal' => $bookings->sum('total_amount'),
                     'grand_total' => (float) ($grossAmount ?: $bookings->sum('total_amount')),
                     'payment_status' => ($newBookingStatus === 'PAID') ? 'PAID' : 'PENDING',
-                ]
-            );
+                ]);
+            } else {
+                $targetStatus = ($newBookingStatus === 'PAID') ? 'PAID' : 'PENDING';
+                if ($order->payment_status !== $targetStatus) {
+                    $order->update(['payment_status' => $targetStatus]);
+                }
+            }
 
-            if ($order->payment_status !== ($newBookingStatus === 'PAID' ? 'PAID' : 'PENDING')) {
-                $order->update(['payment_status' => ($newBookingStatus === 'PAID' ? 'PAID' : 'PENDING')]);
+            // Hubungkan seluruh booking ke Order murni
+            foreach ($bookings as $b) {
+                if ($b->order_id !== $order->id && $b->order_id !== $realOrderId) {
+                    $b->update(['order_id' => $order->id]);
+                }
             }
 
             $paymentType = $request->input('payment_type', 'qris');
@@ -132,7 +151,7 @@ class MidtransWebhookController extends Controller
             };
 
             Payment::updateOrCreate(
-                ['transaction_id' => $orderId],
+                ['transaction_id' => $incomingOrderId],
                 [
                     'order_id' => $order->id,
                     'payment_gateway' => 'MIDTRANS',

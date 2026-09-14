@@ -69,14 +69,21 @@ class PaymentController extends Controller
             }
         }
 
+        $incomingOrderId = $orderId;
+        $realOrderId = explode('_', $incomingOrderId)[0];
+
         // 2. Update Padel Booking if exists (Unified Gateway Support)
-        $bookings = PadelBooking::where('order_id', $orderId)->get();
+        $bookings = PadelBooking::where('order_id', $incomingOrderId)
+            ->orWhere('order_id', $realOrderId)
+            ->get();
         if ($bookings->isEmpty()) {
-            $bookingIds = Cache::get("order_bookings:{$orderId}");
+            $bookingIds = Cache::get("order_bookings:{$incomingOrderId}") ?? Cache::get("order_bookings:{$realOrderId}");
             if (! empty($bookingIds) && is_array($bookingIds)) {
                 $bookings = PadelBooking::whereIn('id', $bookingIds)->get();
             } else {
-                $bookings = PadelBooking::where('booking_code', $orderId)->get();
+                $bookings = PadelBooking::where('booking_code', $incomingOrderId)
+                    ->orWhere('booking_code', $realOrderId)
+                    ->get();
             }
         }
 
@@ -109,19 +116,30 @@ class PaymentController extends Controller
                 };
 
                 $primaryBooking = $bookings->first();
-                $order = Order::firstOrCreate(
-                    ['order_number' => $orderId],
-                    [
+                $order = Order::where('order_number', $realOrderId)
+                    ->orWhere('order_number', $incomingOrderId)
+                    ->first();
+
+                if (! $order) {
+                    $order = Order::create([
+                        'order_number' => $realOrderId,
                         'user_id' => $primaryBooking->user_id,
                         'order_type' => 'ONLINE_BOOKING',
                         'subtotal' => $bookings->sum('total_amount'),
                         'grand_total' => (float) ($grossAmount ?: $bookings->sum('total_amount')),
                         'payment_status' => ($newStatus === 'PAID') ? 'PAID' : 'PENDING',
-                    ]
-                );
+                    ]);
+                } else {
+                    $targetPaymentStatus = ($newStatus === 'PAID') ? 'PAID' : 'PENDING';
+                    if ($order->payment_status !== $targetPaymentStatus) {
+                        $order->update(['payment_status' => $targetPaymentStatus]);
+                    }
+                }
 
-                if ($order->payment_status !== ($newStatus === 'PAID' ? 'PAID' : 'PENDING')) {
-                    $order->update(['payment_status' => ($newStatus === 'PAID') ? 'PAID' : 'PENDING']);
+                foreach ($bookings as $b) {
+                    if ($b->order_id !== $order->id && $b->order_id !== $realOrderId) {
+                        $b->update(['order_id' => $order->id]);
+                    }
                 }
 
                 $paymentType = $request->input('payment_type', 'qris');
@@ -134,7 +152,7 @@ class PaymentController extends Controller
                 };
 
                 Payment::updateOrCreate(
-                    ['transaction_id' => $orderId],
+                    ['transaction_id' => $incomingOrderId],
                     [
                         'order_id' => $order->id,
                         'payment_gateway' => 'MIDTRANS',
