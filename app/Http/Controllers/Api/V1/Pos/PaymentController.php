@@ -9,6 +9,7 @@ use App\Models\Pos\Payment;
 use App\Services\Payment\MidtransService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 
@@ -17,6 +18,7 @@ class PaymentController extends Controller
     /**
      * Webhook Handler for Midtrans / Xendit.
      * Idempotent & secure with Signature Key.
+     * Unified handler: Supports POS Orders & Padel Bookings.
      */
     public function webhook(Request $request): JsonResponse
     {
@@ -34,7 +36,13 @@ class PaymentController extends Controller
         }
 
         // 🛡️ QA DEFENSE: Verifikasi SHA-512 Signature Anti-Spoofing via MidtransService (DRY)
-        if (! MidtransService::verifySignature($orderId, $statusCode, $grossAmount, $signature)) {
+        $isValidSignature = MidtransService::verifySignature($orderId, $statusCode, $grossAmount, $signature);
+
+        // Izinkan test ping Midtrans dashboard jika pada sandbox/dev environment
+        $isTestPing = (! config('services.midtrans.is_production', false))
+            && (str_starts_with(strtolower($orderId), 'test') || str_contains(strtolower($orderId), 'sample'));
+
+        if (! $isValidSignature && ! $isTestPing) {
             Log::warning("🚨 POS WEBHOOK SPOOFING ATTEMPT REJECTED: Invalid signature for Order {$orderId}", [
                 'ip' => $request->ip(),
                 'payload' => $request->all(),
@@ -46,7 +54,7 @@ class PaymentController extends Controller
             ], 400);
         }
 
-        // Update payment log and transition status
+        // 1. Update POS payment & order if exists
         $payment = Payment::where('transaction_id', $orderId)->first();
         if ($payment) {
             $payment->update([
@@ -61,7 +69,44 @@ class PaymentController extends Controller
             }
         }
 
-        return response()->json(['success' => true, 'message' => 'Webhook received and processed.']);
+        // 2. Update Padel Booking if exists (Unified Gateway Support)
+        $bookings = PadelBooking::where('order_id', $orderId)->get();
+        if ($bookings->isEmpty()) {
+            $bookingIds = Cache::get("order_bookings:{$orderId}");
+            if (! empty($bookingIds) && is_array($bookingIds)) {
+                $bookings = PadelBooking::whereIn('id', $bookingIds)->get();
+            } else {
+                $bookings = PadelBooking::where('booking_code', $orderId)->get();
+            }
+        }
+
+        if (! $bookings->isEmpty()) {
+            $fraudStatus = $request->input('fraud_status', 'accept');
+            $newStatus = match ($transactionStatus) {
+                'capture' => ($fraudStatus === 'challenge') ? 'PENDING_PAYMENT' : 'PAID',
+                'settlement' => 'PAID',
+                'pending' => 'PENDING_PAYMENT',
+                'deny', 'expire', 'cancel' => 'CANCELLED',
+                default => null,
+            };
+
+            if ($newStatus) {
+                foreach ($bookings as $booking) {
+                    $booking->update(['status' => $newStatus]);
+
+                    if ($newStatus === 'PAID' && empty($booking->qr_code_hash)) {
+                        $booking->update([
+                            'qr_code_hash' => 'VNT-TICKET-' . strtoupper(bin2hex(random_bytes(16))),
+                        ]);
+                    }
+                }
+            }
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Webhook received and processed.',
+        ]);
     }
 
     /**
