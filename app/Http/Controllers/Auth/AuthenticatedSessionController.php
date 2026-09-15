@@ -35,12 +35,26 @@ class AuthenticatedSessionController extends Controller
 
         $user = $request->user();
 
-        return match ($user->role) {
-            'SUPER_ADMIN', 'ADMIN' => redirect()->intended('/admin'),
-            'CASHIER' => redirect()->intended('/pos'),
-            'KITCHEN' => redirect()->intended('/kitchen'),
-            default => redirect()->intended(route('dashboard', absolute: false)),
-        };
+        // 1. Cek rute home_route yang disetel pada peran pengguna secara eksplisit
+        $primaryRole = $user->roles()->first();
+        if ($primaryRole && ! empty($primaryRole->home_route)) {
+            $request->session()->forget('url.intended');
+            return redirect($primaryRole->home_route);
+        }
+
+        // 2. Fallback cerdas berbasis role default
+        if ($user->hasRole('cashier') && $user->roles->count() === 1) {
+            return redirect()->intended('/pos');
+        }
+        if ($user->hasRole('kitchen') && $user->roles->count() === 1) {
+            return redirect()->intended('/kitchen');
+        }
+        if ($user->canAccessPanel(\Filament\Facades\Filament::getPanel('admin'))) {
+            $request->session()->forget('url.intended');
+            return redirect('/admin');
+        }
+
+        return redirect()->intended(route('dashboard', absolute: false));
     }
 
     /**

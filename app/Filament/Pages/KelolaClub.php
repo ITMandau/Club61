@@ -3,11 +3,13 @@
 namespace App\Filament\Pages;
 
 use BackedEnum;
+use BezhanSalleh\FilamentShield\Traits\HasPageShield;
 use Filament\Pages\Page;
 use UnitEnum;
 
 class KelolaClub extends Page
 {
+    use HasPageShield;
     protected static string | BackedEnum | null $navigationIcon = 'heroicon-o-building-office-2';
 
     protected static ?string $navigationLabel = 'Kelola Club';

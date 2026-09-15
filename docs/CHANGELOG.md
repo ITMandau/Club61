@@ -4,6 +4,56 @@ Catatan riwayat pembaruan sistem dan evolusi arsitektur.
 
 ---
 
+## [v1.3.0-Enterprise-Role-Matrix] - 2026-09-15
+
+### Ditambahkan (Added)
+- **Enterprise Role & Sidebar Permission Matrix (Full Club 61 Ecosystem)**:
+  - Membuat class terpusat `App\Services\Permission\Club61PermissionMatrix` yang mendefinisikan 63 izin aksi granular dalam 11 kategori modul operasional venue (Padel Arena, POS Kasir Frontdesk, F&B Kitchen KDS, Gym & Fitness, Wellness & Sauna, Salon, Merchandise, Karyawan, Turnamen, Analytics, dan Master Data) murni menggunakan teks polos.
+  - Menambahkan kolom `home_route` (varchar 100, nullable) dan `description` (varchar 255, nullable) pada tabel `roles` di `create_permission_tables.php`.
+  - Membuat model kustom `App\Models\Role` yang meng-extend Spatie `Role` dengan konfigurasi opsi resmi Home Route (`/admin`, `/pos`, `/kitchen`, `/dashboard`).
+  - Mengonfigurasi `config/permission.php` untuk menggunakan `App\Models\Role::class` secara global.
+- **Resource Backoffice Kustom (`RoleResource`) di Filament**:
+  - Menggantikan tampilan Shield bawaan dengan `App\Filament\Resources\Roles\RoleResource`:
+    - **Tabel Roles**: Menampilkan kolom ID, SLUG, NAME, MENUS (jumlah izin aktif), HOME ROUTE (badge warna tujuan login), dan tombol aksi Edit / Hapus.
+    - **Form & Modal Edit Role**: Menampilkan input SLUG, NAME, Dropdown HOME ROUTE, serta kartu matriks untuk 11 kategori modul dengan kotak centang sub-modul dan tombol pintas *Select All / Deselect All* per modul.
+  - Otomatis menonaktifkan resource default Shield agar tidak terjadi duplikasi menu di sidebar.
+- **Dynamic Home Route Redirection**:
+  - Memperbarui `AuthenticatedSessionController.php` dan `welcome.blade.php` agar setiap pengguna yang berhasil login langsung mendarat di rute `home_route` yang terpasang pada peran aktifnya.
+- **Perlindungan Akses Halaman Filament (`HasPageShield`)**:
+  - Memasang trait `HasPageShield` pada seluruh 10 halaman menu Filament Admin Panel (`Analytics`, `BookingSystem`, `Dashboard`, `KelolaClub`, `KelolaKaryawan`, `KelolaPemesanan`, `KelolaTurnamen`, `Kustomer`, `Marketing`, `MasterData`).
+
+### Diperbaiki & Diuji (Fixed & Verified)
+- Menghapus total penggunaan emoji dan ikon dekoratif pada seluruh rancangan teks dan antarmuka sistem.
+- Menambahkan test case baru untuk memverifikasi login redirection berdasarkan `home_route` dan integritas 63 izin matrix.
+- Seluruh automated test suite kini lulus 100% (**80 passed, 365 assertions**).
+
+---
+
+## [v1.2.0-Dynamic-RBAC-Shield] - 2026-09-15
+
+### Ditambahkan (Added)
+- **Modul 09: Dynamic Role-Based Access Control (RBAC) & Filament Shield**:
+  - Mengintegrasikan package industri `spatie/laravel-permission:^6.25` dan `bezhansalleh/filament-shield:^4.3`.
+  - Mengonversi otorisasi enum statis `users.role` menjadi arsitektur 5 tabel relasional dinamis: `roles`, `permissions`, `model_has_roles`, `model_has_permissions`, `role_has_permissions`.
+  - Menghasilkan 34 permissions dan 2 policies (`UserPolicy`, `RolePolicy`) secara otomatis via `shield:generate`.
+  - Memasang **Filament Shield Plugin** dengan antarmuka centang visual matriks hak akses peran di `/admin/shield/roles`.
+  - Membuat **`UserResource` di Filament** (`/admin/users`) untuk pengelolaan pengguna dan penugasan peran (*role multi-select*).
+  - Menambahkan gerbang absolut **Super Admin Override** via `Gate::before` di `AppServiceProvider.php`.
+
+### Diperbaiki & Dioptimalkan (Fixed & Refactored)
+- **Kustomisasi Kunci Morf ULID (`CHAR(26)`) Spatie**:
+  - Memodifikasi migrasi Spatie Permission agar kolom `model_id` pada tabel pivot bertipe `char(26)` untuk mendukung Primary Key ULID model `User`.
+- **Konsolidasi Migrasi Database**:
+  - Mengonsolidasikan kolom `order_id` dan `checked_in_at` ke dalam migrasi padel utama `create_padel_tables.php`.
+  - Menghapus 2 file migrasi usang/terfragmentasi (`2026_09_07_...` dan `2026_09_08_...`).
+- **Jembatan Kompatibilitas Model `User`**:
+  - Accessor `getRoleAttribute()` dan mutator `setRoleAttribute()` menjaga respons JSON mobile Flutter tetap valid tanpa breaking changes.
+  - Inisialisasi pembersihan cache `forgetCachedPermissions()` di baris teratas `DatabaseSeeder.php` untuk mencegah stale cache saat fresh migrate.
+- **Automated Test Suite**:
+  - Seluruh 73 automated tests lulus 100% (335 assertions).
+
+---
+
 ## [v1.1.0-Reschedule-Hardening] - 2026-09-15
 
 ### Diperbaiki (Fixed)

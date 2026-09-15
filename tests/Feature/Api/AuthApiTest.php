@@ -141,7 +141,10 @@ class AuthApiTest extends TestCase
 
         $this->assertDatabaseHas('users', [
             'email' => 'budi.baru@vantage.id',
-            'role' => 'CUSTOMER',
         ]);
+        $registeredUser = \App\Models\User::where('email', 'budi.baru@vantage.id')->first();
+        $this->assertNotNull($registeredUser);
+        $this->assertTrue($registeredUser->hasRole('customer'));
+        $this->assertEquals('CUSTOMER', $registeredUser->role);
     }
 }

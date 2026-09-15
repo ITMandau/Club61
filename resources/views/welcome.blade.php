@@ -36,10 +36,23 @@
 
         <nav class="flex items-center gap-3 sm:gap-4">
             @auth
-                <a href="{{ url('/dashboard') }}" 
-                   class="px-5 py-2.5 rounded-full text-xs font-black uppercase tracking-wider transition-all shadow-md transform active:scale-95"
+                @php
+                    $loggedUser = auth()->user();
+                    $homeRoute = $loggedUser->roles()->first()?->home_route ?? ($loggedUser->canAccessPanel(\Filament\Facades\Filament::getPanel('admin')) ? '/admin' : '/dashboard');
+                    $buttonLabel = match ($homeRoute) {
+                        '/admin' => 'Panel Admin',
+                        '/pos' => 'Layar Kasir POS',
+                        '/kitchen' => 'Layar Dapur KDS',
+                        default => 'Buka Dashboard',
+                    };
+                @endphp
+                <a href="{{ url($homeRoute) }}" 
+                   class="px-5 py-2.5 rounded-full text-xs font-black uppercase tracking-wider transition-all shadow-md transform active:scale-95 flex items-center gap-1.5"
                    style="background: linear-gradient(180deg, #F0DB9D 0%, #D4AF37 35%, #B38622 100%); border: 1.5px solid #FBF0CE; color: #281A05; box-shadow: 0 4px 15px rgba(184, 134, 11, 0.35);">
-                    Buka Dashboard
+                    <span>{{ $buttonLabel }}</span>
+                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M14 5l7 7m0 0l-7 7m7-7H3" />
+                    </svg>
                 </a>
             @else
                 <a href="{{ route('login') }}" 

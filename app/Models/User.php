@@ -10,10 +10,12 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Laravel\Sanctum\HasApiTokens;
+use Spatie\Permission\Models\Role;
+use Spatie\Permission\Traits\HasRoles;
 
 class User extends Authenticatable implements FilamentUser
 {
-    use HasApiTokens, HasFactory, HasUlids, Notifiable, SoftDeletes;
+    use HasApiTokens, HasFactory, HasRoles, HasUlids, Notifiable, SoftDeletes;
 
     protected $fillable = [
         'name',
@@ -25,10 +27,16 @@ class User extends Authenticatable implements FilamentUser
         'is_active',
     ];
 
+    protected $appends = [
+        'role',
+    ];
+
     protected $hidden = [
         'password',
         'remember_token',
     ];
+
+    protected ?string $pendingRole = null;
 
     protected function casts(): array
     {
@@ -39,9 +47,73 @@ class User extends Authenticatable implements FilamentUser
         ];
     }
 
+    public function setRoleAttribute($value): void
+    {
+        if ($value) {
+            $this->pendingRole = strtolower($value);
+        }
+    }
+
+    public function getRoleAttribute(): string
+    {
+        $firstRole = $this->roles->first()?->name;
+        return $firstRole ? strtoupper($firstRole) : 'CUSTOMER';
+    }
+
+    protected static function booted(): void
+    {
+        static::saved(function (User $user) {
+            if ($user->pendingRole) {
+                $role = Role::findOrCreate($user->pendingRole, 'web');
+                $user->syncRoles([$role]);
+                $user->pendingRole = null;
+                $user->unsetRelation('roles');
+            }
+        });
+    }
+
+    public function isCustomer(): bool
+    {
+        $roleNames = $this->getRoleNames()->map(fn ($r) => strtolower($r));
+        if ($roleNames->isEmpty()) {
+            return true;
+        }
+
+        return $roleNames->count() === 1 && $roleNames->first() === 'customer';
+    }
+
+    public function isStaff(): bool
+    {
+        return $this->hasRole('cashier') || $this->isAdmin();
+    }
+
+    public function isAdmin(): bool
+    {
+        if ($this->hasAnyRole(['super_admin', 'admin'])) {
+            return true;
+        }
+
+        $nonAdminRoles = ['customer', 'cashier', 'kitchen'];
+        return $this->roles->contains(fn ($role) => ! in_array(strtolower($role->name), $nonAdminRoles, true));
+    }
+
+    public function isCashier(): bool
+    {
+        return $this->hasRole('cashier');
+    }
+
+    public function isKitchen(): bool
+    {
+        return $this->hasRole('kitchen');
+    }
+
     public function canAccessPanel(Panel $panel): bool
     {
-        return in_array($this->role, ['SUPER_ADMIN', 'ADMIN', 'CASHIER', 'KITCHEN']);
+        if ($this->is_active === false) {
+            return false;
+        }
+
+        return ! $this->isCustomer() || $this->can('access_admin_panel');
     }
 
     public function staffProfile()

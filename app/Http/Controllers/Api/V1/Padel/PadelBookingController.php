@@ -186,7 +186,7 @@ class PadelBookingController extends Controller
     public function checkIn(Request $request): JsonResponse
     {
         $user = $request->user();
-        if (! in_array($user->role, ['SUPER_ADMIN', 'ADMIN', 'CASHIER'])) {
+        if (! $user->isStaff()) {
             throw new HttpException(403, 'Akses Ditolak: Hanya staf kasir atau admin yang dapat memverifikasi check-in pemain.');
         }
 

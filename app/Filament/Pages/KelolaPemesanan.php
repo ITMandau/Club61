@@ -12,11 +12,13 @@ use Filament\Notifications\Notification;
 use Filament\Pages\Page;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
+use BezhanSalleh\FilamentShield\Traits\HasPageShield;
 use Livewire\WithPagination;
 use UnitEnum;
 
 class KelolaPemesanan extends Page
 {
+    use HasPageShield;
     use WithPagination;
 
     protected static string | BackedEnum | null $navigationIcon = 'heroicon-o-ticket';
@@ -222,7 +224,7 @@ class KelolaPemesanan extends Page
         }
 
         try {
-            $adminUser = auth()->user() ?? \App\Models\User::where('role', 'ADMIN')->first();
+            $adminUser = auth()->user() ?? \App\Models\User::role(['admin', 'super_admin'])->first();
 
             $service->adminRescheduleBooking(
                 bookingId: $this->selectedBookingId,
@@ -276,7 +278,7 @@ class KelolaPemesanan extends Page
     public function executeSettleSupplemental(PadelBookingService $service): void
     {
         try {
-            $adminUser = auth()->user() ?? \App\Models\User::where('role', 'ADMIN')->first();
+            $adminUser = auth()->user() ?? \App\Models\User::role(['admin', 'super_admin'])->first();
 
             $service->adminSettleCashierPayment(
                 bookingId: $this->settleBookingId,
@@ -322,7 +324,7 @@ class KelolaPemesanan extends Page
     public function executeCancelRefund(PadelBookingService $service): void
     {
         try {
-            $adminUser = auth()->user() ?? \App\Models\User::where('role', 'ADMIN')->first();
+            $adminUser = auth()->user() ?? \App\Models\User::role(['admin', 'super_admin'])->first();
 
             $service->adminCancelAndRefund(
                 bookingId: $this->cancelBookingId,
@@ -378,7 +380,7 @@ class KelolaPemesanan extends Page
         }
 
         try {
-            $staffUser = auth()->user() ?? \App\Models\User::where('role', 'ADMIN')->first();
+            $staffUser = auth()->user() ?? \App\Models\User::role(['admin', 'super_admin'])->first();
             $result = $service->checkIn($code, $staffUser);
             $this->checkInResult = $result;
 
@@ -399,7 +401,7 @@ class KelolaPemesanan extends Page
     public function executeComplete(string $bookingId, PadelBookingService $service): void
     {
         try {
-            $staffUser = auth()->user() ?? \App\Models\User::where('role', 'ADMIN')->first();
+            $staffUser = auth()->user() ?? \App\Models\User::role(['admin', 'super_admin'])->first();
             $booking = $service->completeBooking($bookingId, $staffUser);
 
             Notification::make()
