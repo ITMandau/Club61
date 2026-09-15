@@ -26,7 +26,7 @@ class AdminPanelProvider extends PanelProvider
             ->default()
             ->id('admin')
             ->path('admin')
-            ->login()
+            ->login(\App\Filament\Pages\Auth\Login::class)
             ->darkMode(false)
             ->brandName('Club 61 Padel Court')
             ->brandLogo(asset('images/club61-logo.png'))
@@ -37,6 +37,13 @@ class AdminPanelProvider extends PanelProvider
                 'primary' => Color::Amber,
             ])
             ->spa()
+            ->resources([
+                \App\Filament\Resources\Users\UserResource::class,
+                \App\Filament\Resources\Roles\RoleResource::class,
+            ])
+            ->plugins([
+                \BezhanSalleh\FilamentShield\FilamentShieldPlugin::make(),
+            ])
             ->renderHook(
                 'panels::head.end',
                 fn () => view('filament.custom-styles')

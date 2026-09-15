@@ -28,44 +28,117 @@ class DatabaseSeeder extends Seeder
 {
     public function run(): void
     {
+        // 0. RESET CACHE SPATIE PERMISSION
+        app()[\Spatie\Permission\PermissionRegistrar::class]->forgetCachedPermissions();
+
+        // SINKRONISASI 63 PERMISSIONS MATRIX (CLUB 61 ECOSYSTEM)
+        \App\Services\Permission\Club61PermissionMatrix::syncAllPermissions('web');
+
+        // SEED ROLES DENGAN HOME ROUTE DAN DESKRIPSI (TEKS POLOS)
+        $roleConfigs = [
+            'super_admin' => [
+                'description' => 'Super Administrator Full Access',
+                'home_route' => '/admin',
+            ],
+            'admin' => [
+                'description' => 'Administrator Backoffice',
+                'home_route' => '/admin',
+            ],
+            'cashier' => [
+                'description' => 'Kasir Frontdesk & POS Terminal',
+                'home_route' => '/pos',
+            ],
+            'kitchen' => [
+                'description' => 'Koki Dapur & Barista KDS',
+                'home_route' => '/kitchen',
+            ],
+            'trainer' => [
+                'description' => 'Pelatih & Coach Lapangan Padel',
+                'home_route' => '/admin',
+            ],
+            'stylist' => [
+                'description' => 'Stylist Salon & Hair Treatment',
+                'home_route' => '/admin',
+            ],
+            'customer' => [
+                'description' => 'Pelanggan & Member Club',
+                'home_route' => '/dashboard',
+            ],
+        ];
+
+        foreach ($roleConfigs as $roleName => $config) {
+            $role = \App\Models\Role::firstOrCreate(
+                ['name' => $roleName, 'guard_name' => 'web'],
+                ['description' => $config['description'], 'home_route' => $config['home_route']]
+            );
+            $role->update([
+                'description' => $config['description'],
+                'home_route' => $config['home_route'],
+            ]);
+        }
+
+        // Berikan seluruh izin ke peran super_admin dan admin
+        $allPermissions = \App\Services\Permission\Club61PermissionMatrix::getAllPermissionSlugs();
+        \App\Models\Role::findByName('super_admin', 'web')->syncPermissions($allPermissions);
+        \App\Models\Role::findByName('admin', 'web')->syncPermissions($allPermissions);
+
+        // Berikan izin operasional kasir
+        \App\Models\Role::findByName('cashier', 'web')->syncPermissions([
+            'access_pos_terminal',
+            'pos_cash_payment',
+            'pos_qris_payment',
+            'settle_unpaid_booking',
+            'apply_pos_voucher',
+            'view_padel_bookings',
+            'checkin_padel_ticket',
+            'print_padel_invoice',
+        ]);
+
+        // Berikan izin operasional dapur KDS
+        \App\Models\Role::findByName('kitchen', 'web')->syncPermissions([
+            'view_kitchen_kds',
+            'update_kitchen_order_status',
+            'view_fnb_menu',
+        ]);
+
         // 1. SEED USERS & STAFF
-        $password = Hash::make('Password123!');
+        $password = Hash::make('password123');
 
         $admin = User::create([
             'name' => 'Super Admin Club 61',
             'email' => 'admin@club61.com',
             'phone' => '08110000001',
             'password' => $password,
-            'role' => 'SUPER_ADMIN',
             'is_active' => true,
         ]);
+        $admin->assignRole('super_admin');
 
         $cashier = User::create([
             'name' => 'Kasir Frontdesk POS',
             'email' => 'cashier@club61.com',
             'phone' => '08110000002',
             'password' => $password,
-            'role' => 'CASHIER',
             'is_active' => true,
         ]);
+        $cashier->assignRole('cashier');
 
         $barista = User::create([
             'name' => 'Barista Cafe Club 61',
             'email' => 'barista@club61.com',
             'phone' => '08110000003',
             'password' => $password,
-            'role' => 'KITCHEN',
             'is_active' => true,
         ]);
+        $barista->assignRole('kitchen');
 
         $coachUser = User::create([
             'name' => 'Coach Budi Santoso',
             'email' => 'coach.budi@club61.com',
             'phone' => '08110000004',
             'password' => $password,
-            'role' => 'TRAINER',
             'is_active' => true,
         ]);
+        $coachUser->assignRole('trainer');
 
         $coachProfile = StaffProfile::create([
             'user_id' => $coachUser->id,
@@ -81,9 +154,9 @@ class DatabaseSeeder extends Seeder
             'email' => 'stylist.siti@club61.com',
             'phone' => '08110000005',
             'password' => $password,
-            'role' => 'STYLIST',
             'is_active' => true,
         ]);
+        $stylistUser->assignRole('stylist');
 
         $stylistProfile = StaffProfile::create([
             'user_id' => $stylistUser->id,
@@ -99,9 +172,9 @@ class DatabaseSeeder extends Seeder
             'email' => 'budi@gmail.com',
             'phone' => '081234567890',
             'password' => $password,
-            'role' => 'CUSTOMER',
             'is_active' => true,
         ]);
+        $customer->assignRole('customer');
 
         // 2. SEED PADEL COURTS & EQUIPMENTS
         $courts = [

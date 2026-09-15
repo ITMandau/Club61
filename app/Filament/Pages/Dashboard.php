@@ -3,11 +3,13 @@
 namespace App\Filament\Pages;
 
 use BackedEnum;
+use BezhanSalleh\FilamentShield\Traits\HasPageShield;
 use Filament\Pages\Dashboard as BaseDashboard;
 use UnitEnum;
 
 class Dashboard extends BaseDashboard
 {
+    use HasPageShield;
     protected static string | BackedEnum | null $navigationIcon = 'heroicon-o-home';
 
     protected static ?string $navigationLabel = 'Dashboard';

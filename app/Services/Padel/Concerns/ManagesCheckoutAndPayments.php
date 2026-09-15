@@ -155,7 +155,7 @@ trait ManagesCheckoutAndPayments
             Cache::put("order_bookings:{$orderId}", $bookings->pluck('id')->toArray(), 86400);
 
             // Tentukan status awal transaksi
-            $isStaff = in_array($user->role, ['SUPER_ADMIN', 'ADMIN', 'CASHIER']);
+            $isStaff = $user->isStaff();
             $isCash = strtoupper($paymentMethod) === 'CASH';
 
             if ($isCash && ! $isStaff) {
@@ -234,7 +234,7 @@ trait ManagesCheckoutAndPayments
                 ->firstOrFail();
 
             // Proteksi Otorisasi: Pastikan user hanya bisa retry booking miliknya sendiri
-            $isStaff = in_array($user->role, ['SUPER_ADMIN', 'ADMIN', 'CASHIER']);
+            $isStaff = $user->isStaff();
             if (! $isStaff && $booking->user_id !== $user->id) {
                 throw new HttpException(403, 'Anda tidak memiliki otoritas untuk memproses pembayaran booking ini.');
             }

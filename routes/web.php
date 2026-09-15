@@ -17,7 +17,7 @@ Route::get('/', function () {
 // 2. Layar POS Kasir Frontdesk & KDS Dapur (Wajib Auth & Otorisasi Staf)
 Route::middleware(['auth'])->group(function () {
     Route::get('/pos', function () {
-        if (! in_array(auth()->user()->role, ['SUPER_ADMIN', 'ADMIN', 'CASHIER'])) {
+        if (! auth()->user()->isStaff()) {
             abort(403, 'Akses Ditolak: Hanya staf kasir atau admin yang dapat mengakses terminal POS.');
         }
         return view('pos.index');
@@ -25,7 +25,7 @@ Route::middleware(['auth'])->group(function () {
 
     Route::post('/pos/check-in', function (\Illuminate\Http\Request $request, \App\Services\Padel\PadelBookingService $service) {
         $user = auth()->user();
-        if (! $user || ! in_array($user->role, ['SUPER_ADMIN', 'ADMIN', 'CASHIER'])) {
+        if (! $user || ! $user->isStaff()) {
             return response()->json([
                 'success' => false,
                 'message' => 'Akses Ditolak: Hanya staf kasir atau admin yang berhak melakukan check-in tiket.',
@@ -47,7 +47,7 @@ Route::middleware(['auth'])->group(function () {
 
     // 3. Layar Monitor Dapur / KOT (Kitchen Display System)
     Route::get('/kitchen', function () {
-        if (! in_array(auth()->user()->role, ['SUPER_ADMIN', 'ADMIN', 'KITCHEN'])) {
+        if (! (auth()->user()->hasRole('kitchen') || auth()->user()->isAdmin())) {
             abort(403, 'Akses Ditolak: Hanya staf dapur atau admin yang dapat mengakses KDS.');
         }
         return view('kitchen.kds');

@@ -171,7 +171,7 @@
 
                         <!-- 4 Quick Metallic Gold Role Buttons -->
                         <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                            <button type="button" onclick="selectRole('budi@gmail.com', 'Password123!', 'Dashboard Member (/dashboard)')" 
+                            <button type="button" onclick="selectRole('budi@gmail.com', 'password123', 'Dashboard Member (/dashboard)')" 
                                     class="role-btn text-left p-2 transition-all duration-200 text-xs active:scale-95 group shadow-sm hover:shadow-md cursor-pointer"
                                     style="background: linear-gradient(145deg, #FDF9EE 0%, #EEDBB0 55%, #CF9E46 100%); border: 1.5px solid #BD923E; border-radius: 14px;">
                                 <div class="mb-0.5">
@@ -180,7 +180,7 @@
                                 <div class="text-[9px] text-[#6B4E15] font-medium truncate">Customer VIP</div>
                             </button>
 
-                            <button type="button" onclick="selectRole('cashier@club61.com', 'Password123!', 'Layar Kasir Frontdesk (/pos)')" 
+                            <button type="button" onclick="selectRole('cashier@club61.com', 'password123', 'Layar Kasir Frontdesk (/pos)')" 
                                     class="role-btn text-left p-2 transition-all duration-200 text-xs active:scale-95 group shadow-sm hover:shadow-md cursor-pointer"
                                     style="background: linear-gradient(145deg, #FDF9EE 0%, #EEDBB0 55%, #CF9E46 100%); border: 1.5px solid #BD923E; border-radius: 14px;">
                                 <div class="mb-0.5">
@@ -189,7 +189,7 @@
                                 <div class="text-[9px] text-[#6B4E15] font-medium truncate">POS Venue</div>
                             </button>
 
-                            <button type="button" onclick="selectRole('barista@club61.com', 'Password123!', 'Monitor KOT Kitchen (/kitchen)')" 
+                            <button type="button" onclick="selectRole('barista@club61.com', 'password123', 'Monitor KOT Kitchen (/kitchen)')" 
                                     class="role-btn text-left p-2 transition-all duration-200 text-xs active:scale-95 group shadow-sm hover:shadow-md cursor-pointer"
                                     style="background: linear-gradient(145deg, #FDF9EE 0%, #EEDBB0 55%, #CF9E46 100%); border: 1.5px solid #BD923E; border-radius: 14px;">
                                 <div class="mb-0.5">
@@ -198,7 +198,7 @@
                                 <div class="text-[9px] text-[#6B4E15] font-medium truncate">Display KDS</div>
                             </button>
 
-                            <button type="button" onclick="selectRole('admin@club61.com', 'Password123!', 'Admin Panel Filament (/admin)')" 
+                            <button type="button" onclick="selectRole('admin@club61.com', 'password123', 'Admin Panel Filament (/admin)')" 
                                     class="role-btn text-left p-2 transition-all duration-200 text-xs active:scale-95 group shadow-sm hover:shadow-md cursor-pointer"
                                     style="background: linear-gradient(145deg, #FDF9EE 0%, #EEDBB0 55%, #CF9E46 100%); border: 1.5px solid #BD923E; border-radius: 14px;">
                                 <div class="mb-0.5">
@@ -219,7 +219,7 @@
                         <!-- Email Address Input -->
                         <div>
                             <label for="email" class="block text-xs font-bold text-[#3B2B11] mb-1.5">
-                                Email / ID Kredensial
+                                Email / ID Kredensial (atau ketik: <span class="font-mono text-[#8C6418]">admin</span>)
                             </label>
                             <div class="relative">
                                 <div class="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-[#AA771C]">
@@ -228,13 +228,13 @@
                                     </svg>
                                 </div>
                                 <input id="email" 
-                                       type="email" 
+                                       type="text" 
                                        name="email" 
                                        value="{{ old('email') }}" 
                                        required 
                                        autofocus 
                                        autocomplete="username" 
-                                       placeholder="nama@domain.com"
+                                       placeholder="admin@club61.com atau admin"
                                        class="w-full pl-10 pr-4 py-3.5 bg-white/95 text-[#1E1609] placeholder-[#9E8A68] text-sm shadow-inner transition-all outline-none"
                                        style="border: 1.5px solid #D6BC82; border-radius: 16px;"
                                        onfocus="this.style.borderColor='#AA771C'; this.style.boxShadow='0 0 0 3px rgba(212,175,55,0.3)';"

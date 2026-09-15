@@ -9,10 +9,12 @@ use BackedEnum;
 use Carbon\Carbon;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
+use BezhanSalleh\FilamentShield\Traits\HasPageShield;
 use UnitEnum;
 
 class BookingSystem extends Page
 {
+    use HasPageShield;
     protected static string | BackedEnum | null $navigationIcon = 'heroicon-o-calendar-days';
 
     protected static ?string $navigationLabel = 'Booking System';
@@ -57,7 +59,7 @@ class BookingSystem extends Page
         }
 
         try {
-            $staffUser = auth()->user() ?? \App\Models\User::where('role', 'ADMIN')->first();
+            $staffUser = auth()->user() ?? \App\Models\User::role(['admin', 'super_admin'])->first();
             $result = $service->checkIn($code, $staffUser);
             $this->checkInResult = $result;
 
@@ -78,7 +80,7 @@ class BookingSystem extends Page
     public function executeComplete(string $bookingId, PadelBookingService $service): void
     {
         try {
-            $staffUser = auth()->user() ?? \App\Models\User::where('role', 'ADMIN')->first();
+            $staffUser = auth()->user() ?? \App\Models\User::role(['admin', 'super_admin'])->first();
             $booking = $service->completeBooking($bookingId, $staffUser);
 
             Notification::make()

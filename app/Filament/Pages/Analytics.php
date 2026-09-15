@@ -9,10 +9,12 @@ use BackedEnum;
 use Carbon\Carbon;
 use Filament\Pages\Page;
 use Illuminate\Support\Facades\DB;
+use BezhanSalleh\FilamentShield\Traits\HasPageShield;
 use UnitEnum;
 
 class Analytics extends Page
 {
+    use HasPageShield;
     protected static string | BackedEnum | null $navigationIcon = 'heroicon-o-chart-bar-square';
 
     protected static ?string $navigationLabel = 'Analytics & Keuangan';

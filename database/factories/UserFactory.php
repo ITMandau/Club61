@@ -28,8 +28,52 @@ class UserFactory extends Factory
             'email' => fake()->unique()->safeEmail(),
             'email_verified_at' => now(),
             'password' => static::$password ??= Hash::make('password'),
+            'is_active' => true,
             'remember_token' => Str::random(10),
         ];
+    }
+
+    public function configure(): static
+    {
+        return $this->afterCreating(function (\App\Models\User $user) {
+            if ($user->roles()->count() === 0) {
+                $role = \Spatie\Permission\Models\Role::findOrCreate('customer', 'web');
+                $user->assignRole($role);
+            }
+        });
+    }
+
+    public function role(string $role): static
+    {
+        return $this->afterCreating(function (\App\Models\User $user) use ($role) {
+            $r = \Spatie\Permission\Models\Role::findOrCreate(strtolower($role), 'web');
+            $user->syncRoles([$r]);
+        });
+    }
+
+    public function superAdmin(): static
+    {
+        return $this->role('super_admin');
+    }
+
+    public function admin(): static
+    {
+        return $this->role('admin');
+    }
+
+    public function cashier(): static
+    {
+        return $this->role('cashier');
+    }
+
+    public function kitchen(): static
+    {
+        return $this->role('kitchen');
+    }
+
+    public function customer(): static
+    {
+        return $this->role('customer');
     }
 
     /**
