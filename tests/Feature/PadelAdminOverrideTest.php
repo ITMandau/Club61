@@ -311,6 +311,73 @@ class PadelAdminOverrideTest extends TestCase
 
         // Order grand_total disesuaikan menjadi 300.000
         $this->assertEquals(300000.00, $order->fresh()->grand_total);
+
+        // 🛡️ QA DEFENSE: Garbage collector TIDAK boleh menyentuh booking reschedule yang memiliki riwayat bayar
+        $booking->update(['created_at' => now()->subMinutes(30)]);
+        $released = $this->service->releaseExpiredLocks();
+        $this->assertEquals(0, $released, 'Garbage collector 10 menit tidak boleh merilis booking reschedule.');
+        $this->assertEquals('LOCKED', $booking->fresh()->status);
+    }
+
+    /**
+     * Invarian 4b: Pelunasan Online / Retry Payment Hanya Menagih Nominal Delta (Bukan Total Pesanan).
+     */
+    public function test_rescheduled_booking_retry_payment_only_charges_pending_delta(): void
+    {
+        $weekday = now()->next(Carbon::WEDNESDAY)->format('Y-m-d');
+
+        $order = Order::create([
+            'order_number' => 'ORD-PADEL-DELTA-RETRY',
+            'user_id' => $this->customer->id,
+            'subtotal' => 200000.00,
+            'grand_total' => 300000.00,
+            'payment_status' => 'PARTIAL',
+        ]);
+
+        Payment::create([
+            'order_id' => $order->id,
+            'payment_gateway' => 'MIDTRANS',
+            'transaction_id' => 'MID-INIT-SUCCESS',
+            'amount' => 200000.00,
+            'payment_method' => 'BCA_VA',
+            'status' => 'SUCCESS',
+        ]);
+
+        $booking = PadelBooking::create([
+            'booking_code' => 'BK-TEST-DELTA-RETRY',
+            'order_id' => $order->id,
+            'user_id' => $this->customer->id,
+            'court_id' => $this->court1->id,
+            'booking_date' => $weekday,
+            'start_time' => Carbon::parse("{$weekday} 19:00:00"),
+            'end_time' => Carbon::parse("{$weekday} 20:00:00"),
+            'court_fee' => 300000.00,
+            'total_amount' => 300000.00,
+            'status' => 'LOCKED',
+            'reschedule_count' => 1,
+            'qr_code_hash' => null,
+        ]);
+
+        Payment::create([
+            'order_id' => $order->id,
+            'payment_gateway' => 'CASH',
+            'transaction_id' => 'SUPP-DELTA-PENDING',
+            'amount' => 100000.00,
+            'payment_method' => 'CASH',
+            'status' => 'PENDING',
+        ]);
+
+        // 1. Retry dengan CASH
+        $resCash = $this->service->retryPayment($booking->id, 'CASH', $this->customer);
+        $this->assertTrue($resCash['success']);
+        $this->assertTrue($resCash['is_cash']);
+        $this->assertEquals(100000.00, $resCash['grand_total'], 'Nominal CASH harus persis delta 100.000');
+
+        // 2. Data tiket API harus membaca has_pending_delta
+        $ticket = $this->service->getTicket($booking->id, $this->customer);
+        $this->assertTrue($ticket->has_pending_delta);
+        $this->assertEquals(100000.00, $ticket->unpaid_delta);
+        $this->assertEquals(200000.00, $ticket->total_paid);
     }
 
     /**

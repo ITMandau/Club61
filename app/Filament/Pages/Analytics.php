@@ -38,25 +38,30 @@ class Analytics extends Page
         app(PadelBookingService::class)->syncExpiredAndCompletedBookings();
 
         $now = now();
-        $queryBookings = PadelBooking::whereIn('status', ['PAID', 'CHECKED_IN', 'COMPLETED', 'EXPIRED']);
+        $queryFinancialBookings = PadelBooking::whereIn('status', ['PAID', 'CHECKED_IN', 'COMPLETED', 'EXPIRED']);
+        $queryOccupancyBookings = PadelBooking::whereIn('status', ['PAID', 'CHECKED_IN', 'COMPLETED', 'EXPIRED']);
         $queryRefunds = DB::table('refunds');
         $queryPayments = DB::table('payments')->where('status', 'SUCCESS');
 
         if ($this->period === 'TODAY') {
             $today = $now->format('Y-m-d');
-            $queryBookings->whereDate('booking_date', $today);
+            // 🛡️ CASH BASIS: Uang diakui saat kas diterima (created_at)
+            $queryFinancialBookings->whereDate('created_at', $today);
+            $queryOccupancyBookings->whereDate('booking_date', $today);
             $queryRefunds->whereDate('created_at', $today);
             $queryPayments->whereDate('created_at', $today);
             $periodLabel = 'Hari Ini (' . $now->translatedFormat('d M Y') . ')';
         } elseif ($this->period === 'THIS_WEEK') {
             $startOfWeek = $now->copy()->startOfWeek()->format('Y-m-d');
-            $queryBookings->whereDate('booking_date', '>=', $startOfWeek);
+            $queryFinancialBookings->whereDate('created_at', '>=', $startOfWeek);
+            $queryOccupancyBookings->whereDate('booking_date', '>=', $startOfWeek);
             $queryRefunds->whereDate('created_at', '>=', $startOfWeek);
             $queryPayments->whereDate('created_at', '>=', $startOfWeek);
             $periodLabel = 'Minggu Ini (Sejak ' . $now->copy()->startOfWeek()->translatedFormat('d M') . ')';
         } elseif ($this->period === 'THIS_MONTH') {
             $startOfMonth = $now->copy()->startOfMonth()->format('Y-m-d');
-            $queryBookings->whereDate('booking_date', '>=', $startOfMonth);
+            $queryFinancialBookings->whereDate('created_at', '>=', $startOfMonth);
+            $queryOccupancyBookings->whereDate('booking_date', '>=', $startOfMonth);
             $queryRefunds->whereDate('created_at', '>=', $startOfMonth);
             $queryPayments->whereDate('created_at', '>=', $startOfMonth);
             $periodLabel = 'Bulan Ini (' . $now->translatedFormat('F Y') . ')';
@@ -64,8 +69,8 @@ class Analytics extends Page
             $periodLabel = 'Semua Waktu (All-Time)';
         }
 
-        // Agregat Finansial Riil
-        $financials = (clone $queryBookings)->selectRaw("
+        // Agregat Finansial Riil (Cash Basis)
+        $financials = (clone $queryFinancialBookings)->selectRaw("
             COALESCE(SUM(total_amount), 0) as gross_revenue,
             COALESCE(SUM(court_fee), 0) as court_revenue,
             COALESCE(SUM(equipment_fee), 0) as equipment_revenue,
@@ -82,19 +87,18 @@ class Analytics extends Page
         $totalRefund = (float) ($queryRefunds->sum('refund_amount') ?? 0);
         $netRevenue = max(0, $grossRevenue - $totalRefund);
 
-        // Breakdown Metode Pembayaran
-        // 1. Cari dari payments yang ada
-        $cashTotal = (float) DB::table('payments')->where('payment_method', 'CASH')->where('status', 'SUCCESS')->sum('amount');
-        $midtransTotal = (float) DB::table('payments')->where('payment_gateway', 'MIDTRANS')->where('status', 'SUCCESS')->sum('amount');
-        $xenditTotal = (float) DB::table('payments')->where('payment_gateway', 'XENDIT')->where('status', 'SUCCESS')->sum('amount');
+        // Breakdown Metode Pembayaran (Sesuai Periode Aktif)
+        $cashTotal = (float) (clone $queryPayments)->where('payment_method', 'CASH')->sum('amount');
+        $midtransTotal = (float) (clone $queryPayments)->where('payment_gateway', 'MIDTRANS')->sum('amount');
+        $xenditTotal = (float) (clone $queryPayments)->where('payment_gateway', 'XENDIT')->sum('amount');
         
-        // Sisa transaksi booking default tunai kasir / online
+        // Sisa transaksi booking default tunai kasir / manual
         $settledFromBookings = max(0, $grossRevenue - ($cashTotal + $midtransTotal + $xenditTotal));
         $cashTotal += $settledFromBookings;
 
-        // Okupansi Lapangan Estimasi
+        // Okupansi Lapangan Estimasi (Sesuai Jadwal Lapangan booking_date)
         $totalHoursBooked = 0;
-        foreach ((clone $queryBookings)->get(['start_time', 'end_time']) as $b) {
+        foreach ((clone $queryOccupancyBookings)->get(['start_time', 'end_time']) as $b) {
             $totalHoursBooked += max(1, (int) $b->start_time->diffInHours($b->end_time));
         }
         // 4 Lapangan x 18 jam/hari (06:00 - 24:00) = 72 jam/hari

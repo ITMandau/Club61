@@ -49,9 +49,16 @@ All protected endpoints require the HTTP Authorization Header:
 
 ### 2. Padel Courts & Booking (`/api/v1/padel`)
 - `GET /courts` : List all courts (indoor/outdoor, regular & prime rates)
-- `GET /slots?court_id=&date=` : Get real-time slot availability for specific date
-- `POST /lock-slot` : Temporary slot reservation (5-minute hold in Redis)
-- `POST /bookings` : Create padel court booking (+ equipment + coach)
+- `GET /schedule?date=&timezone=` : Real-time hourly slot availability (06:00 - 23:00 WIB, masked privacy)
+- `GET /equipments` : List rental equipment (rackets, balls, fresh pack) & coaching add-ons
+- `POST /hold-slot` : Atomic multi-slot temporary reservation (10-minute hold with distributed cache lock)
+- `POST /release-slot` : Voluntarily release held slot from customer cart
+- `POST /checkout` : Idempotent checkout with `X-Idempotency-Key` (Midtrans Snap / Xendit / Mock)
+- `POST /bookings/{id}/retry-payment` : Retry payment for booking; handles **pending price delta ($\Delta$)** when rescheduled to Prime Time under the same `order_id`
+- `GET /my-bookings` : Player booking history categorized by status (`UPCOMING`, `COMPLETED`, `CANCELLED`)
+- `GET /bookings/{id}/ticket` : Customer boarding pass ticket payload; includes `has_pending_delta`, `unpaid_delta`, `total_paid`, and turnstile `qr_code_hash` (held `null` while delta is unpaid)
+- `POST /bookings/{id}/refund` : Customer self-service refund (applicable >= H-24 before kickoff)
+- `POST /check-in` : Gate cashier / turnstile QR single-use validation (anti-replay attack)
 
 ### 3. Wellness & Waitlist (`/api/v1/wellness`)
 - `GET /facilities` : List facilities (Cold Plunge & Sauna)

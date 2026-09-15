@@ -4,6 +4,8 @@ namespace App\Http\Controllers\Api\V1\Payment;
 
 use App\Http\Controllers\Controller;
 use App\Models\Padel\PadelBooking;
+use App\Models\Pos\Order;
+use App\Models\Pos\Payment;
 use App\Services\Payment\MidtransService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -55,20 +57,27 @@ class MidtransWebhookController extends Controller
 
         Log::info("Midtrans Webhook verified for Order {$orderId}: Status = {$transactionStatus}");
 
-        // Temukan booking dari Database berdasarkan order_id, Cache, atau booking_code
-        $bookings = PadelBooking::where('order_id', $orderId)->get();
+        $incomingOrderId = $orderId;
+        $realOrderId = explode('_', $incomingOrderId)[0];
+
+        // Temukan booking dari Database berdasarkan incomingOrderId, realOrderId, Cache, atau booking_code
+        $bookings = PadelBooking::where('order_id', $incomingOrderId)
+            ->orWhere('order_id', $realOrderId)
+            ->get();
 
         if ($bookings->isEmpty()) {
-            $bookingIds = Cache::get("order_bookings:{$orderId}");
+            $bookingIds = Cache::get("order_bookings:{$incomingOrderId}") ?? Cache::get("order_bookings:{$realOrderId}");
             if (! empty($bookingIds) && is_array($bookingIds)) {
                 $bookings = PadelBooking::whereIn('id', $bookingIds)->get();
             } else {
-                $bookings = PadelBooking::where('booking_code', $orderId)->get();
+                $bookings = PadelBooking::where('booking_code', $incomingOrderId)
+                    ->orWhere('booking_code', $realOrderId)
+                    ->get();
             }
         }
 
         if ($bookings->isEmpty()) {
-            Log::warning("Midtrans Webhook: No bookings found for order {$orderId}");
+            Log::warning("Midtrans Webhook: No bookings found for order {$incomingOrderId} (Real: {$realOrderId})");
             return response()->json([
                 'success' => true,
                 'message' => 'Webhook diterima, tetapi data pesanan tidak ditemukan.',
@@ -76,21 +85,108 @@ class MidtransWebhookController extends Controller
         }
 
         // Status State Machine Midtrans
+        $newBookingStatus = null;
         if ($transactionStatus === 'capture') {
             if ($fraudStatus === 'challenge') {
-                $this->updateBookingsStatus($bookings, 'PENDING_PAYMENT');
+                $newBookingStatus = 'PENDING_PAYMENT';
             } elseif ($fraudStatus === 'accept') {
-                $this->updateBookingsStatus($bookings, 'PAID');
+                $newBookingStatus = 'PAID';
             }
         } elseif ($transactionStatus === 'settlement') {
             // Lunas (QRIS, VA Transfer Sukses)
-            $this->updateBookingsStatus($bookings, 'PAID');
+            $newBookingStatus = 'PAID';
         } elseif ($transactionStatus === 'pending') {
             // Menunggu pembayaran (VA / QRIS baru di-generate)
-            $this->updateBookingsStatus($bookings, 'PENDING_PAYMENT');
+            $newBookingStatus = 'PENDING_PAYMENT';
         } elseif (in_array($transactionStatus, ['deny', 'expire', 'cancel'])) {
             // Batal / Kedaluwarsa
-            $this->updateBookingsStatus($bookings, 'CANCELLED');
+            $newBookingStatus = 'CANCELLED';
+        }
+
+        if ($newBookingStatus) {
+            $this->updateBookingsStatus($bookings, $newBookingStatus);
+
+            // 🛡️ QA DEFENSE: Idempotent Payment & Order Recording for Analytics & Financial Auditing
+            $paymentStatus = match ($newBookingStatus) {
+                'PAID' => 'SUCCESS',
+                'CANCELLED' => 'FAILED',
+                default => 'PENDING',
+            };
+
+            $primaryBooking = $bookings->first();
+            $order = Order::where('order_number', $realOrderId)
+                ->orWhere('order_number', $incomingOrderId)
+                ->first();
+
+            if (! $order) {
+                $order = Order::create([
+                    'order_number' => $realOrderId,
+                    'user_id' => $primaryBooking->user_id,
+                    'order_type' => 'ONLINE_BOOKING',
+                    'subtotal' => $bookings->sum('total_amount'),
+                    'grand_total' => (float) ($grossAmount ?: $bookings->sum('total_amount')),
+                    'payment_status' => ($newBookingStatus === 'PAID') ? 'PAID' : 'PENDING',
+                ]);
+            } else {
+                $targetStatus = ($newBookingStatus === 'PAID') ? 'PAID' : 'PENDING';
+                if ($order->payment_status !== $targetStatus) {
+                    $order->update(['payment_status' => $targetStatus]);
+                }
+            }
+
+            // Hubungkan seluruh booking ke Order murni
+            foreach ($bookings as $b) {
+                if ($b->order_id !== $order->id && $b->order_id !== $realOrderId) {
+                    $b->update(['order_id' => $order->id]);
+                }
+            }
+
+            $paymentType = $request->input('payment_type', 'qris');
+            $paymentTypeLower = strtolower((string) $paymentType);
+
+            if ($paymentTypeLower === 'bank_transfer') {
+                $vaNumbers = $request->input('va_numbers', []);
+                if (!empty($vaNumbers) && isset($vaNumbers[0]['bank'])) {
+                    $bank = strtoupper($vaNumbers[0]['bank']);
+                    $paymentMethod = "{$bank}_VA";
+                } elseif ($request->filled('permata_va_number')) {
+                    $paymentMethod = 'PERMATA_VA';
+                } else {
+                    $paymentMethod = 'BANK_TRANSFER';
+                }
+            } elseif ($paymentTypeLower === 'echannel') {
+                $paymentMethod = 'MANDIRI_VA';
+            } else {
+                $paymentMethod = match ($paymentTypeLower) {
+                    'qris', 'gopay', 'shopeepay' => 'QRIS',
+                    'credit_card' => 'CREDIT_CARD',
+                    'cst' => 'CASH',
+                    default => strtoupper((string) $paymentType),
+                };
+            }
+
+            Payment::updateOrCreate(
+                ['transaction_id' => $incomingOrderId],
+                [
+                    'order_id' => $order->id,
+                    'payment_gateway' => 'MIDTRANS',
+                    'amount' => (float) ($grossAmount ?: $bookings->sum('total_amount')),
+                    'payment_method' => $paymentMethod,
+                    'status' => $paymentStatus,
+                    'payload_log' => $request->all(),
+                ]
+            );
+
+            // Jika pembayaran berhasil, selesaikan juga supplemental payment berstatus PENDING di bawah order ini
+            if ($paymentStatus === 'SUCCESS') {
+                Payment::where('order_id', $order->id)
+                    ->where('status', 'PENDING')
+                    ->update([
+                        'status' => 'SUCCESS',
+                        'payment_gateway' => 'MIDTRANS',
+                        'payment_method' => $paymentMethod,
+                    ]);
+            }
         }
 
         return response()->json([
@@ -106,10 +202,15 @@ class MidtransWebhookController extends Controller
                 'status' => $status,
             ]);
 
-            // Jika lunas, pastikan QR Code turnstile terisi
+            // Jika lunas, pastikan QR Code turnstile terisi dengan HMAC valid
             if ($status === 'PAID' && empty($booking->qr_code_hash)) {
+                $hash = hash_hmac(
+                    'sha256',
+                    $booking->booking_code . $booking->user_id . $booking->court_id . ($booking->start_time ? $booking->start_time->toISOString() : ''),
+                    config('app.key')
+                );
                 $booking->update([
-                    'qr_code_hash' => 'VNT-TICKET-' . strtoupper(bin2hex(random_bytes(16))),
+                    'qr_code_hash' => $hash ?: ('VNT-TICKET-' . strtoupper(bin2hex(random_bytes(16)))),
                 ]);
             }
         }

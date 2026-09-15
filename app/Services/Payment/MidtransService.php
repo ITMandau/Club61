@@ -81,6 +81,25 @@ class MidtransService
             'customer_details' => $customerDetails,
         ];
 
+        if (!empty($params['payment_method'])) {
+            $method = strtoupper($params['payment_method']);
+            $enabledPayments = match ($method) {
+                'QRIS' => ['other_qris', 'gopay', 'shopeepay'],
+                'BCA_VA' => ['bca_va'],
+                'MANDIRI_VA' => ['echannel'],
+                'BNI_VA' => ['bni_va'],
+                'BRI_VA' => ['bri_va'],
+                'CIMB_VA' => ['cimb_va'],
+                'BSI_VA' => ['permata_va', 'other_va'],
+                'CREDIT_CARD' => ['credit_card'],
+                default => null,
+            };
+
+            if ($enabledPayments) {
+                $payload['enabled_payments'] = $enabledPayments;
+            }
+        }
+
         try {
             $response = Http::withBasicAuth($this->serverKey, '')
                 ->withHeaders([

@@ -29,6 +29,7 @@ Route::prefix('v1/padel')->group(function () {
         // Riwayat & E-Tiket Member
         Route::get('/my-bookings', [PadelBookingController::class, 'myBookings']);
         Route::get('/bookings/{id}/ticket', [PadelBookingController::class, 'ticket']);
+        Route::post('/bookings/{id}/retry-payment', [PadelBookingController::class, 'retryPayment']);
         Route::post('/bookings/{id}/refund', [PadelBookingController::class, 'refund']);
 
         // 4. ENDPOINT STAF GATE & KASIR VENUE (Single-Use QR Scanner)

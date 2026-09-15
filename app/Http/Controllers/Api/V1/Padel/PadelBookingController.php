@@ -134,6 +134,24 @@ class PadelBookingController extends Controller
     }
 
     /**
+     * Ganti Metode Pembayaran / Regenerasi Snap Token (Pending Payment Retry).
+     */
+    public function retryPayment(string $id, Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'payment_method' => ['required', 'string', 'in:QRIS,BCA_VA,MANDIRI_VA,BRI_VA,BNI_VA,CIMB_VA,BSI_VA,CREDIT_CARD,CASH'],
+        ]);
+
+        $result = $this->bookingService->retryPayment(
+            $id,
+            $validated['payment_method'],
+            $request->user()
+        );
+
+        return response()->json($result, 200);
+    }
+
+    /**
      * Riwayat Booking Saya.
      */
     public function myBookings(Request $request): JsonResponse

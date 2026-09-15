@@ -4,6 +4,35 @@ Catatan riwayat pembaruan sistem dan evolusi arsitektur.
 
 ---
 
+## [v1.1.0-Reschedule-Hardening] - 2026-09-15
+
+### Diperbaiki (Fixed)
+- **Anti-Premature Expiry Guard pada Garbage Collection (`releaseExpiredLocks`)**:
+  - Memperbaiki bug kritis di mana booking hasil reschedule yang berstatus `LOCKED` (menunggu pelunasan selisih tarif / delta) hangus dan terbuka kembali slotnya ke publik setelah 10 menit oleh cron `padel:release-expired-slots`.
+  - Mengisolasi aturan kedaluwarsa: Scheduler GC kini **kebal (immune)** terhadap booking yang memiliki `reschedule_count > 0` atau telah memiliki record pembayaran `SUCCESS`. Hanya keranjang baru yang benar-benar belum pernah dibayar (`reschedule_count == 0` dan tanpa pembayaran sukses) yang di-expire setelah 10 menit.
+  - Memperpanjang TTL slot cache lock untuk reschedule kurang bayar menjadi **24 Jam (86.400 detik)** agar slot lapangan baru tetap aman terkunci hingga jadwal tanding tiba.
+
+### Ditambahkan (Added)
+- **Delta-Only Payment Retry & Midtrans Webhook Settlement**:
+  - `retryPayment()` kini mendeteksi status kurang bayar hasil reschedule. Jika terdapat selisih tarif pending, sistem hanya menagihkan nominal delta ($\Delta$) tanpa menimpa order atau menghitung ulang total dari awal.
+  - Mengonsolidasikan transaksi finansial di bawah **Order ID yang sama (`order_id`)**, baik pelunasan via Tunai Kasir Frontdesk maupun via Payment Gateway (Midtrans Snap VA/QRIS).
+  - Webhook Midtrans (`MidtransWebhookController`) otomatis menandai supplemental payment menjadi `SUCCESS`, memperbarui status booking menjadi `PAID`, serta menerbitkan hash QR Turnstile begitu selisih dibayar lunas.
+- **Atribut Baru pada E-Tiket / Boarding Pass (`getTicket()`)**:
+  - Menambahkan field `has_pending_delta`, `unpaid_delta`, dan `total_paid` pada response tiket API dan Blade view invoice untuk transparansi tagihan pelanggan.
+
+### Refaktor Arsitektur (Refactored)
+- **Modularisasi `PadelBookingService.php` (Concerns Trait Architecture)**:
+  - Memecah monolith service berukuran 1.611 baris menjadi 5 Trait domain terfokus di `app/Services/Padel/Concerns/`:
+    - `ManagesScheduleAndSlots`: Matriks jadwal, availability, hold slot, dan release lock.
+    - `ManagesCheckoutAndPayments`: Alur checkout, idempotency key, retry payment delta, dan verifikasi gateway.
+    - `ManagesCheckInAndTurnstile`: Validasi QR single-use check-in, anti-replay, dan turnstile window.
+    - `ManagesTicketsAndRefunds`: Boarding pass customer, refund mandiri H-24, dan admin void/refund.
+    - `ManagesRescheduleAndCashier`: Admin reschedule override, contiguous check, kalkulasi delta, dan quick settle kasir.
+  - `PadelBookingService` kini ramping (29 baris) sebagai orchestrator tanpa mengubah signature method publik.
+  - Seluruh 73 automated tests (332 assertions) lulus 100% tanpa regresi.
+
+---
+
 ## [v1.0.0-Enterprise] - 2026-09-03
 
 ### Ditambahkan (Added)

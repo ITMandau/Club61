@@ -61,7 +61,7 @@ graph TD
 
 Fitur ini menangani kasus customer yang **salah klik jam, salah tanggal, atau salah lapangan**, namun tetap ingin bermain di Club 61.
 
-#### 🛡️ 3 Invarian Kritis QA Operasional:
+#### 🛡️ 4 Invarian Kritis QA Operasional:
 1. **Invarian Kunci Durasi Multi-Jam (Duration-Lock & Contiguous Verification)**:
    * Jika tiket yang di-reschedule berdurasi **3 Jam** (misal: 08:00 - 11:00), form Filament **wajib mengunci durasi 3 jam yang sama**.
    * Dropdown hanya memilih jam mulai (misal: 19:00), dan jam selesai otomatis terkunci menjadi `19:00 + 3 Jam = 22:00`.
@@ -69,15 +69,20 @@ Fitur ini menangani kasus customer yang **salah klik jam, salah tanggal, atau sa
 2. **Invarian Akuntansi Selisih Tarif (Price Delta Settlement)**:
    * Selisih dihitung: $\Delta = \text{Tarif Lapangan Baru} - \text{Tarif Lapangan Lama}$.
    * **Kasus Kurang Bayar ($\Delta > 0$, misal Reguler ke Prime)**:
-     * Sistem wajib menerbitkan *supplemental invoice / payment record* di tabel `payments`.
-     * Tiket di jadwal baru berstatus `LOCKED` (belum rilis QR baru) sampai kasir memproses pembayaran selisih (Cash / EDC / QRIS) di meja kasir.
+     * Sistem wajib menerbitkan *supplemental invoice / payment record* di tabel `payments` dengan status `PENDING`.
+     * Tiket di jadwal baru berstatus `LOCKED` (belum rilis QR baru) sampai pembayaran selisih diselesaikan.
+     * Pelunasan selisih dapat diproses via **Tunai / EDC di Meja Kasir** (Filament Quick Settle) atau secara mandiri oleh customer via **Online Retry Payment (Midtrans Snap VA/QRIS)** di bawah **Order ID yang sama (`order_id`)**.
    * **Kasus Lebih Bayar ($\Delta < 0$, misal Prime ke Reguler)**:
      * Selisih kembalian otomatis dicatat ke tabel `refunds` sebagai saldo deposit member atau pengembalian kasir.
      * Neraca transaksi di tabel `orders` tetap terjaga seimbang: $\text{Bayar Awal} = \text{Tarif Baru} + \text{Refund}$.
-   * **Kasus Tarif Sama ($\Delta = 0$)**: Langsung dimutasi tanpa transaksi finansial.
+   * **Kasus Tarif Sama ($\Delta = 0$)**: Langsung dimutasi tanpa transaksi finansial dan QR baru diterbitkan seketika.
 3. **Invarian Aksi Atomik (`DB::transaction`)**:
-   * Seluruh mutasi (`court_id`, `start_time`, `end_time`, `court_fee`, pencabutan `qr_code_hash` lama, penerbitan QR baru, pembuatan record `payments` atau `refunds`, serta transfer cache lock) **WAJIB dibungkus dalam 1 blok `DB::transaction()`**.
+   * Seluruh mutasi (`court_id`, `start_time`, `end_time`, `court_fee`, pencabutan `qr_code_hash` lama, pembuatan record `payments` atau `refunds`, serta transfer cache lock) **WAJIB dibungkus dalam 1 blok `DB::transaction()`**.
    * Jika terjadi tabrakan di detik yang sama, seluruh operasi otomatis di-rollback tanpa sisa inkonsistensi data.
+4. **Invarian Anti-Premature Expiry & 24h Lock Retention (Garbage Collection Immunity)**:
+   * Pada kasus Kurang Bayar ($\Delta > 0$), slot lapangan baru dikunci pada distributed cache dengan **TTL 24 Jam (86.400 detik)** (bukan 10 menit seperti hold keranjang belanja reguler).
+   * Background scheduler pembersih slot (`padel:release-expired-slots`) **WAJIB KEBAL (IMMUNE)** terhadap booking ini: filter pembersihan hanya menargetkan booking dengan `reschedule_count == 0` DAN tanpa record pembayaran sukses (`SUCCESS`).
+   * Hal ini mengeliminasi bug fatal di mana slot hasil reschedule hangus dan terlepas ke publik sebelum waktu bermain tiba.
 
 #### Alur Kerja (Workflow):
 1. Kasir membuka halaman **Kelola Pemesanan & Tiket** (`/admin/kelola-pemesanan`).
@@ -137,14 +142,16 @@ Untuk mencegah kebocoran uang kasir, hak akses diatur sebagai berikut:
 
 ---
 
-## 5. State Machine Siklus Hidup Tiket Pasca Pembatalan
+## 5. State Machine Siklus Hidup Tiket Pasca Reschedule & Pembatalan
 
 ```mermaid
 stateDiagram-v2
     PAID --> CHECKED_IN : Normal Check-In di Gate
     
-    PAID --> RESCHEDULED : Admin Pindah Jadwal
-    RESCHEDULED --> PAID : Slot Baru Aktif, QR Baru Terbit
+    PAID --> LOCKED : Admin Reschedule (Kurang Bayar: QR Ditahan, 24h Lock)
+    LOCKED --> PAID : Pelunasan Delta (Kasir Tunai / Online Retry) -> QR Terbit
+    
+    PAID --> PAID : Admin Reschedule (Tarif Sama / Lebih Bayar Deposit) -> QR Baru
     
     PAID --> REFUNDED : Admin Eksekusi Refund
     PAID --> CANCELLED : Admin Eksekusi Pembatalan

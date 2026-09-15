@@ -265,7 +265,9 @@ class KelolaPemesanan extends Page
         $this->settleBookingId = $booking->id;
         $this->settleBookingCode = $booking->booking_code;
         $this->settleCustomerName = $booking->user?->name ?? 'Guest';
-        $this->settleAmount = $pendingPayment ? (float) $pendingPayment->amount : (float) $booking->court_fee;
+        $this->settleAmount = $pendingPayment 
+            ? (float) $pendingPayment->amount 
+            : (float) ($booking->order?->grand_total ?: $booking->total_amount);
         $this->settlePaymentMethod = 'CASH';
 
         $this->showSettleModal = true;
@@ -276,17 +278,18 @@ class KelolaPemesanan extends Page
         try {
             $adminUser = auth()->user() ?? \App\Models\User::where('role', 'ADMIN')->first();
 
-            $service->adminSettleSupplementalPayment(
+            $service->adminSettleCashierPayment(
                 bookingId: $this->settleBookingId,
                 paymentMethod: $this->settlePaymentMethod,
-                adminUser: $adminUser
+                amountReceived: (float) $this->settleAmount,
+                cashierUser: $adminUser
             );
 
             Cache::forget('kelola_pemesanan_tab_counts');
 
             Notification::make()
                 ->title('Pelunasan Berhasil')
-                ->body('Sisa tagihan telah dilunasi dan QR Tiket aktif.')
+                ->body('Pelunasan kasir berhasil diverifikasi dan QR Tiket aktif.')
                 ->success()
                 ->send();
 
