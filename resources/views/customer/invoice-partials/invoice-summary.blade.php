@@ -30,6 +30,20 @@
             <span class="font-serif font-black text-xs sm:text-sm text-[#1F170D] shrink-0">Total Transaksi (Invoice):</span>
             <span class="font-mono font-black text-base sm:text-lg text-[#1F170D] whitespace-nowrap sm:text-right" x-text="'Rp ' + formatNumber(displayGrandTotal)"></span>
         </div>
+
+        <!-- Rincian Terbayar & Sisa Reschedule jika Ada Tagihan Sisa -->
+        <template x-if="ticket.has_pending_delta">
+            <div class="space-y-1.5 pt-2 border-t border-dashed border-[#DFC387]/60 text-xs">
+                <div class="flex justify-between items-center gap-3 text-emerald-800">
+                    <span>Terbayar Awal:</span>
+                    <span class="font-mono font-bold whitespace-nowrap text-right" x-text="'Rp ' + formatNumber(ticket.total_paid)"></span>
+                </div>
+                <div class="flex justify-between items-center gap-3 text-amber-900 font-bold">
+                    <span>Sisa Kurang Bayar:</span>
+                    <span class="font-mono text-red-700 font-black whitespace-nowrap text-right" x-text="'Rp ' + formatNumber(ticket.unpaid_delta)"></span>
+                </div>
+            </div>
+        </template>
     </div>
 
     <div class="pt-2">

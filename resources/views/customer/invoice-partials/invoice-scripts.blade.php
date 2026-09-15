@@ -108,6 +108,22 @@
                 return this.ticket ? this.ticket.total_amount : 0;
             },
 
+            getPaymentMethodObject(rawCodeOrName) {
+                if (!rawCodeOrName) return null;
+                const upper = String(rawCodeOrName).toUpperCase();
+
+                if (upper.includes('BCA')) return this.paymentMethods.find(m => m.code === 'BCA_VA') || { id: 'bca', code: 'BCA_VA', name: 'BCA Virtual Account', badge: 'BCA' };
+                if (upper.includes('MANDIRI')) return this.paymentMethods.find(m => m.code === 'MANDIRI_VA') || { id: 'mandiri', code: 'MANDIRI_VA', name: 'Mandiri Virtual Account', badge: 'MDR' };
+                if (upper.includes('BRI')) return this.paymentMethods.find(m => m.code === 'BRI_VA') || { id: 'bri', code: 'BRI_VA', name: 'BRI Virtual Account', badge: 'BRI' };
+                if (upper.includes('BNI')) return this.paymentMethods.find(m => m.code === 'BNI_VA') || { id: 'bni', code: 'BNI_VA', name: 'BNI Virtual Account', badge: 'BNI' };
+                if (upper.includes('CIMB')) return this.paymentMethods.find(m => m.code === 'CIMB_VA') || { id: 'cimb', code: 'CIMB_VA', name: 'CIMB Virtual Account', badge: 'CIMB' };
+                if (upper.includes('BSI')) return this.paymentMethods.find(m => m.code === 'BSI_VA') || { id: 'bsi', code: 'BSI_VA', name: 'BSI Virtual Account', badge: 'BSI' };
+                if (upper.includes('CASH') || upper.includes('TUNAI')) return this.paymentMethods.find(m => m.code === 'CASH') || { id: 'cash', code: 'CASH', name: 'Bayar Tunai di Kasir (Walk-in)', badge: 'CASH' };
+                if (upper.includes('QRIS') || upper.includes('GOPAY') || upper.includes('OVO')) return this.paymentMethods.find(m => m.code === 'QRIS') || { id: 'qris', code: 'QRIS', name: 'QRIS Instan (GoPay/OVO/BCA)', badge: 'QRIS' };
+
+                return { id: 'custom', code: upper, name: rawCodeOrName, badge: 'PAY' };
+            },
+
             selectPaymentMethod(m) {
                 this.selectedMethod = m;
                 this.showPaymentModal = false;
@@ -183,10 +199,7 @@
 
             async init() {
                 const urlParams = new URLSearchParams(window.location.search);
-                const bookingId = urlParams.get('booking_id');
-                const orderId = urlParams.get('order_id');
-
-                const lookupKey = bookingId || orderId;
+                const lookupKey = urlParams.get('order_id') || urlParams.get('booking_code') || urlParams.get('id');
 
                 if (lookupKey) {
                     await this.loadTicket(lookupKey);
@@ -206,14 +219,17 @@
                         this.ticket = json.data;
                         this.currentTicket = json.data;
 
-                        // Sinkronkan selectedMethod jika booking/order sudah memiliki metode pembayaran
-                        const rawMethod = (this.ticket.order && this.ticket.order.payment_method) ? this.ticket.order.payment_method : this.ticket.payment_method;
+                        // Sinkronkan selectedMethod jika booking/order sudah memiliki metode pembayaran riil
+                        const rawMethod = this.ticket.payment_method_label 
+                            || this.ticket.payment_method 
+                            || (this.ticket.order && (this.ticket.order.payment_method_label || this.ticket.order.payment_method));
+
                         if (rawMethod) {
-                            const found = this.paymentMethods.find(m => m.code === rawMethod);
-                            if (found) {
-                                this.selectedMethod = found;
+                            const methodObj = this.getPaymentMethodObject(rawMethod);
+                            if (methodObj) {
+                                this.selectedMethod = methodObj;
                             }
-                            if (rawMethod === 'CASH') {
+                            if (rawMethod === 'CASH' || this.ticket.payment_method === 'CASH') {
                                 this.isCashNotice = true;
                             }
                         }
@@ -630,7 +646,19 @@
                 const cFee = this.displayCourtFee;
                 const eFee = this.displayEquipmentFee;
                 const gTotal = this.displayGrandTotal;
-                const payMethod = (this.selectedMethod && this.selectedMethod.name) ? this.selectedMethod.name : (this.currentTicket.order && this.currentTicket.order.payment_method ? this.currentTicket.order.payment_method : 'QRIS Instan');
+                // Resolusi nama metode pembayaran aktual dari tiket/order
+                let payMethod = 'QRIS Instan (GoPay/OVO/BCA)';
+                if (this.currentTicket.payment_method_label) {
+                    payMethod = this.currentTicket.payment_method_label;
+                } else if (this.currentTicket.payment_method) {
+                    const mObj = this.getPaymentMethodObject(this.currentTicket.payment_method);
+                    payMethod = mObj ? mObj.name : this.currentTicket.payment_method;
+                } else if (this.currentTicket.order && this.currentTicket.order.payment_method) {
+                    const mObj = this.getPaymentMethodObject(this.currentTicket.order.payment_method);
+                    payMethod = mObj ? mObj.name : this.currentTicket.order.payment_method;
+                } else if (this.selectedMethod && this.selectedMethod.name) {
+                    payMethod = this.selectedMethod.name;
+                }
 
                 function drawSumRow(y, label, value, isBold = false) {
                     ctx.fillStyle = '#7A643E';

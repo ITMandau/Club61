@@ -142,13 +142,28 @@ class MidtransWebhookController extends Controller
             }
 
             $paymentType = $request->input('payment_type', 'qris');
-            $paymentMethod = match (strtolower((string) $paymentType)) {
-                'qris', 'gopay', 'shopeepay' => 'QRIS',
-                'bank_transfer', 'echannel' => 'BANK_TRANSFER',
-                'credit_card' => 'CREDIT_CARD',
-                'cst' => 'CASH',
-                default => strtoupper((string) $paymentType),
-            };
+            $paymentTypeLower = strtolower((string) $paymentType);
+
+            if ($paymentTypeLower === 'bank_transfer') {
+                $vaNumbers = $request->input('va_numbers', []);
+                if (!empty($vaNumbers) && isset($vaNumbers[0]['bank'])) {
+                    $bank = strtoupper($vaNumbers[0]['bank']);
+                    $paymentMethod = "{$bank}_VA";
+                } elseif ($request->filled('permata_va_number')) {
+                    $paymentMethod = 'PERMATA_VA';
+                } else {
+                    $paymentMethod = 'BANK_TRANSFER';
+                }
+            } elseif ($paymentTypeLower === 'echannel') {
+                $paymentMethod = 'MANDIRI_VA';
+            } else {
+                $paymentMethod = match ($paymentTypeLower) {
+                    'qris', 'gopay', 'shopeepay' => 'QRIS',
+                    'credit_card' => 'CREDIT_CARD',
+                    'cst' => 'CASH',
+                    default => strtoupper((string) $paymentType),
+                };
+            }
 
             Payment::updateOrCreate(
                 ['transaction_id' => $incomingOrderId],
@@ -161,6 +176,17 @@ class MidtransWebhookController extends Controller
                     'payload_log' => $request->all(),
                 ]
             );
+
+            // Jika pembayaran berhasil, selesaikan juga supplemental payment berstatus PENDING di bawah order ini
+            if ($paymentStatus === 'SUCCESS') {
+                Payment::where('order_id', $order->id)
+                    ->where('status', 'PENDING')
+                    ->update([
+                        'status' => 'SUCCESS',
+                        'payment_gateway' => 'MIDTRANS',
+                        'payment_method' => $paymentMethod,
+                    ]);
+            }
         }
 
         return response()->json([
@@ -176,10 +202,15 @@ class MidtransWebhookController extends Controller
                 'status' => $status,
             ]);
 
-            // Jika lunas, pastikan QR Code turnstile terisi
+            // Jika lunas, pastikan QR Code turnstile terisi dengan HMAC valid
             if ($status === 'PAID' && empty($booking->qr_code_hash)) {
+                $hash = hash_hmac(
+                    'sha256',
+                    $booking->booking_code . $booking->user_id . $booking->court_id . ($booking->start_time ? $booking->start_time->toISOString() : ''),
+                    config('app.key')
+                );
                 $booking->update([
-                    'qr_code_hash' => 'VNT-TICKET-' . strtoupper(bin2hex(random_bytes(16))),
+                    'qr_code_hash' => $hash ?: ('VNT-TICKET-' . strtoupper(bin2hex(random_bytes(16)))),
                 ]);
             }
         }

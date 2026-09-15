@@ -102,14 +102,17 @@ Padel Court Booking Engine adalah **jantung operasional dan mesin penghasil reve
 
 ### FR-06: Scheduler Otomatis Pelepasan Slot Kedaluwarsa (Garbage Collection)
 - **Deskripsi**: Command `padel:release-expired-slots` dijadwalkan berjalan **setiap 1 menit**.
-- **Aksi**:
+- **Aksi & Guard Kebal Reschedule (Anti-Premature Expiry Rule)**:
   - Mencari booking berstatus `LOCKED` di mana `created_at + 10 menit < NOW()`.
-  - Mengubah status menjadi `EXPIRED`.
+  - **Filter Isolasi Wajib**: Scheduler **HANYA** memproses booking awal yang benar-benar belum dibayar (`reschedule_count == 0` DAN tanpa record pembayaran `SUCCESS`).
+  - Booking berstatus `LOCKED` hasil reschedule (karena kurang bayar delta tarif) **DIBERI KEKEBALAN (IMMUNITY)** dengan kuncian distributed cache 24 jam agar slot lapangan barunya tidak hangus atau terbuka ke publik sebelum pertandingan.
+  - Mengubah status booking keranjang kedaluwarsa menjadi `EXPIRED`.
   - Menghapus Distributed Cache Lock terkait sehingga slot langsung kembali `AVAILABLE` untuk publik.
 
 ### FR-07: E-Tiket & Kriptografi Hash QR Code
 - Setiap booking `PAID` menghasilkan `qr_code_hash`:
   $$\text{qr\_code\_hash} = \text{hash\_hmac}('sha256', \text{booking\_code} . \text{user\_id} . \text{court\_id} . \text{start\_time}, \text{config}('app.key'))$$
+- Pada booking dengan selisih tarif (`has_pending_delta == true`), nilai `qr_code_hash` ditahan (`null`) hingga seluruh sisa pembayaran lunas diverifikasi (Midtrans webhook atau Kasir Frontdesk).
 
 ### FR-08: Validasi Check-In di Venue (Anti-Replay / Single-Use Guarantee)
 - **Deskripsi**: Kasir atau turnstile gate melakukan scan QR Code pemain.
@@ -132,10 +135,13 @@ Padel Court Booking Engine adalah **jantung operasional dan mesin penghasil reve
 
 ```mermaid
 stateDiagram-v2
-    [*] --> LOCKED : User hold slot (Hold 10 mnt, Atomic Batch)
-    LOCKED --> EXPIRED : Batas 10 menit habis tanpa pembayaran
+    [*] --> LOCKED : User hold slot (Cart 10 mnt, Atomic Batch)
+    LOCKED --> EXPIRED : Batas 10 menit habis (Keranjang Baru reschedule_count = 0)
     LOCKED --> CANCELLED : Dihapus dari keranjang oleh user
     LOCKED --> PAID : Pembayaran lunas terverifikasi
+    
+    PAID --> LOCKED : Reschedule ke Prime Time (Kurang Bayar: 24h Lock, QR Ditahan)
+    LOCKED --> PAID : Pelunasan Delta Selesai (Kasir / Midtrans Retry)
     
     PAID --> CHECKED_IN : Scan QR pertama kali di venue gate
     CHECKED_IN --> COMPLETED : Sesi permainan selesai
@@ -280,17 +286,43 @@ Mengembalikan daftar raket sewa, bola kaleng, paket fresh, dan pelatih.
   ```
 * **Response (200 OK)**: Mengembalikan rincian biaya, nomor VA atau string QRIS, dan payload pembayaran.
 
-#### 7. `GET /api/v1/padel/my-bookings`
+#### 7. `POST /api/v1/padel/bookings/{id}/retry-payment` (Delta-Only Online Settlement)
+* **Deskripsi**: Mencoba ulang pembayaran untuk booking yang belum lunas atau memiliki tagihan kurang bayar (delta) pasca-reschedule.
+* **Perilaku Khusus Delta Reschedule**:
+  - Jika booking memiliki pembayaran awal yang sukses dan tagihan pending baru (selisih tarif pindah ke jam Prime), endpoint ini **HANYA menagihkan nominal selisih ($\Delta$)** via Midtrans Snap.
+  - Tetap berada di bawah **Order ID (`order_id`) yang sama** untuk menjaga integritas pembukuan finansial.
+* **Response (200 OK)**:
+  ```json
+  {
+    "success": true,
+    "message": "Sesi pembayaran berhasil diinisiasi.",
+    "data": {
+      "booking_id": "01m1njqs8cjxcwt7d6x4f8thc2",
+      "order_id": "01m1njqs8cjxcwt7d6x4f8thc1",
+      "amount_to_pay": 100000,
+      "is_supplemental": true,
+      "snap_token": "midtrans-snap-token-delta-xxx",
+      "redirect_url": "https://app.sandbox.midtrans.com/snap/v2/vtweb/xxx"
+    }
+  }
+  ```
+
+#### 8. `GET /api/v1/padel/my-bookings`
 Riwayat booking pemain terbagi tab: `UPCOMING`, `COMPLETED`, `CANCELLED`.
 
-#### 8. `GET /api/v1/padel/bookings/{id}/ticket`
-Mengembalikan payload tiket, detail jadwal, dan hash QR Code.
+#### 9. `GET /api/v1/padel/bookings/{id}/ticket` (Boarding Pass & Delta Inspector)
+* **Deskripsi**: Mengembalikan payload tiket, detail jadwal, status pelunasan selisih, dan hash QR Code turnstile.
+* **Atribut Finansial Kritis**:
+  - `has_pending_delta` (boolean): Bernilai `true` jika pemain memiliki kekurangan bayar setelah pindah jam.
+  - `unpaid_delta` (integer): Nominal rupiah selisih yang wajib dilunasi.
+  - `total_paid` (integer): Total rupiah yang telah berhasil dibayarkan.
+  - `qr_code_hash` (string | null): Bernilai `null` jika `has_pending_delta == true`, dan baru terisi setelah lunas.
 
 ---
 
 ### C. Endpoint Staf Venue & Kasir Gate (Role: `CASHIER`, `ADMIN`, `SUPER_ADMIN`)
 
-#### 9. `POST /api/v1/padel/check-in` (Single-Use Ticket Scanner)
+#### 10. `POST /api/v1/padel/check-in` (Single-Use Ticket Scanner)
 * **Request Body**: `{ "qr_code_hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855" }`
 * **Response (200 OK - Scan Pertama)**:
   ```json
