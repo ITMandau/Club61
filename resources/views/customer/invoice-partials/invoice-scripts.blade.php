@@ -11,6 +11,35 @@
             pastBookings: [],
             isDownloadingPng: false,
             customerName: @json(Auth::user()->name ?? 'Customer VIP'),
+            canCancelBooking: @json(Auth::check() && Auth::user()->canCancelBooking()),
+            noticeModal: {
+                show: false,
+                title: '',
+                message: '',
+                type: 'info',
+                buttonText: 'OK, Mengerti',
+                onClose: null,
+            },
+
+            showNotice(title, message, type = 'info', buttonText = 'OK, Mengerti', onClose = null) {
+                this.noticeModal = {
+                    show: true,
+                    title,
+                    message,
+                    type,
+                    buttonText,
+                    onClose,
+                };
+            },
+
+            handleNoticeClose() {
+                this.noticeModal.show = false;
+                if (typeof this.noticeModal.onClose === 'function') {
+                    const cb = this.noticeModal.onClose;
+                    this.noticeModal.onClose = null;
+                    cb();
+                }
+            },
 
             // Filter & Pagination Riwayat
             searchQuery: '',
@@ -140,6 +169,10 @@
 
             async payNow() {
                 if (!this.currentTicket) return;
+                if (['EXPIRED', 'CANCELLED', 'REFUNDED'].includes(this.currentTicket.status)) {
+                    this.showNotice('Reservasi Tidak Aktif', 'Reservasi ini telah kedaluwarsa atau dibatalkan dan tidak dapat diproses lagi. Silakan lakukan booking ulang.', 'error', 'Tutup');
+                    return;
+                }
                 this.isSubmittingPayment = true;
 
                 try {
@@ -166,13 +199,77 @@
                             this.openSnap(json.snap_token);
                         }
                     } else {
-                        alert(json.message || 'Gagal memproses sesi pembayaran.');
+                        this.showNotice('Gagal Memproses Pembayaran', json.message || 'Gagal memproses sesi pembayaran.', 'error', 'Tutup');
                     }
                 } catch(e) {
                     console.error('Error retry payment:', e);
-                    alert('Terjadi kendala saat menghubungi gateway pembayaran.');
+                    this.showNotice('Kendala Jaringan', 'Terjadi kendala saat menghubungi gateway pembayaran.', 'error', 'Tutup');
                 } finally {
                     this.isSubmittingPayment = false;
+                }
+            },
+
+            showCancelModal: false,
+            isCancellingBooking: false,
+
+            openCancelModal() {
+                if (!this.canCancelBooking) {
+                    this.showNotice('Akses Ditolak', 'Anda tidak memiliki izin untuk membatalkan pesanan ini.', 'error', 'Tutup');
+                    return;
+                }
+                this.showCancelModal = true;
+            },
+
+            cancelActiveBooking() {
+                this.openCancelModal();
+            },
+
+            async confirmCancelBooking() {
+                if (!this.currentTicket) return;
+                if (!this.canCancelBooking) {
+                    this.showNotice('Akses Ditolak', 'Anda tidak memiliki izin untuk membatalkan pesanan ini.', 'error', 'Tutup');
+                    this.showCancelModal = false;
+                    return;
+                }
+
+                this.isCancellingBooking = true;
+                try {
+                    // Ambil seluruh booking ID dalam order jika sesi jam berturut-turut
+                    const bookingIds = (this.ticket && this.ticket.order_bookings && this.ticket.order_bookings.length > 0)
+                        ? this.ticket.order_bookings.map(b => b.id)
+                        : [this.currentTicket.id];
+
+                    const res = await fetch('/api/v1/padel/release-slot', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Accept': 'application/json',
+                            'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                        },
+                        body: JSON.stringify({
+                            booking_ids: bookingIds
+                        })
+                    });
+
+                    const json = await res.json();
+                    if (json.success) {
+                        localStorage.removeItem('club61_cart');
+                        localStorage.removeItem('club61_hold_data');
+                        sessionStorage.removeItem('club61_cart');
+                        sessionStorage.removeItem('club61_hold_data');
+                        sessionStorage.removeItem('vantage_cart');
+                        sessionStorage.removeItem('vantage_hold_data');
+                        window.dispatchEvent(new CustomEvent('cart-updated'));
+
+                        window.location.href = '{{ route('customer.booking') }}';
+                    } else {
+                        this.showNotice('Gagal Membatalkan', json.message || 'Gagal membatalkan pesanan.', 'error', 'Tutup');
+                        this.isCancellingBooking = false;
+                    }
+                } catch (e) {
+                    console.error('Error cancel booking:', e);
+                    this.showNotice('Kesalahan Server', 'Terjadi kesalahan saat menghubungi server.', 'error', 'Tutup');
+                    this.isCancellingBooking = false;
                 }
             },
 
@@ -186,29 +283,49 @@
                             await this.loadTicket(this.currentTicket.id);
                         },
                         onError: (result) => {
-                            alert('Pembayaran gagal atau kedaluwarsa.');
+                            this.showNotice('Pembayaran Ditolak', 'Pembayaran gagal atau kedaluwarsa.', 'error', 'Tutup');
                         },
                         onClose: () => {
                             this.startAutoPolling(this.currentTicket.id);
                         }
                     });
                 } else {
-                    alert('Komponen Snap Midtrans sedang dimuat. Silakan coba kembali sesaat lagi.');
+                    this.showNotice('Memuat Gateway', 'Komponen Snap Midtrans sedang dimuat. Silakan coba kembali sesaat lagi.', 'info', 'Tutup');
                 }
             },
 
             async init() {
                 const urlParams = new URLSearchParams(window.location.search);
-                const lookupKey = urlParams.get('order_id') || urlParams.get('booking_code') || urlParams.get('id');
+                const lookupKey = urlParams.get('booking_id') || urlParams.get('order_id') || urlParams.get('booking_code') || urlParams.get('id');
 
+                let loaded = false;
                 if (lookupKey) {
-                    await this.loadTicket(lookupKey);
-                } else {
+                    loaded = await this.loadTicket(lookupKey);
+                }
+
+                if (!loaded) {
                     await this.loadLatestBooking();
                 }
 
                 await this.loadMyBookings();
                 this.isLoading = false;
+
+                // Handle tombol Back/Forward browser
+                window.addEventListener('popstate', async () => {
+                    const params = new URLSearchParams(window.location.search);
+                    const key = params.get('booking_id') || params.get('order_id') || params.get('booking_code') || params.get('id');
+                    if (key) {
+                        this.isLoading = true;
+                        if (this.pollingInterval) {
+                            clearInterval(this.pollingInterval);
+                            this.pollingInterval = null;
+                            this.isPolling = false;
+                        }
+                        await this.loadTicket(key);
+                        await this.loadMyBookings();
+                        this.isLoading = false;
+                    }
+                });
             },
 
             async loadTicket(id) {
@@ -238,10 +355,37 @@
                         if (this.ticket.status === 'PENDING' || this.ticket.status === 'PENDING_PAYMENT') {
                             this.startAutoPolling(id);
                         }
+
+                        return true;
                     }
+                    return false;
                 } catch(e) {
                     console.error('Gagal mengambil tiket:', e);
+                    return false;
                 }
+            },
+
+            async switchToBooking(id) {
+                if (!id) return;
+                this.isLoading = true;
+                if (this.pollingInterval) {
+                    clearInterval(this.pollingInterval);
+                    this.pollingInterval = null;
+                    this.isPolling = false;
+                }
+
+                // Update URL browser tanpa full reload
+                const newUrl = new URL(window.location.href);
+                newUrl.searchParams.set('booking_id', id);
+                newUrl.searchParams.delete('order_id');
+                newUrl.searchParams.delete('id');
+                newUrl.searchParams.delete('booking_code');
+                window.history.pushState({ booking_id: id }, '', newUrl);
+
+                await this.loadTicket(id);
+                await this.loadMyBookings();
+                this.isLoading = false;
+                window.scrollTo({ top: 0, behavior: 'smooth' });
             },
 
             switchSession(sBooking) {
@@ -266,11 +410,16 @@
                     const res = await fetch('/api/v1/padel/my-bookings');
                     const json = await res.json();
                     if (json.success && json.data) {
+                        const currentId = this.ticket?.id;
+                        const currentOrderId = this.ticket?.order_id || this.ticket?.order?.id;
+                        const currentOrderNumber = this.ticket?.order?.order_number;
+
                         // Filter keluar tiket saat ini dan tiket lain yang berada dalam order yang sama
                         this.pastBookings = json.data.filter(b => {
                             if (!this.ticket) return true;
-                            if (b.id === this.ticket.id) return false;
-                            if (this.ticket.order_id && b.order_id === this.ticket.order_id) return false;
+                            if (b.id === currentId) return false;
+                            if (currentOrderId && b.order_id === currentOrderId) return false;
+                            if (currentOrderNumber && (b.order_id === currentOrderNumber || b.order?.order_number === currentOrderNumber)) return false;
                             return true;
                         });
                     }
@@ -361,7 +510,7 @@
                     await this.generateAndSaveTicketPng();
                 } catch (err) {
                     console.error('Download PNG failed:', err);
-                    alert('Gagal membuat gambar e-tiket: ' + (err.message || err));
+                    this.showNotice('Gagal Mengunduh', 'Gagal membuat gambar e-tiket: ' + (err.message || err), 'error', 'Tutup');
                 } finally {
                     this.isDownloadingPng = false;
                 }

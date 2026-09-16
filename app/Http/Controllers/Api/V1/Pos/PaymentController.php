@@ -16,7 +16,7 @@ use Illuminate\Support\Str;
 class PaymentController extends Controller
 {
     /**
-     * Webhook Handler for Midtrans / Xendit.
+     * Webhook Handler for Midtrans.
      * Idempotent & secure with Signature Key.
      * Unified handler: Supports POS Orders & Padel Bookings.
      */
@@ -35,7 +35,7 @@ class PaymentController extends Controller
             ], 400);
         }
 
-        // 🛡️ QA DEFENSE: Verifikasi SHA-512 Signature Anti-Spoofing via MidtransService (DRY)
+        // Verifikasi SHA-512 Signature Anti-Spoofing via MidtransService (DRY)
         $isValidSignature = MidtransService::verifySignature($orderId, $statusCode, $grossAmount, $signature);
 
         // Izinkan test ping Midtrans dashboard jika pada sandbox/dev environment

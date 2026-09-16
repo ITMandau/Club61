@@ -65,11 +65,19 @@ trait ManagesTicketsAndRefunds
      */
     public function getTicket(string $bookingId, User $user): PadelBooking
     {
+        $order = Order::where('order_number', $bookingId)
+            ->orWhere('id', $bookingId)
+            ->first();
+        $orderId = $order?->id;
+
         $booking = PadelBooking::with(['court', 'coach', 'equipments.equipment'])
-            ->where(function ($q) use ($bookingId) {
+            ->where(function ($q) use ($bookingId, $orderId) {
                 $q->where('id', $bookingId)
                   ->orWhere('booking_code', $bookingId)
                   ->orWhere('order_id', $bookingId);
+                if ($orderId) {
+                    $q->orWhere('order_id', $orderId);
+                }
             })
             ->where('user_id', $user->id)
             ->firstOrFail();

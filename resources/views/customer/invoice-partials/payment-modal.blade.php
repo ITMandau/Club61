@@ -1,7 +1,7 @@
 <!-- Payment Method Selection Modal (Identik dengan Gambar 3 & Checkout) -->
 <div x-show="showPaymentModal" 
-     style="display: none;"
-     class="fixed inset-0 z-50 overflow-y-auto bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+     style="display: none; z-index: 99999 !important;"
+     class="fixed inset-0 overflow-y-auto bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
     <div class="w-full max-w-md bg-white rounded-3xl border-2 border-[#DFC387] shadow-2xl p-6 space-y-4">
         <div class="flex items-center justify-between border-b border-[#DFC387]/50 pb-3">
             <h3 class="font-serif font-black text-base text-[#1F170D]">Pilih Metode Pembayaran</h3>

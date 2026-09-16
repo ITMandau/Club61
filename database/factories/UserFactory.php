@@ -47,6 +47,10 @@ class UserFactory extends Factory
     {
         return $this->afterCreating(function (\App\Models\User $user) use ($role) {
             $r = \Spatie\Permission\Models\Role::findOrCreate(strtolower($role), 'web');
+            if (strtolower($role) === 'admin' && $r->permissions()->count() === 0 && class_exists(\App\Services\Permission\Club61PermissionMatrix::class)) {
+                \App\Services\Permission\Club61PermissionMatrix::syncAllPermissions('web');
+                $r->syncPermissions(\App\Services\Permission\Club61PermissionMatrix::getAllPermissionSlugs());
+            }
             $user->syncRoles([$r]);
         });
     }

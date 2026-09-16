@@ -9,6 +9,10 @@ class MockSimulatorDriver implements PaymentGatewayInterface
 {
     public function createPayment(array $params): array
     {
+        if (app()->environment('production')) {
+            throw new \RuntimeException('Driver simulasi mock dinonaktifkan pada environment production.');
+        }
+
         $orderId = $params['order_id'];
 
         return [
@@ -24,6 +28,17 @@ class MockSimulatorDriver implements PaymentGatewayInterface
 
     public function verifyWebhook(Request $request): array
     {
+        if (app()->environment('production')) {
+            return [
+                'is_valid' => false,
+                'order_id' => '',
+                'status' => 'FAILED',
+                'raw_status' => 'disabled_on_production',
+                'gross_amount' => 0,
+                'message' => 'Driver simulasi mock dinonaktifkan pada environment production.',
+            ];
+        }
+
         $payload = $request->all();
         $orderId = $payload['order_id'] ?? $payload['external_id'] ?? 'MOCK-ORD';
 

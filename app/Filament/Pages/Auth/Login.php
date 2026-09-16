@@ -48,17 +48,6 @@ class Login extends BaseLogin
             }
         }
 
-        // Support easy dev passwords (password123, Password123!, password, admin)
-        $user = User::where('email', $login)->first();
-        if ($user && ! $user->isCustomer()) {
-            $devPasswords = ['password123', 'Password123!', 'password', 'admin'];
-            if (in_array($password, $devPasswords, true)) {
-                if (! Hash::check($password, $user->password)) {
-                    $user->update(['password' => Hash::make($password)]);
-                }
-            }
-        }
-
         return [
             'email' => $login,
             'password' => $password,

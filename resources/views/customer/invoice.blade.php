@@ -13,7 +13,7 @@
                     <div>
                         <div class="flex items-center gap-2 flex-wrap">
                             <h1 class="font-serif font-black text-xl sm:text-2xl text-[#1F170D]">Invoice &amp; E-Tiket Digital</h1>
-                            <span :class="ticket && (ticket.status === 'PAID' || ticket.status === 'CONFIRMED') ? 'bg-emerald-100 text-emerald-800 border-emerald-300' : 'bg-amber-100 text-amber-800 border-amber-300'"
+                            <span :class="ticket && (ticket.status === 'PAID' || ticket.status === 'CONFIRMED' || ticket.status === 'CHECKED_IN') ? 'bg-emerald-100 text-emerald-800 border-emerald-300' : (ticket && (ticket.status === 'EXPIRED' || ticket.status === 'CANCELLED' || ticket.status === 'REFUNDED') ? 'bg-rose-100 text-rose-800 border-rose-300' : 'bg-amber-100 text-amber-800 border-amber-300')"
                                   class="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase border"
                                   x-text="ticket ? ticket.status : 'MEMUAT...'">
                             </span>
@@ -25,7 +25,7 @@
                 <div class="flex items-center gap-2.5 sm:gap-3 w-full sm:w-auto">
                     <button type="button" 
                             @click="downloadTicketPng()" 
-                            :disabled="isDownloadingPng || !currentTicket"
+                            :disabled="isDownloadingPng || !currentTicket || currentTicket.status === 'EXPIRED' || currentTicket.status === 'CANCELLED' || currentTicket.status === 'REFUNDED'"
                             class="flex-1 sm:flex-none justify-center px-4 py-2.5 rounded-2xl bg-[#FAF2DE] hover:bg-[#F3DFAD] border border-[#DFC387] text-[#7A5818] text-xs font-bold transition-all shadow-sm flex items-center gap-2 disabled:opacity-50 cursor-pointer">
                         <template x-if="!isDownloadingPng">
                             <div class="flex items-center gap-2">
@@ -90,6 +90,8 @@
             <!-- Payment Method Selection Modal -->
             @include('customer.invoice-partials.payment-modal')
 
+            <!-- Cancel Booking Confirmation Modal -->
+            @include('customer.invoice-partials.cancel-modal')
         </div>
     </div>
 

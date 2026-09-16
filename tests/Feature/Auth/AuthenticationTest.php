@@ -86,7 +86,7 @@ class AuthenticationTest extends TestCase
         $response->assertRedirect('/admin');
     }
 
-    public function test_admin_can_login_with_common_dev_password_and_redirect_to_admin(): void
+    public function test_admin_login_rejects_wrong_password_and_does_not_overwrite_hash(): void
     {
         $user = User::factory()->create([
             'email' => 'admin@club61.com',
@@ -95,12 +95,17 @@ class AuthenticationTest extends TestCase
         ]);
 
         $response = $this->post('/login', [
-            'email' => 'admin@club61.com',
-            'password' => 'password123',
+            'email' => 'admin',
+            'password' => 'wrongpassword',
         ]);
 
-        $this->assertAuthenticated();
-        $response->assertRedirect('/admin');
+        $this->assertGuest();
+        $response->assertSessionHasErrors('email');
+
+        // Pastikan hash password di database tidak pernah tertimpa
+        $freshUser = $user->fresh();
+        $this->assertTrue(\Illuminate\Support\Facades\Hash::check('Password123!', $freshUser->password));
+        $this->assertFalse(\Illuminate\Support\Facades\Hash::check('wrongpassword', $freshUser->password));
     }
 
     public function test_filament_admin_login_page_renders_successfully(): void

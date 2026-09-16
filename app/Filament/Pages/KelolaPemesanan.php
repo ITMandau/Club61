@@ -307,6 +307,11 @@ class KelolaPemesanan extends Page
 
     public function openCancelRefundModal(string $bookingId): void
     {
+        if (! auth()->user()->can('cancel_refund_padel') && ! auth()->user()->can('cancel_padel_booking') && ! auth()->user()->isAdmin()) {
+            Notification::make()->title('Akses Ditolak: Anda tidak memiliki izin membatalkan pesanan.')->danger()->send();
+            return;
+        }
+
         $booking = PadelBooking::with(['user'])->findOrFail($bookingId);
 
         $this->cancelBookingId = $booking->id;
@@ -323,6 +328,11 @@ class KelolaPemesanan extends Page
 
     public function executeCancelRefund(PadelBookingService $service): void
     {
+        if (! auth()->user()->can('cancel_refund_padel') && ! auth()->user()->can('cancel_padel_booking') && ! auth()->user()->isAdmin()) {
+            Notification::make()->title('Akses Ditolak: Anda tidak memiliki izin membatalkan pesanan.')->danger()->send();
+            return;
+        }
+
         try {
             $adminUser = auth()->user() ?? \App\Models\User::role(['admin', 'super_admin'])->first();
 
@@ -420,7 +430,7 @@ class KelolaPemesanan extends Page
 
     protected function getViewData(): array
     {
-        // 🔄 REAKTIF FAIL-SAFE: Otomatis sinkronkan tiket kedaluwarsa & selesai setiap halaman dibuka
+        // REAKTIF FAIL-SAFE: Otomatis sinkronkan tiket kedaluwarsa & selesai setiap halaman dibuka
         app(PadelBookingService::class)->syncExpiredAndCompletedBookings();
 
         $query = PadelBooking::with(['user', 'court', 'order.payments', 'order.refunds', 'equipments.equipment'])

@@ -79,6 +79,11 @@ class MidtransService
             ],
             'item_details' => $itemDetails,
             'customer_details' => $customerDetails,
+            'expiry' => [
+                'start_time' => now()->timezone('Asia/Jakarta')->format('Y-m-d H:i:s O'),
+                'unit' => 'minute',
+                'duration' => 15,
+            ],
         ];
 
         if (!empty($params['payment_method'])) {
@@ -130,7 +135,34 @@ class MidtransService
     }
 
     /**
-     * 🛡️ QA DEFENSE 1: Verifikasi Signature Anti-Spoofing (SHA512 + hash_equals).
+     * Membatalkan transaksi di sisi gateway Midtrans (Core API Cancel).
+     */
+    public function cancelTransaction(string $orderId): bool
+    {
+        if (empty($this->serverKey) || app()->environment('testing')) {
+            Log::info("Midtrans Mock Cancel executed for order: {$orderId}");
+            return true;
+        }
+
+        $url = ($this->isProduction ? 'https://api.midtrans.com/v2/' : 'https://api.sandbox.midtrans.com/v2/') . $orderId . '/cancel';
+
+        try {
+            $response = Http::withBasicAuth($this->serverKey, '')
+                ->withHeaders([
+                    'Content-Type' => 'application/json',
+                    'Accept' => 'application/json',
+                ])
+                ->post($url);
+
+            return $response->successful();
+        } catch (\Throwable $e) {
+            Log::warning("Gagal membatalkan transaksi Midtrans ({$orderId}): " . $e->getMessage());
+            return false;
+        }
+    }
+
+    /**
+     * Verifikasi Signature Anti-Spoofing (SHA512 + hash_equals).
      *
      * Rumus: SHA512(order_id + status_code + gross_amount + server_key)
      */
@@ -139,7 +171,10 @@ class MidtransService
         $key = $serverKey ?? (config('services.midtrans.server_key') ?? '');
 
         if (empty($key)) {
-            // Jika belum ada server key (dev lokal), izinkan hash mock
+            // Pada environment production, penandatangan tanpa server key wajib ditolak demi keamanan (fail-closed)
+            if (app()->environment('production')) {
+                return false;
+            }
             return true;
         }
 

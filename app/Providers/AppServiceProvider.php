@@ -16,7 +16,12 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        //
+        $this->app->singleton(\App\Services\Payment\PaymentFulfillmentRegistry::class, function () {
+            $registry = new \App\Services\Payment\PaymentFulfillmentRegistry();
+            $registry->register('PADEL', \App\Services\Padel\Handlers\PadelFulfillmentHandler::class);
+
+            return $registry;
+        });
     }
 
     /**
@@ -25,12 +30,12 @@ class AppServiceProvider extends ServiceProvider
     public function boot(): void
     {
         Gate::before(function ($user, $ability) {
-            return method_exists($user, 'hasRole') && $user->hasAnyRole(['super_admin', 'admin']) ? true : null;
+            return method_exists($user, 'hasRole') && $user->hasRole('super_admin') ? true : null;
         });
 
         Gate::policy(\Spatie\Permission\Models\Role::class, \App\Policies\RolePolicy::class);
 
-        if (request()->header('x-forwarded-proto') === 'https' || str_contains(request()->header('host') ?? '', 'ngrok')) {
+        if (! app()->environment('production') && (request()->header('x-forwarded-proto') === 'https' || str_contains(request()->header('host') ?? '', 'ngrok'))) {
             URL::forceScheme('https');
         }
         // 1. Rate Limiting Otentikasi (10 hit/menit/IP) - Anti Brute-Force

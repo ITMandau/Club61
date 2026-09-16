@@ -533,69 +533,7 @@ class PadelBookingApiTest extends TestCase
             ]);
     }
 
-    /**
-     * 12. Test Xendit Webhook Settlement with Valid Callback Token
-     */
-    public function test_xendit_webhook_settlement_and_valid_token(): void
-    {
-        config(['services.xendit.callback_token' => 'test-xendit-secret-token-123']);
 
-        $booking = PadelBooking::create([
-            'user_id' => $this->customer->id,
-            'court_id' => $this->court1->id,
-            'booking_date' => now()->format('Y-m-d'),
-            'start_time' => now()->format('Y-m-d 14:00:00'),
-            'end_time' => now()->format('Y-m-d 15:00:00'),
-            'status' => 'PENDING_PAYMENT',
-            'court_fee' => 300000.00,
-            'total_amount' => 300000.00,
-            'booking_code' => 'BK-PAD-XEN01',
-        ]);
-
-        $orderId = 'ORD-PAD-XEN01';
-        \Illuminate\Support\Facades\Cache::put("order_bookings:{$orderId}", [$booking->id], 86400);
-
-        $response = $this->withHeader('x-callback-token', 'test-xendit-secret-token-123')
-            ->postJson('/api/v1/padel/webhook/xendit', [
-                'id' => 'xen_inv_123',
-                'external_id' => $orderId,
-                'status' => 'PAID',
-                'amount' => 300000,
-            ]);
-
-        $response->assertStatus(200)
-            ->assertJson([
-                'success' => true,
-            ]);
-
-        $this->assertDatabaseHas('padel_bookings', [
-            'id' => $booking->id,
-            'status' => 'PAID',
-        ]);
-
-        $this->assertNotNull($booking->fresh()->qr_code_hash);
-    }
-
-    /**
-     * 13. Test Xendit Webhook Spoofing with Invalid Callback Token is Rejected (HTTP 400)
-     */
-    public function test_xendit_webhook_spoofing_is_rejected(): void
-    {
-        config(['services.xendit.callback_token' => 'real-secret-token']);
-
-        $response = $this->withHeader('x-callback-token', 'fake-spoofed-token')
-            ->postJson('/api/v1/padel/webhook/xendit', [
-                'external_id' => 'ORD-PAD-HACK02',
-                'status' => 'PAID',
-                'amount' => 300000,
-            ]);
-
-        $response->assertStatus(400)
-            ->assertJson([
-                'success' => false,
-                'message' => 'Invalid Xendit callback token.',
-            ]);
-    }
 
     /**
      * 14. Test Check-In Kasir Mengembalikan Rincian Alat Sewa (Handover) & Scan Kepagian Ditolak (400)

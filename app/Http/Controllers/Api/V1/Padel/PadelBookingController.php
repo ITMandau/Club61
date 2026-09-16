@@ -93,7 +93,22 @@ class PadelBookingController extends Controller
             'booking_ids.*' => ['required', 'string'],
         ]);
 
-        $releasedCount = $this->bookingService->releaseSlots($validated['booking_ids'], $request->user());
+        $user = $request->user();
+        $canCancel = $user->canCancelBooking();
+
+        // Jika user tidak memiliki izin batal, cegah pembatalan tiket yang sudah berstatus PENDING/PENDING_PAYMENT
+        if (! $canCancel) {
+            $hasPendingBooking = \App\Models\Padel\PadelBooking::whereIn('id', $validated['booking_ids'])
+                ->where('user_id', $user->id)
+                ->whereIn('status', ['PENDING', 'PENDING_PAYMENT'])
+                ->exists();
+
+            if ($hasPendingBooking) {
+                throw new HttpException(403, 'Akses Ditolak: Peran Anda tidak memiliki izin untuk membatalkan pesanan ini.');
+            }
+        }
+
+        $releasedCount = $this->bookingService->releaseSlots($validated['booking_ids'], $user);
 
         return response()->json([
             'success' => true,

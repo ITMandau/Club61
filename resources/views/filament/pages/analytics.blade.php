@@ -10,7 +10,7 @@
                 Laporan Uang Masuk &amp; Analisis Finansial
             </div>
             <div class="adm-banner-sub">
-                Rekapitulasi arus kas masuk, settlement payment gateway (Midtrans/Xendit/Cash), refund kasir, dan pendapatan bersih untuk manajemen &amp; PM.
+                Rekapitulasi arus kas masuk, settlement payment gateway (Midtrans/Cash), refund kasir, dan pendapatan bersih untuk manajemen &amp; PM.
             </div>
         </div>
 
@@ -141,16 +141,6 @@
                     </div>
                     <div style="font-family: var(--font-mono, monospace); font-weight: 900; font-size: 1rem; color: #8C6418;">
                         Rp {{ number_format($midtransTotal, 0, ',', '.') }}
-                    </div>
-                </div>
-
-                <div style="display: flex; align-items: center; justify-content: space-between; padding: 0.75rem 1rem; background: #FFFDF5; border-radius: 12px; border: 1px solid #DFC387;">
-                    <div>
-                        <div style="font-weight: 800; font-size: 0.875rem; color: #1F170D;">Xendit Gateway (Kartu Kredit &amp; E-Wallet)</div>
-                        <div style="font-size: 0.6875rem; color: #7A643E;">Kartu kredit internasional &amp; invoice virtual account</div>
-                    </div>
-                    <div style="font-family: var(--font-mono, monospace); font-weight: 900; font-size: 1rem; color: #8C6418;">
-                        Rp {{ number_format($xenditTotal, 0, ',', '.') }}
                     </div>
                 </div>
             </div>

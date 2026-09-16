@@ -74,7 +74,8 @@
     <div x-show="paginatedBookings.length > 0" class="space-y-2.5 text-xs">
         <template x-for="item in paginatedBookings" :key="item.id">
             <a :href="'{{ route('customer.invoice') }}?booking_id=' + item.id"
-               class="p-3 rounded-2xl bg-[#FAF8F2] hover:bg-[#FAF2DE] border border-[#DFC387]/70 flex items-center justify-between transition-colors block group">
+               @click.prevent="switchToBooking(item.id)"
+               class="p-3 rounded-2xl bg-[#FAF8F2] hover:bg-[#FAF2DE] border border-[#DFC387]/70 flex items-center justify-between transition-colors block group cursor-pointer">
                 <div>
                     <div class="font-bold text-[#1F170D] group-hover:text-[#8C6418] transition-colors" x-text="item.court ? item.court.name : 'Court Arena'"></div>
                     <div class="text-[10px] text-[#7A643E]" x-text="formatDate(item.booking_date) + ' &bull; #' + (item.booking_code || item.id.substring(0, 8))"></div>

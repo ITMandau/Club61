@@ -157,6 +157,7 @@
                         </p>
                     </div>
 
+                    @if(app()->isLocal())
                     <!-- Interactive Quick Demo Role Selector (1-Click Auto Fill) -->
                     <div class="relative z-10 mb-6 p-3.5 bg-white/70 shadow-inner backdrop-blur-sm"
                          style="border: 1.5px solid #DFC387; border-radius: 20px;">
@@ -208,6 +209,7 @@
                             </button>
                         </div>
                     </div>
+                    @endif
 
                     <!-- Session Status Alert -->
                     <x-auth-session-status class="relative z-10 mb-4 text-[#7A5818] bg-[#FFF9E6] p-3 rounded-xl border border-[#D4AF37] text-xs font-medium shadow-sm" :status="session('status')" />

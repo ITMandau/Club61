@@ -63,10 +63,27 @@ class UserResource extends Resource
 
                 \Filament\Forms\Components\Select::make('roles')
                     ->label('Peran (Roles)')
-                    ->relationship('roles', 'name')
+                    ->relationship(
+                        name: 'roles',
+                        titleAttribute: 'name',
+                        modifyQueryUsing: fn ($query) => auth()->user()?->hasRole('super_admin')
+                            ? $query
+                            : $query->where('name', '!=', 'super_admin')
+                    )
                     ->multiple()
                     ->preload()
-                    ->searchable(),
+                    ->searchable()
+                    ->rule(function () {
+                        return function (string $attribute, $value, \Closure $fail) {
+                            if (! auth()->user()?->hasRole('super_admin')) {
+                                $superAdminRole = \App\Models\Role::findByName('super_admin', 'web');
+                                $submitted = (array) $value;
+                                if ($superAdminRole && (in_array($superAdminRole->id, $submitted) || in_array((string) $superAdminRole->id, $submitted, true) || in_array('super_admin', $submitted, true))) {
+                                    $fail('Hanya Super Administrator yang berwenang memberikan peran Super Admin.');
+                                }
+                            }
+                        };
+                    }),
 
                 \Filament\Forms\Components\Toggle::make('is_active')
                     ->label('Akun Aktif')
@@ -124,7 +141,19 @@ class UserResource extends Resource
                 TrashedFilter::make(),
             ])
             ->recordActions([
-                EditAction::make(),
+                EditAction::make()
+                    ->mutateFormDataUsing(function (array $data): array {
+                        if (! auth()->user()?->hasRole('super_admin') && isset($data['roles'])) {
+                            $superAdminRole = \App\Models\Role::findByName('super_admin', 'web');
+                            if ($superAdminRole) {
+                                $data['roles'] = array_values(array_filter(
+                                    (array) $data['roles'],
+                                    fn ($r) => (string) $r !== (string) $superAdminRole->id && $r !== 'super_admin'
+                                ));
+                            }
+                        }
+                        return $data;
+                    }),
                 DeleteAction::make(),
                 ForceDeleteAction::make(),
                 RestoreAction::make(),

@@ -57,17 +57,6 @@ class LoginRequest extends FormRequest
             }
         }
 
-        // Support easy dev passwords for admin / staff
-        $user = \App\Models\User::where('email', $login)->first();
-        if ($user && ! $user->isCustomer()) {
-            $devPasswords = ['password123', 'Password123!', 'password', 'admin'];
-            if (in_array($password, $devPasswords, true)) {
-                if (! \Illuminate\Support\Facades\Hash::check($password, $user->password)) {
-                    $user->update(['password' => \Illuminate\Support\Facades\Hash::make($password)]);
-                }
-            }
-        }
-
         $credentials = [
             'email' => $login,
             'password' => $password,
