@@ -22,10 +22,17 @@ class PaymentWebhookController extends Controller
     }
 
     /**
-     * Handler webhook universal untuk driver pembayaran (midtrans, xendit, mock).
+     * Handler webhook universal untuk driver pembayaran (midtrans, mock).
      */
     public function handle(string $driver, Request $request): JsonResponse
     {
+        if (strtolower($driver) === 'mock' && app()->environment('production')) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Driver simulasi mock dinonaktifkan pada environment production.',
+            ], 403);
+        }
+
         try {
             $gateway = $this->paymentManager->driver($driver);
         } catch (\InvalidArgumentException $e) {
@@ -38,7 +45,7 @@ class PaymentWebhookController extends Controller
         $result = $gateway->verifyWebhook($request);
 
         if (! $result['is_valid']) {
-            Log::warning("🚨 PAYMENT WEBHOOK SPOOFING DETECTED [{$driver}]: {$result['message']}", [
+            Log::warning("[ALERT] PAYMENT WEBHOOK SPOOFING DETECTED [{$driver}]: {$result['message']}", [
                 'ip' => $request->ip(),
                 'payload' => $request->all(),
             ]);
@@ -87,6 +94,19 @@ class PaymentWebhookController extends Controller
                         $updateData['qr_code_hash'] = 'VNT-TICKET-' . strtoupper(bin2hex(random_bytes(16)));
                     }
                     $booking->update($updateData);
+                }
+
+                if ($newStatus === 'PAID') {
+                    $voucherCode = Cache::pull("order_voucher:{$realOrderId}") ?? Cache::pull("order_voucher:{$incomingOrderId}");
+                    if ($voucherCode) {
+                        \App\Models\Pos\Voucher::where('code', $voucherCode)
+                            ->where(function ($q) {
+                                $q->whereNull('quota')->orWhere('quota', '>', 0);
+                            })
+                            ->decrement('quota');
+
+                        \App\Models\Pos\Voucher::where('code', $voucherCode)->increment('used_count');
+                    }
                 }
 
                 $primaryBooking = $bookings->first();

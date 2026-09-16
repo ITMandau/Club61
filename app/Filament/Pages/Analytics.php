@@ -92,10 +92,9 @@ class Analytics extends Page
         // Breakdown Metode Pembayaran (Sesuai Periode Aktif)
         $cashTotal = (float) (clone $queryPayments)->where('payment_method', 'CASH')->sum('amount');
         $midtransTotal = (float) (clone $queryPayments)->where('payment_gateway', 'MIDTRANS')->sum('amount');
-        $xenditTotal = (float) (clone $queryPayments)->where('payment_gateway', 'XENDIT')->sum('amount');
         
         // Sisa transaksi booking default tunai kasir / manual
-        $settledFromBookings = max(0, $grossRevenue - ($cashTotal + $midtransTotal + $xenditTotal));
+        $settledFromBookings = max(0, $grossRevenue - ($cashTotal + $midtransTotal));
         $cashTotal += $settledFromBookings;
 
         // Okupansi Lapangan Estimasi (Sesuai Jadwal Lapangan booking_date)
@@ -142,7 +141,6 @@ class Analytics extends Page
             'occupancyRate' => $occupancyRate,
             'cashTotal' => $cashTotal,
             'midtransTotal' => $midtransTotal,
-            'xenditTotal' => $xenditTotal,
             'latestTransactions' => $latestTransactions,
             'latestRefunds' => $latestRefunds,
         ];

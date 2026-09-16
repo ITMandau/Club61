@@ -130,7 +130,7 @@ class MidtransService
     }
 
     /**
-     * 🛡️ QA DEFENSE 1: Verifikasi Signature Anti-Spoofing (SHA512 + hash_equals).
+     * Verifikasi Signature Anti-Spoofing (SHA512 + hash_equals).
      *
      * Rumus: SHA512(order_id + status_code + gross_amount + server_key)
      */
@@ -139,7 +139,10 @@ class MidtransService
         $key = $serverKey ?? (config('services.midtrans.server_key') ?? '');
 
         if (empty($key)) {
-            // Jika belum ada server key (dev lokal), izinkan hash mock
+            // Pada environment production, penandatangan tanpa server key wajib ditolak demi keamanan (fail-closed)
+            if (app()->environment('production')) {
+                return false;
+            }
             return true;
         }
 

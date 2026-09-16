@@ -13,7 +13,19 @@ class ManageUsers extends ManageRecords
     protected function getHeaderActions(): array
     {
         return [
-            CreateAction::make(),
+            CreateAction::make()
+                ->mutateFormDataUsing(function (array $data): array {
+                    if (! auth()->user()?->hasRole('super_admin') && isset($data['roles'])) {
+                        $superAdminRole = \App\Models\Role::findByName('super_admin', 'web');
+                        if ($superAdminRole) {
+                            $data['roles'] = array_values(array_filter(
+                                (array) $data['roles'],
+                                fn ($r) => (string) $r !== (string) $superAdminRole->id && $r !== 'super_admin'
+                            ));
+                        }
+                    }
+                    return $data;
+                }),
         ];
     }
 }

@@ -5,7 +5,6 @@ namespace App\Services\Payment;
 use App\Services\Payment\Contracts\PaymentGatewayInterface;
 use App\Services\Payment\Drivers\MidtransDriver;
 use App\Services\Payment\Drivers\MockSimulatorDriver;
-use App\Services\Payment\Drivers\XenditDriver;
 use InvalidArgumentException;
 
 class PaymentManager
@@ -13,7 +12,7 @@ class PaymentManager
     protected array $drivers = [];
 
     /**
-     * Dapatkan instance driver pembayaran (midtrans, xendit, atau mock).
+     * Dapatkan instance driver pembayaran (midtrans atau mock).
      */
     public function driver(?string $name = null): PaymentGatewayInterface
     {
@@ -33,9 +32,10 @@ class PaymentManager
     {
         return match ($name) {
             'midtrans' => app(MidtransDriver::class),
-            'xendit' => app(XenditDriver::class),
-            'mock' => app(MockSimulatorDriver::class),
-            default => throw new InvalidArgumentException("Payment gateway driver [{$name}] tidak didukung. Pilih: midtrans, xendit, atau mock."),
+            'mock' => ! app()->environment('production')
+                ? app(MockSimulatorDriver::class)
+                : throw new InvalidArgumentException("Driver simulasi mock dinonaktifkan pada environment production."),
+            default => throw new InvalidArgumentException("Payment gateway driver [{$name}] tidak didukung. Pilih: midtrans atau mock."),
         };
     }
 

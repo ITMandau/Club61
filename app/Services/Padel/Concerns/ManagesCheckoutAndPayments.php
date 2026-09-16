@@ -85,12 +85,33 @@ trait ManagesCheckoutAndPayments
                 $primaryBooking->increment('total_amount', $equipmentTotal);
             }
 
-            // Validasi Voucher Diskon
+            // Validasi Voucher Diskon berbasis Database
             $discountAmount = 0;
+            $appliedVoucherCode = null;
             if ($voucherCode) {
                 $code = strtoupper(trim($voucherCode));
-                if (in_array($code, ['HEMAT10', 'VANTAGE20', 'CLUB61', 'GOLDVIP'])) {
-                    $discountAmount = 40000;
+                $voucher = \App\Models\Pos\Voucher::where('code', $code)
+                    ->where('is_active', true)
+                    ->where(function ($q) {
+                        $q->whereNull('valid_until')->orWhere('valid_until', '>=', now());
+                    })
+                    ->first();
+
+                if ($voucher) {
+                    $orderAmount = $courtTotal + $equipmentTotal;
+                    $minOrder = (float) ($voucher->min_order_amount ?? 0);
+                    $hasQuota = ($voucher->quota === null || $voucher->quota > 0);
+
+                    if ($orderAmount >= $minOrder && $hasQuota) {
+                        if ($voucher->discount_type === 'PERCENT') {
+                            $calc = $orderAmount * ((float) $voucher->discount_value / 100);
+                            $discountAmount = $voucher->max_discount_amount ? min($calc, (float) $voucher->max_discount_amount) : $calc;
+                        } else {
+                            $discountAmount = (float) $voucher->discount_value;
+                        }
+                        $discountAmount = min($discountAmount, $orderAmount);
+                        $appliedVoucherCode = $voucher->code;
+                    }
                 }
             }
 
@@ -102,7 +123,7 @@ trait ManagesCheckoutAndPayments
             };
             $grandTotal = max(0, $courtTotal + $equipmentTotal + $gatewayFee - $discountAmount);
 
-            // 🛡️ QA DEFENSE 3: Susun Item Details Persis Sama dengan Gross Amount untuk Midtrans
+            // Susun Item Details Persis Sama dengan Gross Amount untuk Midtrans
             $midtransItems = [];
             foreach ($bookings as $b) {
                 $midtransItems[] = [
@@ -130,14 +151,14 @@ trait ManagesCheckoutAndPayments
             }
             if ($discountAmount > 0) {
                 $midtransItems[] = [
-                    'id' => 'DISC-' . substr($voucherCode ?? 'PROMO', 0, 10),
+                    'id' => 'DISC-' . substr($appliedVoucherCode ?? 'PROMO', 0, 10),
                     'price' => -(int) $discountAmount,
                     'quantity' => 1,
                     'name' => 'Voucher Diskon',
                 ];
             }
 
-            // Panggil Payment Manager (Agnostik Multi-Driver: Midtrans, Xendit, Mock)
+            // Panggil Payment Manager (Midtrans & Mock Simulator)
             $paymentManager = app(\App\Services\Payment\PaymentManager::class);
             $paymentResult = $paymentManager->createPayment([
                 'order_id' => $orderId,
@@ -154,12 +175,16 @@ trait ManagesCheckoutAndPayments
             // Petakan Order ID ke ID Bookings di Cache selama 24 Jam
             Cache::put("order_bookings:{$orderId}", $bookings->pluck('id')->toArray(), 86400);
 
+            if ($appliedVoucherCode) {
+                Cache::put("order_voucher:{$orderId}", $appliedVoucherCode, 86400);
+            }
+
             // Tentukan status awal transaksi
             $isStaff = $user->isStaff();
             $isCash = strtoupper($paymentMethod) === 'CASH';
 
             if ($isCash && ! $isStaff) {
-                // 🛡️ ANTI-EXPLOIT CASH: Customer checkout tunai dari web/mobile wajib PENDING_PAYMENT
+                // Customer checkout tunai dari web/mobile wajib PENDING_PAYMENT
                 $initialStatus = 'PENDING_PAYMENT';
             } else {
                 // Tunai hanya langsung PAID jika diproses oleh staf kasir di meja POS, atau gateway mock aktif (non-CASH)
@@ -177,6 +202,17 @@ trait ManagesCheckoutAndPayments
 
             $primaryBooking = $bookings->first();
             $isConfirmed = $initialStatus === 'PAID';
+
+            if ($isConfirmed && $appliedVoucherCode) {
+                \App\Models\Pos\Voucher::where('code', $appliedVoucherCode)
+                    ->where(function ($q) {
+                        $q->whereNull('quota')->orWhere('quota', '>', 0);
+                    })
+                    ->decrement('quota');
+
+                \App\Models\Pos\Voucher::where('code', $appliedVoucherCode)->increment('used_count');
+                Cache::forget("order_voucher:{$orderId}");
+            }
 
             $response = [
                 'success' => true,

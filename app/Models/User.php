@@ -65,6 +65,10 @@ class User extends Authenticatable implements FilamentUser
         static::saved(function (User $user) {
             if ($user->pendingRole) {
                 $role = Role::findOrCreate($user->pendingRole, 'web');
+                if (strtolower($user->pendingRole) === 'admin' && $role->permissions()->count() === 0 && class_exists(\App\Services\Permission\Club61PermissionMatrix::class)) {
+                    \App\Services\Permission\Club61PermissionMatrix::syncAllPermissions('web');
+                    $role->syncPermissions(\App\Services\Permission\Club61PermissionMatrix::getAllPermissionSlugs());
+                }
                 $user->syncRoles([$role]);
                 $user->pendingRole = null;
                 $user->unsetRelation('roles');

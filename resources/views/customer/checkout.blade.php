@@ -673,16 +673,6 @@
                                         this.clearSessionAndRedirect(this.createdBookingId, this.createdOrderId);
                                     }
                                 });
-                            } else if (data.driver === 'xendit' && data.payment_url && !data.is_mock) {
-                                // Eksekusi Xendit Invoice Redirect
-                                localStorage.removeItem('club61_cart');
-                                localStorage.removeItem('club61_hold_data');
-                                sessionStorage.removeItem('club61_cart');
-                                sessionStorage.removeItem('club61_hold_data');
-                                sessionStorage.removeItem('vantage_cart');
-                                sessionStorage.removeItem('vantage_hold_data');
-                                window.dispatchEvent(new CustomEvent('cart-updated'));
-                                window.location.href = data.payment_url;
                             } else {
                                 // Mode Sandbox Mock Simulator / Tunai
                                 this.showPaymentSuccessModal = true;

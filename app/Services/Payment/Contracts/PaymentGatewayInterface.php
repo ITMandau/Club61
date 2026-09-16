@@ -16,13 +16,13 @@ interface PaymentGatewayInterface
      *     'customer_details' => array,
      * ]
      * @return array [
-     *     'driver' => string,         // midtrans, xendit, mock
+     *     'driver' => string,         // midtrans, mock
      *     'order_id' => string,
      *     'snap_token' => ?string,    // Khusus Midtrans Snap
-     *     'payment_url' => string,    // URL invoice (Xendit) atau redirect Midtrans
+     *     'payment_url' => string,    // URL redirect Midtrans
      *     'redirect_url' => string,
      *     'is_mock' => bool,
-     *     'checkout_mode' => string,  // POPUP (Midtrans Snap) atau REDIRECT / IFRAME (Xendit)
+     *     'checkout_mode' => string,  // POPUP (Midtrans Snap) atau REDIRECT
      * ]
      */
     public function createPayment(array $params): array;

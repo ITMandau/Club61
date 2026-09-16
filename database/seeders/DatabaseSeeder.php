@@ -28,6 +28,14 @@ class DatabaseSeeder extends Seeder
 {
     public function run(): void
     {
+        // Proteksi lingkungan production: minta konfirmasi eksplisit sebelum menjalankan seeder data dummy
+        if (app()->environment('production') && ! app()->runningUnitTests()) {
+            if (! ($this->command && $this->command->confirm('PERINGATAN: Anda akan menjalankan DatabaseSeeder dengan data uji default pada environment PRODUCTION. Lanjutkan?', false))) {
+                $this->command?->warn('Seeding dibatalkan demi keamanan data production.');
+                return;
+            }
+        }
+
         // 0. RESET CACHE SPATIE PERMISSION
         app()[\Spatie\Permission\PermissionRegistrar::class]->forgetCachedPermissions();
 
@@ -306,26 +314,77 @@ class DatabaseSeeder extends Seeder
         MerchVariant::create(['product_id' => $jersey->id, 'sku' => 'C61-JRS-WHT-L', 'color' => 'Chalk White', 'size' => 'L', 'stock_quantity' => 20]);
 
         // 8. SEED PROMO VOUCHERS
-        Voucher::create([
-            'code' => 'CLUB61WELCOME',
-            'discount_type' => 'PERCENT',
-            'discount_value' => 20.00,
-            'min_order_amount' => 100000.00,
-            'max_discount_amount' => 50000.00,
-            'quota' => 200,
-            'used_count' => 0,
-            'valid_until' => now()->addMonths(3),
-            'is_active' => true,
-        ]);
-        Voucher::create([
-            'code' => 'PADELMANIA',
-            'discount_type' => 'FIXED',
-            'discount_value' => 30000.00,
-            'min_order_amount' => 250000.00,
-            'quota' => 100,
-            'used_count' => 0,
-            'valid_until' => now()->addMonths(1),
-            'is_active' => true,
-        ]);
+        $vouchers = [
+            [
+                'code' => 'CLUB61WELCOME',
+                'discount_type' => 'PERCENT',
+                'discount_value' => 20.00,
+                'min_order_amount' => 100000.00,
+                'max_discount_amount' => 50000.00,
+                'quota' => 200,
+                'valid_until' => now()->addMonths(3),
+            ],
+            [
+                'code' => 'PADELMANIA',
+                'discount_type' => 'FIXED',
+                'discount_value' => 30000.00,
+                'min_order_amount' => 250000.00,
+                'max_discount_amount' => null,
+                'quota' => 100,
+                'valid_until' => now()->addMonths(1),
+            ],
+            [
+                'code' => 'HEMAT10',
+                'discount_type' => 'FIXED',
+                'discount_value' => 40000.00,
+                'min_order_amount' => 100000.00,
+                'max_discount_amount' => null,
+                'quota' => 500,
+                'valid_until' => now()->addMonths(6),
+            ],
+            [
+                'code' => 'VANTAGE20',
+                'discount_type' => 'FIXED',
+                'discount_value' => 40000.00,
+                'min_order_amount' => 100000.00,
+                'max_discount_amount' => null,
+                'quota' => 500,
+                'valid_until' => now()->addMonths(6),
+            ],
+            [
+                'code' => 'CLUB61',
+                'discount_type' => 'FIXED',
+                'discount_value' => 40000.00,
+                'min_order_amount' => 100000.00,
+                'max_discount_amount' => null,
+                'quota' => 500,
+                'valid_until' => now()->addMonths(6),
+            ],
+            [
+                'code' => 'GOLDVIP',
+                'discount_type' => 'FIXED',
+                'discount_value' => 40000.00,
+                'min_order_amount' => 100000.00,
+                'max_discount_amount' => null,
+                'quota' => 500,
+                'valid_until' => now()->addMonths(6),
+            ],
+        ];
+
+        foreach ($vouchers as $v) {
+            Voucher::firstOrCreate(
+                ['code' => $v['code']],
+                [
+                    'discount_type' => $v['discount_type'],
+                    'discount_value' => $v['discount_value'],
+                    'min_order_amount' => $v['min_order_amount'],
+                    'max_discount_amount' => $v['max_discount_amount'],
+                    'quota' => $v['quota'],
+                    'used_count' => 0,
+                    'valid_until' => $v['valid_until'],
+                    'is_active' => true,
+                ]
+            );
+        }
     }
 }

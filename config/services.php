@@ -43,11 +43,4 @@ return [
         'is_3ds' => true,
     ],
 
-    'xendit' => [
-        'secret_key' => env('XENDIT_SECRET_KEY'),
-        'public_key' => env('XENDIT_PUBLIC_KEY'),
-        'callback_token' => env('XENDIT_CALLBACK_TOKEN', 'xendit_webhook_token_club61'),
-        'is_production' => env('XENDIT_IS_PRODUCTION', false),
-    ],
-
 ];
