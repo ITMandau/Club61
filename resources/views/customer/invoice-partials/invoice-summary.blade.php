@@ -5,7 +5,7 @@
             <span class="text-[10px] font-extrabold uppercase tracking-wider text-[#7A5818]">Bukti Bayar Resmi</span>
             <h3 class="font-serif font-black text-base text-[#1F170D]">Ringkasan Transaksi</h3>
         </div>
-        <span class="font-mono text-xs font-bold text-[#8C6418]" x-text="'#' + (ticket.order_id || ticket.booking_code || ticket.id.substring(0, 10))"></span>
+        <span class="font-mono text-xs font-bold text-[#8C6418]" x-text="'#' + ((ticket.order && ticket.order.order_number) ? ticket.order.order_number : (ticket.booking_code || (ticket.order_id ? ticket.order_id.substring(0, 12) : ticket.id.substring(0, 10))))"></span>
     </div>
 
     <div class="space-y-2.5 text-xs text-[#5C410F]">
@@ -23,7 +23,9 @@
         </div>
         <div class="flex justify-between items-center gap-3">
             <span>Status Settlement:</span>
-            <span class="font-mono text-emerald-700 font-bold whitespace-nowrap text-right" x-text="ticket.status"></span>
+            <span :class="(ticket.status === 'PAID' || ticket.status === 'CHECKED_IN') ? 'text-emerald-700' : ((ticket.status === 'EXPIRED' || ticket.status === 'CANCELLED' || ticket.status === 'REFUNDED') ? 'text-rose-700' : 'text-amber-700')"
+                  class="font-mono font-bold whitespace-nowrap text-right" 
+                  x-text="ticket.status"></span>
         </div>
 
         <div class="pt-3 border-t border-[#DFC387]/60 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-1.5 sm:gap-4 text-sm">
@@ -52,7 +54,7 @@
                 <span class="w-6 h-6 rounded-md bg-white border border-[#DFC387] flex items-center justify-center font-bold text-[9px] text-[#8C6418] font-mono shrink-0" x-text="selectedMethod.badge"></span>
                 <span class="text-xs font-bold text-[#1F170D]" x-text="selectedMethod.code === 'CASH' ? 'Metode: Bayar Tunai (Kasir)' : 'Metode: ' + selectedMethod.name"></span>
             </div>
-            <span :class="ticket.status === 'PAID' || ticket.status === 'CHECKED_IN' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'"
+            <span :class="(ticket.status === 'PAID' || ticket.status === 'CHECKED_IN') ? 'bg-emerald-100 text-emerald-800' : ((ticket.status === 'EXPIRED' || ticket.status === 'CANCELLED' || ticket.status === 'REFUNDED') ? 'bg-rose-100 text-rose-800' : 'bg-amber-100 text-amber-800')"
                   class="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full"
                   x-text="ticket.status">
             </span>

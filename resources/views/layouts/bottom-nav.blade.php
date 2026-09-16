@@ -1,6 +1,6 @@
 <!-- Customer Mobile Bottom Navigation Bar (iOS & Android Style) -->
 <nav class="md:hidden" 
-     style="position: fixed; bottom: 0; left: 0; right: 0; z-index: 50; background: rgba(255, 255, 255, 0.96); backdrop-filter: blur(20px); border-top: 1.5px solid #DFC387; box-shadow: 0 -8px 25px rgba(160, 120, 30, 0.15);">
+     style="position: fixed; bottom: 0; left: 0; right: 0; z-index: 30; background: rgba(255, 255, 255, 0.96); backdrop-filter: blur(20px); border-top: 1.5px solid #DFC387; box-shadow: 0 -8px 25px rgba(160, 120, 30, 0.15);">
     <div style="max-width: 480px; margin: 0 auto; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); height: 62px; align-items: center; padding: 0 4px;">
         
         <!-- 1. Beranda -->

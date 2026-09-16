@@ -48,9 +48,11 @@ trait ManagesCheckoutAndPayments
             $courtTotal = $bookings->sum('court_fee');
             $equipmentTotal = 0;
             $equipmentItems = [];
-            $orderId = 'ORD-PAD-' . strtoupper(Str::random(10));
+            $orderNumber = 'ORD-PAD-' . strtoupper(Str::random(10));
+            $isStaff = $user->isStaff();
+            $isCash = strtoupper($paymentMethod) === 'CASH';
 
-            // Proses Sewa Peralatan (Raket, Bola, Handuk) - Flat per Order ID
+            // Proses Sewa Peralatan (Raket, Bola, Handuk)
             if (! empty($equipments)) {
                 $primaryBooking = $bookings->first();
 
@@ -64,16 +66,8 @@ trait ManagesCheckoutAndPayments
                     $subtotal = $eq->rental_price * $qty;
                     $equipmentTotal += $subtotal;
 
-                    PadelBookingEquipment::create([
-                        'order_id' => $orderId,
-                        'booking_id' => $primaryBooking->id,
-                        'equipment_id' => $eq->id,
-                        'quantity' => $qty,
-                        'unit_price' => $eq->rental_price,
-                        'subtotal' => $subtotal,
-                    ]);
-
                     $equipmentItems[] = [
+                        'equipment_id' => $eq->id,
                         'name' => $eq->name,
                         'quantity' => $qty,
                         'unit_price' => (float)$eq->rental_price,
@@ -123,6 +117,58 @@ trait ManagesCheckoutAndPayments
             };
             $grandTotal = max(0, $courtTotal + $equipmentTotal + $gatewayFee - $discountAmount);
 
+            // Eager Order Creation
+            $order = Order::create([
+                'order_number' => $orderNumber,
+                'user_id' => $user->id,
+                'cashier_id' => ($isStaff && $isCash) ? $user->id : null,
+                'order_type' => 'ONLINE_BOOKING',
+                'subtotal' => $courtTotal + $equipmentTotal,
+                'discount_amount' => $discountAmount,
+                'voucher_code' => $appliedVoucherCode,
+                'service_charge' => $gatewayFee,
+                'grand_total' => $grandTotal,
+                'payment_status' => 'UNPAID',
+            ]);
+
+            // Catat PadelBookingEquipment dengan foreign key order_id = order->id
+            if (! empty($equipments)) {
+                $primaryBooking = $bookings->first();
+                foreach ($equipmentItems as $eqItem) {
+                    PadelBookingEquipment::create([
+                        'order_id' => $order->id,
+                        'booking_id' => $primaryBooking->id,
+                        'equipment_id' => $eqItem['equipment_id'],
+                        'quantity' => $eqItem['quantity'],
+                        'unit_price' => $eqItem['unit_price'],
+                        'subtotal' => $eqItem['subtotal'],
+                    ]);
+                }
+            }
+
+            // Catat order_items untuk slot lapangan dan peralatan sewa (semua item_type = 'PADEL')
+            foreach ($bookings as $b) {
+                $order->items()->create([
+                    'item_type' => 'PADEL',
+                    'reference_id' => $b->id,
+                    'item_name' => 'Sewa ' . ($b->court ? $b->court->name : 'Court Padel'),
+                    'quantity' => 1,
+                    'unit_price' => $b->court_fee,
+                    'subtotal' => $b->court_fee,
+                ]);
+            }
+
+            foreach ($equipmentItems as $eqItem) {
+                $order->items()->create([
+                    'item_type' => 'PADEL',
+                    'reference_id' => $eqItem['equipment_id'],
+                    'item_name' => $eqItem['name'],
+                    'quantity' => $eqItem['quantity'],
+                    'unit_price' => $eqItem['unit_price'],
+                    'subtotal' => $eqItem['subtotal'],
+                ]);
+            }
+
             // Susun Item Details Persis Sama dengan Gross Amount untuk Midtrans
             $midtransItems = [];
             foreach ($bookings as $b) {
@@ -161,7 +207,7 @@ trait ManagesCheckoutAndPayments
             // Panggil Payment Manager (Midtrans & Mock Simulator)
             $paymentManager = app(\App\Services\Payment\PaymentManager::class);
             $paymentResult = $paymentManager->createPayment([
-                'order_id' => $orderId,
+                'order_id' => $orderNumber,
                 'gross_amount' => (int) $grandTotal,
                 'item_details' => $midtransItems,
                 'customer_details' => [
@@ -172,17 +218,16 @@ trait ManagesCheckoutAndPayments
                 'payment_method' => $paymentMethod,
             ]);
 
-            // Petakan Order ID ke ID Bookings di Cache selama 24 Jam
-            Cache::put("order_bookings:{$orderId}", $bookings->pluck('id')->toArray(), 86400);
+            // Petakan Order ID dan Order Number ke ID Bookings di Cache selama 24 Jam
+            Cache::put("order_bookings:{$orderNumber}", $bookings->pluck('id')->toArray(), 86400);
+            Cache::put("order_bookings:{$order->id}", $bookings->pluck('id')->toArray(), 86400);
 
             if ($appliedVoucherCode) {
-                Cache::put("order_voucher:{$orderId}", $appliedVoucherCode, 86400);
+                Cache::put("order_voucher:{$orderNumber}", $appliedVoucherCode, 86400);
+                Cache::put("order_voucher:{$order->id}", $appliedVoucherCode, 86400);
             }
 
             // Tentukan status awal transaksi
-            $isStaff = $user->isStaff();
-            $isCash = strtoupper($paymentMethod) === 'CASH';
-
             if ($isCash && ! $isStaff) {
                 // Customer checkout tunai dari web/mobile wajib PENDING_PAYMENT
                 $initialStatus = 'PENDING_PAYMENT';
@@ -194,24 +239,40 @@ trait ManagesCheckoutAndPayments
             // Update semua booking dengan order_id dan simpan hash tiket QR
             foreach ($bookings as $booking) {
                 $booking->update([
-                    'order_id' => $orderId,
+                    'order_id' => $order->id,
                     'status' => $initialStatus,
-                    'qr_code_hash' => 'VNT-TICKET-' . strtoupper(bin2hex(random_bytes(16))),
+                    'qr_code_hash' => $initialStatus === 'PAID'
+                        ? ('VNT-TICKET-' . strtoupper(bin2hex(random_bytes(16))))
+                        : null,
                 ]);
             }
 
             $primaryBooking = $bookings->first();
             $isConfirmed = $initialStatus === 'PAID';
 
-            if ($isConfirmed && $appliedVoucherCode) {
-                \App\Models\Pos\Voucher::where('code', $appliedVoucherCode)
-                    ->where(function ($q) {
-                        $q->whereNull('quota')->orWhere('quota', '>', 0);
-                    })
-                    ->decrement('quota');
-
-                \App\Models\Pos\Voucher::where('code', $appliedVoucherCode)->increment('used_count');
-                Cache::forget("order_voucher:{$orderId}");
+            // Sentralisasi pemenuhan via PaymentOrchestratorService
+            $orchestrator = app(\App\Services\Payment\PaymentOrchestratorService::class);
+            if ($isConfirmed) {
+                $orchestrator->markOrderAsPaid($order, [
+                    'payment_gateway' => $paymentResult['is_mock'] ? 'MOCK' : ($isCash ? 'CASH' : 'MIDTRANS'),
+                    'transaction_id' => $orderNumber,
+                    'payment_method' => strtoupper($paymentMethod),
+                    'amount' => (float) $grandTotal,
+                    'payload_log' => $paymentResult['raw'] ?? null,
+                ]);
+            } else {
+                // Simpan record pembayaran awal PENDING dengan transaction_id = orderNumber
+                Payment::create([
+                    'order_id' => $order->id,
+                    'payment_gateway' => strtoupper($paymentMethod === 'CASH' ? 'CASH' : 'MIDTRANS'),
+                    'transaction_id' => $orderNumber,
+                    'snap_token' => $paymentResult['snap_token'] ?? null,
+                    'payment_url' => $paymentResult['payment_url'] ?? $paymentResult['redirect_url'] ?? null,
+                    'amount' => (float) $grandTotal,
+                    'payment_method' => strtoupper($paymentMethod),
+                    'status' => 'PENDING',
+                    'payload_log' => $paymentResult['raw'] ?? null,
+                ]);
             }
 
             $response = [
@@ -221,7 +282,7 @@ trait ManagesCheckoutAndPayments
                     : ($isCash ? 'Reservasi berhasil dibuat. Silakan selesaikan pembayaran tunai di kasir venue.' : 'Sesi transaksi pembayaran berhasil dibuat. Silakan selesaikan pembayaran.'),
                 'data' => [
                     'driver' => $paymentResult['driver'] ?? $paymentManager->getDefaultDriver(),
-                    'order_id' => $orderId,
+                    'order_id' => $orderNumber,
                     'booking_id' => $primaryBooking->id,
                     'snap_token' => $paymentResult['snap_token'] ?? null,
                     'payment_url' => $paymentResult['payment_url'] ?? $paymentResult['redirect_url'],
@@ -262,10 +323,20 @@ trait ManagesCheckoutAndPayments
     public function retryPayment(string $bookingId, string $paymentMethod, User $user): array
     {
         return DB::transaction(function () use ($bookingId, $paymentMethod, $user) {
+            $order = Order::where('order_number', $bookingId)
+                ->orWhere('id', $bookingId)
+                ->first();
+            $orderId = $order?->id;
+
             $booking = PadelBooking::with(['court', 'user', 'order'])
-                ->where('id', $bookingId)
-                ->orWhere('booking_code', $bookingId)
-                ->orWhere('order_id', $bookingId)
+                ->where(function ($q) use ($bookingId, $orderId) {
+                    $q->where('id', $bookingId)
+                        ->orWhere('booking_code', $bookingId)
+                        ->orWhere('order_id', $bookingId);
+                    if ($orderId) {
+                        $q->orWhere('order_id', $orderId);
+                    }
+                })
                 ->lockForUpdate()
                 ->firstOrFail();
 

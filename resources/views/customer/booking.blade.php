@@ -227,6 +227,61 @@
             </div>
 
         </div>
+
+        <!-- CUSTOM LUXURY NOTICE / ALERT MODAL (Club 61 Theme) -->
+        <div x-show="noticeModal.show" 
+             style="display: none; z-index: 99999 !important;"
+             x-transition:enter="transition ease-out duration-200"
+             x-transition:enter-start="opacity-0"
+             x-transition:enter-end="opacity-100"
+             x-transition:leave="transition ease-in duration-150"
+             x-transition:leave-start="opacity-100"
+             x-transition:leave-end="opacity-0"
+             class="fixed inset-0 overflow-y-auto bg-black/75 backdrop-blur-md flex items-center justify-center p-4">
+
+            <div class="w-full max-w-md bg-white rounded-3xl border-2 border-[#D4AF37] shadow-2xl p-6 sm:p-7 space-y-5 animate-scaleIn text-center relative"
+                 @click.away="handleNoticeClose()">
+                
+                <div class="w-16 h-16 rounded-2xl flex items-center justify-center mx-auto shadow-sm"
+                     :class="{
+                         'bg-[#FAF2DE] border border-[#DFC387] text-[#8C6418]': noticeModal.type === 'info' || noticeModal.type === 'gold',
+                         'bg-rose-50 border border-rose-200 text-rose-600': noticeModal.type === 'error' || noticeModal.type === 'danger',
+                         'bg-emerald-50 border border-emerald-200 text-emerald-600': noticeModal.type === 'success'
+                     }">
+                    <template x-if="noticeModal.type === 'info' || noticeModal.type === 'gold'">
+                        <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                    </template>
+                    <template x-if="noticeModal.type === 'error' || noticeModal.type === 'danger'">
+                        <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                        </svg>
+                    </template>
+                    <template x-if="noticeModal.type === 'success'">
+                        <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                    </template>
+                </div>
+
+                <div class="space-y-2">
+                    <h3 class="font-serif font-black text-xl text-[#1F170D]" x-text="noticeModal.title"></h3>
+                    <p class="text-xs text-[#7A643E] leading-relaxed" x-text="noticeModal.message"></p>
+                </div>
+
+                <div class="pt-2">
+                    <button type="button" 
+                            @click="handleNoticeClose()"
+                            class="w-full py-3.5 px-4 rounded-2xl text-[#1E160A] text-xs font-black uppercase tracking-wider block shadow-md hover:brightness-105 transition-all cursor-pointer active:scale-98"
+                            style="background: linear-gradient(180deg, #F5DE9B 0%, #D4AF37 50%, #A87D18 100%); color: #1E160A; border: 1px solid #FFF3CD;">
+                        <span x-text="noticeModal.buttonText || 'OK, Mengerti'"></span>
+                    </button>
+                </div>
+
+            </div>
+        </div>
+
     </div>
 
     <script>
@@ -241,6 +296,34 @@
                 selectedSlots: [],
                 selectedDuration: 1,
                 hoveredSlots: [],
+                noticeModal: {
+                    show: false,
+                    title: '',
+                    message: '',
+                    type: 'info',
+                    buttonText: 'OK, Mengerti',
+                    onClose: null,
+                },
+
+                showNotice(title, message, type = 'info', buttonText = 'OK, Mengerti', onClose = null) {
+                    this.noticeModal = {
+                        show: true,
+                        title,
+                        message,
+                        type,
+                        buttonText,
+                        onClose,
+                    };
+                },
+
+                handleNoticeClose() {
+                    this.noticeModal.show = false;
+                    if (typeof this.noticeModal.onClose === 'function') {
+                        const cb = this.noticeModal.onClose;
+                        this.noticeModal.onClose = null;
+                        cb();
+                    }
+                },
                 
                 init() {
                     this.generateDateTabs();
@@ -371,13 +454,13 @@
                     for (let i = 0; i < needed; i++) {
                         const targetRow = this.matrixRows[rowIndex + i];
                         if (!targetRow) {
-                            alert(`Slot waktu tidak mencukupi untuk durasi ${needed} jam hingga jam tutup operasional.`);
+                            this.showNotice('Durasi Melebihi Jam Buka', `Slot waktu tidak mencukupi untuk durasi ${needed} jam hingga jam tutup operasional venue.`, 'error', 'Pilih Jam Lain');
                             return;
                         }
 
                         const slotObj = targetRow[courtKey];
                         if (!slotObj || slotObj.status !== 'AVAILABLE') {
-                            alert(`Tidak dapat memilih ${needed} jam berturut-turut mulai jam ${startTime} karena jam ${targetRow.time} sudah terisi (${slotObj ? slotObj.status : 'Tutup'}). Silakan pilih jam mulai yang lain.`);
+                            this.showNotice('Slot Tidak Tersedia', `Tidak dapat memilih ${needed} jam berturut-turut mulai jam ${startTime} karena jam ${targetRow.time} sudah terisi (${slotObj ? slotObj.status : 'Tutup'}). Silakan pilih jam mulai yang lain.`, 'error', 'Pilih Jam Lain');
                             return;
                         }
 
@@ -536,11 +619,11 @@
                             window.dispatchEvent(new CustomEvent('cart-updated'));
                             window.location.href = "{{ route('customer.cart') }}";
                         } else {
-                            alert(json.message || 'Gagal mengunci slot lapangan. Silakan coba jam lain.');
+                            this.showNotice('Gagal Kunci Slot', json.message || 'Gagal mengunci slot lapangan. Silakan coba jam lain.', 'error', 'Tutup');
                             this.fetchSchedule(); // Refresh data
                         }
                     } catch (e) {
-                        alert('Terjadi kesalahan jaringan saat hold slot.');
+                        this.showNotice('Kendala Jaringan', 'Terjadi kesalahan jaringan saat hold slot lapangan.', 'error', 'Tutup');
                     } finally {
                         this.isHolding = false;
                     }

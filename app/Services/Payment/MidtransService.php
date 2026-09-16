@@ -79,6 +79,11 @@ class MidtransService
             ],
             'item_details' => $itemDetails,
             'customer_details' => $customerDetails,
+            'expiry' => [
+                'start_time' => now()->timezone('Asia/Jakarta')->format('Y-m-d H:i:s O'),
+                'unit' => 'minute',
+                'duration' => 15,
+            ],
         ];
 
         if (!empty($params['payment_method'])) {
@@ -126,6 +131,33 @@ class MidtransService
                 'redirect_url' => 'https://app.sandbox.midtrans.com/snap/v2/vtweb/' . Str::uuid(),
                 'is_mock' => true,
             ];
+        }
+    }
+
+    /**
+     * Membatalkan transaksi di sisi gateway Midtrans (Core API Cancel).
+     */
+    public function cancelTransaction(string $orderId): bool
+    {
+        if (empty($this->serverKey) || app()->environment('testing')) {
+            Log::info("Midtrans Mock Cancel executed for order: {$orderId}");
+            return true;
+        }
+
+        $url = ($this->isProduction ? 'https://api.midtrans.com/v2/' : 'https://api.sandbox.midtrans.com/v2/') . $orderId . '/cancel';
+
+        try {
+            $response = Http::withBasicAuth($this->serverKey, '')
+                ->withHeaders([
+                    'Content-Type' => 'application/json',
+                    'Accept' => 'application/json',
+                ])
+                ->post($url);
+
+            return $response->successful();
+        } catch (\Throwable $e) {
+            Log::warning("Gagal membatalkan transaksi Midtrans ({$orderId}): " . $e->getMessage());
+            return false;
         }
     }
 

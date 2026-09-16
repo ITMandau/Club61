@@ -1,4 +1,4 @@
-<nav x-data="customerNav()" x-init="init()" class="bg-white/85 backdrop-blur-xl border-b border-[#DFC387]/70 sticky top-0 z-50 shadow-sm">
+<nav x-data="customerNav()" x-init="init()" class="bg-white/85 backdrop-blur-xl border-b border-[#DFC387]/70 sticky top-0 z-30 shadow-sm">
     <!-- Primary Navigation Menu -->
     <div class="w-full px-4 sm:px-8 lg:px-12 2xl:px-16">
         <div class="flex justify-between h-16">

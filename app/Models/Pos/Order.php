@@ -21,6 +21,7 @@ class Order extends Model
         'delivery_fee',
         'subtotal',
         'discount_amount',
+        'voucher_code',
         'tax_amount',
         'service_charge',
         'grand_total',
@@ -54,6 +55,11 @@ class Order extends Model
     public function items()
     {
         return $this->hasMany(OrderItem::class, 'order_id');
+    }
+
+    public function orderItems()
+    {
+        return $this->items();
     }
 
     public function splits()

@@ -109,6 +109,11 @@ class DatabaseSeeder extends Seeder
             'view_fnb_menu',
         ]);
 
+        // Berikan izin default pelanggan (dapat diatur ulang di menu Role & Hak Akses)
+        \App\Models\Role::findByName('customer', 'web')->syncPermissions([
+            'cancel_padel_booking',
+        ]);
+
         // 1. SEED USERS & STAFF
         $password = Hash::make('password123');
 

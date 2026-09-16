@@ -331,7 +331,7 @@
                                         </button>
                                     @endif
 
-                                    @if(in_array($b->status, ['PAID', 'LOCKED', 'REFUND_PENDING']))
+                                    @if(in_array($b->status, ['PAID', 'LOCKED', 'REFUND_PENDING']) && (auth()->user()->can('cancel_refund_padel') || auth()->user()->can('cancel_padel_booking') || auth()->user()->isAdmin()))
                                         <button type="button" wire:click="openCancelRefundModal('{{ $b->id }}')" wire:loading.attr="disabled" title="Batalkan Reservasi &amp; Refund" class="adm-btn-icon adm-btn-icon-danger">
                                             <span wire:loading.remove wire:target="openCancelRefundModal('{{ $b->id }}')">
                                                 <svg style="width: 15px; height: 15px;" fill="none" stroke="currentColor" viewBox="0 0 24 24">

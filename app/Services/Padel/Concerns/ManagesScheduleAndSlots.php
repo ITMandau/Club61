@@ -28,9 +28,9 @@ trait ManagesScheduleAndSlots
 
         $courts = PadelCourt::where('is_active', true)->orderBy('name')->get();
 
-        // Ambil semua booking aktif pada tanggal tersebut
-        $activeBookings = PadelBooking::where('booking_date', $dateStr)
-            ->whereIn('status', ['LOCKED', 'PAID', 'CHECKED_IN'])
+        // Ambil semua booking aktif pada tanggal tersebut (termasuk yang sedang dalam tahap pembayaran pending)
+        $activeBookings = PadelBooking::whereDate('booking_date', $dateStr)
+            ->whereIn('status', ['LOCKED', 'PENDING_PAYMENT', 'PENDING', 'PAID', 'CHECKED_IN'])
             ->get();
 
         // Bulk prefetch Distributed Cache Locks untuk seluruh lapangan & jam dalam 1 query
@@ -60,7 +60,12 @@ trait ManagesScheduleAndSlots
                     if ($booking->court_id !== $court->id) {
                         return false;
                     }
-                    return $booking->start_time < $slotEnd && $booking->end_time > $slotStart;
+                    $bStart = $booking->start_time->format('Y-m-d H:i:s');
+                    $bEnd = $booking->end_time->format('Y-m-d H:i:s');
+                    $sStart = $slotStart->format('Y-m-d H:i:s');
+                    $sEnd = $slotEnd->format('Y-m-d H:i:s');
+
+                    return $bStart < $sEnd && $bEnd > $sStart;
                 });
 
                 // Cek juga Distributed Cache Lock (Tier 1) via bulk prefetch
@@ -69,7 +74,7 @@ trait ManagesScheduleAndSlots
 
                 $status = 'AVAILABLE';
                 if ($collidingBooking) {
-                    $status = $collidingBooking->status === 'LOCKED' ? 'LOCKED' : 'BOOKED';
+                    $status = in_array($collidingBooking->status, ['LOCKED', 'PENDING_PAYMENT', 'PENDING']) ? 'LOCKED' : 'BOOKED';
                 } elseif ($isCacheLocked) {
                     $status = 'LOCKED';
                 }
@@ -195,7 +200,7 @@ trait ManagesScheduleAndSlots
                     // RUMUS OVERLAP MATEMATIS KETAT: (< dan >)
                     $hasConflict = PadelBooking::where('court_id', $court->id)
                         ->whereDate('booking_date', $bookingDate)
-                        ->whereIn('status', ['LOCKED', 'PAID', 'CHECKED_IN'])
+                        ->whereIn('status', ['LOCKED', 'PENDING_PAYMENT', 'PENDING', 'PAID', 'CHECKED_IN'])
                         ->where('start_time', '<', $endDt->format('Y-m-d H:i:s'))
                         ->where('end_time', '>', $startDt->format('Y-m-d H:i:s'))
                         ->lockForUpdate() // Kunci baris database secara eksklusif
@@ -265,38 +270,75 @@ trait ManagesScheduleAndSlots
     }
 
     /**
-     * Melepaskan kunci slot sukarela saat user menghapus item dari keranjang.
+     * Melepaskan kunci slot sukarela saat user membatalkan dari keranjang atau membatalkan pesanan pending.
      */
     public function releaseSlots(array $bookingIds, User $user): int
     {
-        $bookings = PadelBooking::whereIn('id', $bookingIds)
-            ->where('user_id', $user->id)
-            ->where('status', 'LOCKED')
-            ->get();
+        $orderNumbersToCancel = [];
 
-        $count = 0;
-        foreach ($bookings as $booking) {
-            // Rilis cache lock
-            $lockKey = "padel_lock:{$booking->court_id}:{$booking->booking_date->format('Y-m-d')}:" . $booking->start_time->format('Hi');
-            Cache::forget($lockKey);
+        $count = DB::transaction(function () use ($bookingIds, $user, &$orderNumbersToCancel) {
+            $bookings = PadelBooking::whereIn('id', $bookingIds)
+                ->where('user_id', $user->id)
+                ->whereIn('status', ['LOCKED', 'PENDING_PAYMENT', 'PENDING'])
+                ->get();
 
-            $booking->update(['status' => 'CANCELLED']);
-            $count++;
+            $c = 0;
+            foreach ($bookings as $booking) {
+                $currLock = $booking->start_time->copy();
+                $endLock = $booking->end_time->copy();
+                while ($currLock->lt($endLock)) {
+                    $lockKey = "padel_lock:{$booking->court_id}:{$booking->booking_date->format('Y-m-d')}:" . $currLock->format('Hi');
+                    Cache::forget($lockKey);
+                    try {
+                        Cache::lock($lockKey)->forceRelease();
+                    } catch (\Throwable $e) {}
+                    $currLock->addHour();
+                }
+
+                $booking->update(['status' => 'CANCELLED']);
+                $c++;
+
+                if ($booking->order_id) {
+                    $order = \App\Models\Pos\Order::find($booking->order_id);
+                    if ($order && $order->payment_status !== 'PAID') {
+                        $order->update(['payment_status' => 'CANCELLED']);
+                        $orderNumbersToCancel[] = $order->order_number;
+                    }
+                }
+            }
+
+            return $c;
+        });
+
+        // Panggil Midtrans Cancel API secara non-blocking di luar transaksi DB
+        if (! empty($orderNumbersToCancel)) {
+            $midtrans = app(\App\Services\Payment\MidtransService::class);
+            foreach (array_unique($orderNumbersToCancel) as $orderNumber) {
+                try {
+                    $midtrans->cancelTransaction($orderNumber);
+                } catch (\Throwable $e) {
+                    // Best-effort
+                }
+            }
         }
 
         return $count;
     }
 
     /**
-     * Garbage Collection: Merilis semua slot LOCKED yang ditinggal > 10 menit.
+     * Garbage Collection: Merilis semua slot LOCKED yang ditinggal > 10 menit
+     * atau PENDING_PAYMENT / PENDING yang tidak diselesaikan dalam 15 menit.
      */
     public function releaseExpiredLocks(): int
     {
-        $expiredThreshold = now()->subSeconds(self::HOLD_DURATION_SECONDS);
+        $holdThreshold = now()->subSeconds(self::HOLD_DURATION_SECONDS); // 10 menit
+        $paymentThreshold = now()->subMinutes(15); // 15 menit
 
-        // Hanya rilis slot LOCKED dari keranjang checkout awal yang belum pernah dibayar (reschedule_count == 0 dan tanpa payment SUCCESS)
-        $expiredBookings = PadelBooking::where('status', 'LOCKED')
-            ->where('created_at', '<', $expiredThreshold)
+        $orderNumbersToCancel = [];
+
+        // 1. Slot LOCKED tanpa checkout (> 10 menit)
+        $expiredHolds = PadelBooking::where('status', 'LOCKED')
+            ->where('created_at', '<', $holdThreshold)
             ->where('reschedule_count', 0)
             ->where(function ($query) {
                 $query->whereNull('order_id')
@@ -306,6 +348,20 @@ trait ManagesScheduleAndSlots
             })
             ->get();
 
+        // 2. Slot PENDING_PAYMENT / PENDING yang tidak selesai dibayar (> 15 menit)
+        $expiredPendingPayments = PadelBooking::whereIn('status', ['PENDING_PAYMENT', 'PENDING'])
+            ->where('created_at', '<', $paymentThreshold)
+            ->where('reschedule_count', 0)
+            ->where(function ($query) {
+                $query->whereNull('order_id')
+                    ->orWhereDoesntHave('order.payments', function ($q) {
+                        $q->where('status', 'SUCCESS');
+                    });
+            })
+            ->get();
+
+        $expiredBookings = $expiredHolds->merge($expiredPendingPayments);
+
         $count = 0;
         foreach ($expiredBookings as $b) {
             $currLock = $b->start_time->copy();
@@ -313,11 +369,34 @@ trait ManagesScheduleAndSlots
             while ($currLock->lt($endLock)) {
                 $lockKey = "padel_lock:{$b->court_id}:{$b->booking_date->format('Y-m-d')}:" . $currLock->format('Hi');
                 Cache::forget($lockKey);
+                try {
+                    Cache::lock($lockKey)->forceRelease();
+                } catch (\Throwable $e) {}
                 $currLock->addHour();
             }
 
             $b->update(['status' => 'EXPIRED']);
             $count++;
+
+            if ($b->order_id) {
+                $order = \App\Models\Pos\Order::find($b->order_id);
+                if ($order && $order->payment_status !== 'PAID') {
+                    $order->update(['payment_status' => 'CANCELLED']);
+                    $orderNumbersToCancel[] = $order->order_number;
+                }
+            }
+        }
+
+        // Panggil Midtrans Cancel API di luar DB lock
+        if (! empty($orderNumbersToCancel)) {
+            $midtrans = app(\App\Services\Payment\MidtransService::class);
+            foreach (array_unique($orderNumbersToCancel) as $orderNumber) {
+                try {
+                    $midtrans->cancelTransaction($orderNumber);
+                } catch (\Throwable $e) {
+                    // Best-effort
+                }
+            }
         }
 
         return $count;

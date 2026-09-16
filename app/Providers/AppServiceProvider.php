@@ -16,7 +16,12 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        //
+        $this->app->singleton(\App\Services\Payment\PaymentFulfillmentRegistry::class, function () {
+            $registry = new \App\Services\Payment\PaymentFulfillmentRegistry();
+            $registry->register('PADEL', \App\Services\Padel\Handlers\PadelFulfillmentHandler::class);
+
+            return $registry;
+        });
     }
 
     /**
