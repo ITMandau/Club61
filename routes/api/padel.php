@@ -2,7 +2,6 @@
 
 use App\Http\Controllers\Api\V1\Padel\PadelBookingController;
 use App\Http\Controllers\Api\V1\Padel\PadelCourtController;
-use App\Http\Controllers\Api\V1\Payment\MidtransWebhookController;
 use App\Http\Controllers\Api\V1\Payment\PaymentWebhookController;
 use Illuminate\Support\Facades\Route;
 
@@ -14,7 +13,7 @@ Route::prefix('v1/padel')->group(function () {
     Route::get('/equipments', [PadelBookingController::class, 'equipments']);
 
     // 2. ENDPOINT WEBHOOK PAYMENT GATEWAY (Publik, Multi-Driver)
-    Route::post('/webhook/midtrans', [MidtransWebhookController::class, 'handle']);
+    Route::post('/webhook/midtrans', fn(\Illuminate\Http\Request $request) => app(PaymentWebhookController::class)->handle('midtrans', $request))->name('api.payment.webhook.midtrans');
     Route::post('/webhook/{driver}', [PaymentWebhookController::class, 'handle'])->name('api.payment.webhook');
 
     // 3. ENDPOINT PRIVATE (Wajib Auth: Sanctum Token untuk Flutter, Session Cookie untuk Web Portal)

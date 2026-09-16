@@ -100,6 +100,8 @@ class DatabaseSeeder extends Seeder
             'view_padel_bookings',
             'checkin_padel_ticket',
             'print_padel_invoice',
+            'View:BookOfflineCourt',
+            'process_walkin_booking',
         ]);
 
         // Berikan izin operasional dapur KDS

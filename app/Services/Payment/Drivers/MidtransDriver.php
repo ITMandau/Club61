@@ -40,7 +40,7 @@ class MidtransDriver implements PaymentGatewayInterface
         $transactionStatus = $payload['transaction_status'] ?? '';
         $fraudStatus = $payload['fraud_status'] ?? 'accept';
 
-        // 🛡️ QA DEFENSE 1: Timing Attack Safe Signature Verification
+        // QA DEFENSE 1: Timing Attack Safe Signature Verification
         $isValid = $this->service->verifySignature($orderId, $statusCode, $grossAmount, $incomingSignature);
 
         if (! $isValid) {
@@ -50,7 +50,7 @@ class MidtransDriver implements PaymentGatewayInterface
                 'status' => 'INVALID',
                 'raw_status' => $transactionStatus,
                 'gross_amount' => (float) $grossAmount,
-                'message' => 'Invalid Midtrans signature key.',
+                'message' => 'Akses ditolak: Signature Key tidak valid (Spoofing rejected).',
             ];
         }
 

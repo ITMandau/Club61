@@ -145,6 +145,13 @@ class PaymentOrchestratorService
                 }
             }
 
+            // Fallback pemenuhan jika pesanan terhubung langsung ke PadelBooking (misal: online booking / lazy order)
+            if (! $itemsByType->has('PADEL') && $this->registry->hasHandler('PADEL')) {
+                if ($order->padelBookings()->exists() || \App\Models\Padel\PadelBooking::where('order_id', $order->id)->orWhere('order_id', $order->order_number)->exists()) {
+                    $this->registry->getHandler('PADEL')->fulfill($order, collect());
+                }
+            }
+
             // 6. Bersihkan cache transien terkait
             Cache::forget("order_voucher:{$order->order_number}");
             Cache::forget("order_voucher:{$order->id}");

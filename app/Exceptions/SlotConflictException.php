@@ -18,6 +18,16 @@ class SlotConflictException extends Exception
         $this->timeRange = $timeRange;
     }
 
+    public function getCourtName(): ?string
+    {
+        return $this->courtName;
+    }
+
+    public function getTimeRange(): ?string
+    {
+        return $this->timeRange;
+    }
+
     public function render(Request $request): JsonResponse
     {
         return response()->json([
