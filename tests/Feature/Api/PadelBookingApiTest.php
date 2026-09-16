@@ -459,7 +459,7 @@ class PadelBookingApiTest extends TestCase
     }
 
     /**
-     * 10. 🛡️ QA DEFENSE 1: Test Midtrans Webhook Signature Verification and Settlement
+     * 10. QA DEFENSE 1: Test Midtrans Webhook Signature Verification and Settlement
      */
     public function test_midtrans_webhook_settlement_and_valid_signature(): void
     {
@@ -508,7 +508,7 @@ class PadelBookingApiTest extends TestCase
     }
 
     /**
-     * 11. 🛡️ QA DEFENSE 1: Test Spoofing Attack with Forged Signature is Rejected (HTTP 400)
+     * 11. QA DEFENSE 1: Test Spoofing Attack with Forged Signature is Rejected (HTTP 400)
      */
     public function test_midtrans_webhook_spoofing_is_rejected(): void
     {
@@ -924,7 +924,7 @@ class PadelBookingApiTest extends TestCase
         // Verifikasi data payment tercatat untuk Analytics Kasir
         $this->assertDatabaseHas('payments', [
             'order_id' => $result['booking']->order_id,
-            'payment_gateway' => 'CASH',
+            'payment_gateway' => 'CASHIER_POS',
             'payment_method' => 'CASH',
             'amount' => 300000,
             'status' => 'SUCCESS',

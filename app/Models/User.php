@@ -25,6 +25,7 @@ class User extends Authenticatable implements FilamentUser
         'role',
         'avatar_url',
         'is_active',
+        'registration_source',
     ];
 
     protected $appends = [

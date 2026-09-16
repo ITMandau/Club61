@@ -52,6 +52,7 @@ class AdminPanelProvider extends PanelProvider
                 \App\Filament\Pages\Dashboard::class,
                 \App\Filament\Pages\Analytics::class,
                 \App\Filament\Pages\BookingSystem::class,
+                \App\Filament\Pages\BookOfflineCourt::class,
                 \App\Filament\Pages\KelolaPemesanan::class,
                 \App\Filament\Pages\Kustomer::class,
                 \App\Filament\Pages\KelolaKaryawan::class,

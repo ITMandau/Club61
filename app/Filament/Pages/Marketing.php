@@ -18,7 +18,7 @@ class Marketing extends Page
 
     protected static ?string $title = 'Marketing & Promosi';
 
-    protected static ?int $navigationSort = 9;
+    protected static ?int $navigationSort = 10;
 
     protected string $view = 'filament.pages.marketing';
 }

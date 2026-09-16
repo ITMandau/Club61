@@ -35,7 +35,7 @@ class PadelBooking extends Model
     protected function casts(): array
     {
         return [
-            'booking_date' => 'date',
+            'booking_date' => 'date:Y-m-d',
             'start_time' => 'datetime',
             'end_time' => 'datetime',
             'checked_in_at' => 'datetime',

@@ -17,11 +17,11 @@
                 title: '',
                 message: '',
                 type: 'info',
-                buttonText: 'OK, Mengerti',
+                buttonText: 'OK, Understood',
                 onClose: null,
             },
 
-            showNotice(title, message, type = 'info', buttonText = 'OK, Mengerti', onClose = null) {
+            showNotice(title, message, type = 'info', buttonText = 'OK, Understood', onClose = null) {
                 this.noticeModal = {
                     show: true,
                     title,
@@ -41,7 +41,7 @@
                 }
             },
 
-            // Filter & Pagination Riwayat
+            // Filter & Pagination
             searchQuery: '',
             searchDate: '',
             currentPage: 1,
@@ -105,18 +105,18 @@
                 this.currentPage = 1;
             },
 
-            // State Metode Pembayaran & Modal (Persis Sama dengan checkout.blade.php)
+            // Payment Methods State & Modal
             showPaymentModal: false,
-            selectedMethod: { id: 'qris', code: 'QRIS', name: 'QRIS Instan (GoPay/OVO/BCA)', badge: 'QRIS', fee: 2800, note: 'Konfirmasi Otomatis Midtrans' },
+            selectedMethod: { id: 'qris', code: 'QRIS', name: 'QRIS Instant (GoPay/OVO/BCA)', badge: 'QRIS', fee: 2800, note: 'Automated Midtrans Confirmation' },
             paymentMethods: [
-                { id: 'qris', code: 'QRIS', name: 'QRIS Instan (GoPay/OVO/BCA)', badge: 'QRIS', fee: 2800, note: 'Konfirmasi Otomatis Midtrans' },
-                { id: 'bca', code: 'BCA_VA', name: 'BCA Virtual Account', badge: 'BCA', fee: 4440, note: 'Verifikasi Otomatis Midtrans' },
-                { id: 'mandiri', code: 'MANDIRI_VA', name: 'Mandiri Virtual Account', badge: 'MDR', fee: 4440, note: 'Verifikasi Otomatis Midtrans' },
-                { id: 'bri', code: 'BRI_VA', name: 'BRI Virtual Account', badge: 'BRI', fee: 4440, note: 'Verifikasi Otomatis Midtrans' },
-                { id: 'bni', code: 'BNI_VA', name: 'BNI Virtual Account', badge: 'BNI', fee: 4440, note: 'Verifikasi Otomatis Midtrans' },
-                { id: 'cimb', code: 'CIMB_VA', name: 'CIMB Virtual Account', badge: 'CIMB', fee: 4440, note: 'Verifikasi Otomatis Midtrans' },
-                { id: 'bsi', code: 'BSI_VA', name: 'BSI Virtual Account', badge: 'BSI', fee: 4440, note: 'Syariah Otomatis Midtrans' },
-                { id: 'cash', code: 'CASH', name: 'Bayar Tunai di Kasir (Walk-in)', badge: 'CASH', fee: 0, note: 'Bayar di Frontdesk Venue' },
+                { id: 'qris', code: 'QRIS', name: 'QRIS Instant (GoPay/OVO/BCA)', badge: 'QRIS', fee: 2800, note: 'Automated Midtrans Confirmation' },
+                { id: 'bca', code: 'BCA_VA', name: 'BCA Virtual Account', badge: 'BCA', fee: 4440, note: 'Automated Midtrans Verification' },
+                { id: 'mandiri', code: 'MANDIRI_VA', name: 'Mandiri Virtual Account', badge: 'MDR', fee: 4440, note: 'Automated Midtrans Verification' },
+                { id: 'bri', code: 'BRI_VA', name: 'BRI Virtual Account', badge: 'BRI', fee: 4440, note: 'Automated Midtrans Verification' },
+                { id: 'bni', code: 'BNI_VA', name: 'BNI Virtual Account', badge: 'BNI', fee: 4440, note: 'Automated Midtrans Verification' },
+                { id: 'cimb', code: 'CIMB_VA', name: 'CIMB Virtual Account', badge: 'CIMB', fee: 4440, note: 'Automated Midtrans Verification' },
+                { id: 'bsi', code: 'BSI_VA', name: 'BSI Virtual Account', badge: 'BSI', fee: 4440, note: 'Sharia Automated Midtrans' },
+                { id: 'cash', code: 'CASH', name: 'Cash on Arrival (Walk-in)', badge: 'CASH', fee: 0, note: 'Pay at Venue Frontdesk' },
             ],
             isSubmittingPayment: false,
             isCashNotice: false,
@@ -147,8 +147,8 @@
                 if (upper.includes('BNI')) return this.paymentMethods.find(m => m.code === 'BNI_VA') || { id: 'bni', code: 'BNI_VA', name: 'BNI Virtual Account', badge: 'BNI' };
                 if (upper.includes('CIMB')) return this.paymentMethods.find(m => m.code === 'CIMB_VA') || { id: 'cimb', code: 'CIMB_VA', name: 'CIMB Virtual Account', badge: 'CIMB' };
                 if (upper.includes('BSI')) return this.paymentMethods.find(m => m.code === 'BSI_VA') || { id: 'bsi', code: 'BSI_VA', name: 'BSI Virtual Account', badge: 'BSI' };
-                if (upper.includes('CASH') || upper.includes('TUNAI')) return this.paymentMethods.find(m => m.code === 'CASH') || { id: 'cash', code: 'CASH', name: 'Bayar Tunai di Kasir (Walk-in)', badge: 'CASH' };
-                if (upper.includes('QRIS') || upper.includes('GOPAY') || upper.includes('OVO')) return this.paymentMethods.find(m => m.code === 'QRIS') || { id: 'qris', code: 'QRIS', name: 'QRIS Instan (GoPay/OVO/BCA)', badge: 'QRIS' };
+                if (upper.includes('CASH') || upper.includes('TUNAI')) return this.paymentMethods.find(m => m.code === 'CASH') || { id: 'cash', code: 'CASH', name: 'Cash on Arrival (Walk-in)', badge: 'CASH' };
+                if (upper.includes('QRIS') || upper.includes('GOPAY') || upper.includes('OVO')) return this.paymentMethods.find(m => m.code === 'QRIS') || { id: 'qris', code: 'QRIS', name: 'QRIS Instant (GoPay/OVO/BCA)', badge: 'QRIS' };
 
                 return { id: 'custom', code: upper, name: rawCodeOrName, badge: 'PAY' };
             },
@@ -170,7 +170,7 @@
             async payNow() {
                 if (!this.currentTicket) return;
                 if (['EXPIRED', 'CANCELLED', 'REFUNDED'].includes(this.currentTicket.status)) {
-                    this.showNotice('Reservasi Tidak Aktif', 'Reservasi ini telah kedaluwarsa atau dibatalkan dan tidak dapat diproses lagi. Silakan lakukan booking ulang.', 'error', 'Tutup');
+                    this.showNotice('Reservation Inactive', 'This reservation has expired or has been cancelled and can no longer be processed. Please make a new booking.', 'error', 'Close');
                     return;
                 }
                 this.isSubmittingPayment = true;
@@ -199,11 +199,11 @@
                             this.openSnap(json.snap_token);
                         }
                     } else {
-                        this.showNotice('Gagal Memproses Pembayaran', json.message || 'Gagal memproses sesi pembayaran.', 'error', 'Tutup');
+                        this.showNotice('Payment Failed', json.message || 'Failed to process payment session.', 'error', 'Close');
                     }
                 } catch(e) {
                     console.error('Error retry payment:', e);
-                    this.showNotice('Kendala Jaringan', 'Terjadi kendala saat menghubungi gateway pembayaran.', 'error', 'Tutup');
+                    this.showNotice('Network Issue', 'Encountered a problem connecting to the payment gateway.', 'error', 'Close');
                 } finally {
                     this.isSubmittingPayment = false;
                 }
@@ -214,7 +214,7 @@
 
             openCancelModal() {
                 if (!this.canCancelBooking) {
-                    this.showNotice('Akses Ditolak', 'Anda tidak memiliki izin untuk membatalkan pesanan ini.', 'error', 'Tutup');
+                    this.showNotice('Access Denied', 'You do not have permission to cancel this booking.', 'error', 'Close');
                     return;
                 }
                 this.showCancelModal = true;
@@ -227,14 +227,13 @@
             async confirmCancelBooking() {
                 if (!this.currentTicket) return;
                 if (!this.canCancelBooking) {
-                    this.showNotice('Akses Ditolak', 'Anda tidak memiliki izin untuk membatalkan pesanan ini.', 'error', 'Tutup');
+                    this.showNotice('Access Denied', 'You do not have permission to cancel this booking.', 'error', 'Close');
                     this.showCancelModal = false;
                     return;
                 }
 
                 this.isCancellingBooking = true;
                 try {
-                    // Ambil seluruh booking ID dalam order jika sesi jam berturut-turut
                     const bookingIds = (this.ticket && this.ticket.order_bookings && this.ticket.order_bookings.length > 0)
                         ? this.ticket.order_bookings.map(b => b.id)
                         : [this.currentTicket.id];
@@ -263,12 +262,12 @@
 
                         window.location.href = '{{ route('customer.booking') }}';
                     } else {
-                        this.showNotice('Gagal Membatalkan', json.message || 'Gagal membatalkan pesanan.', 'error', 'Tutup');
+                        this.showNotice('Cancellation Failed', json.message || 'Failed to cancel booking.', 'error', 'Close');
                         this.isCancellingBooking = false;
                     }
                 } catch (e) {
                     console.error('Error cancel booking:', e);
-                    this.showNotice('Kesalahan Server', 'Terjadi kesalahan saat menghubungi server.', 'error', 'Tutup');
+                    this.showNotice('Server Error', 'An unexpected error occurred while communicating with the server.', 'error', 'Close');
                     this.isCancellingBooking = false;
                 }
             },
@@ -283,14 +282,14 @@
                             await this.loadTicket(this.currentTicket.id);
                         },
                         onError: (result) => {
-                            this.showNotice('Pembayaran Ditolak', 'Pembayaran gagal atau kedaluwarsa.', 'error', 'Tutup');
+                            this.showNotice('Payment Declined', 'Payment was declined or failed to process.', 'error', 'Close');
                         },
                         onClose: () => {
                             this.startAutoPolling(this.currentTicket.id);
                         }
                     });
                 } else {
-                    this.showNotice('Memuat Gateway', 'Komponen Snap Midtrans sedang dimuat. Silakan coba kembali sesaat lagi.', 'info', 'Tutup');
+                    this.showNotice('Loading Gateway', 'Midtrans payment gateway component is loading. Please try again shortly.', 'info', 'Close');
                 }
             },
 
@@ -310,7 +309,6 @@
                 await this.loadMyBookings();
                 this.isLoading = false;
 
-                // Handle tombol Back/Forward browser
                 window.addEventListener('popstate', async () => {
                     const params = new URLSearchParams(window.location.search);
                     const key = params.get('booking_id') || params.get('order_id') || params.get('booking_code') || params.get('id');
@@ -336,7 +334,6 @@
                         this.ticket = json.data;
                         this.currentTicket = json.data;
 
-                        // Sinkronkan selectedMethod jika booking/order sudah memiliki metode pembayaran riil
                         const rawMethod = this.ticket.payment_method_label 
                             || this.ticket.payment_method 
                             || (this.ticket.order && (this.ticket.order.payment_method_label || this.ticket.order.payment_method));
@@ -351,7 +348,6 @@
                             }
                         }
 
-                        // QA DEFENSE 2: Jika status masih PENDING / PENDING_PAYMENT, lakukan Auto-Polling
                         if (this.ticket.status === 'PENDING' || this.ticket.status === 'PENDING_PAYMENT') {
                             this.startAutoPolling(id);
                         }
@@ -360,7 +356,7 @@
                     }
                     return false;
                 } catch(e) {
-                    console.error('Gagal mengambil tiket:', e);
+                    console.error('Failed to load ticket:', e);
                     return false;
                 }
             },
@@ -374,7 +370,6 @@
                     this.isPolling = false;
                 }
 
-                // Update URL browser tanpa full reload
                 const newUrl = new URL(window.location.href);
                 newUrl.searchParams.set('booking_id', id);
                 newUrl.searchParams.delete('order_id');
@@ -401,7 +396,7 @@
                         await this.loadTicket(latest.id);
                     }
                 } catch(e) {
-                    console.error('Gagal mengambil booking terbaru:', e);
+                    console.error('Failed to load latest booking:', e);
                 }
             },
 
@@ -414,7 +409,6 @@
                         const currentOrderId = this.ticket?.order_id || this.ticket?.order?.id;
                         const currentOrderNumber = this.ticket?.order?.order_number;
 
-                        // Filter keluar tiket saat ini dan tiket lain yang berada dalam order yang sama
                         this.pastBookings = json.data.filter(b => {
                             if (!this.ticket) return true;
                             if (b.id === currentId) return false;
@@ -424,7 +418,7 @@
                         });
                     }
                 } catch(e) {
-                    console.error('Gagal mengambil riwayat booking:', e);
+                    console.error('Failed to load booking history:', e);
                 }
             },
 
@@ -440,9 +434,6 @@
                 return 1;
             },
 
-            /**
-             * QA DEFENSE 2: Auto-Polling anti race condition Webhook vs Redirect
-             */
             startAutoPolling(id) {
                 if (this.isPolling) return;
                 this.isPolling = true;
@@ -481,7 +472,7 @@
                 try {
                     const d = new Date(val);
                     if (!isNaN(d.getTime())) {
-                        const months = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
+                        const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
                         return `${String(d.getDate()).padStart(2, '0')} ${months[d.getMonth()]} ${d.getFullYear()}`;
                     }
                 } catch(e) {}
@@ -500,7 +491,7 @@
             },
 
             /**
-             * Download E-Tiket Sebagai Gambar PNG Lengkap dengan QR Code, Detail Reservasi & Ringkasan Biaya
+             * Download E-Ticket as PNG image
              */
             async downloadTicketPng() {
                 if (!this.currentTicket) return;
@@ -510,7 +501,7 @@
                     await this.generateAndSaveTicketPng();
                 } catch (err) {
                     console.error('Download PNG failed:', err);
-                    this.showNotice('Gagal Mengunduh', 'Gagal membuat gambar e-tiket: ' + (err.message || err), 'error', 'Tutup');
+                    this.showNotice('Download Failed', 'Failed to generate e-ticket image: ' + (err.message || err), 'error', 'Close');
                 } finally {
                     this.isDownloadingPng = false;
                 }
@@ -526,7 +517,6 @@
                 canvas.height = height;
                 const ctx = canvas.getContext('2d');
 
-                // Helper: Draw Rounded Rectangle
                 function drawRoundRect(x, y, w, h, radius, fill = true, stroke = false, fillColor = '#ffffff', strokeColor = '#DFC387', lineWidth = 1) {
                     ctx.save();
                     ctx.beginPath();
@@ -564,7 +554,7 @@
                 drawRoundRect(20, 20, width - 40, height - 40, 24, false, true, null, '#DFC387', 3);
                 drawRoundRect(28, 28, width - 56, height - 56, 18, false, true, null, '#EED9A8', 1);
 
-                // 2. Ticket Header Banner (Deep Emerald Green Gradient)
+                // 2. Ticket Header Banner
                 const headerH = 175;
                 ctx.save();
                 ctx.beginPath();
@@ -604,11 +594,11 @@
                 const duration = this.calculateDuration(this.currentTicket.start_time, this.currentTicket.end_time);
                 ctx.fillStyle = '#A7F3D0';
                 ctx.font = '14px sans-serif';
-                ctx.fillText(`${bookingDateStr} • ${bookingTimeStr} (${duration} Jam)`, 60, 145);
+                ctx.fillText(`${bookingDateStr} • ${bookingTimeStr} (${duration} ${duration > 1 ? 'Hours' : 'Hour'})`, 60, 145);
 
                 // Right-side Status Badge
                 const isPaid = (this.currentTicket.status === 'PAID' || this.currentTicket.status === 'CONFIRMED' || this.currentTicket.status === 'CHECKED_IN');
-                const statusText = isPaid ? (this.currentTicket.status === 'CHECKED_IN' ? 'CHECKED IN' : 'LUNAS (PAID)') : 'PENDING';
+                const statusText = isPaid ? (this.currentTicket.status === 'CHECKED_IN' ? 'CHECKED IN' : 'PAID') : 'PENDING';
                 const statusBg = isPaid ? '#10B981' : '#F59E0B';
                 const badgeW = 140;
                 drawRoundRect(width - 60 - badgeW, 62, badgeW, 30, 15, true, false, statusBg);
@@ -622,10 +612,10 @@
                 ctx.fillStyle = '#DFC387';
                 ctx.font = 'bold 13px monospace';
                 ctx.textAlign = 'right';
-                ctx.fillText('Kode: #' + bookingCode, width - 60, 125);
+                ctx.fillText('Code: #' + bookingCode, width - 60, 125);
                 ctx.textAlign = 'left';
 
-                // 3. Perforated Divider Bar with Notches
+                // 3. Perforated Divider Bar
                 const divY = 40 + headerH;
                 const barH = 42;
                 ctx.fillStyle = '#FAF4E6';
@@ -634,7 +624,6 @@
                 ctx.lineWidth = 1;
                 ctx.strokeRect(40, divY, width - 80, barH);
 
-                // Dashed line inside divider
                 ctx.save();
                 ctx.setLineDash([5, 5]);
                 ctx.strokeStyle = '#DFC387';
@@ -644,7 +633,7 @@
                 ctx.stroke();
                 ctx.restore();
 
-                // Side Notches (cutouts)
+                // Notches
                 ctx.fillStyle = '#FAF7F0';
                 ctx.beginPath();
                 ctx.arc(40, divY + (barH / 2), 16, 0, Math.PI * 2);
@@ -666,7 +655,7 @@
                 ctx.fillStyle = '#7A5818';
                 ctx.font = 'bold 11px sans-serif';
                 ctx.textAlign = 'center';
-                ctx.fillText(`STATUS: ${isPaid ? 'VALID ENTRY PASS' : 'MENUNGGU PEMBAYARAN'} • GATE: FRONTDESK`, width / 2, divY + 25);
+                ctx.fillText(`STATUS: ${isPaid ? 'VALID ENTRY PASS' : 'AWAITING PAYMENT'} • GATE: FRONTDESK`, width / 2, divY + 25);
                 ctx.textAlign = 'left';
 
                 // 4. QR Code Hero Section
@@ -680,7 +669,6 @@
                 const qrText = this.currentTicket.qr_code_hash || this.currentTicket.booking_code || this.currentTicket.id || 'CLUB61-PASS';
                 let qrLoaded = false;
 
-                // Attempt 1: QRCode library
                 if (window.QRCode) {
                     try {
                         const qrDiv = document.createElement('div');
@@ -704,7 +692,6 @@
                     } catch(e) {}
                 }
 
-                // Attempt 2: Image URL via API
                 if (!qrLoaded) {
                     try {
                         const img = new Image();
@@ -724,7 +711,6 @@
                     } catch(e) {}
                 }
 
-                // Fallback placeholder
                 if (!qrLoaded) {
                     drawRoundRect(qrBoxX + 30, qrSectionY + 30, 220, 220, 12, true, true, '#FAF8F2', '#DFC387', 1);
                     ctx.fillStyle = '#8C6418';
@@ -736,7 +722,6 @@
                     ctx.textAlign = 'left';
                 }
 
-                // Hash text under QR box
                 ctx.fillStyle = '#8C6418';
                 ctx.font = 'bold 14px monospace';
                 ctx.textAlign = 'center';
@@ -744,15 +729,15 @@
 
                 ctx.fillStyle = '#7A643E';
                 ctx.font = '12px sans-serif';
-                ctx.fillText('Tunjukkan QR Code ini kepada kasir frontdesk / turnstile gate saat check-in', width / 2, qrSectionY + qrBoxH + 48);
+                ctx.fillText('Present this QR Code to frontdesk staff / turnstile gate upon arrival', width / 2, qrSectionY + qrBoxH + 48);
                 ctx.textAlign = 'left';
 
-                // 5. DETAIL RESERVASI SECTION
+                // 5. Reservation Details Section
                 const detailY = 660;
                 drawRoundRect(45, detailY, 6, 20, 3, true, false, '#D4AF37');
                 ctx.fillStyle = '#1F170D';
                 ctx.font = 'bold 15px sans-serif';
-                ctx.fillText('DETAIL RESERVASI LAPANGAN', 58, detailY + 15);
+                ctx.fillText('MATCH RESERVATION DETAILS', 58, detailY + 15);
 
                 const detailBoxH = 175;
                 drawRoundRect(45, detailY + 28, width - 90, detailBoxH, 16, true, true, '#FFFFFF', '#DFC387', 1.5);
@@ -777,17 +762,17 @@
                 }
 
                 const custName = (this.customerName || 'Customer VIP');
-                drawRow(detailY + 60, 'Nama Pemegang Tiket', custName + ' (VIP Member)', true);
-                drawRow(detailY + 98, 'Waktu Booking', `${bookingTimeStr} (${duration} Jam)`, true);
-                drawRow(detailY + 136, 'Lokasi & Arena', `${courtName} • Indoor Central AC`, true);
-                drawRow(detailY + 174, 'Status Check-In', isPaid ? 'SIAP DIGUNAKAN (VALID)' : 'MENUNGGU PEMBAYARAN', true, isPaid);
+                drawRow(detailY + 60, 'Ticket Holder Name', custName + ' (VIP Member)', true);
+                drawRow(detailY + 98, 'Booking Schedule', `${bookingTimeStr} (${duration} ${duration > 1 ? 'Hours' : 'Hour'})`, true);
+                drawRow(detailY + 136, 'Court & Venue', `${courtName} • Indoor Central AC`, true);
+                drawRow(detailY + 174, 'Check-In Status', isPaid ? 'READY FOR ENTRY (VALID)' : 'AWAITING PAYMENT', true, isPaid);
 
-                // 6. RINGKASAN PEMBAYARAN & BIAYA SECTION
+                // 6. Payment & Fee Summary Section
                 const summaryY = 885;
                 drawRoundRect(45, summaryY, 6, 20, 3, true, false, '#D4AF37');
                 ctx.fillStyle = '#1F170D';
                 ctx.font = 'bold 15px sans-serif';
-                ctx.fillText('RINGKASAN PEMBAYARAN & BIAYA', 58, summaryY + 15);
+                ctx.fillText('PAYMENT & FEE SUMMARY', 58, summaryY + 15);
 
                 const sumBoxH = 245;
                 drawRoundRect(45, summaryY + 28, width - 90, sumBoxH, 16, true, true, '#FFFFFF', '#DFC387', 1.5);
@@ -795,8 +780,8 @@
                 const cFee = this.displayCourtFee;
                 const eFee = this.displayEquipmentFee;
                 const gTotal = this.displayGrandTotal;
-                // Resolusi nama metode pembayaran aktual dari tiket/order
-                let payMethod = 'QRIS Instan (GoPay/OVO/BCA)';
+
+                let payMethod = 'QRIS Instant (GoPay/OVO/BCA)';
                 if (this.currentTicket.payment_method_label) {
                     payMethod = this.currentTicket.payment_method_label;
                 } else if (this.currentTicket.payment_method) {
@@ -828,15 +813,15 @@
                     ctx.stroke();
                 }
 
-                drawSumRow(summaryY + 60, 'Sewa Lapangan Padel', 'Rp ' + this.formatNumber(cFee), false);
-                drawSumRow(summaryY + 98, 'Sewa Peralatan (Raket & Bola)', 'Rp ' + this.formatNumber(eFee), false);
-                drawSumRow(summaryY + 136, 'Metode Pembayaran', payMethod, true);
+                drawSumRow(summaryY + 60, 'Padel Court Rental', 'Rp ' + this.formatNumber(cFee), false);
+                drawSumRow(summaryY + 98, 'Equipment Rental (Rackets & Balls)', 'Rp ' + this.formatNumber(eFee), false);
+                drawSumRow(summaryY + 136, 'Payment Method', payMethod, true);
 
                 // Grand Total Highlight Banner
                 drawRoundRect(60, summaryY + 160, width - 120, 68, 12, true, true, '#FAF4E6', '#DFC387', 1.5);
                 ctx.fillStyle = '#1F170D';
                 ctx.font = 'bold 14px sans-serif';
-                ctx.fillText('TOTAL PEMBAYARAN', 80, summaryY + 200);
+                ctx.fillText('TOTAL AMOUNT', 80, summaryY + 200);
 
                 ctx.fillStyle = '#8C6418';
                 ctx.font = 'bold 22px monospace';
@@ -844,7 +829,7 @@
                 ctx.fillText('Rp ' + this.formatNumber(gTotal), width - 80, summaryY + 202);
                 ctx.textAlign = 'left';
 
-                // 7. FOOTER SECTION
+                // 7. Footer Section
                 const footerY = 1185;
                 ctx.strokeStyle = '#DFC387';
                 ctx.lineWidth = 1;
@@ -860,14 +845,14 @@
 
                 ctx.fillStyle = '#7A643E';
                 ctx.font = '11px sans-serif';
-                ctx.fillText('Simpan gambar e-tiket ini di galeri ponsel Anda sebagai bukti reservasi resmi.', width / 2, footerY + 50);
+                ctx.fillText('Save this digital e-ticket to your device as official proof of reservation.', width / 2, footerY + 50);
 
                 const now = new Date();
-                const months = ['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agu','Sep','Okt','Nov','Des'];
+                const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
                 const timeStampStr = `${now.getDate()} ${months[now.getMonth()]} ${now.getFullYear()} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')} WIB`;
                 ctx.fillStyle = '#A89060';
                 ctx.font = '10px monospace';
-                ctx.fillText(`Diunduh: ${timeStampStr} • Ref: #${bookingCode}`, width / 2, footerY + 70);
+                ctx.fillText(`Downloaded: ${timeStampStr} • Ref: #${bookingCode}`, width / 2, footerY + 70);
                 ctx.textAlign = 'left';
 
                 // 8. Download PNG
@@ -875,7 +860,7 @@
                     if (!blob) {
                         const dataUrl = canvas.toDataURL('image/png');
                         const link = document.createElement('a');
-                        link.download = `E-Tiket-Club61-${bookingCode}.png`;
+                        link.download = `E-Ticket-Club61-${bookingCode}.png`;
                         link.href = dataUrl;
                         document.body.appendChild(link);
                         link.click();
@@ -884,7 +869,7 @@
                     }
                     const url = URL.createObjectURL(blob);
                     const link = document.createElement('a');
-                    link.download = `E-Tiket-Club61-${bookingCode}.png`;
+                    link.download = `E-Ticket-Club61-${bookingCode}.png`;
                     link.href = url;
                     document.body.appendChild(link);
                     link.click();

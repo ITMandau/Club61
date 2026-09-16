@@ -254,9 +254,19 @@
                                             {{ $b->cancel_reason }}
                                         </div>
                                     @elseif($b->status === 'EXPIRED')
-                                        <div style="background: #FEF2F2; color: #991B1B; border: 1px solid #FECACA; border-radius: 6px; padding: 0.35rem 0.55rem; font-size: 0.71875rem; font-weight: 600; line-height: 1.35;">
-                                            Lewat Jadwal Main (No-Show)
-                                        </div>
+                                        @php
+                                            $isPaidNoShow = ($b->order && $b->order->payment_status === 'PAID') 
+                                                || ($b->order && $b->order->payments && $b->order->payments->where('status', 'SUCCESS')->isNotEmpty());
+                                        @endphp
+                                        @if($isPaidNoShow)
+                                            <div style="background: #FEF2F2; color: #991B1B; border: 1px solid #FECACA; border-radius: 6px; padding: 0.35rem 0.55rem; font-size: 0.71875rem; font-weight: 600; line-height: 1.35;">
+                                                Lewat Jadwal Main (No-Show / Lunas)
+                                            </div>
+                                        @else
+                                            <div style="background: #FFFBEB; color: #92400E; border: 1px solid #FDE68A; border-radius: 6px; padding: 0.35rem 0.55rem; font-size: 0.71875rem; font-weight: 600; line-height: 1.35;">
+                                                Kedaluwarsa Pembayaran (Belum Bayar > 15 Menit)
+                                            </div>
+                                        @endif
                                     @else
                                         <span style="color: #9CA3AF; font-size: 0.75rem; font-style: italic;">Tidak ada catatan</span>
                                     @endif

@@ -280,10 +280,31 @@ trait ManagesScheduleAndSlots
             $bookings = PadelBooking::whereIn('id', $bookingIds)
                 ->where('user_id', $user->id)
                 ->whereIn('status', ['LOCKED', 'PENDING_PAYMENT', 'PENDING'])
+                ->lockForUpdate()
                 ->get();
 
             $c = 0;
             foreach ($bookings as $booking) {
+                // Guard: Jika booking sudah berstatus PAID karena webhook concurrent, jangan batalkan
+                if ($booking->status === 'PAID') {
+                    continue;
+                }
+
+                if ($booking->order_id) {
+                    $order = \App\Models\Pos\Order::where('id', $booking->order_id)
+                        ->orWhere('order_number', $booking->order_id)
+                        ->lockForUpdate()
+                        ->first();
+                    if ($order && $order->payment_status === 'PAID') {
+                        // Order sudah dibayar lunas, jangan dibatalkan
+                        continue;
+                    }
+                    if ($order && $order->payment_status !== 'PAID') {
+                        $order->update(['payment_status' => 'CANCELLED']);
+                        $orderNumbersToCancel[] = $order->order_number;
+                    }
+                }
+
                 $currLock = $booking->start_time->copy();
                 $endLock = $booking->end_time->copy();
                 while ($currLock->lt($endLock)) {
@@ -297,14 +318,6 @@ trait ManagesScheduleAndSlots
 
                 $booking->update(['status' => 'CANCELLED']);
                 $c++;
-
-                if ($booking->order_id) {
-                    $order = \App\Models\Pos\Order::find($booking->order_id);
-                    if ($order && $order->payment_status !== 'PAID') {
-                        $order->update(['payment_status' => 'CANCELLED']);
-                        $orderNumbersToCancel[] = $order->order_number;
-                    }
-                }
             }
 
             return $c;

@@ -45,7 +45,7 @@ trait ManagesRescheduleAndCashier
 
         $activeBookings = PadelBooking::where('court_id', $court->id)
             ->where('booking_date', $dateStr)
-            ->whereIn('status', ['LOCKED', 'PAID', 'CHECKED_IN'])
+            ->whereIn('status', ['LOCKED', 'PENDING_PAYMENT', 'PENDING', 'PAID', 'CHECKED_IN'])
             ->where('id', '!=', $booking->id)
             ->get();
 
@@ -171,7 +171,7 @@ trait ManagesRescheduleAndCashier
             // Contiguous Check: Pastikan tidak ada tabrakan di jadwal baru
             $hasConflict = PadelBooking::where('court_id', $newCourt->id)
                 ->whereDate('booking_date', $dateStr)
-                ->whereIn('status', ['LOCKED', 'PAID', 'CHECKED_IN'])
+                ->whereIn('status', ['LOCKED', 'PENDING_PAYMENT', 'PENDING', 'PAID', 'CHECKED_IN'])
                 ->where('id', '!=', $booking->id)
                 ->where('start_time', '<', $newEndDt->format('Y-m-d H:i:s'))
                 ->where('end_time', '>', $newStartDt->format('Y-m-d H:i:s'))
@@ -355,74 +355,23 @@ trait ManagesRescheduleAndCashier
 
             $order = $this->ensureBookingOrder($booking);
 
-            // Ambil semua booking yang tergabung dalam order ini
-            $bookings = PadelBooking::where('order_id', $order->id)
-                ->orWhere('order_id', $order->order_number)
-                ->get();
-
-            if ($bookings->isEmpty()) {
-                $bookings = collect([$booking]);
-            }
-
-            // Update status seluruh booking menjadi PAID dan rilis QR turnstile
-            foreach ($bookings as $b) {
-                $newQrCodeHash = hash_hmac(
-                    'sha256',
-                    $b->booking_code . $b->user_id . $b->court_id . $b->start_time->toISOString(),
-                    config('app.key')
-                );
-
-                $b->update([
-                    'status' => 'PAID',
-                    'qr_code_hash' => $newQrCodeHash,
-                ]);
-            }
-
-            // Update Order
-            $order->update([
-                'payment_status' => 'PAID',
-            ]);
-
-            // Cek apakah ada pending payment sebelumnya untuk diupdate atau buat mutasi CASH baru
-            $pendingPayment = Payment::where('order_id', $order->id)
-                ->where('status', 'PENDING')
-                ->latest()
-                ->first();
-
             $gateway = in_array(strtoupper($paymentMethod), ['CASH', 'TUNAI']) ? 'CASH' : strtoupper($paymentMethod);
             $settleAmount = $amountReceived > 0 
                 ? $amountReceived 
-                : ($pendingPayment ? (float) $pendingPayment->amount : (float) ($order->grand_total ?: $booking->total_amount));
+                : (float) ($order->grand_total ?: $booking->total_amount);
 
-            if ($pendingPayment) {
-                $pendingPayment->update([
-                    'status' => 'SUCCESS',
-                    'payment_method' => $paymentMethod,
-                    'payment_gateway' => $gateway,
-                    'amount' => $settleAmount,
-                    'payload_log' => array_merge($pendingPayment->payload_log ?? [], [
-                        'settled_by' => $cashierUser->id,
-                        'settled_by_name' => $cashierUser->name,
-                        'settled_at' => now()->toIso8601String(),
-                        'channel' => 'FRONTDESK_CASHIER',
-                    ]),
-                ]);
-            } else {
-                Payment::create([
-                    'order_id' => $order->id,
-                    'transaction_id' => 'CASH-' . strtoupper(Str::random(12)),
-                    'payment_gateway' => $gateway,
-                    'payment_method' => $paymentMethod,
-                    'amount' => $settleAmount,
-                    'status' => 'SUCCESS',
-                    'payload_log' => [
-                        'settled_by' => $cashierUser->id,
-                        'settled_by_name' => $cashierUser->name,
-                        'settled_at' => now()->toIso8601String(),
-                        'channel' => 'FRONTDESK_CASHIER',
-                    ],
-                ]);
-            }
+            $orchestrator = app(\App\Services\Payment\PaymentOrchestratorService::class);
+            $orchestrator->markOrderAsPaid($order, [
+                'payment_gateway' => 'CASHIER_POS',
+                'payment_method' => $gateway,
+                'amount' => $settleAmount,
+                'payload_log' => [
+                    'settled_by' => $cashierUser->id,
+                    'settled_by_name' => $cashierUser->name,
+                    'settled_at' => now()->toIso8601String(),
+                    'channel' => 'FRONTDESK_CASHIER',
+                ],
+            ]);
 
             // Bersihkan cache kuncian dan counter tab
             Cache::forget('kelola_pemesanan_tab_counts');

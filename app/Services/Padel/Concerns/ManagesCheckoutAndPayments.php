@@ -10,6 +10,7 @@ use App\Models\Pos\Payment;
 use App\Models\User;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
 use Symfony\Component\HttpKernel\Exception\HttpException;
 
@@ -111,7 +112,7 @@ trait ManagesCheckoutAndPayments
 
             // Biaya Layanan Gateway
             $gatewayFee = match (strtoupper($paymentMethod)) {
-                'CASH' => 0,
+                'CASH', 'EDC_BCA', 'EDC_MANDIRI', 'QRIS_STATIS' => 0,
                 'QRIS' => 2800,
                 default => 4440,
             };
@@ -580,10 +581,224 @@ trait ManagesCheckoutAndPayments
             'BSI_VA' => 'BSI Virtual Account',
             'QRIS' => 'QRIS Instan (GoPay/OVO/BCA)',
             'CASH' => 'Tunai di Kasir (CASH)',
+            'EDC_BCA' => 'Debit/Kartu EDC BCA',
+            'EDC_MANDIRI' => 'Debit/Kartu EDC Mandiri',
+            'QRIS_STATIS' => 'QRIS Kasir Frontdesk',
             'CREDIT_CARD' => 'Kartu Kredit',
             'BANK_TRANSFER' => 'Transfer Bank (VA)',
             default => $method ?: 'QRIS Instan (GoPay/OVO/BCA)',
         };
+    }
+
+    /**
+     * Normalisasi nomor telepon ke format lokal Indonesia (08...).
+     */
+    public function normalizePhoneNumber(string $phone): string
+    {
+        $phone = preg_replace('/[^0-9+]/', '', trim($phone));
+        if (str_starts_with($phone, '+62')) {
+            $phone = '0' . substr($phone, 3);
+        } elseif (str_starts_with($phone, '62')) {
+            $phone = '0' . substr($phone, 2);
+        }
+
+        return $phone;
+    }
+
+    /**
+     * Cari pelanggan walk-in berdasarkan nomor telepon atau buat akun baru otomatis (Smart Deduplication).
+     */
+    public function findOrCreateWalkInCustomer(string $name, string $phone, ?string $email = null): User
+    {
+        $cleanPhone = $this->normalizePhoneNumber($phone);
+        $customer = User::where('phone', $cleanPhone)->first();
+
+        if ($customer) {
+            return $customer;
+        }
+
+        $ulid = strtolower((string) Str::ulid());
+        $fallbackEmail = ! empty($email) ? trim($email) : "walkin-{$ulid}@walkin.club61.internal";
+
+        if (User::where('email', $fallbackEmail)->exists()) {
+            $fallbackEmail = "walkin-{$ulid}@walkin.club61.internal";
+        }
+
+        return User::create([
+            'name' => trim($name),
+            'phone' => $cleanPhone,
+            'email' => $fallbackEmail,
+            'password' => Hash::make(Str::random(32)),
+            'role' => 'CUSTOMER',
+            'registration_source' => 'WALK_IN',
+            'is_active' => true,
+        ]);
+    }
+
+    /**
+     * Proses checkout dan pelunasan instan untuk reservasi walk-in kasir frontdesk.
+     * Menerapkan pemisahan 3 lapis data (registration_source, order_type, payment_gateway)
+     * dan direct POS settlement tanpa Snap Midtrans.
+     */
+    public function processWalkInCheckout(
+        User $customer,
+        array $slots,
+        string $bookingDate,
+        array $equipments,
+        string $paymentMethod,
+        User $cashier,
+        bool $autoCheckIn = false
+    ): array {
+        // 1. Hold batch slots untuk customer (melempar SlotConflictException jika tabrakan)
+        $holdResult = $this->holdBatchSlots($slots, $bookingDate, $customer);
+        $bookingIds = collect($holdResult['bookings'])->pluck('id')->toArray();
+
+        return DB::transaction(function () use ($customer, $bookingIds, $equipments, $paymentMethod, $cashier, $autoCheckIn) {
+            $bookings = PadelBooking::with('court')
+                ->whereIn('id', $bookingIds)
+                ->where('user_id', $customer->id)
+                ->where('status', 'LOCKED')
+                ->get();
+
+            if ($bookings->count() !== count($bookingIds)) {
+                throw new HttpException(422, 'Satu atau lebih slot booking tidak valid atau masa kuncian telah kedaluwarsa.');
+            }
+
+            $courtTotal = (float) $bookings->sum('court_fee');
+            $equipmentTotal = 0;
+            $equipmentItems = [];
+            $orderNumber = 'ORD-PAD-' . strtoupper(Str::random(10));
+
+            // Sewa Alat (Raket, Bola, Handuk) - Item Type: PADEL
+            if (! empty($equipments)) {
+                $primaryBooking = $bookings->first();
+
+                foreach ($equipments as $item) {
+                    $eq = CourtEquipment::find($item['equipment_id']);
+                    if (! $eq) {
+                        continue;
+                    }
+
+                    $qty = max(1, (int)$item['quantity']);
+                    $subtotal = (float) $eq->rental_price * $qty;
+                    $equipmentTotal += $subtotal;
+
+                    $equipmentItems[] = [
+                        'equipment_id' => $eq->id,
+                        'name' => $eq->name,
+                        'quantity' => $qty,
+                        'unit_price' => (float) $eq->rental_price,
+                        'subtotal' => (float) $subtotal,
+                    ];
+                }
+
+                if ($equipmentTotal > 0) {
+                    $primaryBooking->increment('equipment_fee', $equipmentTotal);
+                    $primaryBooking->increment('total_amount', $equipmentTotal);
+                }
+            }
+
+            $grandTotal = $courtTotal + $equipmentTotal;
+
+            // Buat Order resmi dengan order_type = 'WALK_IN' dan cashier_id terisi
+            $order = Order::create([
+                'order_number' => $orderNumber,
+                'user_id' => $customer->id,
+                'cashier_id' => $cashier->id,
+                'order_type' => 'WALK_IN',
+                'subtotal' => $grandTotal,
+                'discount_amount' => 0.00,
+                'voucher_code' => null,
+                'service_charge' => 0.00,
+                'grand_total' => $grandTotal,
+                'payment_status' => 'UNPAID',
+            ]);
+
+            // Catat data sewa peralatan
+            if (! empty($equipmentItems)) {
+                $primaryBooking = $bookings->first();
+                foreach ($equipmentItems as $eqItem) {
+                    PadelBookingEquipment::create([
+                        'order_id' => $order->id,
+                        'booking_id' => $primaryBooking->id,
+                        'equipment_id' => $eqItem['equipment_id'],
+                        'quantity' => $eqItem['quantity'],
+                        'unit_price' => $eqItem['unit_price'],
+                        'subtotal' => $eqItem['subtotal'],
+                    ]);
+                }
+            }
+
+            // Catat order_items (semua item_type = 'PADEL')
+            foreach ($bookings as $b) {
+                $order->items()->create([
+                    'item_type' => 'PADEL',
+                    'reference_id' => $b->id,
+                    'item_name' => 'Sewa ' . ($b->court ? $b->court->name : 'Court Padel'),
+                    'quantity' => 1,
+                    'unit_price' => $b->court_fee,
+                    'subtotal' => $b->court_fee,
+                ]);
+            }
+
+            foreach ($equipmentItems as $eqItem) {
+                $order->items()->create([
+                    'item_type' => 'PADEL',
+                    'reference_id' => $eqItem['equipment_id'],
+                    'item_name' => $eqItem['name'],
+                    'quantity' => $eqItem['quantity'],
+                    'unit_price' => $eqItem['unit_price'],
+                    'subtotal' => $eqItem['subtotal'],
+                ]);
+            }
+
+            // Kaitkan booking dengan Order dan update status ke PENDING_PAYMENT
+            foreach ($bookings as $b) {
+                $b->update([
+                    'order_id' => $order->id,
+                    'status' => 'PENDING_PAYMENT',
+                ]);
+            }
+
+            // Eksekusi pelunasan langsung via PaymentOrchestratorService
+            $orchestrator = app(\App\Services\Payment\PaymentOrchestratorService::class);
+            $orchestrator->markOrderAsPaid($order, [
+                'payment_gateway' => 'CASHIER_POS',
+                'transaction_id' => $orderNumber,
+                'payment_method' => strtoupper($paymentMethod),
+                'amount' => (float) $grandTotal,
+                'cashier_id' => $cashier->id,
+                'payload_log' => [
+                    'cashier_id' => $cashier->id,
+                    'cashier_name' => $cashier->name,
+                    'source' => 'WALK_IN_OFFLINE',
+                    'payment_method' => strtoupper($paymentMethod),
+                ],
+            ]);
+
+            // Opsi Auto Check-In Software
+            if ($autoCheckIn) {
+                PadelBooking::where('order_id', $order->id)->update([
+                    'status' => 'CHECKED_IN',
+                    'checked_in_at' => now(),
+                ]);
+            }
+
+            $updatedBookings = PadelBooking::with(['court', 'equipments.equipment'])
+                ->where('order_id', $order->id)
+                ->get();
+
+            return [
+                'success' => true,
+                'message' => 'Reservasi walk-in berhasil diproses dan lunas.',
+                'order' => $order->fresh(['items', 'payments']),
+                'bookings' => $updatedBookings,
+                'grand_total' => (float) $grandTotal,
+                'payment_method' => strtoupper($paymentMethod),
+                'customer' => $customer->fresh(),
+                'auto_checked_in' => $autoCheckIn,
+            ];
+        });
     }
 
     /**

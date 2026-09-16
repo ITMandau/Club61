@@ -18,11 +18,11 @@
                 <div class="hidden md:flex space-x-5 -my-px ms-6">
                     <a href="{{ route('dashboard') }}" 
                        class="inline-flex items-center px-1 pt-1 border-b-2 {{ request()->routeIs('dashboard') ? 'border-[#D4AF37] text-[#8C6418]' : 'border-transparent text-[#6B5738] hover:text-[#1F170D] hover:border-[#D4AF37]/50' }} text-xs font-bold uppercase tracking-wider transition-colors">
-                        Beranda
+                        Home
                     </a>
                     <a href="{{ route('customer.booking') }}" 
                        class="inline-flex items-center px-1 pt-1 border-b-2 {{ request()->routeIs('customer.booking') ? 'border-[#D4AF37] text-[#8C6418]' : 'border-transparent text-[#6B5738] hover:text-[#1F170D] hover:border-[#D4AF37]/50' }} text-xs font-bold uppercase tracking-wider transition-colors">
-                        Booking Court
+                        Book Court
                     </a>
                     <a href="{{ route('customer.my-club') }}" 
                        class="inline-flex items-center px-1 pt-1 border-b-2 {{ request()->routeIs('customer.my-club') ? 'border-[#D4AF37] text-[#8C6418]' : 'border-transparent text-[#6B5738] hover:text-[#1F170D] hover:border-[#D4AF37]/50' }} text-xs font-bold uppercase tracking-wider transition-colors">
@@ -43,7 +43,7 @@
                     <button type="button" 
                             @click="toggleNotif()"
                             class="p-2 rounded-xl text-[#7A5818] hover:text-[#1F170D] hover:bg-[#FAF2DE] relative transition-colors focus:outline-none cursor-pointer"
-                            title="Notifikasi & Aktivitas">
+                            title="Notifications & Activity">
                         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
                         </svg>
@@ -68,13 +68,13 @@
                         <!-- Panel Header -->
                         <div class="flex items-center justify-between border-b border-[#DFC387]/50 pb-2.5 px-1">
                             <div>
-                                <h4 class="font-serif font-black text-sm text-[#1F170D]">Notifikasi &amp; Aktivitas</h4>
+                                <h4 class="font-serif font-black text-sm text-[#1F170D]">Notifications &amp; Activity</h4>
                                 <span class="text-[10px] text-[#8C6418] font-bold uppercase tracking-wider">Club 61 Concierge</span>
                             </div>
                             <button type="button" 
                                     @click="markAllRead()"
                                     class="text-[10px] font-bold text-[#8C6418] hover:text-[#1F170D] hover:underline px-2 py-1 rounded-lg hover:bg-[#FAF2DE] transition-colors cursor-pointer">
-                                Tandai Dibaca
+                                Mark as Read
                             </button>
                         </div>
 
@@ -93,15 +93,15 @@
                                         </div>
                                         <div class="flex-1 min-w-0">
                                             <div class="flex items-center justify-between">
-                                                <span class="text-xs font-black text-emerald-900">Jadwal Main Terkonfirmasi</span>
+                                                <span class="text-xs font-black text-emerald-900">Confirmed Match Schedule</span>
                                                 <span class="text-[9px] font-mono font-bold text-emerald-700 bg-emerald-200/70 px-1.5 py-0.5 rounded">Confirmed</span>
                                             </div>
                                             <p class="text-[11px] text-emerald-800 mt-1 leading-snug">
-                                                <span class="font-bold" x-text="activeBooking.court_name || 'Lapangan Padel'"></span>
-                                                &bull; <span x-text="activeBooking.booking_date"></span>
+                                                <span class="font-bold" x-text="activeBooking.court_name || 'Padel Court'"></span>
+                                                &bull; <span x-text="formatDate(activeBooking.booking_date)"></span>
                                                 (<span x-text="formatTime(activeBooking.start_time)"></span> WIB)
                                             </p>
-                                            <span class="text-[10px] font-bold text-emerald-700 underline mt-1 inline-block">Buka E-Ticket &amp; QR Code &rarr;</span>
+                                            <span class="text-[10px] font-bold text-emerald-700 underline mt-1 inline-block">View E-Ticket &amp; QR Code &rarr;</span>
                                         </div>
                                     </div>
                                 </a>
@@ -119,13 +119,13 @@
                                         </div>
                                         <div class="flex-1 min-w-0">
                                             <div class="flex items-center justify-between">
-                                                <span class="text-xs font-black text-[#5C410F]">Slot Lapangan Terkunci</span>
-                                                <span class="text-[9px] font-bold text-amber-800 bg-amber-200/80 px-1.5 py-0.5 rounded animate-pulse">Hold 10 Mnt</span>
+                                                <span class="text-xs font-black text-[#5C410F]">Reserved Court Slots</span>
+                                                <span class="text-[9px] font-bold text-amber-800 bg-amber-200/80 px-1.5 py-0.5 rounded animate-pulse">Hold 10 Mins</span>
                                             </div>
                                             <p class="text-[11px] text-[#7A643E] mt-1 leading-snug">
-                                                Tersedia <strong class="text-[#3B2B11]" x-text="cartCount"></strong> slot di keranjang booking Anda. Selesaikan pemesanan sebelum batas waktu habis!
+                                                You have <strong class="text-[#3B2B11]" x-text="cartCount"></strong> slot(s) reserved in your cart. Complete checkout before reservation expires!
                                             </p>
-                                            <span class="text-[10px] font-bold text-[#8C6418] underline mt-1 inline-block">Buka Keranjang Booking &rarr;</span>
+                                            <span class="text-[10px] font-bold text-[#8C6418] underline mt-1 inline-block">View Booking Cart &rarr;</span>
                                         </div>
                                     </div>
                                 </a>
@@ -139,11 +139,11 @@
                                     </div>
                                     <div class="flex-1 min-w-0">
                                         <div class="flex items-center justify-between">
-                                            <span class="text-xs font-black text-[#1F170D]">Selamat Datang di Club 61</span>
-                                            <span class="text-[9px] text-[#8C7A58]">Gedung Indosat</span>
+                                            <span class="text-xs font-black text-[#1F170D]">Welcome to Club 61</span>
+                                            <span class="text-[9px] text-[#8C7A58]">Indosat Building</span>
                                         </div>
                                         <p class="text-[11px] text-[#7A643E] mt-1 leading-snug">
-                                            Nikmati 4 lapangan panoramic standar WPT di Gedung Indosat Medan, lengkap dengan cafe &amp; lounge eksklusif.
+                                            Experience 3 panoramic WPT-standard courts at Indosat Building Medan, complete with an exclusive lounge &amp; cafe.
                                         </p>
                                     </div>
                                 </div>
@@ -163,7 +163,7 @@
                                             <span class="text-[9px] font-mono text-emerald-700 font-bold bg-emerald-100 px-1 py-0.5 rounded">VIP Plat</span>
                                         </div>
                                         <p class="text-[11px] text-[#7A643E] mt-1 leading-snug">
-                                            Fasilitas sauna kayu cedar &amp; ice bath 4&deg;C siap dinikmati gratis bagi member Platinum usai bertanding.
+                                            Finnish cedarwood sauna &amp; 4&deg;C ice bath facilities available complimentarily for Platinum members post-match.
                                         </p>
                                     </div>
                                 </div>
@@ -173,13 +173,13 @@
 
                         <!-- Panel Footer -->
                         <div class="pt-2.5 border-t border-[#DFC387]/50 text-center">
-                            <a href="https://wa.me/6281261617233?text=Halo%20Club%2061%20Padel,%20saya%20butuh%20bantuan%20booking" 
+                            <a href="https://wa.me/6281261617233?text=Hello%20Club%2061%20Padel,%20I%20need%20assistance" 
                                target="_blank" 
                                class="inline-flex items-center justify-center gap-1.5 text-[11px] font-bold text-[#8C6418] hover:text-[#1F170D] transition-colors">
                                 <svg class="w-3.5 h-3.5 text-emerald-600" fill="currentColor" viewBox="0 0 24 24">
                                     <path d="M12.031 6.172c-3.181 0-5.767 2.586-5.768 5.766-.001 1.298.38 2.27 1.019 3.287l-.711 2.598 2.669-.699c.969.54 1.771.82 2.791.82 3.181 0 5.767-2.587 5.767-5.766.001-3.181-2.585-5.766-5.767-5.766zm9.969 5.766c0 5.514-4.486 10-10 10-1.823 0-3.528-.49-4.996-1.344l-5.004 1.309 1.334-4.877c-.958-1.517-1.503-3.308-1.503-5.088 0-5.514 4.486-10 10-10s10 4.486 10 10z"/>
                                 </svg>
-                                <span>Hubungi WhatsApp Concierge</span>
+                                <span>Contact WhatsApp Concierge</span>
                             </a>
                         </div>
 
@@ -189,7 +189,7 @@
                 <!-- Cart Button with Dynamic Counter Badge (Screen 2 & 3) -->
                 <a href="{{ route('customer.cart') }}" 
                    class="p-2 rounded-xl text-[#7A5818] hover:text-[#1F170D] hover:bg-[#FAF2DE] relative transition-colors"
-                   title="Keranjang Booking">
+                   title="Booking Cart">
                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
                     </svg>
@@ -225,7 +225,7 @@
                         @csrf
                         <button type="submit" 
                                 class="p-2 rounded-xl bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-600 text-xs font-bold transition-all flex items-center gap-1 cursor-pointer shadow-sm" 
-                                title="Keluar">
+                                title="Log Out">
                             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
                             </svg>
@@ -317,6 +317,18 @@
                     }
                 } catch(e) {}
                 return (isoString.substring(11, 16) || isoString);
+            },
+
+            formatDate(val) {
+                if (!val) return '-';
+                try {
+                    const d = new Date(val);
+                    if (!isNaN(d.getTime())) {
+                        const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+                        return `${String(d.getDate()).padStart(2, '0')} ${months[d.getMonth()]} ${d.getFullYear()}`;
+                    }
+                } catch(e) {}
+                return String(val).substring(0, 10);
             }
         };
     }

@@ -18,7 +18,7 @@ class MasterData extends Page
 
     protected static ?string $title = 'Master Data & Tarif';
 
-    protected static ?int $navigationSort = 10;
+    protected static ?int $navigationSort = 11;
 
     protected string $view = 'filament.pages.master-data';
 }

@@ -22,7 +22,9 @@ class Club61PermissionMatrix
                         'label' => 'Booking System (Kalender & Slot)',
                         'actions' => [
                             'View:BookingSystem' => 'Akses Halaman Kalender & Slot',
+                            'View:BookOfflineCourt' => 'Akses Halaman Walk-In Booking',
                             'manage_court_slots' => 'Kelola Jadwal & Ketersediaan Slot',
+                            'process_walkin_booking' => 'Proses Pemesanan & Pembayaran Walk-In',
                         ],
                     ],
                     'padel_bookings' => [

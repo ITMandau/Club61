@@ -18,7 +18,7 @@ class KelolaKaryawan extends Page
 
     protected static ?string $title = 'Kelola Karyawan & Staff';
 
-    protected static ?int $navigationSort = 6;
+    protected static ?int $navigationSort = 7;
 
     protected string $view = 'filament.pages.kelola-karyawan';
 }

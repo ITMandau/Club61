@@ -441,7 +441,7 @@ CHECK (used_count <= quota);
 | `order_number` | `VARCHAR(35)` (UNIQUE) | Misal: `ORD-20260902-0089` |
 | `user_id` | `UUID` (FK -> users.id) NULL | User pemesan (NULL jika tamu kasir tanpa login) |
 | `cashier_id` | `UUID` (FK -> users.id) NULL | Kasir yang menangani (jika via POS kasir) |
-| `order_type` | `VARCHAR(20)` | `DINE_IN`, `TAKE_AWAY`, `DELIVERY`, `ONLINE_BOOKING`, `RETAIL` |
+| `order_type` | `VARCHAR(20)` | `DINE_IN`, `TAKE_AWAY`, `DELIVERY`, `ONLINE_BOOKING`, `RETAIL`, `WALK_IN` (Modul 11: reservasi lapangan via kasir frontdesk) |
 | `table_number` | `VARCHAR(20)` NULL | Nomor meja (jika order cafe) |
 | `delivery_address`| `TEXT` NULL | Alamat tujuan (jika delivery) |
 | `delivery_fee` | `DECIMAL(12,2)` | Ongkos kirim delivery (Default `0.00`) |
