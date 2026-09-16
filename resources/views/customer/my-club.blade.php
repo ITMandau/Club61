@@ -5,7 +5,7 @@
             <!-- Top Header & Navigation -->
             <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white/95 backdrop-blur-xl p-5 rounded-3xl border border-[#DFC387] shadow-sm">
                 <div class="flex items-center gap-3.5">
-                    <a href="{{ route('dashboard') }}" class="p-2.5 rounded-2xl bg-[#FAF2DE] hover:bg-[#F3DFAD] border border-[#DFC387] text-[#7A5818] transition-colors" title="Kembali ke Beranda">
+                    <a href="{{ route('dashboard') }}" class="p-2.5 rounded-2xl bg-[#FAF2DE] hover:bg-[#F3DFAD] border border-[#DFC387] text-[#7A5818] transition-colors" title="Back to Home">
                         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M15 19l-7-7 7-7" />
                         </svg>
@@ -15,7 +15,7 @@
                             <h1 class="font-serif font-black text-xl sm:text-2xl text-[#1F170D]">My Club &bull; CLUB 61 Padel Court</h1>
                             <span class="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase bg-[#FAF2DE] text-[#7A5818] border border-[#DFC387]">Medan Venue</span>
                         </div>
-                        <p class="text-xs text-[#7A643E] mt-0.5">Informasi fasilitas eksklusif, jam operasional venue, dan privilese keanggotaan</p>
+                        <p class="text-xs text-[#7A643E] mt-0.5">Exclusive club facilities, operational hours, and membership privileges</p>
                     </div>
                 </div>
 
@@ -25,7 +25,7 @@
                     </span>
                     <a href="{{ route('customer.booking') }}" 
                        class="px-5 py-2.5 rounded-2xl bg-gradient-to-b from-[#F5DE9B] to-[#D4AF37] text-[#1E160A] text-xs font-black uppercase tracking-wider shadow-md hover:brightness-105 active:scale-95 transition-all">
-                        + Booking Court
+                        + Book Court
                     </a>
                 </div>
             </div>
@@ -39,23 +39,23 @@
 
                 <div class="relative z-10 max-w-2xl">
                     <div class="inline-flex items-center gap-1.5 px-3.5 py-1 rounded-full text-[10px] font-extrabold uppercase tracking-widest bg-[#DFC387]/20 text-[#F5E6BE] border border-[#DFC387]/40 mb-3 backdrop-blur-md shadow-sm">
-                        <span>Club Profile &bull; Gedung Indosat, Medan, Sumatera Utara</span>
+                        <span>Club Profile &bull; Indosat Building, Medan, North Sumatra</span>
                     </div>
                     <h2 class="font-serif text-2xl sm:text-4xl font-extrabold tracking-tight text-[#FAF5E6] leading-tight">
                         Club 61 Padel Court Medan
                     </h2>
                     <p class="text-xs sm:text-sm text-emerald-100/80 mt-3 font-medium leading-relaxed">
-                        Venue olahraga padel modern di Medan dengan 4 lapangan panoramic indoor ber-AC standar World Padel Tour, sauna kayu cedar, cold plunge 4°C, dan specialty cafe lounge.
+                        Medan's premier padel sporting venue featuring 3 tournament-standard panoramic courts (2 indoor AC, 1 outdoor), cedarwood Finnish sauna, 4°C cold plunge, and specialty cafe lounge.
                     </p>
 
                     <div class="mt-6 flex flex-wrap items-center gap-3">
                         <div class="inline-flex items-center gap-2 px-4 py-2 rounded-2xl bg-white/10 border border-white/20 text-xs font-bold text-white backdrop-blur-md">
                             <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-                            Venue Terbuka Hari Ini: 06:00 - 23:00 WIB
+                            Venue Open Daily: 06:00 - 23:00 WIB
                         </div>
                         <a href="https://wa.me/6281261617233" target="_blank" 
                            class="inline-flex items-center gap-2 px-4 py-2 rounded-2xl bg-[#DFC387]/20 hover:bg-[#DFC387]/30 border border-[#DFC387]/50 text-xs font-bold text-[#F5E6BE] backdrop-blur-md transition-colors">
-                            <span>Hubungi Concierge via WhatsApp</span>
+                            <span>Contact Concierge via WhatsApp</span>
                         </a>
                     </div>
                 </div>
@@ -70,8 +70,8 @@
                         </svg>
                     </div>
                     <div>
-                        <div class="text-[10px] uppercase font-extrabold tracking-wider text-[#7A5818]">Jam Operasional</div>
-                        <div class="font-serif font-black text-base text-[#1F170D] mt-0.5">Senin &ndash; Minggu (Setiap Hari)</div>
+                        <div class="text-[10px] uppercase font-extrabold tracking-wider text-[#7A5818]">Operating Hours</div>
+                        <div class="font-serif font-black text-base text-[#1F170D] mt-0.5">Monday &ndash; Sunday (Daily)</div>
                         <div class="text-xs text-[#8C7A58] mt-1 font-mono font-bold">06:00 &ndash; 23:00 WIB</div>
                     </div>
                 </div>
@@ -84,9 +84,9 @@
                         </svg>
                     </div>
                     <div>
-                        <div class="text-[10px] uppercase font-extrabold tracking-wider text-[#7A5818]">Lokasi Strategis</div>
+                        <div class="text-[10px] uppercase font-extrabold tracking-wider text-[#7A5818]">Prime Location</div>
                         <div class="font-serif font-black text-base text-[#1F170D] mt-0.5">Club 61 Padel Court Medan</div>
-                        <div class="text-xs text-[#8C7A58] mt-1">Gedung Indosat, Jl. Perintis Kemerdekaan No. 39, Medan, Sumatera Utara</div>
+                        <div class="text-xs text-[#8C7A58] mt-1">Indosat Building, Jl. Perintis Kemerdekaan No. 39, Medan, North Sumatra</div>
                     </div>
                 </div>
 
@@ -98,8 +98,8 @@
                     </div>
                     <div>
                         <div class="text-[10px] uppercase font-extrabold tracking-wider text-[#7A5818]">Concierge &amp; Valet</div>
-                        <div class="font-serif font-black text-base text-[#1F170D] mt-0.5">Layanan Dedicated Member</div>
-                        <div class="text-xs text-[#8C7A58] mt-1 font-mono">0812-6161-PADEL &bull; Free Valet VIP</div>
+                        <div class="font-serif font-black text-base text-[#1F170D] mt-0.5">Dedicated Member Services</div>
+                        <div class="text-xs text-[#8C7A58] mt-1 font-mono">0812-6161-PADEL &bull; Free VIP Valet</div>
                     </div>
                 </div>
             </div>
@@ -108,34 +108,34 @@
             <div class="space-y-4">
                 <div class="flex items-center justify-between px-1">
                     <div>
-                        <h3 class="font-serif font-extrabold text-lg text-[#1F170D]">Fasilitas Eksklusif Member</h3>
-                        <p class="text-xs text-[#7A643E]">Standar kejuaraan internasional yang dirancang untuk kenyamanan atletik tingkat tinggi</p>
+                        <h3 class="font-serif font-extrabold text-lg text-[#1F170D]">Exclusive Member Facilities</h3>
+                        <p class="text-xs text-[#7A643E]">International championship standards tailored for peak athletic performance and recovery</p>
                     </div>
-                    <span class="text-xs font-bold text-[#8C6418]">6 Fasilitas Terintegrasi</span>
+                    <span class="text-xs font-bold text-[#8C6418]">6 Integrated Facilities</span>
                 </div>
 
                 <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
                     
-                    <!-- Facility 1 -->
+                    <!-- Facility 1: Courts -->
                     <div class="p-6 rounded-3xl bg-white/95 backdrop-blur-xl border border-[#DFC387] shadow-sm flex flex-col justify-between hover:border-[#D4AF37] hover:shadow-[0_10px_25px_rgba(212,175,55,0.2)] transition-all group">
                         <div class="flex items-start gap-4">
                             <div class="w-12 h-12 rounded-2xl bg-[#FAF2DE] border border-[#DFC387] flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform">
                                 <span class="text-[10px] font-black tracking-widest text-[#8C6418] uppercase">COURT</span>
                             </div>
                             <div>
-                                <h4 class="font-serif font-black text-sm text-[#1F170D]">4 Panoramic Padel Courts</h4>
+                                <h4 class="font-serif font-black text-sm text-[#1F170D]">3 Panoramic Padel Courts</h4>
                                 <p class="text-xs text-[#7A643E] mt-1.5 leading-relaxed">
-                                    Kaca tempered 12mm tanpa pilar tengah, rumput Mondo Supercourt XN, pencahayaan LED 1000 lux anti-silau, dan indoor ber-AC.
+                                    12mm tempered glass without center pillars, Mondo Supercourt XN turf, anti-glare 1000 lux LED illumination, and climate-controlled central AC.
                                 </p>
                             </div>
                         </div>
                         <div class="mt-4 pt-3 border-t border-[#DFC387]/40 flex items-center justify-between text-[11px] font-bold text-[#7A5818]">
-                            <span>Standar FIP / WPT</span>
-                            <span class="text-emerald-700">Tersedia Harian</span>
+                            <span>FIP / WPT Standard</span>
+                            <span class="text-emerald-700">Available Daily</span>
                         </div>
                     </div>
 
-                    <!-- Facility 2 -->
+                    <!-- Facility 2: Sauna & Cold Plunge -->
                     <div class="p-6 rounded-3xl bg-white/95 backdrop-blur-xl border border-[#DFC387] shadow-sm flex flex-col justify-between hover:border-[#D4AF37] hover:shadow-[0_10px_25px_rgba(212,175,55,0.2)] transition-all group">
                         <div class="flex items-start gap-4">
                             <div class="w-12 h-12 rounded-2xl bg-[#FAF2DE] border border-[#DFC387] flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform">
@@ -144,17 +144,17 @@
                             <div>
                                 <h4 class="font-serif font-black text-sm text-[#1F170D]">Cold Plunge 4°C &amp; Sauna</h4>
                                 <p class="text-xs text-[#7A643E] mt-1.5 leading-relaxed">
-                                    Kolam es recovery dengan sirkulasi ozon berkecepatan tinggi bersuhu 4°C dan sauna kayu cedar merah Finlandia untuk regenerasi otot pasca tanding.
+                                    High-speed ozone-circulated 4°C ice bath and Finnish red cedarwood sauna for optimal post-match muscle recovery.
                                 </p>
                             </div>
                         </div>
                         <div class="mt-4 pt-3 border-t border-[#DFC387]/40 flex items-center justify-between text-[11px] font-bold text-[#7A5818]">
-                            <span>Regenerasi Otot</span>
-                            <span class="text-emerald-700">Gratis VIP Platinum</span>
+                            <span>Muscle Recovery</span>
+                            <span class="text-emerald-700">Free for VIP Platinum</span>
                         </div>
                     </div>
 
-                    <!-- Facility 3 -->
+                    <!-- Facility 3: Cafe & Lounge -->
                     <div class="p-6 rounded-3xl bg-white/95 backdrop-blur-xl border border-[#DFC387] shadow-sm flex flex-col justify-between hover:border-[#D4AF37] hover:shadow-[0_10px_25px_rgba(212,175,55,0.2)] transition-all group">
                         <div class="flex items-start gap-4">
                             <div class="w-12 h-12 rounded-2xl bg-[#FAF2DE] border border-[#DFC387] flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform">
@@ -163,17 +163,17 @@
                             <div>
                                 <h4 class="font-serif font-black text-sm text-[#1F170D]">Club 61 Cafe &amp; Lounge</h4>
                                 <p class="text-xs text-[#7A643E] mt-1.5 leading-relaxed">
-                                    Artisan protein smoothie bar, specialty single-origin espresso, menu brunch sehat, serta panoramic viewing deck menghadap ke court arena.
+                                    Artisan protein smoothie bar, specialty single-origin espresso, wholesome brunch menu, and panoramic court-viewing deck.
                                 </p>
                             </div>
                         </div>
                         <div class="mt-4 pt-3 border-t border-[#DFC387]/40 flex items-center justify-between text-[11px] font-bold text-[#7A5818]">
                             <span>F&amp;B &bull; Social Lounge</span>
-                            <span class="text-emerald-700">Buka 07:00 - 22:30</span>
+                            <span class="text-emerald-700">Open 07:00 - 22:30</span>
                         </div>
                     </div>
 
-                    <!-- Facility 4 -->
+                    <!-- Facility 4: Locker & Shower -->
                     <div class="p-6 rounded-3xl bg-white/95 backdrop-blur-xl border border-[#DFC387] shadow-sm flex flex-col justify-between hover:border-[#D4AF37] hover:shadow-[0_10px_25px_rgba(212,175,55,0.2)] transition-all group">
                         <div class="flex items-start gap-4">
                             <div class="w-12 h-12 rounded-2xl bg-[#FAF2DE] border border-[#DFC387] flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform">
@@ -182,7 +182,7 @@
                             <div>
                                 <h4 class="font-serif font-black text-sm text-[#1F170D]">Smart Locker &amp; Rain Shower</h4>
                                 <p class="text-xs text-[#7A643E] mt-1.5 leading-relaxed">
-                                    Locker digital berteknologi RFID dengan charging port, kamar bilas mewah dengan rain shower bertekanan tinggi, hair dryer Dyson, dan amenities Le Labo.
+                                    RFID digital lockers with device charging ports, high-pressure rain showers, Dyson hair dryers, and Le Labo bath amenities.
                                 </p>
                             </div>
                         </div>
@@ -192,7 +192,7 @@
                         </div>
                     </div>
 
-                    <!-- Facility 5 -->
+                    <!-- Facility 5: Pro Shop -->
                     <div class="p-6 rounded-3xl bg-white/95 backdrop-blur-xl border border-[#DFC387] shadow-sm flex flex-col justify-between hover:border-[#D4AF37] hover:shadow-[0_10px_25px_rgba(212,175,55,0.2)] transition-all group">
                         <div class="flex items-start gap-4">
                             <div class="w-12 h-12 rounded-2xl bg-[#FAF2DE] border border-[#DFC387] flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform">
@@ -201,7 +201,7 @@
                             <div>
                                 <h4 class="font-serif font-black text-sm text-[#1F170D]">Pro Shop &amp; Custom Gear</h4>
                                 <p class="text-xs text-[#7A643E] mt-1.5 leading-relaxed">
-                                    Penyediaan raket padel edisi terbatas (Babolat, Bullpadel, Nox), demo raket uji coba gratis, serta apparel dan grip original berstandar pro tour.
+                                    Curated selection of limited-edition padel rackets (Babolat, Bullpadel, Nox), complimentary racket demo testing, and official pro tour apparel.
                                 </p>
                             </div>
                         </div>
@@ -211,7 +211,7 @@
                         </div>
                     </div>
 
-                    <!-- Facility 6 -->
+                    <!-- Facility 6: Valet & EV -->
                     <div class="p-6 rounded-3xl bg-white/95 backdrop-blur-xl border border-[#DFC387] shadow-sm flex flex-col justify-between hover:border-[#D4AF37] hover:shadow-[0_10px_25px_rgba(212,175,55,0.2)] transition-all group">
                         <div class="flex items-start gap-4">
                             <div class="w-12 h-12 rounded-2xl bg-[#FAF2DE] border border-[#DFC387] flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform">
@@ -220,13 +220,13 @@
                             <div>
                                 <h4 class="font-serif font-black text-sm text-[#1F170D]">Dedicated Valet &amp; EV Charger</h4>
                                 <p class="text-xs text-[#7A643E] mt-1.5 leading-relaxed">
-                                    Area parkir privat khusus member dengan layanan valet gratis tanpa antri, dilengkapi fast charging station untuk mobil listrik.
+                                    Private member parking area with complimentary zero-wait valet service and ultra-fast charging stations for electric vehicles.
                                 </p>
                             </div>
                         </div>
                         <div class="mt-4 pt-3 border-t border-[#DFC387]/40 flex items-center justify-between text-[11px] font-bold text-[#7A5818]">
                             <span>Valet Service</span>
-                            <span class="text-emerald-700">Gratis untuk Member</span>
+                            <span class="text-emerald-700">Free for Members</span>
                         </div>
                     </div>
 
@@ -245,8 +245,8 @@
                             </svg>
                         </div>
                         <div>
-                            <h3 class="font-serif font-black text-base text-[#1F170D]">Etiket &amp; Peraturan Club</h3>
-                            <p class="text-[11px] text-[#7A643E]">Demi menjaga standar kenyamanan bersama antar seluruh member</p>
+                            <h3 class="font-serif font-black text-base text-[#1F170D]">Club Etiquette &amp; Rules</h3>
+                            <p class="text-[11px] text-[#7A643E]">Maintaining an exceptional standard of comfort for all members</p>
                         </div>
                     </div>
 
@@ -254,24 +254,24 @@
                         <div class="flex items-start gap-3 p-3 rounded-2xl bg-[#FAF8F2] border border-[#DFC387]/60">
                             <span class="font-black text-[#8C6418] shrink-0">01.</span>
                             <div>
-                                <strong class="text-[#1F170D]">Alas Kaki Khusus Padel:</strong>
-                                <span class="text-[#7A643E] block mt-0.5">Pemain diwajibkan mengenakan sepatu olahraga khusus court / padel dengan sol non-marking untuk menjaga kelestarian rumput karpet.</span>
+                                <strong class="text-[#1F170D]">Dedicated Padel Footwear:</strong>
+                                <span class="text-[#7A643E] block mt-0.5">Players are required to wear dedicated court/padel footwear with non-marking outsoles to protect turf integrity.</span>
                             </div>
                         </div>
 
                         <div class="flex items-start gap-3 p-3 rounded-2xl bg-[#FAF8F2] border border-[#DFC387]/60">
                             <span class="font-black text-[#8C6418] shrink-0">02.</span>
                             <div>
-                                <strong class="text-[#1F170D]">Check-In Turnstile Tepat Waktu:</strong>
-                                <span class="text-[#7A643E] block mt-0.5">Tunjukkan QR Code E-Tiket Anda pada turnstile gate minimal 10 menit sebelum jam sesi dimulai untuk validasi otomatis.</span>
+                                <strong class="text-[#1F170D]">Punctual Turnstile Check-In:</strong>
+                                <span class="text-[#7A643E] block mt-0.5">Present your E-Ticket QR Code at the turnstile gate at least 10 minutes prior to session start for automatic access.</span>
                             </div>
                         </div>
 
                         <div class="flex items-start gap-3 p-3 rounded-2xl bg-[#FAF8F2] border border-[#DFC387]/60">
                             <span class="font-black text-[#8C6418] shrink-0">03.</span>
                             <div>
-                                <strong class="text-[#1F170D]">Prosedur Sauna &amp; Cold Plunge:</strong>
-                                <span class="text-[#7A643E] block mt-0.5">Wajib membilas badan (shower) terlebih dahulu sebelum memasuki cold plunge demi higienitas dan kenyamanan member lain.</span>
+                                <strong class="text-[#1F170D]">Sauna &amp; Cold Plunge Protocol:</strong>
+                                <span class="text-[#7A643E] block mt-0.5">Showering is mandatory prior to entering the cold plunge pool to preserve hygiene and community wellness.</span>
                             </div>
                         </div>
                     </div>
@@ -282,36 +282,36 @@
                     <div class="bg-gradient-to-br from-[#1C2E24] to-[#0E1A14] text-white rounded-3xl p-6 border border-[#DFC387]/70 shadow-lg space-y-4">
                         <div class="flex items-center justify-between">
                             <span class="px-3 py-1 rounded-full text-[10px] font-extrabold uppercase tracking-widest bg-[#DFC387]/20 text-[#F5E6BE] border border-[#DFC387]/40">
-                                Privilese Anda
+                                Your Privileges
                             </span>
                             <span class="text-xs text-[#E5C378] font-bold">VIP Platinum</span>
                         </div>
 
-                        <h4 class="font-serif font-black text-lg text-white">Keistimewaan Status Member</h4>
+                        <h4 class="font-serif font-black text-lg text-white">Member Status Benefits</h4>
                         
                         <ul class="space-y-2.5 text-xs text-emerald-100/85 font-medium">
                             <li class="flex items-center gap-2">
                                 <span class="text-[#E5C378] font-bold">&bull;</span>
-                                <span>Prioritas booking lapangan hingga H-7</span>
+                                <span>Priority court booking up to 7 days in advance</span>
                             </li>
                             <li class="flex items-center gap-2">
                                 <span class="text-[#E5C378] font-bold">&bull;</span>
-                                <span>Diskon 25% sewa lapangan &amp; rental raket</span>
+                                <span>25% discount on court rentals &amp; equipment add-ons</span>
                             </li>
                             <li class="flex items-center gap-2">
                                 <span class="text-[#E5C378] font-bold">&bull;</span>
-                                <span>Akses tak terbatas ke Finnish Sauna &amp; Ice Bath</span>
+                                <span>Unlimited access to Finnish Sauna &amp; Ice Bath</span>
                             </li>
                             <li class="flex items-center gap-2">
                                 <span class="text-[#E5C378] font-bold">&bull;</span>
-                                <span>Undangan eksklusif turnamen internal member</span>
+                                <span>Exclusive invitations to member-only tournaments</span>
                             </li>
                         </ul>
 
                         <div class="pt-3 border-t border-white/15">
                             <a href="{{ route('customer.booking') }}" 
                                class="w-full py-3.5 px-4 rounded-2xl bg-gradient-to-b from-[#F5DE9B] to-[#D4AF37] text-[#1E160A] text-xs font-black uppercase tracking-wider flex items-center justify-center gap-2 shadow-md hover:brightness-105 active:scale-95 transition-all">
-                                <span>Pesan Lapangan Sekarang &rarr;</span>
+                                <span>Book Court Now &rarr;</span>
                             </a>
                         </div>
                     </div>

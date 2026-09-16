@@ -194,7 +194,6 @@ class DatabaseSeeder extends Seeder
             ['name' => 'Court 1 - Panoramic Indoor', 'type' => 'INDOOR', 'hourly_rate_regular' => 300000.00, 'hourly_rate_prime' => 450000.00],
             ['name' => 'Court 2 - Panoramic Indoor', 'type' => 'INDOOR', 'hourly_rate_regular' => 300000.00, 'hourly_rate_prime' => 450000.00],
             ['name' => 'Court 3 - Open Air Outdoor', 'type' => 'OUTDOOR', 'hourly_rate_regular' => 250000.00, 'hourly_rate_prime' => 375000.00],
-            ['name' => 'Court 4 - Championship Arena', 'type' => 'INDOOR', 'hourly_rate_regular' => 350000.00, 'hourly_rate_prime' => 500000.00],
         ];
         foreach ($courts as $c) {
             PadelCourt::create($c);

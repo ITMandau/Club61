@@ -8,9 +8,9 @@
                 </div>
                 <div>
                     <h2 class="font-serif font-extrabold text-xl text-[#1F170D] tracking-wide">
-                        Pengaturan Profil Member
+                        Member Profile Settings
                     </h2>
-                    <p class="text-xs text-[#7A643E]">Kelola data akun, keamanan password, dan preferensi akun Anda.</p>
+                    <p class="text-xs text-[#7A643E]">Manage your account profile, password security, and account preferences.</p>
                 </div>
             </div>
         </div>
