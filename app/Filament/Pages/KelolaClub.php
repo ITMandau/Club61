@@ -18,7 +18,7 @@ class KelolaClub extends Page
 
     protected static ?string $title = 'Kelola Fasilitas Club';
 
-    protected static ?int $navigationSort = 8;
+    protected static ?int $navigationSort = 9;
 
     protected string $view = 'filament.pages.kelola-club';
 }

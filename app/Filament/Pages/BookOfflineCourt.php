@@ -28,7 +28,7 @@ class BookOfflineCourt extends Page
 
     protected static ?string $title = 'Walk-In Offline Booking & Frontdesk POS';
 
-    protected static ?int $navigationSort = 5;
+    protected static ?int $navigationSort = 4;
 
     protected string $view = 'filament.pages.book-offline-court';
 
@@ -483,6 +483,37 @@ class BookOfflineCourt extends Page
             $gridData[] = $courtRow;
         }
 
+        // Ringkasan okupansi tanggal yang sedang ditampilkan di grid
+        $totalSlotsAll = 0;
+        $bookedSlotsAll = 0;
+        foreach ($gridData as $courtRow) {
+            foreach ($courtRow['slots'] as $slot) {
+                if ($slot['status'] === 'PAST') {
+                    continue;
+                }
+                $totalSlotsAll++;
+                if (in_array($slot['status'], ['BOOKED', 'LOCKED', 'SELECTED'], true)) {
+                    $bookedSlotsAll++;
+                }
+            }
+        }
+
+        // Statistik & riwayat transaksi walk-in yang diproses HARI INI (bukan tanggal grid)
+        $walkInTodayQuery = \App\Models\Pos\Order::where('order_type', 'WALK_IN')
+            ->whereDate('created_at', now());
+
+        $walkInStatsToday = [
+            'count' => $walkInTodayQuery->count(),
+            'revenue' => (float) $walkInTodayQuery->sum('grand_total'),
+        ];
+
+        $recentWalkInOrders = \App\Models\Pos\Order::where('order_type', 'WALK_IN')
+            ->whereDate('created_at', now())
+            ->with(['user', 'padelBookings.court'])
+            ->latest()
+            ->limit(8)
+            ->get();
+
         $equipments = CourtEquipment::orderBy('type')->orderBy('name')->get();
 
         $searchResults = [];
@@ -503,6 +534,10 @@ class BookOfflineCourt extends Page
             'equipments' => $equipments,
             'searchResults' => $searchResults,
             'isToday' => $isToday,
+            'totalSlotsAll' => $totalSlotsAll,
+            'bookedSlotsAll' => $bookedSlotsAll,
+            'walkInStatsToday' => $walkInStatsToday,
+            'recentWalkInOrders' => $recentWalkInOrders,
         ];
     }
 }

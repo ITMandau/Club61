@@ -64,9 +64,114 @@
     }
 
     .pos-grid-scroll {
-        overflow: auto; /* scroll pada kontainer, bukan halaman */
+        overflow: auto; /* scroll horizontal pada tabel, bukan halaman */
+        flex-shrink: 0; /* tabel setinggi kontennya, tidak dipaksa mengisi ruang */
+    }
+
+    /* ===== Panel Bawah: Ringkasan Okupansi & Riwayat Walk-In ===== */
+    .pos-grid-footer {
         flex: 1;
         min-height: 0;
+        overflow-y: auto;
+        padding: 0.85rem 1rem;
+        border-top: 1.5px solid #F3E8CE;
+    }
+
+    .pos-stats-row {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 0.6rem;
+        margin-bottom: 0.85rem;
+    }
+
+    .pos-stat-card {
+        background: #FAF5E8;
+        border: 1.5px solid #DFC387;
+        border-radius: 10px;
+        padding: 0.55rem 0.7rem;
+        text-align: center;
+    }
+
+    .pos-stat-value {
+        font-size: 1.0625rem;
+        font-weight: 900;
+        color: #8C6418;
+    }
+
+    .pos-stat-label {
+        font-size: 0.625rem;
+        font-weight: 700;
+        color: #7A643E;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        margin-top: 0.15rem;
+    }
+
+    .pos-recent-header {
+        font-size: 0.6875rem;
+        font-weight: 900;
+        color: #8C6418;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        margin-bottom: 0.5rem;
+    }
+
+    .pos-recent-list {
+        display: flex;
+        flex-direction: column;
+        gap: 0.4rem;
+    }
+
+    .pos-recent-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        background: #FFFDF5;
+        border: 1px solid #F0DB9D;
+        border-radius: 8px;
+        padding: 0.5rem 0.7rem;
+    }
+
+    .pos-recent-name {
+        font-size: 0.75rem;
+        font-weight: 800;
+        color: #1F170D;
+    }
+
+    .pos-recent-sub {
+        font-size: 0.625rem;
+        color: #8C6418;
+        margin-top: 0.1rem;
+    }
+
+    .pos-recent-amount {
+        font-size: 0.8125rem;
+        font-weight: 900;
+        color: #B38622;
+    }
+
+    .pos-recent-badge {
+        display: inline-block;
+        margin-top: 0.15rem;
+        font-size: 0.5625rem;
+        font-weight: 800;
+        padding: 0.05rem 0.4rem;
+        border-radius: 4px;
+        text-transform: uppercase;
+    }
+
+    .pos-badge-paid { background: #D1FAE5; color: #047857; }
+    .pos-badge-partially_paid { background: #FEF3C7; color: #92400E; }
+    .pos-badge-unpaid { background: #F3F4F6; color: #6B7280; }
+    .pos-badge-cancelled { background: #FEE2E2; color: #B91C1C; }
+    .pos-badge-refunded { background: #E0E7FF; color: #3730A3; }
+
+    .pos-recent-empty {
+        text-align: center;
+        color: #9CA3AF;
+        font-size: 0.6875rem;
+        padding: 1rem;
+        font-style: italic;
     }
 
     /* ===== KANAN: Checkout Panel ===== */
@@ -496,6 +601,45 @@
                     @endforeach
                 </tbody>
             </table>
+        </div>
+
+        {{-- Ringkasan Okupansi & Riwayat Transaksi Walk-In --}}
+        <div class="pos-grid-footer">
+            <div class="pos-stats-row">
+                <div class="pos-stat-card">
+                    <div class="pos-stat-value">{{ $bookedSlotsAll }}/{{ $totalSlotsAll }}</div>
+                    <div class="pos-stat-label">Slot Terisi Hari Ini</div>
+                </div>
+                <div class="pos-stat-card">
+                    <div class="pos-stat-value">{{ $walkInStatsToday['count'] }}</div>
+                    <div class="pos-stat-label">Transaksi Walk-In</div>
+                </div>
+                <div class="pos-stat-card">
+                    <div class="pos-stat-value">Rp {{ number_format($walkInStatsToday['revenue'], 0, ',', '.') }}</div>
+                    <div class="pos-stat-label">Omzet Walk-In</div>
+                </div>
+            </div>
+
+            <div class="pos-recent-header">Transaksi Walk-In Terakhir</div>
+            <div class="pos-recent-list">
+                @forelse($recentWalkInOrders as $ro)
+                    <div class="pos-recent-row">
+                        <div>
+                            <div class="pos-recent-name">{{ $ro->user?->name ?? 'Walk-In' }}</div>
+                            <div class="pos-recent-sub">
+                                {{ $ro->padelBookings->pluck('court.name')->filter()->unique()->implode(', ') ?: 'Lapangan' }}
+                                &bull; {{ $ro->created_at->format('H:i') }}
+                            </div>
+                        </div>
+                        <div style="text-align:right;">
+                            <div class="pos-recent-amount">Rp {{ number_format($ro->grand_total, 0, ',', '.') }}</div>
+                            <div class="pos-recent-badge pos-badge-{{ strtolower($ro->payment_status) }}">{{ $ro->payment_status }}</div>
+                        </div>
+                    </div>
+                @empty
+                    <div class="pos-recent-empty">Belum ada transaksi walk-in yang diproses hari ini.</div>
+                @endforelse
+            </div>
         </div>
     </div>
 

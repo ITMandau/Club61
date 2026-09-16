@@ -18,7 +18,7 @@ class KelolaTurnamen extends Page
 
     protected static ?string $title = 'Kelola Turnamen & Event';
 
-    protected static ?int $navigationSort = 7;
+    protected static ?int $navigationSort = 8;
 
     protected string $view = 'filament.pages.kelola-turnamen';
 }
