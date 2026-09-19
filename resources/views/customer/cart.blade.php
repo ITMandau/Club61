@@ -438,7 +438,7 @@
                     }, 1000);
                 },
 
-                checkExpiry() {
+                async checkExpiry() {
                     if (!this.expiresAtTime) return;
 
                     const now = Date.now();
@@ -447,8 +447,8 @@
                     if (diffMs <= 0) {
                         this.isExpired = true;
                         this.timerDisplay = '00:00';
-                        this.showExpiredModal = true;
                         if (this.timerInterval) clearInterval(this.timerInterval);
+                        await this.handleSessionExpired();
                         return;
                     }
 
@@ -459,7 +459,29 @@
                     this.timerDisplay = `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
                 },
 
-                handleExpiredRedirect() {
+                async handleSessionExpired() {
+                    this.showExpiredModal = true;
+
+                    const bookingIds = (this.holdData && this.holdData.bookings) 
+                        ? this.holdData.bookings.map(b => b.id) 
+                        : [];
+
+                    if (bookingIds.length > 0) {
+                        try {
+                            await fetch('/api/v1/padel/release-slot', {
+                                method: 'POST',
+                                headers: {
+                                    'Content-Type': 'application/json',
+                                    'Accept': 'application/json',
+                                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
+                                },
+                                body: JSON.stringify({ booking_ids: bookingIds })
+                            });
+                        } catch(e) {
+                            console.error('Error auto-releasing expired cart slots:', e);
+                        }
+                    }
+
                     localStorage.removeItem('club61_cart');
                     localStorage.removeItem('club61_hold_data');
                     sessionStorage.removeItem('club61_cart');
@@ -467,6 +489,10 @@
                     sessionStorage.removeItem('vantage_cart');
                     sessionStorage.removeItem('vantage_hold_data');
                     window.dispatchEvent(new CustomEvent('cart-updated'));
+                },
+
+                handleExpiredRedirect() {
+                    this.handleSessionExpired();
                 },
 
                 get subtotal() {

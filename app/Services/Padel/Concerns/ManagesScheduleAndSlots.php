@@ -22,15 +22,31 @@ trait ManagesScheduleAndSlots
      */
     public function getScheduleMatrix(string $date, string $timezone = 'Asia/Jakarta'): array
     {
+        // Sinkronkan booking kedaluwarsa & rilis lock yang hangus secara otomatis
+        $this->syncExpiredAndCompletedBookings();
+
         $parsedDate = Carbon::parse($date, $timezone);
         $dateStr = $parsedDate->format('Y-m-d');
         $isWeekend = $parsedDate->isWeekend();
 
         $courts = PadelCourt::where('is_active', true)->orderBy('name')->get();
 
-        // Ambil semua booking aktif pada tanggal tersebut (termasuk yang sedang dalam tahap pembayaran pending)
+        $holdThreshold = now()->subSeconds(self::HOLD_DURATION_SECONDS);
+        $paymentThreshold = now()->subMinutes(15);
+
+        // Ambil semua booking aktif pada tanggal tersebut (hanya yang benar-benar aktif dan belum hangus)
         $activeBookings = PadelBooking::whereDate('booking_date', $dateStr)
-            ->whereIn('status', ['LOCKED', 'PENDING_PAYMENT', 'PENDING', 'PAID', 'CHECKED_IN'])
+            ->where(function ($query) use ($holdThreshold, $paymentThreshold) {
+                $query->whereIn('status', ['PAID', 'CHECKED_IN'])
+                    ->orWhere(function ($q) use ($holdThreshold) {
+                        $q->where('status', 'LOCKED')
+                            ->where('created_at', '>=', $holdThreshold);
+                    })
+                    ->orWhere(function ($q) use ($paymentThreshold) {
+                        $q->whereIn('status', ['PENDING_PAYMENT', 'PENDING'])
+                            ->where('created_at', '>=', $paymentThreshold);
+                    });
+            })
             ->get();
 
         // Bulk prefetch Distributed Cache Locks untuk seluruh lapangan & jam dalam 1 query
@@ -157,6 +173,9 @@ trait ManagesScheduleAndSlots
             }
         }
 
+        // Bersihkan lock kedaluwarsa secara proaktif sebelum memegang slot baru
+        $this->releaseExpiredLocks();
+
         // TIER 1: ACQUIRE DISTRIBUTED CACHE LOCKS SECARA BERURUTAN (Tiap Interval 1 Jam)
         $acquiredLocks = [];
         try {
@@ -188,6 +207,9 @@ trait ManagesScheduleAndSlots
                 $totalCourtFee = 0;
                 $batchId = 'BATCH-PAD-' . strtoupper(Str::random(8));
 
+                $holdThreshold = now()->subSeconds(self::HOLD_DURATION_SECONDS);
+                $paymentThreshold = now()->subMinutes(15);
+
                 foreach ($slots as $slot) {
                     $court = PadelCourt::where('id', $slot['court_id'])->where('is_active', true)->first();
                     if (! $court) {
@@ -197,10 +219,20 @@ trait ManagesScheduleAndSlots
                     $startDt = Carbon::parse("{$bookingDate} {$slot['start_time']}");
                     $endDt = Carbon::parse("{$bookingDate} {$slot['end_time']}");
 
-                    // RUMUS OVERLAP MATEMATIS KETAT: (< dan >)
+                    // RUMUS OVERLAP MATEMATIS KETAT: (< dan >) dengan proteksi anti-stale locks
                     $hasConflict = PadelBooking::where('court_id', $court->id)
                         ->whereDate('booking_date', $bookingDate)
-                        ->whereIn('status', ['LOCKED', 'PENDING_PAYMENT', 'PENDING', 'PAID', 'CHECKED_IN'])
+                        ->where(function ($q) use ($holdThreshold, $paymentThreshold) {
+                            $q->whereIn('status', ['PAID', 'CHECKED_IN'])
+                                ->orWhere(function ($sub) use ($holdThreshold) {
+                                    $sub->where('status', 'LOCKED')
+                                        ->where('created_at', '>=', $holdThreshold);
+                                })
+                                ->orWhere(function ($sub) use ($paymentThreshold) {
+                                    $sub->whereIn('status', ['PENDING_PAYMENT', 'PENDING'])
+                                        ->where('created_at', '>=', $paymentThreshold);
+                                });
+                        })
                         ->where('start_time', '<', $endDt->format('Y-m-d H:i:s'))
                         ->where('end_time', '>', $startDt->format('Y-m-d H:i:s'))
                         ->lockForUpdate() // Kunci baris database secara eksklusif

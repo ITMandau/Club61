@@ -277,9 +277,54 @@ class BookOfflineCourt extends Page
         return (float) $total;
     }
 
-    public function getGrandTotalProperty(): float
+    public function getSubtotalProperty(): float
     {
         return $this->courtTotal + $this->equipmentTotal;
+    }
+
+    public function getFinanceCalculationProperty(): array
+    {
+        return app(\App\Services\Finance\TaxAndFeeService::class)->calculate(
+            subtotal: $this->subtotal,
+            discountAmount: 0,
+            channel: 'POS_WALKIN',
+            module: 'PADEL'
+        );
+    }
+
+    public function getTaxAmountProperty(): int
+    {
+        return $this->financeCalculation['tax_amount'];
+    }
+
+    public function getTaxNameProperty(): string
+    {
+        return $this->financeCalculation['tax_name'] ?: 'PB1 Pajak Daerah / PPh';
+    }
+
+    public function getIsTaxEnabledProperty(): bool
+    {
+        return $this->financeCalculation['tax_enabled'];
+    }
+
+    public function getAdminFeeAmountProperty(): int
+    {
+        return $this->financeCalculation['admin_fee_amount'];
+    }
+
+    public function getAdminFeeNameProperty(): string
+    {
+        return $this->financeCalculation['admin_fee_name'] ?: 'Biaya Layanan';
+    }
+
+    public function getIsAdminFeeEnabledProperty(): bool
+    {
+        return $this->financeCalculation['admin_fee_enabled'];
+    }
+
+    public function getGrandTotalProperty(): float
+    {
+        return (float) $this->financeCalculation['grand_total'];
     }
 
     public function getActiveShiftProperty(): ?PosCashierShift
@@ -297,9 +342,11 @@ class BookOfflineCourt extends Page
     public function executeOpenShift(): void
     {
         $user = auth()->user();
-        if (! $user) {
-            return;
-        }
+        abort_unless(
+            $user && ($user->hasAnyRole(['super_admin', 'admin']) || $user->can('open_pos_shift')),
+            403,
+            'Akses ditolak: Anda tidak memiliki izin [open_pos_shift] untuk membuka sesi shift kasir.'
+        );
 
         if ($this->activeShift) {
             Notification::make()
@@ -355,6 +402,12 @@ class BookOfflineCourt extends Page
     public function executeCloseShift(): void
     {
         $user = auth()->user();
+        abort_unless(
+            $user && ($user->hasAnyRole(['super_admin', 'admin']) || $user->can('close_pos_shift')),
+            403,
+            'Akses ditolak: Anda tidak memiliki izin [close_pos_shift] untuk menutup sesi shift kasir.'
+        );
+
         $shift = $this->activeShift;
 
         if (! $shift) {
@@ -949,6 +1002,11 @@ class BookOfflineCourt extends Page
                 'cashier_name' => $cashier->name,
                 'booking_date' => Carbon::parse($this->bookingDate)->translatedFormat('d F Y'),
                 'payment_method' => $service->formatPaymentMethodLabel($this->paymentMethod),
+                'subtotal' => $result['order']->subtotal,
+                'tax_amount' => $result['order']->tax_amount,
+                'tax_name' => $this->taxName,
+                'service_charge' => $result['order']->service_charge,
+                'admin_fee_name' => $this->adminFeeName,
                 'grand_total' => $result['grand_total'],
                 'auto_checked_in' => $result['auto_checked_in'],
                 'created_at' => now()->format('d/m/Y H:i:s'),

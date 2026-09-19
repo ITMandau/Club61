@@ -69,7 +69,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
     })->name('customer.cart');
 
     Route::get('/checkout', function () {
-        return view('customer.checkout');
+        $clubFinanceSettings = \App\Models\Pos\ClubFinanceSetting::getSettings();
+        return view('customer.checkout', [
+            'clubFinanceSettings' => $clubFinanceSettings,
+        ]);
     })->name('customer.checkout');
 
     Route::get('/my-club', function () {

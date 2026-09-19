@@ -1253,6 +1253,19 @@
                                     </div>
                                 @endforeach
                             @endif
+
+                            @if(!empty($completedOrderData['tax_amount']) && $completedOrderData['tax_amount'] > 0)
+                                <div style="display:flex; justify-content:space-between; font-size:0.65rem; margin-top:0.35rem; color:#4B5563;">
+                                    <span>{{ $completedOrderData['tax_name'] ?? 'Pajak Daerah' }}</span>
+                                    <span>Rp {{ number_format($completedOrderData['tax_amount'], 0, ',', '.') }}</span>
+                                </div>
+                            @endif
+                            @if(!empty($completedOrderData['service_charge']) && $completedOrderData['service_charge'] > 0)
+                                <div style="display:flex; justify-content:space-between; font-size:0.65rem; margin-top:0.15rem; color:#4B5563;">
+                                    <span>{{ $completedOrderData['admin_fee_name'] ?? 'Biaya Layanan' }}</span>
+                                    <span>Rp {{ number_format($completedOrderData['service_charge'], 0, ',', '.') }}</span>
+                                </div>
+                            @endif
                         </div>
 
                         <div style="border-bottom:1px dashed #000; padding-bottom:0.5rem; margin-bottom:0.6rem;">
@@ -1429,9 +1442,19 @@
                 <div style="display:flex; justify-content:space-between; font-size:0.6875rem; color:#7A643E; margin-bottom:0.2rem;">
                     <span>Lapangan:</span><span>Rp {{ number_format($this->courtTotal, 0, ',', '.') }}</span>
                 </div>
-                <div style="display:flex; justify-content:space-between; font-size:0.6875rem; color:#7A643E; margin-bottom:0.35rem;">
+                <div style="display:flex; justify-content:space-between; font-size:0.6875rem; color:#7A643E; margin-bottom:0.2rem;">
                     <span>Sewa Alat:</span><span>Rp {{ number_format($this->equipmentTotal, 0, ',', '.') }}</span>
                 </div>
+                @if($this->isTaxEnabled && $this->taxAmount > 0)
+                <div style="display:flex; justify-content:space-between; font-size:0.6875rem; color:#7A643E; margin-bottom:0.2rem;">
+                    <span>{{ $this->taxName }}:</span><span>Rp {{ number_format($this->taxAmount, 0, ',', '.') }}</span>
+                </div>
+                @endif
+                @if($this->isAdminFeeEnabled && $this->adminFeeAmount > 0)
+                <div style="display:flex; justify-content:space-between; font-size:0.6875rem; color:#7A643E; margin-bottom:0.2rem;">
+                    <span>{{ $this->adminFeeName }}:</span><span>Rp {{ number_format($this->adminFeeAmount, 0, ',', '.') }}</span>
+                </div>
+                @endif
                 <div style="border-top:1.5px dashed #D4AF37; padding-top:0.4rem; display:flex; justify-content:space-between; align-items:baseline;">
                     <span style="font-size:0.8125rem; font-weight:900; color:#1F170D;">TOTAL:</span>
                     <span style="font-size:1.1875rem; font-weight:900; color:#B38622;">Rp {{ number_format($this->grandTotal, 0, ',', '.') }}</span>

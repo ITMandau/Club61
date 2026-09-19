@@ -11,6 +11,7 @@ Route::prefix('v1/padel')->group(function () {
     Route::get('/courts', [PadelCourtController::class, 'index']);
     Route::get('/schedule', [PadelBookingController::class, 'schedule']);
     Route::get('/equipments', [PadelBookingController::class, 'equipments']);
+    Route::get('/finance-settings', [PadelBookingController::class, 'financeSettings']);
 
     // 2. ENDPOINT WEBHOOK PAYMENT GATEWAY (Publik, Multi-Driver)
     Route::post('/webhook/midtrans', fn(\Illuminate\Http\Request $request) => app(PaymentWebhookController::class)->handle('midtrans', $request))->name('api.payment.webhook.midtrans');

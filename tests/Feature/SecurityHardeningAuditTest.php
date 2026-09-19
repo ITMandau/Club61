@@ -76,7 +76,7 @@ class SecurityHardeningAuditTest extends TestCase
     }
 
     /**
-     * 🛡️ Uji Celah 1: Simulator Endpoint Ditolak Pada Production
+     * Uji Celah 1: Simulator Endpoint Ditolak Pada Production
      */
     public function test_simulator_is_rejected_on_production_environment(): void
     {
@@ -109,7 +109,7 @@ class SecurityHardeningAuditTest extends TestCase
     }
 
     /**
-     * 🛡️ Uji Celah 2: Customer Checkout dengan CASH Wajib PENDING_PAYMENT (Bukan PAID)
+     * Uji Celah 2: Customer Checkout dengan CASH Wajib PENDING_PAYMENT (Bukan PAID)
      */
     public function test_customer_checkout_with_cash_forces_pending_payment(): void
     {
@@ -142,10 +142,20 @@ class SecurityHardeningAuditTest extends TestCase
     }
 
     /**
-     * 🛡️ Uji Celah 2: Staff Kasir / Admin di POS Checkout CASH Langsung Berstatus PAID
+     * Uji Celah 2: Staff Kasir / Admin di POS Checkout CASH Langsung Berstatus PAID
      */
     public function test_staff_checkout_with_cash_at_pos_is_immediately_paid(): void
     {
+        \App\Models\Pos\PosCashierShift::create([
+            'shift_number' => 'SHIFT-CASHIER-TEST',
+            'counter' => 'PADEL_FRONTDESK',
+            'status' => 'OPEN',
+            'opened_by_id' => $this->cashier->id,
+            'opened_at' => now(),
+            'starting_cash' => 200000.00,
+            'expected_cash' => 200000.00,
+        ]);
+
         $date = now()->addDays(3)->format('Y-m-d');
         $cashierToken = $this->cashier->createToken('cashier-token')->plainTextToken;
 
@@ -174,7 +184,7 @@ class SecurityHardeningAuditTest extends TestCase
     }
 
     /**
-     * 🛡️ Uji Celah 3: /pos/check-in Menolak Tamu Tanpa Auth & Menolak Role Customer
+     * Uji Celah 3: /pos/check-in Menolak Tamu Tanpa Auth & Menolak Role Customer
      */
     public function test_pos_check_in_rejects_unauthenticated_and_customer_role(): void
     {
@@ -215,7 +225,7 @@ class SecurityHardeningAuditTest extends TestCase
     }
 
     /**
-     * 🛡️ Uji Celah 4: Webhook POS Menolak Spoofing Tanpa Signature Valid (DRY)
+     * Uji Celah 4: Webhook POS Menolak Spoofing Tanpa Signature Valid (DRY)
      */
     public function test_pos_webhook_rejects_invalid_signature_and_accepts_valid(): void
     {
@@ -266,7 +276,7 @@ class SecurityHardeningAuditTest extends TestCase
     }
 
     /**
-     * 🛡️ Uji Celah 5: Layar /pos dan /kitchen Dilindungi Middleware Auth & Role
+     * Uji Celah 5: Layar /pos dan /kitchen Dilindungi Middleware Auth & Role
      */
     public function test_pos_and_kitchen_screens_protected_from_public_and_wrong_role(): void
     {

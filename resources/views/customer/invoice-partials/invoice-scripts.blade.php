@@ -107,15 +107,15 @@
 
             // Payment Methods State & Modal
             showPaymentModal: false,
-            selectedMethod: { id: 'qris', code: 'QRIS', name: 'QRIS Instant (GoPay/OVO/BCA)', badge: 'QRIS', fee: 2800, note: 'Automated Midtrans Confirmation' },
+            selectedMethod: { id: 'qris', code: 'QRIS', name: 'QRIS Instant (GoPay/OVO/BCA)', badge: 'QRIS', fee: 0, note: 'Automated Midtrans Confirmation' },
             paymentMethods: [
-                { id: 'qris', code: 'QRIS', name: 'QRIS Instant (GoPay/OVO/BCA)', badge: 'QRIS', fee: 2800, note: 'Automated Midtrans Confirmation' },
-                { id: 'bca', code: 'BCA_VA', name: 'BCA Virtual Account', badge: 'BCA', fee: 4440, note: 'Automated Midtrans Verification' },
-                { id: 'mandiri', code: 'MANDIRI_VA', name: 'Mandiri Virtual Account', badge: 'MDR', fee: 4440, note: 'Automated Midtrans Verification' },
-                { id: 'bri', code: 'BRI_VA', name: 'BRI Virtual Account', badge: 'BRI', fee: 4440, note: 'Automated Midtrans Verification' },
-                { id: 'bni', code: 'BNI_VA', name: 'BNI Virtual Account', badge: 'BNI', fee: 4440, note: 'Automated Midtrans Verification' },
-                { id: 'cimb', code: 'CIMB_VA', name: 'CIMB Virtual Account', badge: 'CIMB', fee: 4440, note: 'Automated Midtrans Verification' },
-                { id: 'bsi', code: 'BSI_VA', name: 'BSI Virtual Account', badge: 'BSI', fee: 4440, note: 'Sharia Automated Midtrans' },
+                { id: 'qris', code: 'QRIS', name: 'QRIS Instant (GoPay/OVO/BCA)', badge: 'QRIS', fee: 0, note: 'Automated Midtrans Confirmation' },
+                { id: 'bca', code: 'BCA_VA', name: 'BCA Virtual Account', badge: 'BCA', fee: 0, note: 'Automated Midtrans Verification' },
+                { id: 'mandiri', code: 'MANDIRI_VA', name: 'Mandiri Virtual Account', badge: 'MDR', fee: 0, note: 'Automated Midtrans Verification' },
+                { id: 'bri', code: 'BRI_VA', name: 'BRI Virtual Account', badge: 'BRI', fee: 0, note: 'Automated Midtrans Verification' },
+                { id: 'bni', code: 'BNI_VA', name: 'BNI Virtual Account', badge: 'BNI', fee: 0, note: 'Automated Midtrans Verification' },
+                { id: 'cimb', code: 'CIMB_VA', name: 'CIMB Virtual Account', badge: 'CIMB', fee: 0, note: 'Automated Midtrans Verification' },
+                { id: 'bsi', code: 'BSI_VA', name: 'BSI Virtual Account', badge: 'BSI', fee: 0, note: 'Sharia Automated Midtrans' },
                 { id: 'cash', code: 'CASH', name: 'Cash on Arrival (Walk-in)', badge: 'CASH', fee: 0, note: 'Pay at Venue Frontdesk' },
             ],
             isSubmittingPayment: false,

@@ -32,13 +32,14 @@ class PaymentOrchestratorService
             $amount = isset($paymentDetails['amount']) ? (float) $paymentDetails['amount'] : (float) $order->grand_total;
             $payloadLog = $paymentDetails['payload_log'] ?? null;
 
-            // Validasi sesi shift kasir jika pembayaran dilakukan via loket kasir POS
+            // Validasi sesi shift kasir jika pembayaran dilakukan via loket kasir POS atau pembayaran tunai staf
             $posShiftId = null;
-            if (strtoupper($paymentGateway) === 'CASHIER_POS') {
+            $isPosGateway = strtoupper($paymentGateway) === 'CASHIER_POS' || (strtoupper($paymentGateway) === 'CASH' && isset($paymentDetails['counter']));
+            if ($isPosGateway) {
                 $counter = $paymentDetails['counter'] ?? 'PADEL_FRONTDESK';
                 $activeShift = PosCashierShift::getActiveShift($counter);
-                $currentUser = auth()->user();
-                $isSuperAdmin = $currentUser && method_exists($currentUser, 'hasRole') && $currentUser->hasRole('super_admin');
+                $userCandidate = auth()->user() ?? ($paymentDetails['user'] ?? ($paymentDetails['cashier_user'] ?? ($paymentDetails['admin_user'] ?? null)));
+                $isSuperAdmin = $userCandidate && method_exists($userCandidate, 'hasRole') && $userCandidate->hasRole('super_admin');
 
                 if (! $activeShift && ! $isSuperAdmin) {
                     throw new \Exception("Tidak ada shift kasir yang aktif untuk loket [{$counter}]. Silakan buka shift terlebih dahulu.");

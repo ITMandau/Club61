@@ -70,6 +70,16 @@ class PadelAdminOverrideTest extends TestCase
             'rental_price' => 50000.00,
             'stock_quantity' => 10,
         ]);
+
+        PosCashierShift::create([
+            'shift_number' => 'SHIFT-ADMIN-TEST',
+            'counter' => 'PADEL_FRONTDESK',
+            'status' => 'OPEN',
+            'opened_by_id' => $this->admin->id,
+            'opened_at' => now(),
+            'starting_cash' => 500000.00,
+            'expected_cash' => 500000.00,
+        ]);
     }
 
     /**
