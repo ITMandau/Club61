@@ -11,6 +11,7 @@ class Payment extends Model
 
     protected $fillable = [
         'order_id',
+        'pos_shift_id',
         'bill_split_id',
         'payment_gateway',
         'transaction_id',
@@ -33,5 +34,10 @@ class Payment extends Model
     public function order()
     {
         return $this->belongsTo(Order::class, 'order_id');
+    }
+
+    public function posShift()
+    {
+        return $this->belongsTo(PosCashierShift::class, 'pos_shift_id');
     }
 }

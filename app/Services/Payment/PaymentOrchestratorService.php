@@ -4,6 +4,7 @@ namespace App\Services\Payment;
 
 use App\Models\Pos\Order;
 use App\Models\Pos\Payment;
+use App\Models\Pos\PosCashierShift;
 use App\Models\Pos\Refund;
 use App\Models\Pos\Voucher;
 use Illuminate\Support\Facades\Cache;
@@ -31,6 +32,21 @@ class PaymentOrchestratorService
             $amount = isset($paymentDetails['amount']) ? (float) $paymentDetails['amount'] : (float) $order->grand_total;
             $payloadLog = $paymentDetails['payload_log'] ?? null;
 
+            // Validasi sesi shift kasir jika pembayaran dilakukan via loket kasir POS
+            $posShiftId = null;
+            if (strtoupper($paymentGateway) === 'CASHIER_POS') {
+                $counter = $paymentDetails['counter'] ?? 'PADEL_FRONTDESK';
+                $activeShift = PosCashierShift::getActiveShift($counter);
+                $currentUser = auth()->user();
+                $isSuperAdmin = $currentUser && method_exists($currentUser, 'hasRole') && $currentUser->hasRole('super_admin');
+
+                if (! $activeShift && ! $isSuperAdmin) {
+                    throw new \Exception("Tidak ada shift kasir yang aktif untuk loket [{$counter}]. Silakan buka shift terlebih dahulu.");
+                }
+
+                $posShiftId = $activeShift?->id;
+            }
+
             // 1. Transaction-Level Idempotency Guard
             $payment = null;
             if ($transactionId) {
@@ -51,19 +67,24 @@ class PaymentOrchestratorService
 
             // 2. Proteksi Late Settlement: Jika pesanan sebelumnya telah dibatalkan (CANCELLED)
             if ($order->payment_status === 'CANCELLED') {
+                $paymentUpdates = [
+                    'payment_gateway' => strtoupper($paymentGateway),
+                    'transaction_id' => $transactionId ?: ($payment ? $payment->transaction_id : null),
+                    'payment_method' => strtoupper($paymentMethod),
+                    'amount' => $amount ?: (float) ($payment ? $payment->amount : 0),
+                    'status' => 'SUCCESS',
+                    'payload_log' => is_array($payloadLog)
+                        ? array_merge($payment?->payload_log ?? [], $payloadLog)
+                        : ($payloadLog ?: $payment?->payload_log),
+                ];
+                if ($posShiftId) {
+                    $paymentUpdates['pos_shift_id'] = $posShiftId;
+                }
+
                 if ($payment) {
-                    $payment->update([
-                        'payment_gateway' => strtoupper($paymentGateway),
-                        'transaction_id' => $transactionId ?: $payment->transaction_id,
-                        'payment_method' => strtoupper($paymentMethod),
-                        'amount' => $amount ?: (float) $payment->amount,
-                        'status' => 'SUCCESS',
-                        'payload_log' => is_array($payloadLog)
-                            ? array_merge($payment->payload_log ?? [], $payloadLog)
-                            : ($payloadLog ?: $payment->payload_log),
-                    ]);
+                    $payment->update($paymentUpdates);
                 } else {
-                    $payment = Payment::create([
+                    $paymentData = [
                         'order_id' => $order->id,
                         'payment_gateway' => strtoupper($paymentGateway),
                         'transaction_id' => $transactionId ?: ('POS-' . strtoupper($paymentGateway) . '-' . strtoupper(Str::random(10))),
@@ -71,7 +92,15 @@ class PaymentOrchestratorService
                         'amount' => $amount,
                         'status' => 'SUCCESS',
                         'payload_log' => $payloadLog,
-                    ]);
+                    ];
+                    if ($posShiftId) {
+                        $paymentData['pos_shift_id'] = $posShiftId;
+                    }
+                    $payment = Payment::create($paymentData);
+                }
+
+                if ($posShiftId && ! $order->pos_shift_id) {
+                    $order->update(['pos_shift_id' => $posShiftId]);
                 }
 
                 // Set order payment_status = PAID sesuai fakta finansial bahwa uang sah diterima
@@ -91,19 +120,24 @@ class PaymentOrchestratorService
             }
 
             // 2. Update atau create record pembayaran
+            $paymentUpdates = [
+                'payment_gateway' => strtoupper($paymentGateway),
+                'transaction_id' => $transactionId ?: ($payment ? $payment->transaction_id : null),
+                'payment_method' => strtoupper($paymentMethod),
+                'amount' => $amount ?: (float) ($payment ? $payment->amount : 0),
+                'status' => 'SUCCESS',
+                'payload_log' => is_array($payloadLog)
+                    ? array_merge($payment?->payload_log ?? [], $payloadLog)
+                    : ($payloadLog ?: $payment?->payload_log),
+            ];
+            if ($posShiftId) {
+                $paymentUpdates['pos_shift_id'] = $posShiftId;
+            }
+
             if ($payment) {
-                $payment->update([
-                    'payment_gateway' => strtoupper($paymentGateway),
-                    'transaction_id' => $transactionId ?: $payment->transaction_id,
-                    'payment_method' => strtoupper($paymentMethod),
-                    'amount' => $amount ?: (float) $payment->amount,
-                    'status' => 'SUCCESS',
-                    'payload_log' => is_array($payloadLog)
-                        ? array_merge($payment->payload_log ?? [], $payloadLog)
-                        : ($payloadLog ?: $payment->payload_log),
-                ]);
+                $payment->update($paymentUpdates);
             } else {
-                $payment = Payment::create([
+                $paymentData = [
                     'order_id' => $order->id,
                     'payment_gateway' => strtoupper($paymentGateway),
                     'transaction_id' => $transactionId ?: ('POS-' . strtoupper($paymentGateway) . '-' . strtoupper(Str::random(10))),
@@ -111,7 +145,15 @@ class PaymentOrchestratorService
                     'amount' => $amount,
                     'status' => 'SUCCESS',
                     'payload_log' => $payloadLog,
-                ]);
+                ];
+                if ($posShiftId) {
+                    $paymentData['pos_shift_id'] = $posShiftId;
+                }
+                $payment = Payment::create($paymentData);
+            }
+
+            if ($posShiftId && ! $order->pos_shift_id) {
+                $order->update(['pos_shift_id' => $posShiftId]);
             }
 
             // 3. Evaluasi status finansial Order (PAID vs PARTIALLY_PAID)

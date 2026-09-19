@@ -5,6 +5,7 @@ namespace Tests\Feature\Api;
 use App\Models\Padel\CourtEquipment;
 use App\Models\Padel\PadelBooking;
 use App\Models\Padel\PadelCourt;
+use App\Models\Pos\PosCashierShift;
 use App\Models\User;
 use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -705,7 +706,7 @@ class PadelBookingApiTest extends TestCase
      */
     public function test_retry_payment_generates_suffixed_snap_token_and_updates_fee(): void
     {
-        $tomorrow = now()->addDays(2)->format('Y-m-d');
+        $tomorrow = Carbon::parse('next Tuesday')->format('Y-m-d');
         $hold = $this->withHeader('Authorization', "Bearer {$this->customerToken}")
             ->postJson('/api/v1/padel/hold-slot', [
                 'booking_date' => $tomorrow,
@@ -769,7 +770,7 @@ class PadelBookingApiTest extends TestCase
      */
     public function test_retry_payment_with_cash_returns_frontdesk_instruction(): void
     {
-        $tomorrow = now()->addDays(2)->format('Y-m-d');
+        $tomorrow = Carbon::parse('next Tuesday')->format('Y-m-d');
         $hold = $this->withHeader('Authorization', "Bearer {$this->customerToken}")
             ->postJson('/api/v1/padel/hold-slot', [
                 'booking_date' => $tomorrow,
@@ -909,6 +910,16 @@ class PadelBookingApiTest extends TestCase
             'status' => 'PENDING_PAYMENT',
         ]);
 
+        $shift = PosCashierShift::create([
+            'shift_number' => 'SFT-PADEL-' . now()->format('Ymd') . '-0001',
+            'counter' => 'PADEL_FRONTDESK',
+            'status' => 'OPEN',
+            'opened_by_id' => $this->cashier->id,
+            'opened_at' => now(),
+            'starting_cash' => 200000,
+            'expected_cash' => 200000,
+        ]);
+
         $service = app(\App\Services\Padel\PadelBookingService::class);
         $result = $service->adminSettleCashierPayment(
             bookingId: $booking->id,
@@ -924,6 +935,7 @@ class PadelBookingApiTest extends TestCase
         // Verifikasi data payment tercatat untuk Analytics Kasir
         $this->assertDatabaseHas('payments', [
             'order_id' => $result['booking']->order_id,
+            'pos_shift_id' => $shift->id,
             'payment_gateway' => 'CASHIER_POS',
             'payment_method' => 'CASH',
             'amount' => 300000,

@@ -363,6 +363,7 @@ trait ManagesRescheduleAndCashier
             $orchestrator = app(\App\Services\Payment\PaymentOrchestratorService::class);
             $orchestrator->markOrderAsPaid($order, [
                 'payment_gateway' => 'CASHIER_POS',
+                'counter' => 'PADEL_FRONTDESK',
                 'payment_method' => $gateway,
                 'amount' => $settleAmount,
                 'payload_log' => [

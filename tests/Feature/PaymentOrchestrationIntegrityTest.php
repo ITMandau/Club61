@@ -7,6 +7,7 @@ use App\Models\Padel\PadelBooking;
 use App\Models\Padel\PadelCourt;
 use App\Models\Pos\Order;
 use App\Models\Pos\Payment;
+use App\Models\Pos\PosCashierShift;
 use App\Models\Pos\Refund;
 use App\Models\Role;
 use App\Models\User;
@@ -220,6 +221,16 @@ class PaymentOrchestrationIntegrityTest extends TestCase
             'status' => 'PENDING_PAYMENT',
         ]);
 
+        $shift = PosCashierShift::create([
+            'shift_number' => 'SFT-PADEL-' . now()->format('Ymd') . '-0001',
+            'counter' => 'PADEL_FRONTDESK',
+            'status' => 'OPEN',
+            'opened_by_id' => $this->cashier->id,
+            'opened_at' => now(),
+            'starting_cash' => 200000,
+            'expected_cash' => 200000,
+        ]);
+
         $service = app(PadelBookingService::class);
         $result = $service->adminSettleCashierPayment(
             bookingId: $booking->id,
@@ -234,6 +245,7 @@ class PaymentOrchestrationIntegrityTest extends TestCase
 
         $this->assertDatabaseHas('payments', [
             'order_id' => $result['booking']->order_id,
+            'pos_shift_id' => $shift->id,
             'payment_gateway' => 'CASHIER_POS',
             'payment_method' => 'CASH',
             'status' => 'SUCCESS',

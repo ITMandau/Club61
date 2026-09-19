@@ -112,7 +112,7 @@ trait ManagesCheckoutAndPayments
 
             // Biaya Layanan Gateway
             $gatewayFee = match (strtoupper($paymentMethod)) {
-                'CASH', 'EDC_BCA', 'EDC_MANDIRI', 'QRIS_STATIS' => 0,
+                'CASH', 'DEBIT_CARD', 'CREDIT_CARD', 'EDC_BCA', 'EDC_MANDIRI', 'QRIS_STATIS', 'DEBIT', 'CREDIT' => 0,
                 'QRIS' => 2800,
                 default => 4440,
             };
@@ -581,10 +581,11 @@ trait ManagesCheckoutAndPayments
             'BSI_VA' => 'BSI Virtual Account',
             'QRIS' => 'QRIS Instan (GoPay/OVO/BCA)',
             'CASH' => 'Tunai di Kasir (CASH)',
+            'DEBIT_CARD', 'DEBIT' => 'Kartu Debit (EDC)',
+            'CREDIT_CARD', 'CREDIT' => 'Kartu Kredit (EDC)',
             'EDC_BCA' => 'Debit/Kartu EDC BCA',
             'EDC_MANDIRI' => 'Debit/Kartu EDC Mandiri',
             'QRIS_STATIS' => 'QRIS Kasir Frontdesk',
-            'CREDIT_CARD' => 'Kartu Kredit',
             'BANK_TRANSFER' => 'Transfer Bank (VA)',
             default => $method ?: 'QRIS Instan (GoPay/OVO/BCA)',
         };
@@ -647,13 +648,14 @@ trait ManagesCheckoutAndPayments
         array $equipments,
         string $paymentMethod,
         User $cashier,
-        bool $autoCheckIn = false
+        bool $autoCheckIn = false,
+        array $paymentMeta = []
     ): array {
         // 1. Hold batch slots untuk customer (melempar SlotConflictException jika tabrakan)
         $holdResult = $this->holdBatchSlots($slots, $bookingDate, $customer);
         $bookingIds = collect($holdResult['bookings'])->pluck('id')->toArray();
 
-        return DB::transaction(function () use ($customer, $bookingIds, $equipments, $paymentMethod, $cashier, $autoCheckIn) {
+        return DB::transaction(function () use ($customer, $bookingIds, $equipments, $paymentMethod, $cashier, $autoCheckIn, $paymentMeta) {
             $bookings = PadelBooking::with('court')
                 ->whereIn('id', $bookingIds)
                 ->where('user_id', $customer->id)
@@ -760,20 +762,51 @@ trait ManagesCheckoutAndPayments
                 ]);
             }
 
-            // Eksekusi pelunasan langsung via PaymentOrchestratorService
+            // Susun payload_log audit finansial
+            $payloadLog = [
+                'cashier_id' => $cashier->id,
+                'cashier_name' => $cashier->name,
+                'source' => 'WALK_IN_OFFLINE',
+                'payment_method' => strtoupper($paymentMethod),
+            ];
+
+            if (in_array(strtoupper($paymentMethod), ['DEBIT_CARD', 'CREDIT_CARD', 'EDC_BCA', 'EDC_MANDIRI', 'DEBIT', 'CREDIT'])) {
+                $cardType = $paymentMeta['card_type'] ?? (str_contains(strtoupper($paymentMethod), 'CREDIT') ? 'CREDIT' : 'DEBIT');
+                $terminal = $paymentMeta['terminal'] ?? ($paymentMethod === 'EDC_MANDIRI' ? 'EDC_MANDIRI' : 'EDC_BCA');
+
+                $payloadLog['edc_details'] = [
+                    'terminal' => $terminal,
+                    'card_type' => $cardType,
+                    'card_network' => $paymentMeta['card_network'] ?? null,
+                    'card_issuer' => $paymentMeta['card_issuer'] ?? 'BCA',
+                    'card_last_4' => $paymentMeta['card_last_4'] ?? null,
+                    'approval_code' => $paymentMeta['approval_code'] ?? null,
+                    'trace_number' => $paymentMeta['trace_number'] ?? null,
+                    'charged_amount' => isset($paymentMeta['charged_amount']) ? (float) $paymentMeta['charged_amount'] : (float) $grandTotal,
+                ];
+            } elseif (in_array(strtoupper($paymentMethod), ['QRIS_STATIS', 'QRIS'])) {
+                $payloadLog['qris_details'] = [
+                    'provider' => $paymentMeta['qris_provider'] ?? 'BCA_QRIS',
+                    'rrn' => $paymentMeta['qris_rrn'] ?? null,
+                    'sender_name' => $paymentMeta['qris_sender_name'] ?? null,
+                ];
+            } elseif (in_array(strtoupper($paymentMethod), ['CASH', 'TUNAI'])) {
+                $payloadLog['cash_details'] = [
+                    'cash_received' => isset($paymentMeta['cash_received']) ? (float) $paymentMeta['cash_received'] : (float) $grandTotal,
+                    'cash_change' => isset($paymentMeta['cash_change']) ? (float) $paymentMeta['cash_change'] : 0.00,
+                ];
+            }
+
+            // Eksekusi pelunasan langsung via PaymentOrchestratorService sebagai single writer
             $orchestrator = app(\App\Services\Payment\PaymentOrchestratorService::class);
             $orchestrator->markOrderAsPaid($order, [
                 'payment_gateway' => 'CASHIER_POS',
+                'counter' => 'PADEL_FRONTDESK',
                 'transaction_id' => $orderNumber,
                 'payment_method' => strtoupper($paymentMethod),
                 'amount' => (float) $grandTotal,
                 'cashier_id' => $cashier->id,
-                'payload_log' => [
-                    'cashier_id' => $cashier->id,
-                    'cashier_name' => $cashier->name,
-                    'source' => 'WALK_IN_OFFLINE',
-                    'payment_method' => strtoupper($paymentMethod),
-                ],
+                'payload_log' => $payloadLog,
             ]);
 
             // Opsi Auto Check-In Software
