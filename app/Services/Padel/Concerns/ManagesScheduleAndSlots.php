@@ -49,10 +49,27 @@ trait ManagesScheduleAndSlots
             })
             ->get();
 
+        $minOpenHour = 6;
+        $maxCloseHour = 23;
+
+        if ($courts->isNotEmpty()) {
+            $minOpenHour = $courts->min(function ($c) {
+                return (int) substr($c->open_time ?: '06:00', 0, 2);
+            }) ?? 6;
+
+            $maxCloseHour = $courts->max(function ($c) {
+                $val = $c->close_time ?: '23:00';
+                return ($val === '00:00' || $val === '24:00') ? 24 : (int) substr($val, 0, 2);
+            }) ?? 23;
+
+            $minOpenHour = max(0, min($minOpenHour, 23));
+            $maxCloseHour = max($minOpenHour + 1, min($maxCloseHour, 24));
+        }
+
         // Bulk prefetch Distributed Cache Locks untuk seluruh lapangan & jam dalam 1 query
         $allMatrixKeys = [];
         foreach ($courts as $c) {
-            for ($h = 6; $h < 23; $h++) {
+            for ($h = $minOpenHour; $h < $maxCloseHour; $h++) {
                 $allMatrixKeys[] = "padel_lock:{$c->id}:{$dateStr}:" . sprintf('%02d00', $h);
             }
         }
@@ -62,17 +79,22 @@ trait ManagesScheduleAndSlots
 
         foreach ($courts as $court) {
             $slots = [];
+            $courtOpen = (int) substr($court->open_time ?: '06:00', 0, 2);
+            $courtCloseVal = $court->close_time ?: '23:00';
+            $courtClose = ($courtCloseVal === '00:00' || $courtCloseVal === '24:00') ? 24 : (int) substr($courtCloseVal, 0, 2);
 
-            // Jam operasional: 06:00 sampai 23:00 (interval 1 jam)
-            for ($hour = 6; $hour < 23; $hour++) {
+            // Jam operasional dinamis: minOpenHour sampai maxCloseHour
+            for ($hour = $minOpenHour; $hour < $maxCloseHour; $hour++) {
                 $startHourStr = sprintf('%02d:00', $hour);
                 $endHourStr = sprintf('%02d:00', $hour + 1);
 
                 $slotStart = Carbon::parse("{$dateStr} {$startHourStr}", $timezone);
                 $slotEnd = Carbon::parse("{$dateStr} {$endHourStr}", $timezone);
 
+                $isOpenForCourt = ($hour >= $courtOpen && $hour < $courtClose);
+
                 // Cek apakah slot ini tabrakan dengan booking aktif menggunakan rumus batas terbuka ketat (< dan >)
-                $collidingBooking = $activeBookings->first(function ($booking) use ($court, $slotStart, $slotEnd) {
+                $collidingBooking = $isOpenForCourt ? $activeBookings->first(function ($booking) use ($court, $slotStart, $slotEnd) {
                     if ($booking->court_id !== $court->id) {
                         return false;
                     }
@@ -82,17 +104,20 @@ trait ManagesScheduleAndSlots
                     $sEnd = $slotEnd->format('Y-m-d H:i:s');
 
                     return $bStart < $sEnd && $bEnd > $sStart;
-                });
+                }) : null;
 
                 // Cek juga Distributed Cache Lock (Tier 1) via bulk prefetch
                 $cacheLockKey = "padel_lock:{$court->id}:{$dateStr}:" . $slotStart->format('Hi');
-                $isCacheLocked = ! empty($bulkMatrixLocks[$cacheLockKey]);
+                $isCacheLocked = $isOpenForCourt && ! empty($bulkMatrixLocks[$cacheLockKey]);
 
-                $status = 'AVAILABLE';
-                if ($collidingBooking) {
+                if (! $isOpenForCourt) {
+                    $status = 'CLOSED';
+                } elseif ($collidingBooking) {
                     $status = in_array($collidingBooking->status, ['LOCKED', 'PENDING_PAYMENT', 'PENDING']) ? 'LOCKED' : 'BOOKED';
                 } elseif ($isCacheLocked) {
                     $status = 'LOCKED';
+                } else {
+                    $status = 'AVAILABLE';
                 }
 
                 $isPrime = $isWeekend || $hour >= 17; // Prime time 17:00 ke atas atau akhir pekan
@@ -117,6 +142,8 @@ trait ManagesScheduleAndSlots
                 'court_name' => $court->name,
                 'type' => $court->type,
                 'description' => $court->description ?: ($court->type === 'INDOOR' ? 'Indoor • Central AC' : 'Outdoor • Open Air Court'),
+                'open_time' => $court->open_time ?: '06:00',
+                'close_time' => $court->close_time ?: '23:00',
                 'slots' => $slots,
             ];
         }
@@ -124,6 +151,8 @@ trait ManagesScheduleAndSlots
         return [
             'date' => $dateStr,
             'timezone' => $timezone,
+            'open_hour' => sprintf('%02d:00', $minOpenHour),
+            'close_hour' => sprintf('%02d:00', $maxCloseHour),
             'courts' => $resultCourts,
         ];
     }
@@ -219,6 +248,18 @@ trait ManagesScheduleAndSlots
 
                     $startDt = Carbon::parse("{$bookingDate} {$slot['start_time']}");
                     $endDt = Carbon::parse("{$bookingDate} {$slot['end_time']}");
+
+                    // Validasi jam operasional lapangan (tolak booking di luar jam buka/tutup)
+                    $courtOpen = (int) substr($court->open_time ?: '06:00', 0, 2);
+                    $courtCloseVal = $court->close_time ?: '23:00';
+                    $courtClose = ($courtCloseVal === '00:00' || $courtCloseVal === '24:00') ? 24 : (int) substr($courtCloseVal, 0, 2);
+
+                    $slotStartH = (int) $startDt->format('H');
+                    $slotEndH = ($endDt->format('H:i') === '00:00' && $endDt->isNextDay($startDt)) ? 24 : (int) $endDt->format('H');
+
+                    if ($slotStartH < $courtOpen || $slotEndH > $courtClose) {
+                        throw new HttpException(422, "Slot {$court->name} pada jam {$slot['start_time']} - {$slot['end_time']} berada di luar jam operasional ({$court->open_time} - {$court->close_time} WIB).");
+                    }
 
                     // RUMUS OVERLAP MATEMATIS KETAT: (< dan >) dengan proteksi anti-stale locks
                     $hasConflict = PadelBooking::where('court_id', $court->id)

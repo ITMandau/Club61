@@ -287,8 +287,11 @@
             </div>
         </div>
 
-        <div style="display:flex; align-items:center; gap:0.5rem;">
+        <div style="display:flex; align-items:center; gap:0.5rem; flex-wrap:wrap;">
             @if($activeTab === 'courts')
+                <button type="button" wire:click="openOperatingHoursModal" class="md-btn-action" style="background:#FAF5E8; border:1.5px solid #DFC387; color:#8C6418; font-weight:800; padding:0.65rem 1.15rem; border-radius:10px; cursor:pointer;">
+                    <span>Atur Jam Buka-Tutup Massal</span>
+                </button>
                 <button type="button" wire:click="openCreateCourtModal" class="md-btn-gold">
                     <span>+ Tambah Lapangan Baru</span>
                 </button>
@@ -347,7 +350,12 @@
                                     <div style="font-size:0.75rem; color:#8C6418; font-weight:600; margin-top:0.15rem;">
                                         {{ $court->description ?: ($court->type === 'INDOOR' ? 'Indoor • Central AC' : 'Outdoor • Open Air Court') }}
                                     </div>
-                                    <div style="font-size:0.7rem; color:#6B7280; font-family:var(--font-mono); margin-top:0.1rem;">ID: {{ $court->id }}</div>
+                                    <div style="display:inline-flex; align-items:center; gap:0.35rem; margin-top:0.25rem;">
+                                        <span class="md-badge" style="background:#FAF5E8; color:#8C6418; border:1px solid #DFC387; font-size:0.68rem; text-transform:none;">
+                                            Jam Operasional: {{ $court->open_time ?: '06:00' }} - {{ $court->close_time ?: '23:00' }} WIB
+                                        </span>
+                                    </div>
+                                    <div style="font-size:0.7rem; color:#6B7280; font-family:var(--font-mono); margin-top:0.15rem;">ID: {{ $court->id }}</div>
                                 </td>
                                 <td>
                                     @if(strtoupper($court->type) === 'INDOOR')
@@ -589,6 +597,32 @@
                         </div>
                     </div>
 
+                    <div style="display:grid; grid-template-columns:1fr 1fr; gap:1rem;">
+                        <div class="md-form-group">
+                            <label class="md-form-label">Jam Buka Operasional</label>
+                            <select wire:model="courtOpenTime" class="md-form-select">
+                                @for($i = 5; $i <= 18; $i++)
+                                    @php $val = sprintf('%02d:00', $i); @endphp
+                                    <option value="{{ $val }}">{{ $val }} WIB</option>
+                                @endfor
+                            </select>
+                            <span style="font-size:0.7rem; color:#6B7280;">Jadwal booking lapangan dimulai dari jam ini.</span>
+                            @error('courtOpenTime') <span style="font-size:0.75rem; color:#DC2626;">{{ $message }}</span> @enderror
+                        </div>
+
+                        <div class="md-form-group">
+                            <label class="md-form-label">Jam Tutup Operasional</label>
+                            <select wire:model="courtCloseTime" class="md-form-select">
+                                @for($i = 12; $i <= 24; $i++)
+                                    @php $val = sprintf('%02d:00', $i); @endphp
+                                    <option value="{{ $val }}">{{ $val }} WIB</option>
+                                @endfor
+                            </select>
+                            <span style="font-size:0.7rem; color:#6B7280;">Batas slot jam terakhir selesai.</span>
+                            @error('courtCloseTime') <span style="font-size:0.75rem; color:#DC2626;">{{ $message }}</span> @enderror
+                        </div>
+                    </div>
+
                     <div class="md-form-group">
                         <label class="md-form-label">Status Lapangan di Jadwal Publik</label>
                         <div style="display:flex; align-items:center; gap:0.65rem; margin-top:0.25rem;">
@@ -683,6 +717,68 @@
                     </button>
                     <button type="button" wire:click="saveEquipment" class="md-btn-gold">
                         Simpan Add-on
+                    </button>
+                </div>
+            </div>
+        </div>
+    @endif
+
+    {{-- ================= MODAL ATUR JAM OPERASIONAL MASSAL ================= --}}
+    @if($showOperatingHoursModal)
+        <div class="md-modal-backdrop">
+            <div class="md-modal-dialog">
+                <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1.5px solid #F3E8CE; padding-bottom:0.75rem;">
+                    <div>
+                        <div style="font-family:var(--font-serif); font-size:1.15rem; font-weight:800; color:#1F170D;">
+                            Atur Jam Operasional Seluruh Lapangan
+                        </div>
+                        <div style="font-size:0.75rem; color:#7A643E; margin-top:0.2rem;">
+                            Terapkan jam buka dan tutup ke seluruh {{ $this->courts->count() }} lapangan sekaligus secara serempak.
+                        </div>
+                    </div>
+                    <button type="button" wire:click="closeOperatingHoursModal" style="background:none; border:none; font-size:1.25rem; font-weight:800; color:#9CA3AF; cursor:pointer;">
+                        &times;
+                    </button>
+                </div>
+
+                <div style="display:flex; flex-direction:column; gap:1rem; margin-top:0.5rem;">
+                    <div style="background:#FAF5E8; border:1px solid #DFC387; border-radius:10px; padding:0.75rem 1rem; font-size:0.8125rem; color:#5C410F;">
+                        Perubahan ini langsung memperbarui awal dan akhir slot booking pada jadwal publik (/booking), monitor command board, dan kasir POS walk-in. Misalnya jika diset jam 11:00 WIB, maka booking lapangan langsung dimulai dari jam 11:00 WIB.
+                    </div>
+
+                    <div style="display:grid; grid-template-columns:1fr 1fr; gap:1rem;">
+                        <div class="md-form-group">
+                            <label class="md-form-label">Jam Buka Serentak</label>
+                            <select wire:model="bulkOpenTime" class="md-form-select">
+                                @for($i = 5; $i <= 18; $i++)
+                                    @php $val = sprintf('%02d:00', $i); @endphp
+                                    <option value="{{ $val }}">{{ $val }} WIB</option>
+                                @endfor
+                            </select>
+                            <span style="font-size:0.7rem; color:#6B7280;">Misal: buka jam 11:00 WIB, maka jadwal mulai dari jam 11:00.</span>
+                            @error('bulkOpenTime') <span style="font-size:0.75rem; color:#DC2626;">{{ $message }}</span> @enderror
+                        </div>
+
+                        <div class="md-form-group">
+                            <label class="md-form-label">Jam Tutup Serentak</label>
+                            <select wire:model="bulkCloseTime" class="md-form-select">
+                                @for($i = 12; $i <= 24; $i++)
+                                    @php $val = sprintf('%02d:00', $i); @endphp
+                                    <option value="{{ $val }}">{{ $val }} WIB</option>
+                                @endfor
+                            </select>
+                            <span style="font-size:0.7rem; color:#6B7280;">Batas slot jam terakhir malam hari.</span>
+                            @error('bulkCloseTime') <span style="font-size:0.75rem; color:#DC2626;">{{ $message }}</span> @enderror
+                        </div>
+                    </div>
+                </div>
+
+                <div style="display:flex; justify-content:flex-end; gap:0.75rem; border-top:1.5px solid #F3E8CE; padding-top:1rem; margin-top:0.5rem;">
+                    <button type="button" wire:click="closeOperatingHoursModal" class="md-btn-action" style="background:#F3F4F6; color:#4B5563;">
+                        Batal
+                    </button>
+                    <button type="button" wire:click="saveOperatingHoursAllCourts" class="md-btn-gold">
+                        Terapkan ke Seluruh Lapangan
                     </button>
                 </div>
             </div>

@@ -157,6 +157,23 @@ class BookOfflineCourt extends Page
         if (isset($this->selectedSlots[$slotKey])) {
             unset($this->selectedSlots[$slotKey]);
         } else {
+            $court = PadelCourt::find($courtId);
+            if ($court) {
+                $cOpen = (int) substr($court->open_time ?: '06:00', 0, 2);
+                $cCloseVal = $court->close_time ?: '23:00';
+                $cClose = ($cCloseVal === '00:00' || $cCloseVal === '24:00') ? 24 : (int) substr($cCloseVal, 0, 2);
+                $slotH = (int) substr($startTime, 0, 2);
+
+                if ($slotH < $cOpen || $slotH >= $cClose) {
+                    Notification::make()
+                        ->title('Lapangan Tutup')
+                        ->body("Jam {$startTime} berada di luar jam operasional {$court->name} ({$court->open_time} - {$court->close_time} WIB).")
+                        ->warning()
+                        ->send();
+                    return;
+                }
+            }
+
             $this->selectedSlots[$slotKey] = [
                 'court_id' => $courtId,
                 'court_name' => $courtName,
@@ -1095,9 +1112,26 @@ class BookOfflineCourt extends Page
             ->whereIn('status', ['LOCKED', 'PENDING_PAYMENT', 'PENDING', 'PAID', 'CHECKED_IN', 'COMPLETED'])
             ->get();
 
-        // Susun grid jam operasional: 06:00 - 23:00 (17 slot per lapangan)
+        // Susun grid jam operasional dinamis sesuai jam buka & jam tutup lapangan
+        $minOpenHour = 6;
+        $maxCloseHour = 23;
+
+        if ($courts->isNotEmpty()) {
+            $minOpenHour = $courts->min(function ($c) {
+                return (int) substr($c->open_time ?: '06:00', 0, 2);
+            }) ?? 6;
+
+            $maxCloseHour = $courts->max(function ($c) {
+                $val = $c->close_time ?: '23:00';
+                return ($val === '00:00' || $val === '24:00') ? 24 : (int) substr($val, 0, 2);
+            }) ?? 23;
+
+            $minOpenHour = max(0, min($minOpenHour, 23));
+            $maxCloseHour = max($minOpenHour + 1, min($maxCloseHour, 24));
+        }
+
         $operationalHours = [];
-        for ($h = 6; $h <= 22; $h++) {
+        for ($h = $minOpenHour; $h < $maxCloseHour; $h++) {
             $operationalHours[] = [
                 'hour' => $h,
                 'start_time' => sprintf('%02d:00:00', $h),
@@ -1114,6 +1148,10 @@ class BookOfflineCourt extends Page
                 'slots' => [],
             ];
 
+            $courtOpen = (int) substr($court->open_time ?: '06:00', 0, 2);
+            $courtCloseVal = $court->close_time ?: '23:00';
+            $courtClose = ($courtCloseVal === '00:00' || $courtCloseVal === '24:00') ? 24 : (int) substr($courtCloseVal, 0, 2);
+
             foreach ($operationalHours as $oh) {
                 $h = $oh['hour'];
                 $startTimeStr = $oh['start_time'];
@@ -1127,7 +1165,9 @@ class BookOfflineCourt extends Page
                 $status = 'AVAILABLE';
                 $bookingDetail = null;
 
-                if (isset($this->selectedSlots[$slotKey])) {
+                if ($h < $courtOpen || $h >= $courtClose) {
+                    $status = 'CLOSED';
+                } elseif (isset($this->selectedSlots[$slotKey])) {
                     $status = 'SELECTED';
                 } elseif ($isToday && $h < $currentHour) {
                     $status = 'PAST';

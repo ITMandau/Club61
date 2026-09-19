@@ -73,7 +73,11 @@
             <!-- Court Selector Badges (3 Courts Pro Ecosystem) -->
             <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <template x-for="court in courts" :key="court.court_id">
-                    <div class="p-4 rounded-2xl bg-white/95 border border-[#DFC387] shadow-sm flex items-center justify-between">
+                    <div @click="selectCourtTab(court.court_id)"
+                         :class="activeCourtFilter === court.court_id 
+                             ? 'ring-2 ring-[#D4AF37] bg-[#FAF5E8] shadow-md scale-[1.01]' 
+                             : 'bg-white/95 hover:bg-[#FAF8F2] shadow-sm'"
+                         class="p-3.5 sm:p-4 rounded-2xl border border-[#DFC387] flex items-center justify-between cursor-pointer transition-all active:scale-95">
                         <div>
                             <div class="font-extrabold text-xs sm:text-sm text-[#1F170D] flex items-center gap-1.5">
                                 <span x-text="court.court_name"></span>
@@ -81,7 +85,10 @@
                             </div>
                             <div class="text-[10px] text-[#7A643E] mt-0.5" x-text="court.description || (court.type === 'INDOOR' ? 'Indoor • Central AC' : 'Outdoor • Open Air Court')"></div>
                         </div>
-                        <span class="w-3 h-3 rounded-full bg-emerald-500 ring-4 ring-emerald-100"></span>
+                        <div class="flex items-center gap-2">
+                            <span x-show="activeCourtFilter === court.court_id" class="text-[10px] font-extrabold text-[#8C6418] bg-[#FAF2DE] px-2 py-0.5 rounded-full border border-[#DFC387]">Dipilih</span>
+                            <span class="w-3 h-3 rounded-full bg-emerald-500 ring-4 ring-emerald-100 shrink-0"></span>
+                        </div>
                     </div>
                 </template>
             </div>
@@ -102,18 +109,48 @@
                 </div>
 
                 <!-- Duration Pills -->
-                <div class="flex items-center gap-1.5 sm:gap-2 bg-[#FAF8F2] p-1.5 rounded-2xl border border-[#DFC387]/70 shrink-0">
+                <div class="flex items-center gap-1.5 sm:gap-2 bg-[#FAF8F2] p-1.5 rounded-2xl border border-[#DFC387]/70 shrink-0 overflow-x-auto">
                     <template x-for="d in [1, 2, 3, 4]" :key="d">
                         <button type="button" 
                                 @click="setDuration(d)"
                                 :class="selectedDuration === d 
                                     ? 'bg-[#183428] text-[#F5E6BE] border-[#D4AF37] shadow-md font-black scale-[1.02]' 
                                     : 'bg-white text-[#5C410F] hover:bg-[#FAF2DE] border-transparent font-bold'"
-                                class="px-3.5 sm:px-4 py-2 rounded-xl text-xs border transition-all cursor-pointer flex items-center gap-1.5">
+                                class="px-3.5 sm:px-4 py-2 rounded-xl text-xs border transition-all cursor-pointer flex items-center gap-1.5 shrink-0">
                             <span x-text="d + (d === 1 ? ' Hour' : ' Hours')"></span>
                             <span x-show="d === 2" class="hidden sm:inline text-[9px] text-amber-500 font-bold">Popular</span>
                         </button>
                     </template>
+                </div>
+            </div>
+
+            <!-- Court View Filter Bar (Sleek Segmented Navigation) -->
+            <div class="flex items-center justify-between flex-wrap gap-2 pt-1">
+                <div class="flex items-center gap-1.5 overflow-x-auto pb-1 max-w-full" style="-webkit-overflow-scrolling: touch;">
+                    <button type="button" 
+                            @click="activeCourtFilter = 'ALL'"
+                            :class="activeCourtFilter === 'ALL'
+                                ? 'bg-[#183428] text-[#F5E6BE] border-[#D4AF37] shadow-sm font-black' 
+                                : 'bg-white text-[#5C410F] hover:bg-[#FAF2DE] border-[#DFC387] font-bold'"
+                            class="px-3.5 sm:px-4 py-2 rounded-xl text-xs border transition-all cursor-pointer shrink-0 flex items-center gap-1.5 whitespace-nowrap active:scale-95">
+                        <span>Semua Lapangan (Grid)</span>
+                    </button>
+                    <template x-for="c in courts" :key="c.court_id">
+                        <button type="button" 
+                                @click="activeCourtFilter = c.court_id"
+                                :class="activeCourtFilter === c.court_id
+                                    ? 'bg-[#183428] text-[#F5E6BE] border-[#D4AF37] shadow-sm font-black' 
+                                    : 'bg-white text-[#5C410F] hover:bg-[#FAF2DE] border-[#DFC387] font-bold'"
+                                class="px-3.5 sm:px-4 py-2 rounded-xl text-xs border transition-all cursor-pointer shrink-0 flex items-center gap-1.5 whitespace-nowrap active:scale-95">
+                            <span class="w-2 h-2 rounded-full bg-emerald-500 shrink-0"></span>
+                            <span x-text="c.court_name"></span>
+                        </button>
+                    </template>
+                </div>
+
+                <div x-show="activeCourtFilter !== 'ALL'" class="text-[11px] text-[#7A643E] font-medium hidden sm:block">
+                    <span>Menampilkan jadwal fokus 1 lapangan.</span>
+                    <button type="button" @click="activeCourtFilter = 'ALL'" class="font-bold text-[#8C6418] hover:underline ml-1">Bandingkan Semua &rarr;</button>
                 </div>
             </div>
 
@@ -124,38 +161,62 @@
             </div>
 
             <!-- Schedule Matrix Grid (Displays all 3 Courts side-by-side with Time) -->
-            <div x-show="!isLoading" class="bg-white/95 backdrop-blur-xl rounded-3xl border border-[#DFC387] shadow-[0_15px_40px_rgba(160,120,30,0.15)] overflow-hidden">
-                <div class="overflow-x-auto">
-                    <div class="min-w-[760px]">
+            <div x-show="!isLoading && activeCourtFilter === 'ALL'" class="bg-white/95 backdrop-blur-xl rounded-3xl border border-[#DFC387] shadow-[0_15px_40px_rgba(160,120,30,0.15)] overflow-hidden">
+                
+                <!-- Mobile Horizontal Swipe Hint -->
+                <div class="sm:hidden flex items-center justify-between px-4 py-2 bg-[#FAF5E8] border-b border-[#DFC387]/60 text-[10px] text-[#8C6418] font-bold">
+                    <span>Bandingkan 3 Lapangan</span>
+                    <span class="flex items-center gap-1">Geser horizontal &rarr;</span>
+                </div>
+
+                <div class="overflow-x-auto" style="-webkit-overflow-scrolling: touch;">
+                    <div style="min-width: 520px;">
                         
-                        <!-- Table Headers (Time + 3 Courts) -->
-                        <div class="items-center bg-gradient-to-r from-[#FAF2DE] via-[#F5E6BE] to-[#FAF2DE] border-b border-[#DFC387] text-[11px] font-black uppercase text-[#5C410F] py-3.5 px-4"
-                             style="display: grid; grid-template-columns: 110px 1fr 1fr 1fr; gap: 14px;">
-                            <div class="text-center font-mono font-bold">Match Time</div>
-                            <div class="text-center" x-text="courts[0] ? courts[0].court_name : 'Court 1 (Panoramic Indoor)'">Court 1</div>
-                            <div class="text-center" x-text="courts[1] ? courts[1].court_name : 'Court 2 (Panoramic Indoor)'">Court 2</div>
-                            <div class="text-center" x-text="courts[2] ? courts[2].court_name : 'Court 3 (Open Air Outdoor)'">Court 3</div>
+                        <!-- Table Headers (Sticky Time + 3 Courts) -->
+                        <div class="items-center bg-gradient-to-r from-[#FAF2DE] via-[#F5E6BE] to-[#FAF2DE] border-b border-[#DFC387] text-[11px] font-black uppercase text-[#5C410F] py-3 px-2 sm:px-4"
+                             style="display: grid; grid-template-columns: 62px 1fr 1fr 1fr; gap: 8px;">
+                            <div class="text-center font-mono font-bold sticky left-0 z-20 bg-[#FAF2DE] py-1 border-r border-[#DFC387]/70 shadow-[2px_0_6px_rgba(0,0,0,0.04)]">
+                                <span class="sm:hidden">Jam</span>
+                                <span class="hidden sm:inline">Match Time</span>
+                            </div>
+                            <div class="text-center px-1">
+                                <div class="font-extrabold text-[11px] sm:text-xs text-[#1F170D] truncate" x-text="courts[0] ? courts[0].court_name : 'Court 1'" :title="courts[0] ? courts[0].court_name : ''">Court 1</div>
+                                <div class="text-[9px] text-[#7A643E] font-medium truncate hidden sm:block" x-text="courts[0] ? (courts[0].description || 'Indoor • Central AC') : ''"></div>
+                            </div>
+                            <div class="text-center px-1">
+                                <div class="font-extrabold text-[11px] sm:text-xs text-[#1F170D] truncate" x-text="courts[1] ? courts[1].court_name : 'Court 2'" :title="courts[1] ? courts[1].court_name : ''">Court 2</div>
+                                <div class="text-[9px] text-[#7A643E] font-medium truncate hidden sm:block" x-text="courts[1] ? (courts[1].description || 'Indoor • Central AC') : ''"></div>
+                            </div>
+                            <div class="text-center px-1">
+                                <div class="font-extrabold text-[11px] sm:text-xs text-[#1F170D] truncate" x-text="courts[2] ? courts[2].court_name : 'Court 3'" :title="courts[2] ? courts[2].court_name : ''">Court 3</div>
+                                <div class="text-[9px] text-[#7A643E] font-medium truncate hidden sm:block" x-text="courts[2] ? (courts[2].description || 'Outdoor • Open Air Court') : ''"></div>
+                            </div>
                         </div>
 
                         <!-- Time Slot Rows -->
                         <div class="divide-y divide-[#EEDBB0]/60 text-xs">
                             <template x-for="(row, rowIndex) in matrixRows" :key="row.time">
-                                <div class="items-center p-3 sm:p-3.5 hover:bg-[#FDFBF7] transition-colors"
-                                     style="display: grid; grid-template-columns: 110px 1fr 1fr 1fr; gap: 14px;">
+                                <div class="items-center p-2 sm:p-3 hover:bg-[#FDFBF7] transition-colors group"
+                                     style="display: grid; grid-template-columns: 62px 1fr 1fr 1fr; gap: 8px;">
                                     
-                                    <!-- Time Label -->
-                                    <div class="text-center font-mono font-bold text-[#5C410F] text-xs sm:text-sm" x-text="row.time"></div>
+                                    <!-- Sticky Time Label -->
+                                    <div class="text-center font-mono font-bold text-[#5C410F] text-xs sticky left-0 z-20 bg-white group-hover:bg-[#FDFBF7] py-2.5 border-r border-[#DFC387]/70 shadow-[2px_0_6px_rgba(0,0,0,0.04)] flex items-center justify-center" x-text="row.time"></div>
 
                                     <!-- Court 1 Slot -->
-                                    <div>
+                                    <div class="px-0.5">
                                         <template x-if="row.c1 && row.c1.status === 'BOOKED'">
-                                            <div class="w-full py-2.5 px-3 rounded-xl bg-[#F0ECE1] text-[#9E907B] text-center font-bold text-xs border border-[#E0D8C8] cursor-not-allowed">
+                                            <div class="w-full py-2 sm:py-2.5 px-1.5 sm:px-3 rounded-xl bg-[#F0ECE1] text-[#9E907B] text-center font-bold text-[10px] sm:text-xs border border-[#E0D8C8] whitespace-nowrap cursor-not-allowed">
                                                 Booked
                                             </div>
                                         </template>
                                         <template x-if="row.c1 && row.c1.status === 'LOCKED'">
-                                            <div class="w-full py-2.5 px-3 rounded-xl bg-amber-100/80 text-amber-800 text-center font-bold text-xs border border-amber-300">
+                                            <div class="w-full py-2 sm:py-2.5 px-1.5 sm:px-3 rounded-xl bg-amber-100/80 text-amber-800 text-center font-bold text-[10px] sm:text-xs border border-amber-300 whitespace-nowrap">
                                                 In Checkout
+                                            </div>
+                                        </template>
+                                        <template x-if="row.c1 && row.c1.status === 'CLOSED'">
+                                            <div class="w-full py-2 sm:py-2.5 px-1.5 sm:px-3 rounded-xl bg-[#F3F4F6] text-[#9CA3AF] text-center font-bold text-[10px] sm:text-xs border border-[#E5E7EB] whitespace-nowrap cursor-not-allowed">
+                                                Tutup
                                             </div>
                                         </template>
                                         <template x-if="row.c1 && row.c1.status === 'AVAILABLE'">
@@ -168,8 +229,8 @@
                                                         : (isSlotHovered(row.c1.court_id, row.c1.local_start) 
                                                             ? 'bg-[#FAF2DE] text-[#1F170D] border-2 border-[#D4AF37] shadow-md' 
                                                             : 'bg-white hover:bg-[#FAF5E6] text-[#1F170D] border border-[#DFC387]')"
-                                                    class="w-full py-2.5 px-3 rounded-xl text-center font-medium transition-all active:scale-95 group cursor-pointer relative">
-                                                <div class="font-extrabold text-xs sm:text-sm text-[#8C6418]" 
+                                                    class="w-full py-2 sm:py-2.5 px-1.5 sm:px-2 rounded-xl text-center font-medium transition-all active:scale-95 group cursor-pointer relative">
+                                                <div class="font-extrabold text-[11px] sm:text-xs md:text-sm text-[#8C6418] whitespace-nowrap" 
                                                      :class="isSlotSelected(row.c1.court_id, row.c1.local_start) ? 'text-[#F5E6BE]' : ''"
                                                      x-text="'Rp ' + formatNumber(row.c1.price)"></div>
                                             </button>
@@ -177,15 +238,20 @@
                                     </div>
 
                                     <!-- Court 2 Slot -->
-                                    <div>
+                                    <div class="px-0.5">
                                         <template x-if="row.c2 && row.c2.status === 'BOOKED'">
-                                            <div class="w-full py-2.5 px-3 rounded-xl bg-[#F0ECE1] text-[#9E907B] text-center font-bold text-xs border border-[#E0D8C8] cursor-not-allowed">
+                                            <div class="w-full py-2 sm:py-2.5 px-1.5 sm:px-3 rounded-xl bg-[#F0ECE1] text-[#9E907B] text-center font-bold text-[10px] sm:text-xs border border-[#E0D8C8] whitespace-nowrap cursor-not-allowed">
                                                 Booked
                                             </div>
                                         </template>
                                         <template x-if="row.c2 && row.c2.status === 'LOCKED'">
-                                            <div class="w-full py-2.5 px-3 rounded-xl bg-amber-100/80 text-amber-800 text-center font-bold text-xs border border-amber-300">
+                                            <div class="w-full py-2 sm:py-2.5 px-1.5 sm:px-3 rounded-xl bg-amber-100/80 text-amber-800 text-center font-bold text-[10px] sm:text-xs border border-amber-300 whitespace-nowrap">
                                                 In Checkout
+                                            </div>
+                                        </template>
+                                        <template x-if="row.c2 && row.c2.status === 'CLOSED'">
+                                            <div class="w-full py-2 sm:py-2.5 px-1.5 sm:px-3 rounded-xl bg-[#F3F4F6] text-[#9CA3AF] text-center font-bold text-[10px] sm:text-xs border border-[#E5E7EB] whitespace-nowrap cursor-not-allowed">
+                                                Tutup
                                             </div>
                                         </template>
                                         <template x-if="row.c2 && row.c2.status === 'AVAILABLE'">
@@ -198,8 +264,8 @@
                                                         : (isSlotHovered(row.c2.court_id, row.c2.local_start) 
                                                             ? 'bg-[#FAF2DE] text-[#1F170D] border-2 border-[#D4AF37] shadow-md' 
                                                             : 'bg-white hover:bg-[#FAF5E6] text-[#1F170D] border border-[#DFC387]')"
-                                                    class="w-full py-2.5 px-3 rounded-xl text-center font-medium transition-all active:scale-95 group cursor-pointer relative">
-                                                <div class="font-extrabold text-xs sm:text-sm text-[#8C6418]" 
+                                                    class="w-full py-2 sm:py-2.5 px-1.5 sm:px-2 rounded-xl text-center font-medium transition-all active:scale-95 group cursor-pointer relative">
+                                                <div class="font-extrabold text-[11px] sm:text-xs md:text-sm text-[#8C6418] whitespace-nowrap" 
                                                      :class="isSlotSelected(row.c2.court_id, row.c2.local_start) ? 'text-[#F5E6BE]' : ''"
                                                      x-text="'Rp ' + formatNumber(row.c2.price)"></div>
                                             </button>
@@ -207,15 +273,20 @@
                                     </div>
 
                                     <!-- Court 3 Slot -->
-                                    <div>
+                                    <div class="px-0.5">
                                         <template x-if="row.c3 && row.c3.status === 'BOOKED'">
-                                            <div class="w-full py-2.5 px-3 rounded-xl bg-[#F0ECE1] text-[#9E907B] text-center font-bold text-xs border border-[#E0D8C8] cursor-not-allowed">
+                                            <div class="w-full py-2 sm:py-2.5 px-1.5 sm:px-3 rounded-xl bg-[#F0ECE1] text-[#9E907B] text-center font-bold text-[10px] sm:text-xs border border-[#E0D8C8] whitespace-nowrap cursor-not-allowed">
                                                 Booked
                                             </div>
                                         </template>
                                         <template x-if="row.c3 && row.c3.status === 'LOCKED'">
-                                            <div class="w-full py-2.5 px-3 rounded-xl bg-amber-100/80 text-amber-800 text-center font-bold text-xs border border-amber-300">
+                                            <div class="w-full py-2 sm:py-2.5 px-1.5 sm:px-3 rounded-xl bg-amber-100/80 text-amber-800 text-center font-bold text-[10px] sm:text-xs border border-amber-300 whitespace-nowrap">
                                                 In Checkout
+                                            </div>
+                                        </template>
+                                        <template x-if="row.c3 && row.c3.status === 'CLOSED'">
+                                            <div class="w-full py-2 sm:py-2.5 px-1.5 sm:px-3 rounded-xl bg-[#F3F4F6] text-[#9CA3AF] text-center font-bold text-[10px] sm:text-xs border border-[#E5E7EB] whitespace-nowrap cursor-not-allowed">
+                                                Tutup
                                             </div>
                                         </template>
                                         <template x-if="row.c3 && row.c3.status === 'AVAILABLE'">
@@ -228,8 +299,8 @@
                                                         : (isSlotHovered(row.c3.court_id, row.c3.local_start) 
                                                             ? 'bg-[#FAF2DE] text-[#1F170D] border-2 border-[#D4AF37] shadow-md' 
                                                             : 'bg-white hover:bg-[#FAF5E6] text-[#1F170D] border border-[#DFC387]')"
-                                                    class="w-full py-2.5 px-3 rounded-xl text-center font-medium transition-all active:scale-95 group cursor-pointer relative">
-                                                <div class="font-extrabold text-xs sm:text-sm text-[#8C6418]" 
+                                                    class="w-full py-2 sm:py-2.5 px-1.5 sm:px-2 rounded-xl text-center font-medium transition-all active:scale-95 group cursor-pointer relative">
+                                                <div class="font-extrabold text-[11px] sm:text-xs md:text-sm text-[#8C6418] whitespace-nowrap" 
                                                      :class="isSlotSelected(row.c3.court_id, row.c3.local_start) ? 'text-[#F5E6BE]' : ''"
                                                      x-text="'Rp ' + formatNumber(row.c3.price)"></div>
                                             </button>
@@ -241,6 +312,76 @@
                         </div>
                     </div>
                 </div>
+            </div>
+
+            <!-- Single Court Schedule View (Full-Width Mobile Perfection) -->
+            <div x-show="!isLoading && activeCourtFilter !== 'ALL'" class="bg-white/95 backdrop-blur-xl rounded-3xl border border-[#DFC387] shadow-[0_15px_40px_rgba(160,120,30,0.15)] overflow-hidden">
+                <template x-if="getSelectedCourt()">
+                    <div>
+                        <!-- Focused Court Header Card -->
+                        <div class="p-4 bg-gradient-to-r from-[#FAF2DE] via-[#F5E6BE] to-[#FAF2DE] border-b border-[#DFC387] flex items-center justify-between gap-3">
+                            <div>
+                                <div class="font-extrabold text-sm sm:text-base text-[#1F170D] flex items-center gap-2">
+                                    <span x-text="getSelectedCourt().court_name"></span>
+                                    <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 ring-4 ring-emerald-100 shrink-0"></span>
+                                </div>
+                                <div class="text-xs text-[#7A643E] mt-0.5" x-text="getSelectedCourt().description || (getSelectedCourt().type === 'INDOOR' ? 'Indoor • Central AC' : 'Outdoor • Open Air Court')"></div>
+                            </div>
+                            <button type="button" 
+                                    @click="activeCourtFilter = 'ALL'" 
+                                    class="text-xs font-black text-[#5C410F] bg-white/90 hover:bg-white px-3 py-1.5 rounded-xl border border-[#DFC387] shadow-sm shrink-0 cursor-pointer active:scale-95 transition-all">
+                                <span>Lihat Semua &rarr;</span>
+                            </button>
+                        </div>
+
+                        <!-- Focused Court Slot Rows -->
+                        <div class="divide-y divide-[#EEDBB0]/60 text-xs">
+                            <template x-for="(slot, slotIndex) in getSelectedCourtSlots()" :key="slot.local_start">
+                                <div class="p-3 sm:p-4 flex items-center justify-between gap-3 hover:bg-[#FDFBF7] transition-colors">
+                                    <div class="flex items-center gap-2 sm:gap-3 min-w-0">
+                                        <div class="font-mono font-bold text-xs sm:text-sm text-[#1F170D] whitespace-nowrap" x-text="slot.time"></div>
+                                        <span x-show="slot.is_prime_time" class="px-2 py-0.5 rounded-md text-[9px] font-extrabold uppercase bg-amber-100 text-amber-800 border border-amber-300 shrink-0">Prime</span>
+                                        <span x-show="!slot.is_prime_time" class="px-2 py-0.5 rounded-md text-[9px] font-extrabold uppercase bg-slate-100 text-slate-700 border border-slate-300 shrink-0">Reguler</span>
+                                    </div>
+
+                                    <div class="w-32 sm:w-44 shrink-0">
+                                        <template x-if="slot.status === 'BOOKED'">
+                                            <div class="w-full py-2.5 px-2 sm:px-3 rounded-xl bg-[#F0ECE1] text-[#9E907B] text-center font-bold text-xs border border-[#E0D8C8] whitespace-nowrap cursor-not-allowed">
+                                                Booked
+                                            </div>
+                                        </template>
+                                        <template x-if="slot.status === 'LOCKED'">
+                                            <div class="w-full py-2.5 px-2 sm:px-3 rounded-xl bg-amber-100/80 text-amber-800 text-center font-bold text-xs border border-amber-300 whitespace-nowrap">
+                                                In Checkout
+                                            </div>
+                                        </template>
+                                        <template x-if="slot.status === 'CLOSED'">
+                                            <div class="w-full py-2.5 px-2 sm:px-3 rounded-xl bg-[#F3F4F6] text-[#9CA3AF] text-center font-bold text-xs border border-[#E5E7EB] whitespace-nowrap cursor-not-allowed">
+                                                Tutup
+                                            </div>
+                                        </template>
+                                        <template x-if="slot.status === 'AVAILABLE'">
+                                            <button type="button" 
+                                                    @click="handleSlotClick(getSelectedCourt().court_id, getSelectedCourt().court_name, slot.local_start, slot.local_end, slot.price, slotIndex, getSelectedCourtKey())"
+                                                    @mouseenter="previewSlots(getSelectedCourt().court_id, slotIndex, getSelectedCourtKey())"
+                                                    @mouseleave="clearPreview()"
+                                                    :class="isSlotSelected(getSelectedCourt().court_id, slot.local_start) 
+                                                        ? 'bg-[#183428] text-white border-2 border-[#D4AF37] shadow-[0_4px_15px_rgba(24,52,40,0.4)] scale-[1.01]' 
+                                                        : (isSlotHovered(getSelectedCourt().court_id, slot.local_start) 
+                                                            ? 'bg-[#FAF2DE] text-[#1F170D] border-2 border-[#D4AF37] shadow-md' 
+                                                            : 'bg-white hover:bg-[#FAF5E6] text-[#1F170D] border border-[#DFC387]')"
+                                                    class="w-full py-2.5 px-2 sm:px-3 rounded-xl text-center font-medium transition-all active:scale-95 group cursor-pointer relative">
+                                                <div class="font-extrabold text-xs sm:text-sm text-[#8C6418] whitespace-nowrap" 
+                                                     :class="isSlotSelected(getSelectedCourt().court_id, slot.local_start) ? 'text-[#F5E6BE]' : ''"
+                                                     x-text="'Rp ' + formatNumber(slot.price)"></div>
+                                            </button>
+                                        </template>
+                                    </div>
+                                </div>
+                            </template>
+                        </div>
+                    </div>
+                </template>
             </div>
 
             <!-- Sticky Bottom Selection Action Bar -->
@@ -341,6 +482,29 @@
                 matrixRows: [],
                 isLoading: true,
                 isHolding: false,
+                activeCourtFilter: 'ALL', // 'ALL' atau court_id
+
+                selectCourtTab(courtId) {
+                    this.activeCourtFilter = (this.activeCourtFilter === courtId ? 'ALL' : courtId);
+                },
+
+                getSelectedCourt() {
+                    if (this.activeCourtFilter === 'ALL') return null;
+                    return this.courts.find(c => c.court_id === this.activeCourtFilter) || null;
+                },
+
+                getSelectedCourtSlots() {
+                    const court = this.getSelectedCourt();
+                    return court && court.slots ? court.slots : [];
+                },
+
+                getSelectedCourtKey() {
+                    const idx = this.courts.findIndex(c => c.court_id === this.activeCourtFilter);
+                    if (idx === 0) return 'c1';
+                    if (idx === 1) return 'c2';
+                    if (idx === 2) return 'c3';
+                    return 'c1';
+                },
 
                 // Luxury Notice Modal State
                 noticeModal: {
@@ -457,6 +621,9 @@
                         if (json.success && json.data.courts.length > 0) {
                             this.courts = json.data.courts;
                             this.buildMatrixRows(json.data.courts);
+                            if (this.activeCourtFilter !== 'ALL' && !this.courts.some(c => c.court_id === this.activeCourtFilter)) {
+                                this.activeCourtFilter = 'ALL';
+                            }
                         }
                     } catch (e) {
                         console.error('Failed to fetch court schedule:', e);

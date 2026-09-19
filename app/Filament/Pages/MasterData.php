@@ -40,7 +40,14 @@ class MasterData extends Page
     public ?string $courtDescription = '';
     public int|float|string|null $hourlyRateRegular = 300000;
     public int|float|string|null $hourlyRatePrime = 450000;
+    public string $courtOpenTime = '06:00';
+    public string $courtCloseTime = '23:00';
     public bool $courtIsActive = true;
+
+    // State Modal Atur Jam Operasional Massal (Seluruh Lapangan Sekaligus)
+    public bool $showOperatingHoursModal = false;
+    public string $bulkOpenTime = '06:00';
+    public string $bulkCloseTime = '23:00';
 
     // State Modal Add-on / Equipment
     public bool $showEquipmentModal = false;
@@ -76,6 +83,8 @@ class MasterData extends Page
         $this->courtDescription = 'Indoor • Central AC';
         $this->hourlyRateRegular = 300000;
         $this->hourlyRatePrime = 450000;
+        $this->courtOpenTime = '06:00';
+        $this->courtCloseTime = '23:00';
         $this->courtIsActive = true;
         $this->showCourtModal = true;
     }
@@ -94,6 +103,8 @@ class MasterData extends Page
         $this->courtDescription = (string) ($court->description ?: ($court->type === 'INDOOR' ? 'Indoor • Central AC' : 'Outdoor • Open Air Court'));
         $this->hourlyRateRegular = (float) $court->hourly_rate_regular;
         $this->hourlyRatePrime = (float) $court->hourly_rate_prime;
+        $this->courtOpenTime = (string) ($court->open_time ?: '06:00');
+        $this->courtCloseTime = (string) ($court->close_time ?: '23:00');
         $this->courtIsActive = (bool) $court->is_active;
         $this->showCourtModal = true;
     }
@@ -103,6 +114,53 @@ class MasterData extends Page
         $this->showCourtModal = false;
         $this->editingCourtId = null;
         $this->courtDescription = '';
+    }
+
+    public function openOperatingHoursModal(): void
+    {
+        $firstCourt = PadelCourt::first();
+        $this->bulkOpenTime = (string) ($firstCourt?->open_time ?: '06:00');
+        $this->bulkCloseTime = (string) ($firstCourt?->close_time ?: '23:00');
+        $this->showOperatingHoursModal = true;
+    }
+
+    public function closeOperatingHoursModal(): void
+    {
+        $this->showOperatingHoursModal = false;
+    }
+
+    public function saveOperatingHoursAllCourts(): void
+    {
+        $this->authorizeAdminAction();
+
+        $this->validate([
+            'bulkOpenTime' => ['required', 'string'],
+            'bulkCloseTime' => ['required', 'string'],
+        ], [
+            'bulkOpenTime.required' => 'Jam buka wajib dipilih.',
+            'bulkCloseTime.required' => 'Jam tutup wajib dipilih.',
+        ]);
+
+        $openHour = (int) substr($this->bulkOpenTime, 0, 2);
+        $closeHour = ($this->bulkCloseTime === '00:00' || $this->bulkCloseTime === '24:00') ? 24 : (int) substr($this->bulkCloseTime, 0, 2);
+
+        if ($openHour >= $closeHour) {
+            $this->addError('bulkCloseTime', 'Jam tutup harus lebih malam dari jam buka.');
+            return;
+        }
+
+        PadelCourt::query()->update([
+            'open_time' => $this->bulkOpenTime,
+            'close_time' => $this->bulkCloseTime,
+        ]);
+
+        $this->closeOperatingHoursModal();
+
+        Notification::make()
+            ->title('Jam Operasional Berhasil Disinkronkan')
+            ->body("Seluruh lapangan kini diset buka jam {$this->bulkOpenTime} WIB dan tutup jam {$this->bulkCloseTime} WIB. Jadwal booking pelanggan langsung mengikuti perubahan ini.")
+            ->success()
+            ->send();
     }
 
     public function saveCourt(): void
@@ -115,11 +173,23 @@ class MasterData extends Page
             'courtDescription' => ['nullable', 'string', 'max:100'],
             'hourlyRateRegular' => ['required', 'numeric', 'min:0'],
             'hourlyRatePrime' => ['required', 'numeric', 'min:0'],
+            'courtOpenTime' => ['required', 'string'],
+            'courtCloseTime' => ['required', 'string'],
         ], [
             'courtName.required' => 'Nama lapangan wajib diisi.',
             'hourlyRateRegular.required' => 'Tarif reguler wajib diisi.',
             'hourlyRatePrime.required' => 'Tarif prime time wajib diisi.',
+            'courtOpenTime.required' => 'Jam buka lapangan wajib diisi.',
+            'courtCloseTime.required' => 'Jam tutup lapangan wajib diisi.',
         ]);
+
+        $openHour = (int) substr($this->courtOpenTime, 0, 2);
+        $closeHour = ($this->courtCloseTime === '00:00' || $this->courtCloseTime === '24:00') ? 24 : (int) substr($this->courtCloseTime, 0, 2);
+
+        if ($openHour >= $closeHour) {
+            $this->addError('courtCloseTime', 'Jam tutup harus lebih malam dari jam buka.');
+            return;
+        }
 
         $regular = max(0, (float) ($this->hourlyRateRegular ?: 0));
         $prime = max(0, (float) ($this->hourlyRatePrime ?: 0));
@@ -137,12 +207,14 @@ class MasterData extends Page
                 'description' => trim($this->courtDescription ?? '') ?: null,
                 'hourly_rate_regular' => $regular,
                 'hourly_rate_prime' => $prime,
+                'open_time' => $this->courtOpenTime,
+                'close_time' => $this->courtCloseTime,
                 'is_active' => $this->courtIsActive,
             ]);
 
             Notification::make()
                 ->title('Tarif Lapangan Berhasil Diperbarui')
-                ->body("Konfigurasi untuk {$court->name} telah aktif dan tersinkronisasi ke seluruh jadwal.")
+                ->body("Konfigurasi untuk {$court->name} (Jam Operasional: {$court->open_time} - {$court->close_time} WIB) telah aktif dan tersinkronisasi ke seluruh jadwal.")
                 ->success()
                 ->send();
         } else {
@@ -152,6 +224,8 @@ class MasterData extends Page
                 'description' => trim($this->courtDescription ?? '') ?: null,
                 'hourly_rate_regular' => $regular,
                 'hourly_rate_prime' => $prime,
+                'open_time' => $this->courtOpenTime,
+                'close_time' => $this->courtCloseTime,
                 'is_active' => $this->courtIsActive,
             ]);
 

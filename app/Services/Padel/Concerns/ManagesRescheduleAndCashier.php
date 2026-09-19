@@ -49,17 +49,21 @@ trait ManagesRescheduleAndCashier
             ->where('id', '!=', $booking->id)
             ->get();
 
+        $openHour = (int) substr($court->open_time ?: '06:00', 0, 2);
+        $closeVal = $court->close_time ?: '23:00';
+        $closeHour = ($closeVal === '00:00' || $closeVal === '24:00') ? 24 : (int) substr($closeVal, 0, 2);
+
         // Bulk prefetch Distributed Cache Locks untuk seluruh rentang jam lapangan tujuan (1 query)
         $allSlotCacheKeys = [];
-        for ($h = 6; $h < 23; $h++) {
+        for ($h = $openHour; $h < $closeHour; $h++) {
             $allSlotCacheKeys[] = "padel_lock:{$court->id}:{$dateStr}:" . sprintf('%02d00', $h);
         }
         $bulkSlotLocks = Cache::many($allSlotCacheKeys);
 
         $availableSlots = [];
 
-        // Jam operasional: 06:00 sampai 23:00 (batas start adalah 23 - durasi)
-        for ($startHour = 6; $startHour <= (23 - $durationHours); $startHour++) {
+        // Jam operasional: open_time sampai close_time (batas start adalah closeHour - durasi)
+        for ($startHour = $openHour; $startHour <= ($closeHour - $durationHours); $startHour++) {
             $slotStart = Carbon::parse("{$dateStr} " . sprintf('%02d:00', $startHour), $timezone);
             $slotEnd = $slotStart->copy()->addHours($durationHours);
 

@@ -750,7 +750,7 @@
     <div class="pos-grid-card">
         <div class="pos-grid-header">
             <div>
-                <div style="font-size:0.8125rem; font-weight:900; color:#1F170D;">Slot Lapangan — 06:00 sampai 23:00</div>
+                <div style="font-size:0.8125rem; font-weight:900; color:#1F170D;">Slot Lapangan &mdash; {{ !empty($operationalHours) ? $operationalHours[0]['label'] . ' sampai ' . substr(end($operationalHours)['end_time'], 0, 5) . ' WIB' : 'Jam Operasional' }}</div>
                 <div style="font-size:0.625rem; color:#7A643E; margin-top:0.1rem;">Klik kotak jam hijau untuk memilih. Klik lagi untuk membatalkan pilihan.</div>
             </div>
             <div style="font-size:0.6875rem; color:#7A643E;">
@@ -809,6 +809,10 @@
                                         <div class="slot-btn slot-locked" title="Hold di keranjang">
                                             <span style="font-size:0.5rem;">HOLD</span>
                                             <span style="font-size:0.5rem;">Cart</span>
+                                        </div>
+                                    @elseif($st === 'CLOSED')
+                                        <div class="slot-btn slot-past" title="Di luar jam operasional lapangan">
+                                            <span style="font-size:0.5rem; text-transform:uppercase; color:#9CA3AF;">Tutup</span>
                                         </div>
                                     @else
                                         <div class="slot-btn slot-past" title="Jam sudah lewat">

@@ -575,7 +575,7 @@
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16"></path>
                 </svg>
                 <span style="font-size: 0.875rem; font-weight: 900; color: #1A150B; text-transform: uppercase; letter-spacing: 0.04em;">
-                    Timetable Jadwal Lapangan Padel (06:00 - 24:00 WIB)
+                    Timetable Jadwal Lapangan Padel ({{ !empty($operationalHours) ? $operationalHours[0]['label'] . ' - ' . end($operationalHours)['next_label'] . ' WIB' : '06:00 - 23:00 WIB' }})
                 </span>
             </div>
             <div style="font-size: 0.75rem; color: #7A6335; font-weight: 600;">
@@ -676,6 +676,12 @@
                                                     </span>
                                                 @endif
                                             </div>
+                                        </div>
+                                    @elseif($slot['type'] === 'closed')
+                                        <!-- Slot Tutup / Di Luar Jam Operasional Lapangan -->
+                                        <div class="cmd-slot-box cmd-slot-past" title="Di luar jam operasional lapangan">
+                                            <span style="font-size: 0.75rem; font-weight: 800; color: #9CA3AF;">-</span>
+                                            <span style="font-size: 0.5625rem; font-weight: 700; color: #9CA3AF; text-transform: uppercase;">TUTUP</span>
                                         </div>
                                     @else
                                         @if($slot['is_past'])

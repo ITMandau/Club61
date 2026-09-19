@@ -305,4 +305,122 @@ class MasterDataPricingAndAddonsTest extends TestCase
         $this->assertNotNull($courtData);
         $this->assertEquals('Indoor • VIP Central AC', $courtData['description']);
     }
+
+    public function test_admin_can_update_court_operating_hours(): void
+    {
+        $this->actingAs($this->adminUser);
+
+        Livewire::test(MasterData::class)
+            ->call('openEditCourtModal', $this->court->id)
+            ->set('courtOpenTime', '11:00')
+            ->set('courtCloseTime', '22:00')
+            ->call('saveCourt')
+            ->assertHasNoErrors();
+
+        $this->assertDatabaseHas('padel_courts', [
+            'id' => $this->court->id,
+            'open_time' => '11:00',
+            'close_time' => '22:00',
+        ]);
+    }
+
+    public function test_admin_can_bulk_update_operating_hours_all_courts(): void
+    {
+        $this->actingAs($this->adminUser);
+
+        $court2 = PadelCourt::create([
+            'name' => 'Court 2 - Second',
+            'type' => 'OUTDOOR',
+            'hourly_rate_regular' => 200000.00,
+            'hourly_rate_prime' => 300000.00,
+            'open_time' => '06:00',
+            'close_time' => '23:00',
+            'is_active' => true,
+        ]);
+
+        Livewire::test(MasterData::class)
+            ->call('openOperatingHoursModal')
+            ->set('bulkOpenTime', '11:00')
+            ->set('bulkCloseTime', '23:00')
+            ->call('saveOperatingHoursAllCourts')
+            ->assertHasNoErrors();
+
+        $this->assertDatabaseHas('padel_courts', [
+            'id' => $this->court->id,
+            'open_time' => '11:00',
+            'close_time' => '23:00',
+        ]);
+
+        $this->assertDatabaseHas('padel_courts', [
+            'id' => $court2->id,
+            'open_time' => '11:00',
+            'close_time' => '23:00',
+        ]);
+    }
+
+    public function test_court_operating_hours_validation_rejects_close_before_open(): void
+    {
+        $this->actingAs($this->adminUser);
+
+        Livewire::test(MasterData::class)
+            ->call('openEditCourtModal', $this->court->id)
+            ->set('courtOpenTime', '15:00')
+            ->set('courtCloseTime', '10:00')
+            ->call('saveCourt')
+            ->assertHasErrors(['courtCloseTime']);
+    }
+
+    public function test_schedule_matrix_starts_from_court_open_time(): void
+    {
+        // Set seluruh lapangan buka jam 11:00 dan tutup jam 22:00
+        PadelCourt::query()->update([
+            'open_time' => '11:00',
+            'close_time' => '22:00',
+        ]);
+
+        $service = app(PadelBookingService::class);
+        $matrix = $service->getScheduleMatrix('2026-09-21');
+
+        $courtData = collect($matrix['courts'])->firstWhere('court_id', $this->court->id);
+        $this->assertNotNull($courtData);
+        $this->assertNotEmpty($courtData['slots']);
+
+        // Baris slot pertama HARUS dimulai dari jam buka (11:00), bukan hardcoded 06:00
+        $firstSlot = $courtData['slots'][0];
+        $this->assertEquals('11:00 - 12:00', $firstSlot['time']);
+        $this->assertEquals('11:00', $firstSlot['local_start']);
+        $this->assertEquals('AVAILABLE', $firstSlot['status']);
+
+        // Slot jam 06:00 s/d 10:00 tidak boleh ada di matriks
+        $hasBeforeOpen = collect($courtData['slots'])->contains(function ($s) {
+            return $s['time'] === '06:00 - 07:00' || $s['time'] === '10:00 - 11:00';
+        });
+        $this->assertFalse($hasBeforeOpen);
+
+        // Baris slot terakhir adalah 21:00 - 22:00
+        $lastSlot = end($courtData['slots']);
+        $this->assertEquals('21:00 - 22:00', $lastSlot['time']);
+    }
+
+    public function test_hold_batch_slots_rejects_booking_outside_operating_hours(): void
+    {
+        $this->court->update([
+            'open_time' => '11:00',
+            'close_time' => '22:00',
+        ]);
+
+        $service = app(PadelBookingService::class);
+
+        $this->expectException(\Symfony\Component\HttpKernel\Exception\HttpException::class);
+        $this->expectExceptionMessage('berada di luar jam operasional');
+
+        // Coba hold slot jam 09:00 - 10:00 (sebelum jam 11:00 buka)
+        $service->holdBatchSlots([
+            [
+                'court_id' => $this->court->id,
+                'start_time' => '09:00:00',
+                'end_time' => '10:00:00',
+            ],
+        ], '2026-09-21', $this->adminUser);
+    }
 }
