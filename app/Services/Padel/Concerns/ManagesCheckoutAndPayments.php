@@ -59,7 +59,7 @@ trait ManagesCheckoutAndPayments
 
                 foreach ($equipments as $item) {
                     $eq = CourtEquipment::find($item['equipment_id']);
-                    if (! $eq) {
+                    if (! $eq || ! $eq->is_active) {
                         continue;
                     }
 
@@ -766,7 +766,7 @@ trait ManagesCheckoutAndPayments
 
                 foreach ($equipments as $item) {
                     $eq = CourtEquipment::find($item['equipment_id']);
-                    if (! $eq) {
+                    if (! $eq || ! $eq->is_active) {
                         continue;
                     }
 

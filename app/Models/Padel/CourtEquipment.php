@@ -16,6 +16,7 @@ class CourtEquipment extends Model
         'type',
         'rental_price',
         'stock_quantity',
+        'is_active',
     ];
 
     protected function casts(): array
@@ -23,6 +24,7 @@ class CourtEquipment extends Model
         return [
             'rental_price' => 'decimal:2',
             'stock_quantity' => 'integer',
+            'is_active' => 'boolean',
         ];
     }
 }

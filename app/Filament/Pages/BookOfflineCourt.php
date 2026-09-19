@@ -118,7 +118,7 @@ class BookOfflineCourt extends Page
 
     protected function initializeEquipmentQuantities(): void
     {
-        $equipments = CourtEquipment::all();
+        $equipments = CourtEquipment::where('is_active', true)->get();
         foreach ($equipments as $eq) {
             if (! isset($this->rentalQuantities[$eq->id])) {
                 $this->rentalQuantities[$eq->id] = 0;
@@ -268,7 +268,7 @@ class BookOfflineCourt extends Page
         foreach ($this->rentalQuantities as $eqId => $qty) {
             if ($qty > 0) {
                 $eq = CourtEquipment::find($eqId);
-                if ($eq) {
+                if ($eq && $eq->is_active) {
                     $total += ((float) $eq->rental_price * $qty);
                 }
             }
@@ -1023,7 +1023,7 @@ class BookOfflineCourt extends Page
                 })->toArray(),
                 'equipments' => array_values(array_filter(array_map(function ($item) {
                     $eq = CourtEquipment::find($item['equipment_id']);
-                    return $eq ? [
+                    return ($eq && $eq->is_active) ? [
                         'name' => $eq->name,
                         'quantity' => $item['quantity'],
                         'price' => (float) $eq->rental_price * $item['quantity'],
@@ -1220,7 +1220,7 @@ class BookOfflineCourt extends Page
             ->limit(8)
             ->get();
 
-        $equipments = CourtEquipment::orderBy('type')->orderBy('name')->get();
+        $equipments = CourtEquipment::where('is_active', true)->orderBy('type')->orderBy('name')->get();
 
         $searchResults = [];
         if (strlen(trim($this->customerSearch)) >= 2) {

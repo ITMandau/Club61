@@ -181,12 +181,17 @@ class BookingSystem extends Page
         $startFormatted = sprintf('%02d:00', (int) $hour);
         $endFormatted = sprintf('%02d:00', (int) $hour + 1);
 
+        $isWeekend = Carbon::parse($this->selectedDate)->isWeekend();
+        $isPrime = $isWeekend || (int) $hour >= 17;
+        $rate = $isPrime ? (float) $court->hourly_rate_prime : (float) $court->hourly_rate_regular;
+
         $this->inspectData = [
             'type' => 'available',
             'court_id' => $court->id,
             'court_name' => $court->name,
             'court_type' => $court->type ?? 'INDOOR',
-            'rate' => (float) $court->hourly_rate_regular,
+            'rate' => $rate,
+            'is_prime_time' => $isPrime,
             'booking_date' => $this->selectedDate,
             'date_formatted' => Carbon::parse($this->selectedDate)->translatedFormat('l, d F Y'),
             'start_time' => $startFormatted,
@@ -333,12 +338,17 @@ class BookingSystem extends Page
                         'equipment_count' => $matchedBooking->equipments ? $matchedBooking->equipments->sum('quantity') : 0,
                     ];
                 } else {
+                    $isWeekend = $targetDate->isWeekend();
+                    $isPrime = $isWeekend || (int) $h >= 17;
+                    $slotPrice = $isPrime ? (float) $court->hourly_rate_prime : (float) $court->hourly_rate_regular;
+
                     $courtRow['slots'][$h] = [
                         'type' => 'available',
                         'court_id' => $court->id,
                         'hour' => $h,
                         'is_past' => $opHour['is_past'],
-                        'price' => (float) $court->hourly_rate_regular,
+                        'is_prime_time' => $isPrime,
+                        'price' => $slotPrice,
                     ];
                 }
             }

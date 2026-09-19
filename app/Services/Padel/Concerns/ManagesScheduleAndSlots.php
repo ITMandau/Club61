@@ -116,6 +116,7 @@ trait ManagesScheduleAndSlots
                 'court_id' => $court->id,
                 'court_name' => $court->name,
                 'type' => $court->type,
+                'description' => $court->description ?: ($court->type === 'INDOOR' ? 'Indoor • Central AC' : 'Outdoor • Open Air Court'),
                 'slots' => $slots,
             ];
         }
@@ -132,7 +133,7 @@ trait ManagesScheduleAndSlots
      */
     public function getEquipments(): Collection
     {
-        return CourtEquipment::orderBy('type')->get();
+        return CourtEquipment::where('is_active', true)->orderBy('type')->get();
     }
 
     /**

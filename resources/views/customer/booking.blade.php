@@ -79,7 +79,7 @@
                                 <span x-text="court.court_name"></span>
                                 <span class="text-[#8C6418] cursor-help" title="Specification: 12mm WPT Tempered Glass & Mondo Supercourt Turf">ⓘ</span>
                             </div>
-                            <div class="text-[10px] text-[#7A643E] mt-0.5" x-text="court.type === 'INDOOR' ? 'Indoor &bull; Central AC' : 'Outdoor &bull; Open Air Court'"></div>
+                            <div class="text-[10px] text-[#7A643E] mt-0.5" x-text="court.description || (court.type === 'INDOOR' ? 'Indoor • Central AC' : 'Outdoor • Open Air Court')"></div>
                         </div>
                         <span class="w-3 h-3 rounded-full bg-emerald-500 ring-4 ring-emerald-100"></span>
                     </div>
@@ -168,10 +168,7 @@
                                                         : (isSlotHovered(row.c1.court_id, row.c1.local_start) 
                                                             ? 'bg-[#FAF2DE] text-[#1F170D] border-2 border-[#D4AF37] shadow-md' 
                                                             : 'bg-white hover:bg-[#FAF5E6] text-[#1F170D] border border-[#DFC387]')"
-                                                    class="w-full py-2 px-3 rounded-xl text-center font-medium transition-all active:scale-95 group cursor-pointer relative">
-                                                <div class="text-[9px] line-through text-[#9E907B]" 
-                                                     :class="isSlotSelected(row.c1.court_id, row.c1.local_start) ? 'text-emerald-200/70' : ''"
-                                                     x-text="'Rp ' + formatNumber(row.c1.original_price)"></div>
+                                                    class="w-full py-2.5 px-3 rounded-xl text-center font-medium transition-all active:scale-95 group cursor-pointer relative">
                                                 <div class="font-extrabold text-xs sm:text-sm text-[#8C6418]" 
                                                      :class="isSlotSelected(row.c1.court_id, row.c1.local_start) ? 'text-[#F5E6BE]' : ''"
                                                      x-text="'Rp ' + formatNumber(row.c1.price)"></div>
@@ -201,10 +198,7 @@
                                                         : (isSlotHovered(row.c2.court_id, row.c2.local_start) 
                                                             ? 'bg-[#FAF2DE] text-[#1F170D] border-2 border-[#D4AF37] shadow-md' 
                                                             : 'bg-white hover:bg-[#FAF5E6] text-[#1F170D] border border-[#DFC387]')"
-                                                    class="w-full py-2 px-3 rounded-xl text-center font-medium transition-all active:scale-95 group cursor-pointer relative">
-                                                <div class="text-[9px] line-through text-[#9E907B]" 
-                                                     :class="isSlotSelected(row.c2.court_id, row.c2.local_start) ? 'text-emerald-200/70' : ''"
-                                                     x-text="'Rp ' + formatNumber(row.c2.original_price)"></div>
+                                                    class="w-full py-2.5 px-3 rounded-xl text-center font-medium transition-all active:scale-95 group cursor-pointer relative">
                                                 <div class="font-extrabold text-xs sm:text-sm text-[#8C6418]" 
                                                      :class="isSlotSelected(row.c2.court_id, row.c2.local_start) ? 'text-[#F5E6BE]' : ''"
                                                      x-text="'Rp ' + formatNumber(row.c2.price)"></div>
@@ -234,10 +228,7 @@
                                                         : (isSlotHovered(row.c3.court_id, row.c3.local_start) 
                                                             ? 'bg-[#FAF2DE] text-[#1F170D] border-2 border-[#D4AF37] shadow-md' 
                                                             : 'bg-white hover:bg-[#FAF5E6] text-[#1F170D] border border-[#DFC387]')"
-                                                    class="w-full py-2 px-3 rounded-xl text-center font-medium transition-all active:scale-95 group cursor-pointer relative">
-                                                <div class="text-[9px] line-through text-[#9E907B]" 
-                                                     :class="isSlotSelected(row.c3.court_id, row.c3.local_start) ? 'text-emerald-200/70' : ''"
-                                                     x-text="'Rp ' + formatNumber(row.c3.original_price)"></div>
+                                                    class="w-full py-2.5 px-3 rounded-xl text-center font-medium transition-all active:scale-95 group cursor-pointer relative">
                                                 <div class="font-extrabold text-xs sm:text-sm text-[#8C6418]" 
                                                      :class="isSlotSelected(row.c3.court_id, row.c3.local_start) ? 'text-[#F5E6BE]' : ''"
                                                      x-text="'Rp ' + formatNumber(row.c3.price)"></div>

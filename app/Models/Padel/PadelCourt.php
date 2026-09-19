@@ -13,6 +13,7 @@ class PadelCourt extends Model
     protected $fillable = [
         'name',
         'type',
+        'description',
         'hourly_rate_regular',
         'hourly_rate_prime',
         'is_active',
