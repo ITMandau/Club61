@@ -714,11 +714,15 @@ trait ManagesCheckoutAndPayments
             $fallbackEmail = "walkin-{$ulid}@walkin.club61.internal";
         }
 
+        $rawPassword = strlen($cleanPhone) >= 6
+            ? substr($cleanPhone, -6)
+            : (empty($cleanPhone) ? '123456' : str_pad($cleanPhone, 6, '0', STR_PAD_LEFT));
+
         return User::create([
             'name' => trim($name),
             'phone' => $cleanPhone,
             'email' => $fallbackEmail,
-            'password' => Hash::make(Str::random(32)),
+            'password' => Hash::make($rawPassword),
             'role' => 'CUSTOMER',
             'registration_source' => 'WALK_IN',
             'is_active' => true,

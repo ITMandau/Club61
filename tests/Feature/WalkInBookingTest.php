@@ -13,6 +13,7 @@ use App\Models\User;
 use App\Services\Padel\PadelBookingService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Hash;
 use Tests\TestCase;
 
 class WalkInBookingTest extends TestCase
@@ -180,6 +181,27 @@ class WalkInBookingTest extends TestCase
 
         // Phone harus tersimpan dengan benar
         $this->assertEquals('089912345678', $newCustomer->phone);
+
+        // Password default harus 6 digit terakhir nomor HP (345678)
+        $this->assertTrue(Hash::check('345678', $newCustomer->password));
+    }
+
+    /**
+     * Test 3b: Pelanggan walk-in dapat login ke web menggunakan No HP dan 6 digit terakhir nomor HP.
+     */
+    public function test_walk_in_customer_can_login_with_phone_and_last_six_digits(): void
+    {
+        $customer = $this->service->findOrCreateWalkInCustomer(
+            name: 'Pemain POS',
+            phone: '081234567890'
+        );
+
+        $response = $this->post('/login', [
+            'email' => '081234567890',
+            'password' => '567890',
+        ]);
+
+        $this->assertAuthenticatedAs($customer);
     }
 
     /**
