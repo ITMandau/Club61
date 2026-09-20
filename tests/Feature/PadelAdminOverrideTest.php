@@ -9,6 +9,7 @@ use App\Models\Padel\PadelBookingEquipment;
 use App\Models\Padel\PadelCourt;
 use App\Models\Pos\Order;
 use App\Models\Pos\Payment;
+use App\Models\Pos\PosCashierShift;
 use App\Models\Pos\Refund;
 use App\Models\User;
 use App\Services\Padel\PadelBookingService;
@@ -68,6 +69,16 @@ class PadelAdminOverrideTest extends TestCase
             'type' => 'RACKET',
             'rental_price' => 50000.00,
             'stock_quantity' => 10,
+        ]);
+
+        PosCashierShift::create([
+            'shift_number' => 'SHIFT-ADMIN-TEST',
+            'counter' => 'PADEL_FRONTDESK',
+            'status' => 'OPEN',
+            'opened_by_id' => $this->admin->id,
+            'opened_at' => now(),
+            'starting_cash' => 500000.00,
+            'expected_cash' => 500000.00,
         ]);
     }
 
@@ -312,7 +323,7 @@ class PadelAdminOverrideTest extends TestCase
         // Order grand_total disesuaikan menjadi 300.000
         $this->assertEquals(300000.00, $order->fresh()->grand_total);
 
-        // 🛡️ QA DEFENSE: Garbage collector TIDAK boleh menyentuh booking reschedule yang memiliki riwayat bayar
+        // QA DEFENSE: Garbage collector TIDAK boleh menyentuh booking reschedule yang memiliki riwayat bayar
         $booking->update(['created_at' => now()->subMinutes(30)]);
         $released = $this->service->releaseExpiredLocks();
         $this->assertEquals(0, $released, 'Garbage collector 10 menit tidak boleh merilis booking reschedule.');
@@ -416,6 +427,17 @@ class PadelAdminOverrideTest extends TestCase
             'amount' => 100000.00,
             'payment_method' => 'CASH',
             'status' => 'PENDING',
+        ]);
+
+        // Buka shift kasir aktif
+        $shift = PosCashierShift::create([
+            'shift_number' => 'SFT-PADEL-' . now()->format('Ymd') . '-0001',
+            'counter' => 'PADEL_FRONTDESK',
+            'status' => 'OPEN',
+            'opened_by_id' => $this->admin->id,
+            'opened_at' => now(),
+            'starting_cash' => 200000.00,
+            'expected_cash' => 200000.00,
         ]);
 
         // Kasir melunasi tagihan saat pemain tiba di lokasi

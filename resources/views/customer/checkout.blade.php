@@ -88,17 +88,57 @@
                         </div>
 
                         <div x-show="selectedAddOns.length > 0" class="divide-y divide-[#EEDBB0]/60 text-xs">
-                            <template x-for="(addon, idx) in selectedAddOns" :key="idx">
-                                <div class="py-3 flex items-center justify-between">
-                                    <div>
-                                        <div class="font-bold text-[#1F170D]" x-text="addon.name"></div>
-                                        <div class="text-[10px] text-[#7A643E]" x-text="addon.desc"></div>
+                            <template x-for="(addon, idx) in selectedAddOns" :key="addon.id || idx">
+                                <div class="py-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                                    <div class="flex-1 min-w-0">
+                                        <div class="font-bold text-sm text-[#1F170D]" x-text="addon.name"></div>
+                                        <div class="flex items-center gap-2 mt-0.5 text-[11px] text-[#7A643E]">
+                                            <span class="font-mono text-[#8C6418]" x-text="'Rp ' + formatNumber(addon.price) + ' / unit'"></span>
+                                            <span>&bull;</span>
+                                            <span x-text="addon.desc || ('In Stock: ' + (addon.stock || 20))"></span>
+                                        </div>
                                     </div>
-                                    <div class="flex items-center gap-3">
-                                        <span class="font-mono font-bold text-[#1F170D]"
-                                            x-text="'Rp ' + formatNumber(addon.price * (addon.quantity || 1))"></span>
+
+                                    <div class="flex items-center justify-between sm:justify-end gap-3 sm:gap-4">
+                                        <!-- Stepper Quantity -->
+                                        <div class="flex items-center bg-[#FAF8F2] border border-[#DFC387] rounded-xl p-0.5 shadow-sm">
+                                            <button type="button"
+                                                @click="decrementAddon(idx)"
+                                                :disabled="(addon.quantity || 1) <= 1"
+                                                :class="(addon.quantity || 1) <= 1 ? 'opacity-30 cursor-not-allowed text-gray-400' : 'hover:bg-[#F3DFAD] text-[#7A5818] active:scale-95 cursor-pointer'"
+                                                class="w-7 h-7 rounded-lg flex items-center justify-center font-bold text-sm transition-all"
+                                                title="Kurangi kuantitas">
+                                                -
+                                            </button>
+                                            <span class="w-9 text-center font-mono font-bold text-xs text-[#1F170D]"
+                                                x-text="addon.quantity || 1"></span>
+                                            <button type="button"
+                                                @click="incrementAddon(idx)"
+                                                :disabled="addon.stock && (addon.quantity || 1) >= addon.stock"
+                                                :class="addon.stock && (addon.quantity || 1) >= addon.stock ? 'opacity-30 cursor-not-allowed text-gray-400' : 'hover:bg-[#F3DFAD] text-[#7A5818] active:scale-95 cursor-pointer'"
+                                                class="w-7 h-7 rounded-lg flex items-center justify-center font-bold text-sm transition-all"
+                                                title="Tambah kuantitas">
+                                                +
+                                            </button>
+                                        </div>
+
+                                        <!-- Subtotal per item sewa -->
+                                        <div class="text-right min-w-[95px]">
+                                            <div class="font-mono font-black text-sm text-[#1F170D]"
+                                                x-text="'Rp ' + formatNumber(addon.price * (addon.quantity || 1))"></div>
+                                            <div class="text-[10px] text-[#8C7A58]"
+                                                x-text="(addon.quantity || 1) + 'x Rp ' + formatNumber(addon.price)"></div>
+                                        </div>
+
+                                        <!-- Tombol Remove -->
                                         <button type="button" @click="removeAddon(idx)"
-                                            class="text-rose-500 hover:text-rose-700 text-xs font-bold cursor-pointer">Remove</button>
+                                            class="p-1.5 rounded-lg text-rose-500 hover:text-rose-700 hover:bg-rose-50 transition-colors cursor-pointer"
+                                            title="Hapus sewa alat">
+                                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                                    d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                            </svg>
+                                        </button>
                                     </div>
                                 </div>
                             </template>
@@ -134,7 +174,7 @@
                             </div>
 
                             <span class="text-xs font-mono font-bold text-[#1F170D]"
-                                x-text="selectedMethod.fee > 0 ? '+ Rp ' + formatNumber(selectedMethod.fee) : 'No Fee'"></span>
+                                x-text="(isAdminFeeApplicable && calculatedAdminFee > 0 && selectedMethod.id !== 'cash') ? '+ Rp ' + formatNumber(calculatedAdminFee) : 'No Fee'"></span>
                         </div>
                     </div>
 
@@ -175,23 +215,27 @@
                                 <span>Court Rental Subtotal:</span>
                                 <span class="font-mono font-bold" x-text="'Rp ' + formatNumber(subtotal)"></span>
                             </div>
-                            <div class="flex justify-between">
+                            <div class="flex justify-between" x-show="addonsTotal > 0">
                                 <span>Equipment Add-ons:</span>
                                 <span class="font-mono font-bold" x-text="'Rp ' + formatNumber(addonsTotal)"></span>
-                            </div>
-                            <div class="flex justify-between">
-                                <span>Gateway Processing Fee:</span>
-                                <span class="font-mono font-bold"
-                                    x-text="'Rp ' + formatNumber(selectedMethod.fee)"></span>
                             </div>
                             <div x-show="promoApplied" class="flex justify-between text-emerald-700 font-bold">
                                 <span>Voucher Discount:</span>
                                 <span class="font-mono" x-text="'- Rp ' + formatNumber(promoDiscount)"></span>
                             </div>
-                            <div class="flex justify-between text-[10px] text-[#8C7A58]">
-                                <span>11% VAT (Included):</span>
-                                <span class="font-mono"
-                                    x-text="'Rp ' + formatNumber(Math.round(grandTotal * 0.11 / 1.11))"></span>
+
+                            <!-- Biaya Layanan / Admin Fee dari Panel Admin -->
+                            <div x-show="isAdminFeeApplicable && calculatedAdminFee > 0" class="flex justify-between">
+                                <span x-text="financeSettings.admin_fee_name || 'Biaya Layanan / Admin'"></span>
+                                <span class="font-mono font-bold"
+                                    x-text="'Rp ' + formatNumber(calculatedAdminFee)"></span>
+                            </div>
+
+                            <!-- Pajak Daerah / PPh / PPN dari Panel Admin -->
+                            <div x-show="isTaxApplicable && calculatedTax > 0" class="flex justify-between">
+                                <span x-text="(financeSettings.tax_name || 'Pajak') + (financeSettings.tax_type === 'PERCENTAGE' ? ' (' + financeSettings.tax_rate + '%):' : ':')"></span>
+                                <span class="font-mono font-bold"
+                                    x-text="'Rp ' + formatNumber(calculatedTax)"></span>
                             </div>
 
                             <div class="pt-3 border-t border-[#DFC387]/60 flex justify-between items-center text-sm">
@@ -305,7 +349,7 @@
                                 </div>
                             </div>
                             <span class="text-xs font-mono font-bold text-[#1F170D]"
-                                x-text="m.fee > 0 ? '+ Rp ' + formatNumber(m.fee) : 'No Fee'"></span>
+                                x-text="(isAdminFeeApplicable && calculatedAdminFee > 0 && m.id !== 'cash') ? '+ Rp ' + formatNumber(calculatedAdminFee) : 'No Fee'"></span>
                         </button>
                     </template>
                 </div>
@@ -317,7 +361,10 @@
             class="fixed inset-0 overflow-y-auto bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
             <div class="w-full max-w-md bg-white rounded-3xl border-2 border-[#DFC387] shadow-2xl p-6 space-y-4">
                 <div class="flex items-center justify-between border-b border-[#DFC387]/50 pb-3">
-                    <h3 class="font-serif font-black text-base text-[#1F170D]">Equipment &amp; Add-ons Catalog</h3>
+                    <div>
+                        <h3 class="font-serif font-black text-base text-[#1F170D]">Equipment &amp; Add-ons Catalog</h3>
+                        <p class="text-[11px] text-[#7A643E]">Pilih jumlah raket dan bola yang ingin disewa</p>
+                    </div>
                     <button type="button" @click="showAddOnsModal = false"
                         class="text-xs text-[#8C7A58] hover:text-[#1F170D] font-bold cursor-pointer">Done</button>
                 </div>
@@ -325,20 +372,46 @@
                 <div class="space-y-2.5 max-h-96 overflow-y-auto pr-1">
                     <template x-for="addon in availableAddOns" :key="addon.id">
                         <div
-                            class="p-3.5 rounded-2xl border border-[#DFC387]/70 bg-[#FAF8F2] flex items-center justify-between">
-                            <div>
+                            class="p-3.5 rounded-2xl border border-[#DFC387]/70 bg-[#FAF8F2] flex items-center justify-between gap-3">
+                            <div class="flex-1 min-w-0">
                                 <div class="font-bold text-xs text-[#1F170D]" x-text="addon.name"></div>
                                 <div class="text-[10px] text-[#7A643E]" x-text="addon.desc"></div>
                                 <div class="font-mono font-bold text-xs text-[#8C6418] mt-1"
                                     x-text="'Rp ' + formatNumber(addon.price) + ' / session'"></div>
                             </div>
 
-                            <button type="button" @click="toggleAddOn(addon)"
-                                :class="isAddOnSelected(addon.id) ? 'bg-rose-100 text-rose-700 border-rose-300' :
-                                    'bg-[#FAF2DE] text-[#7A5818] border-[#DFC387]'"
-                                class="px-3.5 py-1.5 rounded-xl text-xs font-bold border transition-colors cursor-pointer">
-                                <span x-text="isAddOnSelected(addon.id) ? 'Remove' : '+ Add'"></span>
-                            </button>
+                            <!-- Belum dipilih -->
+                            <template x-if="!isAddOnSelected(addon.id)">
+                                <button type="button" @click="toggleAddOn(addon)"
+                                    class="px-3.5 py-1.5 rounded-xl text-xs font-bold border transition-colors cursor-pointer bg-[#FAF2DE] text-[#7A5818] border-[#DFC387] hover:bg-[#F3DFAD]">
+                                    + Add
+                                </button>
+                            </template>
+
+                            <!-- Sudah dipilih: stepper kuantitas langsung -->
+                            <template x-if="isAddOnSelected(addon.id)">
+                                <div class="flex items-center gap-2">
+                                    <div class="flex items-center bg-white border border-[#D4AF37] rounded-xl p-0.5 shadow-xs">
+                                        <button type="button" 
+                                            @click="decrementAddonById(addon.id)"
+                                            class="w-6 h-6 rounded-lg flex items-center justify-center font-bold text-xs text-[#7A5818] hover:bg-[#FAF2DE] transition-all cursor-pointer">
+                                            -
+                                        </button>
+                                        <span class="w-7 text-center font-mono font-bold text-xs text-[#1F170D]"
+                                            x-text="getAddOnQuantity(addon.id)"></span>
+                                        <button type="button" 
+                                            @click="incrementAddonById(addon.id)"
+                                            :disabled="addon.stock && getAddOnQuantity(addon.id) >= addon.stock"
+                                            class="w-6 h-6 rounded-lg flex items-center justify-center font-bold text-xs text-[#7A5818] hover:bg-[#FAF2DE] transition-all disabled:opacity-30 cursor-pointer">
+                                            +
+                                        </button>
+                                    </div>
+                                    <button type="button" @click="removeAddonById(addon.id)"
+                                        class="text-[11px] text-rose-500 hover:text-rose-700 font-bold cursor-pointer">
+                                        Remove
+                                    </button>
+                                </div>
+                            </template>
                         </div>
                     </template>
                 </div>
@@ -543,6 +616,33 @@
             </div>
         </div>
 
+        <!-- Session Expired Modal (Club 61 Luxury Theme) -->
+        <div x-show="showExpiredModal" style="display: none; z-index: 99999 !important;"
+            x-transition:enter="transition ease-out duration-200" x-transition:enter-start="opacity-0"
+            x-transition:enter-end="opacity-100" x-transition:leave="transition ease-in duration-150"
+            x-transition:leave-start="opacity-100" x-transition:leave-end="opacity-0"
+            class="fixed inset-0 overflow-y-auto bg-black/75 backdrop-blur-md flex items-center justify-center p-4">
+
+            <div class="w-full max-w-md bg-white rounded-3xl border-2 border-[#D4AF37] shadow-2xl p-6 sm:p-7 space-y-5 animate-scaleIn text-center relative">
+                <div class="w-16 h-16 rounded-2xl bg-rose-50 border border-rose-200 text-rose-600 flex items-center justify-center mx-auto text-xs font-black tracking-wider shadow-sm">
+                    EXPIRED
+                </div>
+                <div class="space-y-2">
+                    <h3 class="font-serif font-black text-xl text-[#1F170D]">Waktu Checkout Habis!</h3>
+                    <p class="text-xs text-[#7A643E] leading-relaxed">
+                        Batas waktu kuncian slot 10 menit telah berakhir. Slot lapangan telah otomatis dirilis kembali agar dapat dipesan pemain lain.
+                    </p>
+                </div>
+                <div class="pt-2">
+                    <a href="{{ route('customer.booking') }}"
+                        class="w-full py-3.5 px-4 rounded-2xl text-[#1E160A] text-xs font-black uppercase tracking-wider block shadow-md hover:brightness-105 transition-all cursor-pointer text-center"
+                        style="background: linear-gradient(180deg, #F5DE9B 0%, #D4AF37 50%, #A87D18 100%); color: #1E160A; border: 1px solid #FFF3CD;">
+                        Pilih Jadwal Baru &rarr;
+                    </a>
+                </div>
+            </div>
+        </div>
+
         <!-- Custom Luxury Notice Modal -->
         <div x-show="noticeModal.show" style="display: none; z-index: 99999 !important;"
             x-transition:enter="transition ease-out duration-200" x-transition:enter-start="opacity-0"
@@ -606,6 +706,7 @@
         function checkoutApp() {
             return {
                 canCancelBooking: @json(Auth::check() && Auth::user()->canCancelBooking()),
+                financeSettings: @json($clubFinanceSettings ?? \App\Models\Pos\ClubFinanceSetting::getSettings()),
                 noticeModal: {
                     show: false,
                     title: '',
@@ -682,7 +783,7 @@
                     code: 'QRIS',
                     name: 'QRIS Instant (GoPay/Shopee/BCA)',
                     badge: 'QRIS',
-                    fee: 2800,
+                    fee: 0,
                     note: ''
                 },
                 paymentMethods: [{
@@ -690,7 +791,7 @@
                         code: 'QRIS',
                         name: 'QRIS Instant (GoPay/OVO/BCA)',
                         badge: 'QRIS',
-                        fee: 2800,
+                        fee: 0,
                         note: ''
                     },
                     {
@@ -698,7 +799,7 @@
                         code: 'BCA_VA',
                         name: 'BCA Virtual Account',
                         badge: 'BCA',
-                        fee: 4440,
+                        fee: 0,
                         note: ''
                     },
                     {
@@ -706,7 +807,7 @@
                         code: 'MANDIRI_VA',
                         name: 'Mandiri Virtual Account',
                         badge: 'MDR',
-                        fee: 4440,
+                        fee: 0,
                         note: ''
                     },
                     {
@@ -714,7 +815,7 @@
                         code: 'BRI_VA',
                         name: 'BRI Virtual Account',
                         badge: 'BRI',
-                        fee: 4440,
+                        fee: 0,
                         note: ''
                     },
                     {
@@ -722,7 +823,7 @@
                         code: 'BNI_VA',
                         name: 'BNI Virtual Account',
                         badge: 'BNI',
-                        fee: 4440,
+                        fee: 0,
                         note: ''
                     },
                     {
@@ -730,7 +831,7 @@
                         code: 'CIMB_VA',
                         name: 'CIMB Virtual Account',
                         badge: 'CIMB',
-                        fee: 4440,
+                        fee: 0,
                         note: ''
                     },
                     {
@@ -738,7 +839,7 @@
                         code: 'BSI_VA',
                         name: 'BSI Virtual Account',
                         badge: 'BSI',
-                        fee: 4440,
+                        fee: 0,
                         note: ''
                     },
                     {
@@ -794,8 +895,21 @@
                         });
                     }
 
-                    // Load catalog from database
+                    // Load catalog from database & sync finance settings
                     this.fetchEquipments();
+                    this.fetchFinanceSettings();
+                },
+
+                async fetchFinanceSettings() {
+                    try {
+                        const res = await fetch('/api/v1/padel/finance-settings');
+                        const json = await res.json();
+                        if (json.success && json.data) {
+                            this.financeSettings = json.data;
+                        }
+                    } catch (e) {
+                        // Fallback to server-rendered initial state
+                    }
                 },
 
                 async fetchEquipments() {
@@ -808,6 +922,7 @@
                                 name: eq.name,
                                 desc: `In Stock: ${eq.stock_quantity}`,
                                 price: parseFloat(eq.rental_price),
+                                stock: parseInt(eq.stock_quantity, 10) || 99,
                                 quantity: 1,
                             }));
                         }
@@ -823,7 +938,7 @@
                     }, 1000);
                 },
 
-                checkExpiry() {
+                async checkExpiry() {
                     if (!this.expiresAtTime) return;
 
                     const now = Date.now();
@@ -832,8 +947,8 @@
                     if (diffMs <= 0) {
                         this.isExpired = true;
                         this.timerDisplay = '00:00';
-                        this.showExpiredModal = true;
                         if (this.timerInterval) clearInterval(this.timerInterval);
+                        await this.handleSessionExpired();
                         return;
                     }
 
@@ -844,6 +959,39 @@
                     this.timerDisplay = `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
                 },
 
+                async handleSessionExpired() {
+                    this.showExpiredModal = true;
+
+                    let bookingIds = [];
+                    if (this.holdData && this.holdData.bookings && this.holdData.bookings.length > 0) {
+                        bookingIds = this.holdData.bookings.map(b => b.id);
+                    }
+
+                    if (bookingIds.length > 0) {
+                        try {
+                            await fetch('/api/v1/padel/release-slot', {
+                                method: 'POST',
+                                headers: {
+                                    'Content-Type': 'application/json',
+                                    'Accept': 'application/json',
+                                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
+                                },
+                                body: JSON.stringify({ booking_ids: bookingIds })
+                            });
+                        } catch(e) {
+                            console.error('Error auto-releasing expired slots:', e);
+                        }
+                    }
+
+                    localStorage.removeItem('club61_cart');
+                    localStorage.removeItem('club61_hold_data');
+                    sessionStorage.removeItem('club61_cart');
+                    sessionStorage.removeItem('club61_hold_data');
+                    sessionStorage.removeItem('vantage_cart');
+                    sessionStorage.removeItem('vantage_hold_data');
+                    window.dispatchEvent(new CustomEvent('cart-updated'));
+                },
+
                 get subtotal() {
                     return this.bookingItems.reduce((sum, item) => sum + item.price, 0);
                 },
@@ -852,8 +1000,47 @@
                     return this.selectedAddOns.reduce((sum, item) => sum + (item.price * (item.quantity || 1)), 0);
                 },
 
+                get taxableAmount() {
+                    return Math.max(0, this.subtotal + this.addonsTotal - this.promoDiscount);
+                },
+
+                get isTaxApplicable() {
+                    if (!this.financeSettings || !this.financeSettings.is_tax_enabled) return false;
+                    const ch = (this.financeSettings.tax_channels || 'ALL').toUpperCase();
+                    return ch === 'ALL' || ch === 'ONLINE_ONLY';
+                },
+
+                get calculatedTax() {
+                    if (!this.isTaxApplicable) return 0;
+                    const taxable = this.taxableAmount;
+                    if (taxable <= 0) return 0;
+                    if (this.financeSettings.tax_type === 'FIXED') {
+                        return Math.round(parseFloat(this.financeSettings.tax_rate) || 0);
+                    }
+                    return Math.round((taxable * (parseFloat(this.financeSettings.tax_rate) || 0)) / 100);
+                },
+
+                get isAdminFeeApplicable() {
+                    if (!this.financeSettings || !this.financeSettings.is_admin_fee_enabled) return false;
+                    const ch = (this.financeSettings.admin_fee_channels || 'ONLINE_ONLY').toUpperCase();
+                    return ch === 'ALL' || ch === 'ONLINE_ONLY';
+                },
+
+                get calculatedAdminFee() {
+                    if (!this.isAdminFeeApplicable) return 0;
+                    const taxable = this.taxableAmount;
+                    if (this.financeSettings.admin_fee_type === 'PERCENTAGE') {
+                        return Math.round((taxable * (parseFloat(this.financeSettings.admin_fee_amount) || 0)) / 100);
+                    }
+                    return Math.round(parseFloat(this.financeSettings.admin_fee_amount) || 0);
+                },
+
+                get gatewayFee() {
+                    return 0;
+                },
+
                 get grandTotal() {
-                    const total = this.subtotal + this.addonsTotal + this.selectedMethod.fee - this.promoDiscount;
+                    const total = this.taxableAmount + this.calculatedTax + this.calculatedAdminFee;
                     return total > 0 ? total : 0;
                 },
 
@@ -866,6 +1053,11 @@
                     return this.selectedAddOns.some(a => a.id === id);
                 },
 
+                getAddOnQuantity(id) {
+                    const item = this.selectedAddOns.find(a => a.id === id);
+                    return item ? (item.quantity || 1) : 0;
+                },
+
                 toggleAddOn(addon) {
                     const idx = this.selectedAddOns.findIndex(a => a.id === addon.id);
                     if (idx >= 0) {
@@ -873,13 +1065,52 @@
                     } else {
                         this.selectedAddOns.push({
                             ...addon,
-                            quantity: 1
+                            quantity: 1,
+                            stock: addon.stock || 99
                         });
+                    }
+                },
+
+                incrementAddon(idx) {
+                    if (!this.selectedAddOns[idx]) return;
+                    const item = this.selectedAddOns[idx];
+                    const maxStock = item.stock || 99;
+                    if ((item.quantity || 1) < maxStock) {
+                        item.quantity = (item.quantity || 1) + 1;
+                    }
+                },
+
+                decrementAddon(idx) {
+                    if (!this.selectedAddOns[idx]) return;
+                    const item = this.selectedAddOns[idx];
+                    if ((item.quantity || 1) > 1) {
+                        item.quantity = (item.quantity || 1) - 1;
+                    }
+                },
+
+                incrementAddonById(id) {
+                    const idx = this.selectedAddOns.findIndex(a => a.id === id);
+                    if (idx >= 0) {
+                        this.incrementAddon(idx);
+                    }
+                },
+
+                decrementAddonById(id) {
+                    const idx = this.selectedAddOns.findIndex(a => a.id === id);
+                    if (idx >= 0) {
+                        this.decrementAddon(idx);
                     }
                 },
 
                 removeAddon(idx) {
                     this.selectedAddOns.splice(idx, 1);
+                },
+
+                removeAddonById(id) {
+                    const idx = this.selectedAddOns.findIndex(a => a.id === id);
+                    if (idx >= 0) {
+                        this.selectedAddOns.splice(idx, 1);
+                    }
                 },
 
                 applyPromo() {
@@ -947,7 +1178,7 @@
                             booking_ids: bookingIds,
                             equipments: this.selectedAddOns.map(a => ({
                                 equipment_id: a.id,
-                                quantity: a.quantity || 1
+                                quantity: Math.max(1, parseInt(a.quantity, 10) || 1)
                             })),
                             voucher_code: this.promoApplied ? this.promoCode : null,
                             payment_method: this.selectedMethod.code

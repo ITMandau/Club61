@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api\V1\Padel;
 
 use App\Http\Controllers\Controller;
+use App\Models\Pos\ClubFinanceSetting;
 use App\Services\Padel\PadelBookingService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -50,6 +51,31 @@ class PadelBookingController extends Controller
             'success' => true,
             'message' => 'Katalog alat dan add-on padel berhasil diambil.',
             'data' => $equipments,
+        ]);
+    }
+
+    /**
+     * Pengaturan Biaya Layanan dan Pajak Terpusat (Publik).
+     */
+    public function financeSettings(): JsonResponse
+    {
+        $settings = ClubFinanceSetting::getSettings();
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Pengaturan finansial berhasil diambil.',
+            'data' => [
+                'is_tax_enabled' => (bool) $settings->is_tax_enabled,
+                'tax_name' => (string) ($settings->tax_name ?: 'PB1 Pajak Daerah / PPh'),
+                'tax_type' => (string) ($settings->tax_type ?: 'PERCENTAGE'),
+                'tax_rate' => (float) $settings->tax_rate,
+                'tax_channels' => (string) ($settings->tax_channels ?: 'ALL'),
+                'is_admin_fee_enabled' => (bool) $settings->is_admin_fee_enabled,
+                'admin_fee_name' => (string) ($settings->admin_fee_name ?: 'Biaya Layanan / Admin'),
+                'admin_fee_type' => (string) ($settings->admin_fee_type ?: 'FIXED'),
+                'admin_fee_amount' => (float) $settings->admin_fee_amount,
+                'admin_fee_channels' => (string) ($settings->admin_fee_channels ?: 'ONLINE_ONLY'),
+            ],
         ]);
     }
 

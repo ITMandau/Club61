@@ -178,15 +178,34 @@ class BookingSystem extends Page
         $court = PadelCourt::find($courtId);
         if (! $court) return;
 
-        $startFormatted = sprintf('%02d:00', (int) $hour);
-        $endFormatted = sprintf('%02d:00', (int) $hour + 1);
+        $cOpen = (int) substr($court->open_time ?: '06:00', 0, 2);
+        $cCloseVal = $court->close_time ?: '23:00';
+        $cClose = ($cCloseVal === '00:00' || $cCloseVal === '24:00') ? 24 : (int) substr($cCloseVal, 0, 2);
+        $h = (int) $hour;
+
+        if ($h < $cOpen || $h >= $cClose) {
+            Notification::make()
+                ->title('Lapangan Tutup')
+                ->body("Jam {$hour}:00 berada di luar jam operasional {$court->name} ({$court->open_time} - {$court->close_time}).")
+                ->warning()
+                ->send();
+            return;
+        }
+
+        $startFormatted = sprintf('%02d:00', $h);
+        $endFormatted = sprintf('%02d:00', $h + 1);
+
+        $isWeekend = Carbon::parse($this->selectedDate)->isWeekend();
+        $isPrime = $isWeekend || $h >= 17;
+        $rate = $isPrime ? (float) $court->hourly_rate_prime : (float) $court->hourly_rate_regular;
 
         $this->inspectData = [
             'type' => 'available',
             'court_id' => $court->id,
             'court_name' => $court->name,
             'court_type' => $court->type ?? 'INDOOR',
-            'rate' => (float) $court->hourly_rate_regular,
+            'rate' => $rate,
+            'is_prime_time' => $isPrime,
             'booking_date' => $this->selectedDate,
             'date_formatted' => Carbon::parse($this->selectedDate)->translatedFormat('l, d F Y'),
             'start_time' => $startFormatted,
@@ -265,9 +284,26 @@ class BookingSystem extends Page
         }
         $courts = $courtQuery->orderBy('name')->get();
 
-        // Jam Operasional (06:00 sampai 23:00)
+        // Jam Operasional Dinamis (Mengikuti konfigurasi lapangan di Master Data)
+        $minOpenHour = 6;
+        $maxCloseHour = 23;
+
+        if ($courts->isNotEmpty()) {
+            $minOpenHour = $courts->min(function ($c) {
+                return (int) substr($c->open_time ?: '06:00', 0, 2);
+            }) ?? 6;
+
+            $maxCloseHour = $courts->max(function ($c) {
+                $val = $c->close_time ?: '23:00';
+                return ($val === '00:00' || $val === '24:00') ? 24 : (int) substr($val, 0, 2);
+            }) ?? 23;
+
+            $minOpenHour = max(0, min($minOpenHour, 23));
+            $maxCloseHour = max($minOpenHour + 1, min($maxCloseHour, 24));
+        }
+
         $operationalHours = [];
-        for ($h = 6; $h <= 23; $h++) {
+        for ($h = $minOpenHour; $h < $maxCloseHour; $h++) {
             $operationalHours[] = [
                 'hour' => $h,
                 'label' => sprintf('%02d:00', $h),
@@ -297,8 +333,13 @@ class BookingSystem extends Page
                 'slots' => [],
             ];
 
+            $courtOpen = (int) substr($court->open_time ?: '06:00', 0, 2);
+            $courtCloseVal = $court->close_time ?: '23:00';
+            $courtClose = ($courtCloseVal === '00:00' || $courtCloseVal === '24:00') ? 24 : (int) substr($courtCloseVal, 0, 2);
+
             foreach ($operationalHours as $opHour) {
                 $h = $opHour['hour'];
+                $isOpenForCourt = ($h >= $courtOpen && $h < $courtClose);
                 $slotTimeStr = sprintf('%02d:00:00', $h);
                 $slotCarbon = Carbon::parse("{$this->selectedDate} {$slotTimeStr}");
 
@@ -332,13 +373,27 @@ class BookingSystem extends Page
                         'booking_code' => $matchedBooking->booking_code,
                         'equipment_count' => $matchedBooking->equipments ? $matchedBooking->equipments->sum('quantity') : 0,
                     ];
+                } elseif (! $isOpenForCourt) {
+                    $courtRow['slots'][$h] = [
+                        'type' => 'closed',
+                        'court_id' => $court->id,
+                        'hour' => $h,
+                        'is_past' => $opHour['is_past'],
+                        'is_prime_time' => false,
+                        'price' => 0,
+                    ];
                 } else {
+                    $isWeekend = $targetDate->isWeekend();
+                    $isPrime = $isWeekend || (int) $h >= 17;
+                    $slotPrice = $isPrime ? (float) $court->hourly_rate_prime : (float) $court->hourly_rate_regular;
+
                     $courtRow['slots'][$h] = [
                         'type' => 'available',
                         'court_id' => $court->id,
                         'hour' => $h,
                         'is_past' => $opHour['is_past'],
-                        'price' => (float) $court->hourly_rate_regular,
+                        'is_prime_time' => $isPrime,
+                        'price' => $slotPrice,
                     ];
                 }
             }

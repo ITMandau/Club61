@@ -111,6 +111,7 @@ trait ManagesTicketsAndRefunds
                ->first();
 
             if ($order) {
+                $booking->setAttribute('order_grand_total', (float) $order->grand_total);
                 $latestPayment = $order->payments->first();
                 $rawMethod = $latestPayment?->payment_method;
                 $methodLabel = $this->formatPaymentMethodLabel($rawMethod, $latestPayment?->payload_log);

@@ -13,7 +13,7 @@ return new class extends Migration
             $table->string('order_number', 35)->unique();
             $table->foreignUlid('user_id')->nullable()->constrained('users')->nullOnDelete();
             $table->foreignUlid('cashier_id')->nullable()->constrained('users')->nullOnDelete();
-            $table->string('order_type', 20)->default('DINE_IN'); // DINE_IN, TAKE_AWAY, DELIVERY, ONLINE_BOOKING, RETAIL
+            $table->string('order_type', 20)->default('DINE_IN'); // DINE_IN, TAKE_AWAY, DELIVERY, ONLINE_BOOKING, RETAIL, WALK_IN
             $table->string('table_number', 20)->nullable();
             $table->text('delivery_address')->nullable();
             $table->decimal('delivery_fee', 12, 2)->default(0.00);

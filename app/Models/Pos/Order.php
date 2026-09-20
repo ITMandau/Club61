@@ -15,6 +15,7 @@ class Order extends Model
         'order_number',
         'user_id',
         'cashier_id',
+        'pos_shift_id',
         'order_type',
         'table_number',
         'delivery_address',
@@ -80,5 +81,10 @@ class Order extends Model
     public function padelBookings()
     {
         return $this->hasMany(\App\Models\Padel\PadelBooking::class, 'order_id');
+    }
+
+    public function posShift()
+    {
+        return $this->belongsTo(PosCashierShift::class, 'pos_shift_id');
     }
 }

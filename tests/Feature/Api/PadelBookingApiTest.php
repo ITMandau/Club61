@@ -5,6 +5,7 @@ namespace Tests\Feature\Api;
 use App\Models\Padel\CourtEquipment;
 use App\Models\Padel\PadelBooking;
 use App\Models\Padel\PadelCourt;
+use App\Models\Pos\PosCashierShift;
 use App\Models\User;
 use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -637,11 +638,11 @@ class PadelBookingApiTest extends TestCase
         $orderIdA = $checkoutA->json('data.order_id');
         $this->assertNotEmpty($orderIdA);
 
-        // Biaya lapangan 3 jam regular (3 x 200.000 = 600.000), Flat raket 1x (1 x 50.000 = 50.000), QRIS Fee (2.800)
-        // Grand total = 652.800 (tidak ada bug perkalian berulang)
+        // Biaya lapangan 3 jam regular (3 x 200.000 = 600.000), Flat raket 1x (1 x 50.000 = 50.000)
+        // Grand total = 650.000 (tidak ada surcharge liar saat admin fee disabled)
         $this->assertEquals(600000, $checkoutA->json('data.court_fee'));
         $this->assertEquals(50000, $checkoutA->json('data.equipment_fee'));
-        $this->assertEquals(652800, $checkoutA->json('data.grand_total'));
+        $this->assertEquals(650000, $checkoutA->json('data.grand_total'));
 
         // Query ticket by order_id
         $ticketA = $this->withHeader('Authorization', "Bearer {$this->customerToken}")
@@ -681,7 +682,7 @@ class PadelBookingApiTest extends TestCase
 
         $orderIdB = $checkoutB->json('data.order_id');
         $this->assertNotEmpty($orderIdB);
-        $this->assertEquals(502800, $checkoutB->json('data.grand_total'));
+        $this->assertEquals(500000, $checkoutB->json('data.grand_total'));
 
         // Tiket per order tetap menjaga 2 sesi terpisah (anti jadwal bolong)
         $ticketB = $this->withHeader('Authorization', "Bearer {$this->customerToken}")
@@ -705,7 +706,7 @@ class PadelBookingApiTest extends TestCase
      */
     public function test_retry_payment_generates_suffixed_snap_token_and_updates_fee(): void
     {
-        $tomorrow = now()->addDays(2)->format('Y-m-d');
+        $tomorrow = Carbon::parse('next Tuesday')->format('Y-m-d');
         $hold = $this->withHeader('Authorization', "Bearer {$this->customerToken}")
             ->postJson('/api/v1/padel/hold-slot', [
                 'booking_date' => $tomorrow,
@@ -721,7 +722,7 @@ class PadelBookingApiTest extends TestCase
 
         $bookingId = $hold->json('data.bookings.0.id');
 
-        // Checkout awal menggunakan BCA_VA (Gateway Fee: Rp 4.440)
+        // Checkout awal menggunakan BCA_VA
         $checkout = $this->withHeaders([
             'Authorization' => "Bearer {$this->customerToken}",
             'X-Idempotency-Key' => (string) Str::uuid(),
@@ -731,13 +732,13 @@ class PadelBookingApiTest extends TestCase
         ])->assertStatus(200);
 
         $orderId = $checkout->json('data.order_id');
-        $this->assertEquals(204440, $checkout->json('data.grand_total'));
+        $this->assertEquals(200000, $checkout->json('data.grand_total'));
 
         // Simulasikan status PENDING_PAYMENT saat menunggu pembayaran customer
         PadelBooking::where('id', $bookingId)->update(['status' => 'PENDING_PAYMENT']);
         \App\Models\Pos\Order::where('order_number', $orderId)->update(['payment_status' => 'PENDING']);
 
-        // Customer menutup Snap dan ganti metode ke QRIS (Gateway Fee: Rp 2.800)
+        // Customer menutup Snap dan ganti metode ke QRIS
         $retry = $this->withHeader('Authorization', "Bearer {$this->customerToken}")
             ->postJson("/api/v1/padel/bookings/{$bookingId}/retry-payment", [
                 'payment_method' => 'QRIS',
@@ -747,7 +748,7 @@ class PadelBookingApiTest extends TestCase
                 'success' => true,
                 'is_cash' => false,
                 'order_id' => $orderId,
-                'gateway_fee' => 2800,
+                'gateway_fee' => 0,
                 'payment_method' => 'QRIS',
             ]);
 
@@ -755,12 +756,12 @@ class PadelBookingApiTest extends TestCase
         $suffixedOrderId = $retry->json('suffixed_order_id');
         $this->assertStringStartsWith($orderId . '_', $suffixedOrderId);
         $this->assertNotEmpty($retry->json('snap_token'));
-        $this->assertEquals(202800, $retry->json('grand_total'));
+        $this->assertEquals(200000, $retry->json('grand_total'));
 
         // Database orders tetap memiliki order_number bersih
         $this->assertDatabaseHas('orders', [
             'order_number' => $orderId,
-            'grand_total' => 202800,
+            'grand_total' => 200000,
         ]);
     }
 
@@ -769,7 +770,7 @@ class PadelBookingApiTest extends TestCase
      */
     public function test_retry_payment_with_cash_returns_frontdesk_instruction(): void
     {
-        $tomorrow = now()->addDays(2)->format('Y-m-d');
+        $tomorrow = Carbon::parse('next Tuesday')->format('Y-m-d');
         $hold = $this->withHeader('Authorization', "Bearer {$this->customerToken}")
             ->postJson('/api/v1/padel/hold-slot', [
                 'booking_date' => $tomorrow,
@@ -909,6 +910,16 @@ class PadelBookingApiTest extends TestCase
             'status' => 'PENDING_PAYMENT',
         ]);
 
+        $shift = PosCashierShift::create([
+            'shift_number' => 'SFT-PADEL-' . now()->format('Ymd') . '-0001',
+            'counter' => 'PADEL_FRONTDESK',
+            'status' => 'OPEN',
+            'opened_by_id' => $this->cashier->id,
+            'opened_at' => now(),
+            'starting_cash' => 200000,
+            'expected_cash' => 200000,
+        ]);
+
         $service = app(\App\Services\Padel\PadelBookingService::class);
         $result = $service->adminSettleCashierPayment(
             bookingId: $booking->id,
@@ -924,6 +935,7 @@ class PadelBookingApiTest extends TestCase
         // Verifikasi data payment tercatat untuk Analytics Kasir
         $this->assertDatabaseHas('payments', [
             'order_id' => $result['booking']->order_id,
+            'pos_shift_id' => $shift->id,
             'payment_gateway' => 'CASHIER_POS',
             'payment_method' => 'CASH',
             'amount' => 300000,

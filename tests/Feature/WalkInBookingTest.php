@@ -8,10 +8,12 @@ use App\Models\Padel\PadelBooking;
 use App\Models\Padel\PadelCourt;
 use App\Models\Pos\Order;
 use App\Models\Pos\Payment;
+use App\Models\Pos\PosCashierShift;
 use App\Models\User;
 use App\Services\Padel\PadelBookingService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Hash;
 use Tests\TestCase;
 
 class WalkInBookingTest extends TestCase
@@ -95,6 +97,17 @@ class WalkInBookingTest extends TestCase
 
         // Gunakan tanggal yang pasti di masa depan untuk menghindari validasi jam past
         $this->bookingDate = now()->addDays(3)->format('Y-m-d');
+
+        // Buka shift kasir aktif untuk loket Padel Frontdesk agar transaksi POS dapat diproses
+        PosCashierShift::create([
+            'shift_number' => 'SFT-PADEL-' . now()->format('Ymd') . '-0001',
+            'counter' => 'PADEL_FRONTDESK',
+            'status' => 'OPEN',
+            'opened_by_id' => $this->cashier->id,
+            'opened_at' => now(),
+            'starting_cash' => 500000,
+            'expected_cash' => 500000,
+        ]);
     }
 
     /**
@@ -168,6 +181,27 @@ class WalkInBookingTest extends TestCase
 
         // Phone harus tersimpan dengan benar
         $this->assertEquals('089912345678', $newCustomer->phone);
+
+        // Password default harus 6 digit terakhir nomor HP (345678)
+        $this->assertTrue(Hash::check('345678', $newCustomer->password));
+    }
+
+    /**
+     * Test 3b: Pelanggan walk-in dapat login ke web menggunakan No HP dan 6 digit terakhir nomor HP.
+     */
+    public function test_walk_in_customer_can_login_with_phone_and_last_six_digits(): void
+    {
+        $customer = $this->service->findOrCreateWalkInCustomer(
+            name: 'Pemain POS',
+            phone: '081234567890'
+        );
+
+        $response = $this->post('/login', [
+            'email' => '081234567890',
+            'password' => '567890',
+        ]);
+
+        $this->assertAuthenticatedAs($customer);
     }
 
     /**

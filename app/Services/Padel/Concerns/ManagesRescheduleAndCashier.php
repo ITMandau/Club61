@@ -49,17 +49,21 @@ trait ManagesRescheduleAndCashier
             ->where('id', '!=', $booking->id)
             ->get();
 
+        $openHour = (int) substr($court->open_time ?: '06:00', 0, 2);
+        $closeVal = $court->close_time ?: '23:00';
+        $closeHour = ($closeVal === '00:00' || $closeVal === '24:00') ? 24 : (int) substr($closeVal, 0, 2);
+
         // Bulk prefetch Distributed Cache Locks untuk seluruh rentang jam lapangan tujuan (1 query)
         $allSlotCacheKeys = [];
-        for ($h = 6; $h < 23; $h++) {
+        for ($h = $openHour; $h < $closeHour; $h++) {
             $allSlotCacheKeys[] = "padel_lock:{$court->id}:{$dateStr}:" . sprintf('%02d00', $h);
         }
         $bulkSlotLocks = Cache::many($allSlotCacheKeys);
 
         $availableSlots = [];
 
-        // Jam operasional: 06:00 sampai 23:00 (batas start adalah 23 - durasi)
-        for ($startHour = 6; $startHour <= (23 - $durationHours); $startHour++) {
+        // Jam operasional: open_time sampai close_time (batas start adalah closeHour - durasi)
+        for ($startHour = $openHour; $startHour <= ($closeHour - $durationHours); $startHour++) {
             $slotStart = Carbon::parse("{$dateStr} " . sprintf('%02d:00', $startHour), $timezone);
             $slotEnd = $slotStart->copy()->addHours($durationHours);
 
@@ -102,6 +106,17 @@ trait ManagesRescheduleAndCashier
                 $startStr = sprintf('%02d:00', $startHour);
                 $endStr = sprintf('%02d:00', $startHour + $durationHours);
 
+                $totalDelta = $delta;
+                if ($delta > 0) {
+                    $deltaCalc = app(\App\Services\Finance\TaxAndFeeService::class)->calculate(
+                        subtotal: $delta,
+                        discountAmount: 0,
+                        channel: 'POS_WALKIN',
+                        module: 'PADEL'
+                    );
+                    $totalDelta = $deltaCalc['grand_total'];
+                }
+
                 $availableSlots[] = [
                     'start_time' => $startStr,
                     'end_time' => $endStr,
@@ -109,6 +124,7 @@ trait ManagesRescheduleAndCashier
                     'label' => "{$startStr} - {$endStr} WIB ({$durationHours} Jam)" . ($hasPrime ? ' [Prime Time]' : ' [Reguler]'),
                     'estimated_fee' => $estimatedFee,
                     'delta' => $delta,
+                    'total_delta' => $totalDelta,
                     'is_prime' => $hasPrime,
                 ];
             }
@@ -186,17 +202,23 @@ trait ManagesRescheduleAndCashier
                 );
             }
 
-            // Distributed Cache Lock check on new slots
+            // Distributed Cache Lock check on new slots with atomic Cache::add (Anti-TOCTOU)
             $currCheck = $newStartDt->copy();
+            $acquiredLocks = [];
             while ($currCheck->lt($newEndDt)) {
                 $lockKey = "padel_lock:{$newCourt->id}:{$dateStr}:" . $currCheck->format('Hi');
-                if (Cache::has($lockKey)) {
+                $locked = Cache::add($lockKey, $booking->user_id, 86400);
+                if (! $locked) {
+                    foreach ($acquiredLocks as $k) {
+                        Cache::forget($k);
+                    }
                     throw new SlotConflictException(
                         "Slot {$newCourt->name} jam {$currCheck->format('H:i')} sedang dikunci transaksi lain.",
                         $newCourt->name,
                         $currCheck->format('H:i')
                     );
                 }
+                $acquiredLocks[] = $lockKey;
                 $currCheck->addHour();
             }
 
@@ -228,44 +250,86 @@ trait ManagesRescheduleAndCashier
             // Pastikan booking memiliki relasi Order terikat untuk pembukuan
             $order = $this->ensureBookingOrder($booking);
 
-            // Eksekusi Finansial Berdasarkan Price Delta
+            // Eksekusi Finansial Berdasarkan Price Delta Terpusat via TaxAndFeeService
             if ($delta > 0) {
-                // Kurang bayar (Reguler -> Prime): Buat supplemental payment record
-                $paymentStatus = $isDeltaPaid ? 'SUCCESS' : 'PENDING';
-                Payment::create([
-                    'order_id' => $order->id,
-                    'payment_gateway' => $paymentMethod ?? 'CASH',
-                    'transaction_id' => 'SUPP-' . strtoupper(Str::random(12)),
-                    'amount' => $delta,
-                    'payment_method' => $paymentMethod ?? 'CASH',
-                    'status' => $paymentStatus,
-                    'payload_log' => [
-                        'type' => 'RESCHEDULE_PRICE_DELTA',
-                        'booking_id' => $booking->id,
-                        'admin_id' => $adminUser->id,
-                        'reason' => $reason,
-                        'delta' => $delta,
-                    ],
-                ]);
-
-                if (! $isDeltaPaid) {
-                    // Jika belum dibayar kasir, status LOCKED dan QR code ditahan
-                    $targetStatus = 'LOCKED';
-                    $newQrCodeHash = null;
-                }
+                // Kurang bayar (Reguler -> Prime): Hitung via TaxAndFeeService
+                $deltaCalc = app(\App\Services\Finance\TaxAndFeeService::class)->calculate(
+                    subtotal: $delta,
+                    discountAmount: 0,
+                    channel: 'POS_WALKIN',
+                    module: 'PADEL'
+                );
+                $taxDelta = $deltaCalc['tax_amount'];
+                $adminFeeDelta = $deltaCalc['admin_fee_amount'];
+                $totalDeltaToPay = $deltaCalc['grand_total'];
 
                 $booking->court_fee = $newCourtFee;
-                $booking->total_amount += $delta;
+                $booking->total_amount += $totalDeltaToPay;
 
                 if ($booking->order) {
                     $booking->order->update([
-                        'subtotal' => $booking->order->subtotal + $delta,
-                        'grand_total' => $booking->order->grand_total + $delta,
+                        'subtotal' => $booking->order->subtotal + $deltaCalc['subtotal'],
+                        'tax_amount' => $booking->order->tax_amount + $taxDelta,
+                        'service_charge' => $booking->order->service_charge + $adminFeeDelta,
+                        'grand_total' => $booking->order->grand_total + $totalDeltaToPay,
+                    ]);
+                }
+
+                if ($isDeltaPaid) {
+                    // Eksekusi pelunasan via PaymentOrchestratorService: wajib validasi shift aktif & ikat pos_shift_id
+                    $orchestrator = app(\App\Services\Payment\PaymentOrchestratorService::class);
+                    $orchestrator->markOrderAsPaid($booking->order, [
+                        'payment_gateway' => 'CASHIER_POS',
+                        'counter' => 'PADEL_FRONTDESK',
+                        'payment_method' => strtoupper($paymentMethod ?? 'CASH'),
+                        'amount' => (float) $totalDeltaToPay,
+                        'transaction_id' => 'SUPP-' . strtoupper(Str::random(12)),
+                        'admin_user' => $adminUser,
+                        'payload_log' => [
+                            'type' => 'RESCHEDULE_PRICE_DELTA',
+                            'booking_id' => $booking->id,
+                            'admin_id' => $adminUser->id,
+                            'reason' => $reason,
+                            'court_delta' => $delta,
+                            'tax_delta' => $taxDelta,
+                            'admin_fee_delta' => $adminFeeDelta,
+                            'total_delta' => $totalDeltaToPay,
+                        ],
+                    ]);
+                } else {
+                    // Jika belum dibayar kasir, status LOCKED dan QR code ditahan
+                    $targetStatus = 'LOCKED';
+                    $newQrCodeHash = null;
+
+                    Payment::create([
+                        'order_id' => $order->id,
+                        'payment_gateway' => 'CASHIER_POS',
+                        'transaction_id' => 'SUPP-' . strtoupper(Str::random(12)),
+                        'amount' => $totalDeltaToPay,
+                        'payment_method' => strtoupper($paymentMethod ?? 'CASH'),
+                        'status' => 'PENDING',
+                        'payload_log' => [
+                            'type' => 'RESCHEDULE_PRICE_DELTA',
+                            'booking_id' => $booking->id,
+                            'admin_id' => $adminUser->id,
+                            'reason' => $reason,
+                            'court_delta' => $delta,
+                            'tax_delta' => $taxDelta,
+                            'admin_fee_delta' => $adminFeeDelta,
+                            'total_delta' => $totalDeltaToPay,
+                        ],
                     ]);
                 }
             } elseif ($delta < 0) {
-                // Lebih bayar (Prime -> Reguler): Selisih dilempar ke tabel refunds sebagai saldo deposit member
-                $refundAmount = abs($delta);
+                // Lebih bayar (Prime -> Reguler): Hitung refund proporsional via TaxAndFeeService
+                $refundCalc = app(\App\Services\Finance\TaxAndFeeService::class)->calculate(
+                    subtotal: abs($delta),
+                    discountAmount: 0,
+                    channel: 'POS_WALKIN',
+                    module: 'PADEL'
+                );
+                $totalRefundToDeposit = $refundCalc['subtotal'] + $refundCalc['tax_amount'];
+
                 $origPayment = Payment::where('order_id', $booking->order_id)
                     ->where('status', 'SUCCESS')
                     ->latest()
@@ -274,19 +338,20 @@ trait ManagesRescheduleAndCashier
                 Refund::create([
                     'order_id' => $booking->order_id,
                     'payment_id' => $origPayment?->id ?? Payment::where('order_id', $booking->order_id)->first()?->id,
-                    'refund_amount' => $refundAmount,
+                    'refund_amount' => $totalRefundToDeposit,
                     'reason' => "[DEPOSIT_MEMBER] Selisih reschedule booking {$booking->booking_code} ke jam Reguler",
                     'status' => 'PROCESSED',
                     'processed_at' => now(),
                 ]);
 
                 $booking->court_fee = $newCourtFee;
-                $booking->total_amount -= $refundAmount;
+                $booking->total_amount -= $totalRefundToDeposit;
 
                 if ($booking->order) {
                     $booking->order->update([
-                        'subtotal' => max(0, $booking->order->subtotal - $refundAmount),
-                        'grand_total' => max(0, $booking->order->grand_total - $refundAmount),
+                        'subtotal' => max(0, $booking->order->subtotal - $refundCalc['subtotal']),
+                        'tax_amount' => max(0, $booking->order->tax_amount - $refundCalc['tax_amount']),
+                        'grand_total' => max(0, $booking->order->grand_total - $totalRefundToDeposit),
                     ]);
                 }
             } else {
@@ -363,6 +428,7 @@ trait ManagesRescheduleAndCashier
             $orchestrator = app(\App\Services\Payment\PaymentOrchestratorService::class);
             $orchestrator->markOrderAsPaid($order, [
                 'payment_gateway' => 'CASHIER_POS',
+                'counter' => 'PADEL_FRONTDESK',
                 'payment_method' => $gateway,
                 'amount' => $settleAmount,
                 'payload_log' => [
@@ -415,6 +481,11 @@ trait ManagesRescheduleAndCashier
 
             if ($refundAmount > 0) {
                 $order = $this->ensureBookingOrder($booking);
+
+                $maxRefund = (float) ($order->grand_total ?: $booking->total_amount);
+                if ($refundAmount > $maxRefund) {
+                    throw new HttpException(422, 'Nominal refund (Rp ' . number_format($refundAmount, 0, ',', '.') . ') tidak boleh melebihi total pembayaran pesanan (Rp ' . number_format($maxRefund, 0, ',', '.') . ').');
+                }
 
                 $origPayment = Payment::where('order_id', $order->id)
                     ->where('status', 'SUCCESS')

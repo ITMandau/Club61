@@ -59,7 +59,7 @@ trait ManagesCheckoutAndPayments
 
                 foreach ($equipments as $item) {
                     $eq = CourtEquipment::find($item['equipment_id']);
-                    if (! $eq) {
+                    if (! $eq || ! $eq->is_active) {
                         continue;
                     }
 
@@ -110,13 +110,18 @@ trait ManagesCheckoutAndPayments
                 }
             }
 
-            // Biaya Layanan Gateway
-            $gatewayFee = match (strtoupper($paymentMethod)) {
-                'CASH', 'EDC_BCA', 'EDC_MANDIRI', 'QRIS_STATIS' => 0,
-                'QRIS' => 2800,
-                default => 4440,
-            };
-            $grandTotal = max(0, $courtTotal + $equipmentTotal + $gatewayFee - $discountAmount);
+            // Hitung Pajak & Biaya Admin via Mesin Terpusat TaxAndFeeService (Tunduk pada Menu Pengaturan Biaya & Pajak)
+            $financeCalc = app(\App\Services\Finance\TaxAndFeeService::class)->calculate(
+                subtotal: $courtTotal + $equipmentTotal,
+                discountAmount: $discountAmount,
+                channel: 'ONLINE',
+                module: 'PADEL'
+            );
+
+            $taxAmount = $financeCalc['tax_amount'];
+            $adminFee = $financeCalc['admin_fee_amount'];
+            $totalServiceCharge = $adminFee;
+            $grandTotal = max(0, $financeCalc['taxable_amount'] + $taxAmount + $totalServiceCharge);
 
             // Eager Order Creation
             $order = Order::create([
@@ -124,10 +129,11 @@ trait ManagesCheckoutAndPayments
                 'user_id' => $user->id,
                 'cashier_id' => ($isStaff && $isCash) ? $user->id : null,
                 'order_type' => 'ONLINE_BOOKING',
-                'subtotal' => $courtTotal + $equipmentTotal,
-                'discount_amount' => $discountAmount,
+                'subtotal' => $financeCalc['subtotal'],
+                'discount_amount' => $financeCalc['discount_amount'],
                 'voucher_code' => $appliedVoucherCode,
-                'service_charge' => $gatewayFee,
+                'tax_amount' => $taxAmount,
+                'service_charge' => $totalServiceCharge,
                 'grand_total' => $grandTotal,
                 'payment_status' => 'UNPAID',
             ]);
@@ -188,12 +194,20 @@ trait ManagesCheckoutAndPayments
                     'name' => substr($eq['name'], 0, 50),
                 ];
             }
-            if ($gatewayFee > 0) {
+            if ($taxAmount > 0) {
                 $midtransItems[] = [
-                    'id' => 'FEE-GATEWAY',
-                    'price' => (int) $gatewayFee,
+                    'id' => 'TAX-FEE',
+                    'price' => (int) $taxAmount,
                     'quantity' => 1,
-                    'name' => 'Biaya Layanan Gerbang',
+                    'name' => substr($financeCalc['tax_name'] ?: 'Pajak Daerah PB1', 0, 50),
+                ];
+            }
+            if ($adminFee > 0) {
+                $midtransItems[] = [
+                    'id' => 'ADMIN-FEE',
+                    'price' => (int) $adminFee,
+                    'quantity' => 1,
+                    'name' => substr($financeCalc['admin_fee_name'] ?: 'Biaya Layanan', 0, 50),
                 ];
             }
             if ($discountAmount > 0) {
@@ -203,6 +217,34 @@ trait ManagesCheckoutAndPayments
                     'quantity' => 1,
                     'name' => 'Voucher Diskon',
                 ];
+            }
+
+            // QA DEFENSE 3: Targeted 1-Rupiah Auto-Reconciliation
+            $sumItems = 0;
+            foreach ($midtransItems as $item) {
+                $sumItems += (int) $item['price'] * (int) $item['quantity'];
+            }
+            $diff = (int) $grandTotal - $sumItems;
+            if ($diff !== 0 && ! empty($midtransItems)) {
+                $targetIdx = null;
+                foreach ($midtransItems as $idx => $item) {
+                    if ($item['id'] === 'TAX-FEE') {
+                        $targetIdx = $idx;
+                        break;
+                    }
+                }
+                if ($targetIdx === null) {
+                    foreach ($midtransItems as $idx => $item) {
+                        if ($item['id'] === 'ADMIN-FEE') {
+                            $targetIdx = $idx;
+                            break;
+                        }
+                    }
+                }
+                if ($targetIdx === null) {
+                    $targetIdx = count($midtransItems) - 1;
+                }
+                $midtransItems[$targetIdx]['price'] += $diff;
             }
 
             // Panggil Payment Manager (Midtrans & Mock Simulator)
@@ -255,10 +297,12 @@ trait ManagesCheckoutAndPayments
             $orchestrator = app(\App\Services\Payment\PaymentOrchestratorService::class);
             if ($isConfirmed) {
                 $orchestrator->markOrderAsPaid($order, [
-                    'payment_gateway' => $paymentResult['is_mock'] ? 'MOCK' : ($isCash ? 'CASH' : 'MIDTRANS'),
+                    'payment_gateway' => $isCash ? 'CASHIER_POS' : ($paymentResult['is_mock'] ? 'MOCK' : 'MIDTRANS'),
+                    'counter' => 'PADEL_FRONTDESK',
                     'transaction_id' => $orderNumber,
                     'payment_method' => strtoupper($paymentMethod),
                     'amount' => (float) $grandTotal,
+                    'user' => $user,
                     'payload_log' => $paymentResult['raw'] ?? null,
                 ]);
             } else {
@@ -294,7 +338,10 @@ trait ManagesCheckoutAndPayments
                     'payment_status' => $initialStatus,
                     'court_fee' => (float) $courtTotal,
                     'equipment_fee' => (float) $equipmentTotal,
-                    'gateway_fee' => (float) $gatewayFee,
+                    'tax_amount' => (float) $taxAmount,
+                    'admin_fee' => (float) $adminFee,
+                    'gateway_fee' => (float) $totalServiceCharge,
+                    'service_charge' => (float) $totalServiceCharge,
                     'discount' => (float) $discountAmount,
                     'grand_total' => (float) $grandTotal,
                     'equipments' => $equipmentItems,
@@ -376,19 +423,12 @@ trait ManagesCheckoutAndPayments
 
             $isSupplementalDelta = ($totalPaid > 0 && $pendingSupplementalPayment);
 
-            // Hitung Biaya Layanan Gateway Baru
-            $newGatewayFee = match (strtoupper($paymentMethod)) {
-                'CASH' => 0,
-                'QRIS' => 2800,
-                default => 4440,
-            };
-
             $isCash = strtoupper($paymentMethod) === 'CASH';
 
             if ($isSupplementalDelta) {
                 // HANYA menagih nominal selisih (delta), bukan menagih ulang seluruh order
                 $deltaAmount = (float) $pendingSupplementalPayment->amount;
-                $chargeTotal = max(0, $deltaAmount + $newGatewayFee);
+                $chargeTotal = max(0, $deltaAmount);
 
                 if ($isCash) {
                     $pendingSupplementalPayment->update([
@@ -471,10 +511,22 @@ trait ManagesCheckoutAndPayments
             $courtTotal = $bookings->sum('court_fee');
             $equipmentTotal = $bookings->sum('equipment_fee');
             $baseAmount = $courtTotal + $equipmentTotal;
-            $grandTotal = max(0, $baseAmount + $newGatewayFee);
+
+            $retryFinanceCalc = app(\App\Services\Finance\TaxAndFeeService::class)->calculate(
+                subtotal: $baseAmount,
+                discountAmount: (float) ($order->discount_amount ?? 0),
+                channel: 'ONLINE',
+                module: 'PADEL'
+            );
+            $taxAmount = $retryFinanceCalc['tax_amount'];
+            $adminFee = $retryFinanceCalc['admin_fee_amount'];
+            $totalServiceCharge = $adminFee;
+            $grandTotal = max(0, $retryFinanceCalc['taxable_amount'] + $taxAmount + $totalServiceCharge);
 
             $order->update([
-                'subtotal' => $baseAmount,
+                'subtotal' => $retryFinanceCalc['subtotal'],
+                'tax_amount' => $taxAmount,
+                'service_charge' => $totalServiceCharge,
                 'grand_total' => $grandTotal,
             ]);
 
@@ -512,13 +564,49 @@ trait ManagesCheckoutAndPayments
                     'name' => 'Sewa Peralatan',
                 ];
             }
-            if ($newGatewayFee > 0) {
+            if ($taxAmount > 0) {
                 $midtransItems[] = [
-                    'id' => 'FEE-GATEWAY',
-                    'price' => (int) $newGatewayFee,
+                    'id' => 'TAX-FEE',
+                    'price' => (int) $taxAmount,
                     'quantity' => 1,
-                    'name' => 'Biaya Layanan Gerbang',
+                    'name' => substr($retryFinanceCalc['tax_name'] ?: 'Pajak Daerah PB1', 0, 50),
                 ];
+            }
+            if ($adminFee > 0) {
+                $midtransItems[] = [
+                    'id' => 'ADMIN-FEE',
+                    'price' => (int) $adminFee,
+                    'quantity' => 1,
+                    'name' => substr($retryFinanceCalc['admin_fee_name'] ?: 'Biaya Layanan', 0, 50),
+                ];
+            }
+
+            // QA DEFENSE 3: Targeted 1-Rupiah Auto-Reconciliation
+            $sumItems = 0;
+            foreach ($midtransItems as $item) {
+                $sumItems += (int) $item['price'] * (int) $item['quantity'];
+            }
+            $diff = (int) $grandTotal - $sumItems;
+            if ($diff !== 0 && ! empty($midtransItems)) {
+                $targetIdx = null;
+                foreach ($midtransItems as $idx => $item) {
+                    if ($item['id'] === 'TAX-FEE') {
+                        $targetIdx = $idx;
+                        break;
+                    }
+                }
+                if ($targetIdx === null) {
+                    foreach ($midtransItems as $idx => $item) {
+                        if ($item['id'] === 'ADMIN-FEE') {
+                            $targetIdx = $idx;
+                            break;
+                        }
+                    }
+                }
+                if ($targetIdx === null) {
+                    $targetIdx = count($midtransItems) - 1;
+                }
+                $midtransItems[$targetIdx]['price'] += $diff;
             }
 
             // Panggil Payment Manager
@@ -546,7 +634,8 @@ trait ManagesCheckoutAndPayments
                 'snap_token' => $paymentResult['snap_token'] ?? null,
                 'redirect_url' => $paymentResult['redirect_url'] ?? null,
                 'grand_total' => $grandTotal,
-                'gateway_fee' => $newGatewayFee,
+                'service_charge' => $totalServiceCharge,
+                'gateway_fee' => $totalServiceCharge,
                 'payment_method' => $paymentMethod,
                 'message' => 'Token pembayaran baru berhasil dibuat.',
             ];
@@ -581,10 +670,11 @@ trait ManagesCheckoutAndPayments
             'BSI_VA' => 'BSI Virtual Account',
             'QRIS' => 'QRIS Instan (GoPay/OVO/BCA)',
             'CASH' => 'Tunai di Kasir (CASH)',
+            'DEBIT_CARD', 'DEBIT' => 'Kartu Debit (EDC)',
+            'CREDIT_CARD', 'CREDIT' => 'Kartu Kredit (EDC)',
             'EDC_BCA' => 'Debit/Kartu EDC BCA',
             'EDC_MANDIRI' => 'Debit/Kartu EDC Mandiri',
             'QRIS_STATIS' => 'QRIS Kasir Frontdesk',
-            'CREDIT_CARD' => 'Kartu Kredit',
             'BANK_TRANSFER' => 'Transfer Bank (VA)',
             default => $method ?: 'QRIS Instan (GoPay/OVO/BCA)',
         };
@@ -624,11 +714,15 @@ trait ManagesCheckoutAndPayments
             $fallbackEmail = "walkin-{$ulid}@walkin.club61.internal";
         }
 
+        $rawPassword = strlen($cleanPhone) >= 6
+            ? substr($cleanPhone, -6)
+            : (empty($cleanPhone) ? '123456' : str_pad($cleanPhone, 6, '0', STR_PAD_LEFT));
+
         return User::create([
             'name' => trim($name),
             'phone' => $cleanPhone,
             'email' => $fallbackEmail,
-            'password' => Hash::make(Str::random(32)),
+            'password' => Hash::make($rawPassword),
             'role' => 'CUSTOMER',
             'registration_source' => 'WALK_IN',
             'is_active' => true,
@@ -647,13 +741,14 @@ trait ManagesCheckoutAndPayments
         array $equipments,
         string $paymentMethod,
         User $cashier,
-        bool $autoCheckIn = false
+        bool $autoCheckIn = false,
+        array $paymentMeta = []
     ): array {
         // 1. Hold batch slots untuk customer (melempar SlotConflictException jika tabrakan)
         $holdResult = $this->holdBatchSlots($slots, $bookingDate, $customer);
         $bookingIds = collect($holdResult['bookings'])->pluck('id')->toArray();
 
-        return DB::transaction(function () use ($customer, $bookingIds, $equipments, $paymentMethod, $cashier, $autoCheckIn) {
+        return DB::transaction(function () use ($customer, $bookingIds, $equipments, $paymentMethod, $cashier, $autoCheckIn, $paymentMeta) {
             $bookings = PadelBooking::with('court')
                 ->whereIn('id', $bookingIds)
                 ->where('user_id', $customer->id)
@@ -675,7 +770,7 @@ trait ManagesCheckoutAndPayments
 
                 foreach ($equipments as $item) {
                     $eq = CourtEquipment::find($item['equipment_id']);
-                    if (! $eq) {
+                    if (! $eq || ! $eq->is_active) {
                         continue;
                     }
 
@@ -698,7 +793,14 @@ trait ManagesCheckoutAndPayments
                 }
             }
 
-            $grandTotal = $courtTotal + $equipmentTotal;
+            $walkInFinanceCalc = app(\App\Services\Finance\TaxAndFeeService::class)->calculate(
+                subtotal: $courtTotal + $equipmentTotal,
+                discountAmount: 0,
+                channel: 'POS_WALKIN',
+                module: 'PADEL'
+            );
+
+            $grandTotal = $walkInFinanceCalc['grand_total'];
 
             // Buat Order resmi dengan order_type = 'WALK_IN' dan cashier_id terisi
             $order = Order::create([
@@ -706,10 +808,11 @@ trait ManagesCheckoutAndPayments
                 'user_id' => $customer->id,
                 'cashier_id' => $cashier->id,
                 'order_type' => 'WALK_IN',
-                'subtotal' => $grandTotal,
+                'subtotal' => $walkInFinanceCalc['subtotal'],
                 'discount_amount' => 0.00,
                 'voucher_code' => null,
-                'service_charge' => 0.00,
+                'tax_amount' => $walkInFinanceCalc['tax_amount'],
+                'service_charge' => $walkInFinanceCalc['admin_fee_amount'],
                 'grand_total' => $grandTotal,
                 'payment_status' => 'UNPAID',
             ]);
@@ -760,20 +863,51 @@ trait ManagesCheckoutAndPayments
                 ]);
             }
 
-            // Eksekusi pelunasan langsung via PaymentOrchestratorService
+            // Susun payload_log audit finansial
+            $payloadLog = [
+                'cashier_id' => $cashier->id,
+                'cashier_name' => $cashier->name,
+                'source' => 'WALK_IN_OFFLINE',
+                'payment_method' => strtoupper($paymentMethod),
+            ];
+
+            if (in_array(strtoupper($paymentMethod), ['DEBIT_CARD', 'CREDIT_CARD', 'EDC_BCA', 'EDC_MANDIRI', 'DEBIT', 'CREDIT'])) {
+                $cardType = $paymentMeta['card_type'] ?? (str_contains(strtoupper($paymentMethod), 'CREDIT') ? 'CREDIT' : 'DEBIT');
+                $terminal = $paymentMeta['terminal'] ?? ($paymentMethod === 'EDC_MANDIRI' ? 'EDC_MANDIRI' : 'EDC_BCA');
+
+                $payloadLog['edc_details'] = [
+                    'terminal' => $terminal,
+                    'card_type' => $cardType,
+                    'card_network' => $paymentMeta['card_network'] ?? null,
+                    'card_issuer' => $paymentMeta['card_issuer'] ?? 'BCA',
+                    'card_last_4' => $paymentMeta['card_last_4'] ?? null,
+                    'approval_code' => $paymentMeta['approval_code'] ?? null,
+                    'trace_number' => $paymentMeta['trace_number'] ?? null,
+                    'charged_amount' => isset($paymentMeta['charged_amount']) ? (float) $paymentMeta['charged_amount'] : (float) $grandTotal,
+                ];
+            } elseif (in_array(strtoupper($paymentMethod), ['QRIS_STATIS', 'QRIS'])) {
+                $payloadLog['qris_details'] = [
+                    'provider' => $paymentMeta['qris_provider'] ?? 'BCA_QRIS',
+                    'rrn' => $paymentMeta['qris_rrn'] ?? null,
+                    'sender_name' => $paymentMeta['qris_sender_name'] ?? null,
+                ];
+            } elseif (in_array(strtoupper($paymentMethod), ['CASH', 'TUNAI'])) {
+                $payloadLog['cash_details'] = [
+                    'cash_received' => isset($paymentMeta['cash_received']) ? (float) $paymentMeta['cash_received'] : (float) $grandTotal,
+                    'cash_change' => isset($paymentMeta['cash_change']) ? (float) $paymentMeta['cash_change'] : 0.00,
+                ];
+            }
+
+            // Eksekusi pelunasan langsung via PaymentOrchestratorService sebagai single writer
             $orchestrator = app(\App\Services\Payment\PaymentOrchestratorService::class);
             $orchestrator->markOrderAsPaid($order, [
                 'payment_gateway' => 'CASHIER_POS',
+                'counter' => 'PADEL_FRONTDESK',
                 'transaction_id' => $orderNumber,
                 'payment_method' => strtoupper($paymentMethod),
                 'amount' => (float) $grandTotal,
                 'cashier_id' => $cashier->id,
-                'payload_log' => [
-                    'cashier_id' => $cashier->id,
-                    'cashier_name' => $cashier->name,
-                    'source' => 'WALK_IN_OFFLINE',
-                    'payment_method' => strtoupper($paymentMethod),
-                ],
+                'payload_log' => $payloadLog,
             ]);
 
             // Opsi Auto Check-In Software

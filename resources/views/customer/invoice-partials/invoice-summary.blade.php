@@ -21,6 +21,18 @@
             <span>Rental Equipment (Flat):</span>
             <span class="font-mono text-[#1F170D] whitespace-nowrap text-right" x-text="'Rp ' + formatNumber(displayEquipmentFee)"></span>
         </div>
+        <template x-if="ticket.order && ticket.order.tax_amount > 0">
+            <div class="flex justify-between items-center gap-3">
+                <span>Pajak (PB1 / PPh):</span>
+                <span class="font-mono text-[#1F170D] whitespace-nowrap text-right" x-text="'Rp ' + formatNumber(ticket.order.tax_amount)"></span>
+            </div>
+        </template>
+        <template x-if="ticket.order && ticket.order.service_charge > 0">
+            <div class="flex justify-between items-center gap-3">
+                <span>Biaya Layanan & Admin:</span>
+                <span class="font-mono text-[#1F170D] whitespace-nowrap text-right" x-text="'Rp ' + formatNumber(ticket.order.service_charge)"></span>
+            </div>
+        </template>
         <div class="flex justify-between items-center gap-3">
             <span>Settlement Status:</span>
             <span :class="(ticket.status === 'PAID' || ticket.status === 'CHECKED_IN') ? 'text-emerald-700' : ((ticket.status === 'EXPIRED' || ticket.status === 'CANCELLED' || ticket.status === 'REFUNDED') ? 'text-rose-700' : 'text-amber-700')"
