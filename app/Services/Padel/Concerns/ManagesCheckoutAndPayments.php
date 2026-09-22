@@ -1010,17 +1010,30 @@ trait ManagesCheckoutAndPayments
     protected function applyMembershipBenefitToCourtBookings(
         iterable $bookings,
         User $user,
-        ?string $membershipBalanceId = null
+        ?string $membershipBalanceId = null,
+        bool $commit = true
     ): array {
+        $noBenefit = [
+            'applied_balance' => null,
+            'hours_consumed' => 0.0,
+            'total_court_discount' => 0.0,
+            'benefit_type' => 'NONE',
+            'plan_name' => null,
+            'discount_percent' => 0.0,
+            'remaining_quota_after' => null,
+            'rejected_reason' => null,
+        ];
+
         if ($membershipBalanceId === 'none' || $membershipBalanceId === 'NONE') {
-            return ['applied_balance' => null, 'hours_consumed' => 0.0, 'total_court_discount' => 0.0];
+            return $noBenefit;
         }
 
+        // Mode preview (dipanggil dari endpoint "lihat dulu sebelum bayar") tidak perlu row-lock karena
+        // tidak menulis apa-apa ke database — locking cukup dilakukan saat commit (checkout beneran).
         $balance = null;
         if ($membershipBalanceId) {
-            $balance = \App\Models\Membership\UserMembershipBalance::where('id', $membershipBalanceId)
-                ->lockForUpdate()
-                ->first();
+            $query = \App\Models\Membership\UserMembershipBalance::where('id', $membershipBalanceId);
+            $balance = $commit ? $query->lockForUpdate()->first() : $query->first();
         } else {
             // Auto-detect active membership Padel balance
             $activeMembership = \App\Models\Membership\UserMembership::where('user_id', $user->id)
@@ -1031,35 +1044,44 @@ trait ManagesCheckoutAndPayments
                 ->whereHas('balances', function ($q) {
                     $q->where('facility', 'PADEL');
                 })
+                // Tie-break: kartu yang paling cepat kedaluwarsa dipakai lebih dulu (jam tidak hangus sia-sia
+                // jika user punya >1 membership aktif); kartu tanpa end_date (unlimited) diprioritaskan paling akhir.
+                ->orderByRaw('end_date IS NULL, end_date ASC')
                 ->first();
 
             if ($activeMembership) {
-                $balance = \App\Models\Membership\UserMembershipBalance::where('user_membership_id', $activeMembership->id)
-                    ->where('facility', 'PADEL')
-                    ->lockForUpdate()
-                    ->first();
+                $query = \App\Models\Membership\UserMembershipBalance::where('user_membership_id', $activeMembership->id)
+                    ->where('facility', 'PADEL');
+                $balance = $commit ? $query->lockForUpdate()->first() : $query->first();
             }
         }
 
         if (! $balance) {
-            return ['applied_balance' => null, 'hours_consumed' => 0.0, 'total_court_discount' => 0.0];
+            return $noBenefit;
         }
 
         $membership = $balance->membership;
         if (! $membership || ! $membership->isActive() || $membership->user_id !== $user->id) {
-            return ['applied_balance' => null, 'hours_consumed' => 0.0, 'total_court_discount' => 0.0];
+            return $noBenefit;
         }
 
         if ($balance->facility !== 'PADEL') {
-            return ['applied_balance' => null, 'hours_consumed' => 0.0, 'total_court_discount' => 0.0];
+            return $noBenefit;
         }
 
-        // Time window check
+        // Time window check — SELURUH rentang booking (mulai s.d. selesai) wajib di dalam jendela waktu paket,
+        // bukan cuma jam mulainya saja (all-or-nothing, tidak ada benefit parsial untuk booking yang nyerempet keluar jendela).
         if ($balance->time_window_start && $balance->time_window_end) {
             foreach ($bookings as $b) {
-                $bookingTime = \Carbon\Carbon::parse($b->start_time)->format('H:i:s');
-                if ($bookingTime < $balance->time_window_start || $bookingTime > $balance->time_window_end) {
-                    throw new HttpException(422, "Sesi booking di luar jam akses paket membership ({$balance->time_window_start} - {$balance->time_window_end}).");
+                $bookingStart = \Carbon\Carbon::parse($b->start_time)->format('H:i:s');
+                $bookingEnd = \Carbon\Carbon::parse($b->end_time)->format('H:i:s');
+                if ($bookingStart < $balance->time_window_start || $bookingEnd > $balance->time_window_end) {
+                    if ($commit) {
+                        throw new HttpException(422, "Sesi booking di luar jam akses paket membership ({$balance->time_window_start} - {$balance->time_window_end}). Seluruh durasi booking harus berada di dalam jendela waktu paket.");
+                    }
+
+                    // Mode preview: jangan gagalkan halaman, cukup laporkan benefit tidak berlaku + alasannya.
+                    return array_merge($noBenefit, ['rejected_reason' => 'OUTSIDE_TIME_WINDOW']);
                 }
             }
         }
@@ -1067,47 +1089,61 @@ trait ManagesCheckoutAndPayments
         $balanceService = app(\App\Services\Membership\MembershipBalanceService::class);
         $totalHoursConsumed = 0.0;
         $totalCourtDiscount = 0.0;
+        $benefitType = 'NONE';
+        // Simulasi sisa kuota berjalan (dipakai di mode preview agar booking ke-2/ke-3 dalam 1 keranjang tetap
+        // konsisten dengan mode commit tanpa perlu benar-benar mendekremen apa pun ke database).
+        $simulatedRemaining = (float) $balance->remaining_quota;
 
         foreach ($bookings as $booking) {
             $durationMinutes = \Carbon\Carbon::parse($booking->start_time)->diffInMinutes(\Carbon\Carbon::parse($booking->end_time));
             $hoursNeeded = max(0.5, round($durationMinutes / 60, 2));
 
-            if ($balance->quota_type === 'HOURS' && (float) $balance->remaining_quota >= $hoursNeeded) {
+            if ($balance->quota_type === 'HOURS' && $simulatedRemaining >= $hoursNeeded) {
                 // Kuota jam mencukupi: menanggung 100% biaya sewa lapangan
-                $balanceService->adjustQuota(
-                    balanceId: $balance->id,
-                    changeType: 'DECREMENT',
-                    quantity: $hoursNeeded,
-                    notes: 'Pemakaian jam main Padel booking ' . $booking->booking_code,
-                    relatedType: PadelBooking::class,
-                    relatedId: $booking->id
-                );
-
                 $discount = (float) $booking->court_fee;
-                $booking->membership_balance_id = $balance->id;
-                $booking->member_hours_consumed = $hoursNeeded;
-                $booking->member_discount_court = $discount;
-                $booking->court_fee = 0.00;
-                $booking->total_amount = max(0, (float) $booking->total_amount - $discount);
-                $booking->save();
+
+                if ($commit) {
+                    $balanceService->adjustQuota(
+                        balanceId: $balance->id,
+                        changeType: 'DECREMENT',
+                        quantity: $hoursNeeded,
+                        notes: 'Pemakaian jam main Padel booking ' . $booking->booking_code,
+                        relatedType: PadelBooking::class,
+                        relatedId: $booking->id
+                    );
+
+                    $booking->membership_balance_id = $balance->id;
+                    $booking->member_hours_consumed = $hoursNeeded;
+                    $booking->member_discount_court = $discount;
+                    $booking->court_fee = 0.00;
+                    $booking->total_amount = max(0, (float) $booking->total_amount - $discount);
+                    $booking->save();
+
+                    $balance->refresh();
+                    $simulatedRemaining = (float) $balance->remaining_quota;
+                } else {
+                    $simulatedRemaining -= $hoursNeeded;
+                }
 
                 $totalHoursConsumed += $hoursNeeded;
                 $totalCourtDiscount += $discount;
-
-                $balance->refresh();
+                $benefitType = 'HOURS';
             } elseif ((float) $balance->discount_percent > 0) {
                 // Kuota jam habis atau quota_type NONE: diskon persentase flat
                 $courtFee = (float) $booking->court_fee;
                 $discount = round($courtFee * ((float) $balance->discount_percent / 100), 2);
 
-                $booking->membership_balance_id = $balance->id;
-                $booking->member_hours_consumed = 0.00;
-                $booking->member_discount_court = $discount;
-                $booking->court_fee = max(0, $courtFee - $discount);
-                $booking->total_amount = max(0, (float) $booking->total_amount - $discount);
-                $booking->save();
+                if ($commit) {
+                    $booking->membership_balance_id = $balance->id;
+                    $booking->member_hours_consumed = 0.00;
+                    $booking->member_discount_court = $discount;
+                    $booking->court_fee = max(0, $courtFee - $discount);
+                    $booking->total_amount = max(0, (float) $booking->total_amount - $discount);
+                    $booking->save();
+                }
 
                 $totalCourtDiscount += $discount;
+                $benefitType = $benefitType === 'NONE' ? 'DISCOUNT_PERCENT' : $benefitType;
             }
         }
 
@@ -1115,6 +1151,47 @@ trait ManagesCheckoutAndPayments
             'applied_balance' => $balance,
             'hours_consumed' => $totalHoursConsumed,
             'total_court_discount' => $totalCourtDiscount,
+            'benefit_type' => $benefitType,
+            'plan_name' => $membership->plan->name ?? null,
+            'discount_percent' => (float) $balance->discount_percent,
+            'remaining_quota_after' => $simulatedRemaining,
+            'rejected_reason' => null,
+        ];
+    }
+
+    /**
+     * Preview (read-only, tanpa efek samping) benefit membership untuk booking yang sudah di-hold,
+     * dipakai halaman "Payment Details & Checkout" (online) maupun POS walk-in agar customer/kasir
+     * tahu ada potongan SEBELUM menekan tombol bayar — bukan baru ketahuan setelah checkout dieksekusi.
+     */
+    public function previewMembershipBenefit(array $bookingIds, User $user, ?string $membershipBalanceId = null): array
+    {
+        $bookings = PadelBooking::with('court')
+            ->whereIn('id', $bookingIds)
+            ->where('user_id', $user->id)
+            ->where('status', 'LOCKED')
+            ->get();
+
+        if ($bookings->isEmpty()) {
+            throw new HttpException(422, 'Satu atau lebih slot booking tidak valid atau masa kuncian telah kedaluwarsa.');
+        }
+
+        $result = $this->applyMembershipBenefitToCourtBookings($bookings, $user, $membershipBalanceId, commit: false);
+
+        $courtSubtotal = (float) $bookings->sum('court_fee');
+        $projectedCourtTotal = max(0, $courtSubtotal - $result['total_court_discount']);
+
+        return [
+            'has_benefit' => $result['applied_balance'] !== null,
+            'benefit_type' => $result['benefit_type'], // NONE | HOURS | DISCOUNT_PERCENT
+            'plan_name' => $result['plan_name'],
+            'discount_percent' => $result['discount_percent'],
+            'hours_to_consume' => $result['hours_consumed'],
+            'remaining_quota_after' => $result['remaining_quota_after'],
+            'court_discount_amount' => $result['total_court_discount'],
+            'court_subtotal' => $courtSubtotal,
+            'projected_court_total' => $projectedCourtTotal,
+            'rejected_reason' => $result['rejected_reason'],
         ];
     }
 }

@@ -188,6 +188,74 @@
                         <h3 class="font-serif font-black text-base text-[#1F170D] border-b border-[#DFC387]/50 pb-3">
                             Payment Summary</h3>
 
+                        <!-- Membership Benefit Banner (Muncul Otomatis Kalau Ada Membership Aktif) -->
+                        <template x-if="isLoadingMembershipPreview">
+                            <div class="p-3 rounded-2xl bg-[#FAF8F2] border border-[#DFC387]/70 text-[11px] text-[#7A643E] flex items-center gap-2">
+                                <div class="w-3.5 h-3.5 border-2 border-[#D4AF37] border-t-transparent rounded-full animate-spin"></div>
+                                <span>Checking membership benefit...</span>
+                            </div>
+                        </template>
+
+                        <template x-if="!isLoadingMembershipPreview && membershipBenefit">
+                            <div class="p-3.5 rounded-2xl border space-y-2.5 transition-all shadow-sm"
+                                :style="useMembershipBenefit 
+                                    ? 'background-color: #FAF6EC; border: 1.5px solid #D4AF37;' 
+                                    : 'background-color: #F4EFE6; border: 1.5px solid #CDBFA8;'">
+                                <div class="flex items-center justify-between gap-3">
+                                    <div class="flex items-center gap-2 min-w-0">
+                                        <span class="px-2 py-0.5 rounded-full text-[9px] font-extrabold uppercase tracking-wider shrink-0 transition-colors"
+                                            :style="useMembershipBenefit 
+                                                ? 'background-color: #D1FAE5; color: #065F46; border: 1px solid #6EE7B7;' 
+                                                : 'background-color: #E6DCCD; color: #5C4A26; border: 1px solid #C4B59D;'">
+                                            Member
+                                        </span>
+                                        <span class="text-xs font-bold text-[#1F170D] truncate" x-text="membershipBenefit.plan_name"></span>
+                                    </div>
+
+                                    <!-- Toggle Switch Pakai / Tidak Pakai Benefit -->
+                                    <div class="flex items-center gap-2 shrink-0">
+                                        <span class="text-[10px] font-extrabold uppercase tracking-wider select-none transition-colors"
+                                            :style="useMembershipBenefit ? 'color: #8C6418;' : 'color: #786546;'"
+                                            x-text="useMembershipBenefit ? 'Dipakai' : 'Nonaktif'">
+                                        </span>
+                                        <button type="button" @click="toggleMembershipBenefit()"
+                                            class="relative inline-flex items-center rounded-full transition-all shrink-0 cursor-pointer focus:outline-none p-0.5"
+                                            :style="useMembershipBenefit 
+                                                ? 'width: 44px; height: 24px; background: linear-gradient(135deg, #D4AF37 0%, #B38622 100%); border: 1.5px solid #997015; box-shadow: inset 0 1px 2px rgba(0,0,0,0.15);' 
+                                                : 'width: 44px; height: 24px; background-color: #8C7A58; border: 1.5px solid #635338; box-shadow: inset 0 1px 3px rgba(0,0,0,0.3);'"
+                                            :title="useMembershipBenefit ? 'Klik untuk menonaktifkan benefit membership' : 'Klik untuk mengaktifkan benefit membership'">
+                                            <span class="inline-block rounded-full bg-white transition-all shadow-md"
+                                                :style="useMembershipBenefit 
+                                                    ? 'width: 18px; height: 18px; transform: translateX(21px); box-shadow: 0 2px 4px rgba(0,0,0,0.35);' 
+                                                    : 'width: 18px; height: 18px; transform: translateX(2px); box-shadow: 0 2px 4px rgba(0,0,0,0.3);'">
+                                            </span>
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <div x-show="useMembershipBenefit" class="text-[11px] text-[#7A643E]">
+                                    <template x-if="membershipBenefit.benefit_type === 'HOURS'">
+                                        <span>
+                                            Pakai <span class="font-bold text-[#8C6418]" x-text="membershipBenefit.hours_to_consume + ' jam'"></span>
+                                            kuota membership &mdash; sisa jadi
+                                            <span class="font-bold" x-text="membershipBenefit.remaining_quota_after + ' jam'"></span>.
+                                        </span>
+                                    </template>
+                                    <template x-if="membershipBenefit.benefit_type === 'DISCOUNT_PERCENT'">
+                                        <span>
+                                            Diskon member
+                                            <span class="font-bold text-[#8C6418]" x-text="membershipBenefit.discount_percent + '%'"></span>
+                                            untuk sewa lapangan ini.
+                                        </span>
+                                    </template>
+                                </div>
+
+                                <div x-show="!useMembershipBenefit" class="text-[10px] font-semibold text-[#6B5B3E] bg-[#EBE2D3] p-2.5 rounded-xl border border-[#CDBFA8] leading-relaxed">
+                                    Benefit membership dinonaktifkan untuk booking ini &mdash; kuota jam / diskon Anda tetap aman dan tidak akan berkurang.
+                                </div>
+                            </div>
+                        </template>
+
                         <!-- Promo Code Input -->
                         <div class="space-y-2">
                             <label class="text-[11px] font-bold text-[#7A5818] uppercase tracking-wider block">Discount Promo Code</label>
@@ -218,6 +286,10 @@
                             <div class="flex justify-between" x-show="addonsTotal > 0">
                                 <span>Equipment Add-ons:</span>
                                 <span class="font-mono font-bold" x-text="'Rp ' + formatNumber(addonsTotal)"></span>
+                            </div>
+                            <div x-show="membershipDiscountAmount > 0" class="flex justify-between text-[#8C6418] font-bold">
+                                <span x-text="'Membership Benefit (' + (membershipBenefit ? membershipBenefit.plan_name : '') + '):'"></span>
+                                <span class="font-mono" x-text="'- Rp ' + formatNumber(membershipDiscountAmount)"></span>
                             </div>
                             <div x-show="promoApplied" class="flex justify-between text-emerald-700 font-bold">
                                 <span>Voucher Discount:</span>
@@ -738,6 +810,9 @@
 
                 bookingItems: [],
                 bookingDateFormatted: 'Today',
+                membershipBenefit: null,
+                useMembershipBenefit: true,
+                isLoadingMembershipPreview: false,
                 holdData: null,
                 expiresAtTime: null,
                 timerDisplay: '10:00',
@@ -898,6 +973,47 @@
                     // Load catalog from database & sync finance settings
                     this.fetchEquipments();
                     this.fetchFinanceSettings();
+                    this.fetchMembershipBenefitPreview();
+                },
+
+                /**
+                 * Preview (read-only) benefit membership SEBELUM customer menekan Pay Now — supaya
+                 * potongan jam/diskon kelihatan di muka, bukan baru ketahuan setelah bayar.
+                 */
+                async fetchMembershipBenefitPreview() {
+                    let bookingIds = [];
+                    if (this.holdData && this.holdData.bookings && this.holdData.bookings.length > 0) {
+                        bookingIds = this.holdData.bookings.map(b => b.id);
+                    }
+                    if (bookingIds.length === 0) return;
+
+                    this.isLoadingMembershipPreview = true;
+                    try {
+                        const res = await fetch('/api/v1/padel/preview-membership-benefit', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'Accept': 'application/json',
+                                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
+                            },
+                            body: JSON.stringify({ booking_ids: bookingIds })
+                        });
+                        const json = await res.json();
+                        if (json.success && json.data && json.data.has_benefit) {
+                            this.membershipBenefit = json.data;
+                        } else {
+                            this.membershipBenefit = null;
+                        }
+                    } catch (e) {
+                        // Tidak fatal — customer tanpa membership tetap bisa checkout normal
+                        this.membershipBenefit = null;
+                    } finally {
+                        this.isLoadingMembershipPreview = false;
+                    }
+                },
+
+                toggleMembershipBenefit() {
+                    this.useMembershipBenefit = !this.useMembershipBenefit;
                 },
 
                 async fetchFinanceSettings() {
@@ -1000,8 +1116,16 @@
                     return this.selectedAddOns.reduce((sum, item) => sum + (item.price * (item.quantity || 1)), 0);
                 },
 
+                get membershipDiscountAmount() {
+                    if (!this.membershipBenefit || !this.useMembershipBenefit) return 0;
+                    return this.membershipBenefit.court_discount_amount || 0;
+                },
+
                 get taxableAmount() {
-                    return Math.max(0, this.subtotal + this.addonsTotal - this.promoDiscount);
+                    // Potongan membership dihitung dari sewa lapangan dulu (mengikuti urutan yang sama
+                    // seperti backend checkout()), baru voucher diterapkan ke sisa subtotal + add-on.
+                    const courtAfterMembership = Math.max(0, this.subtotal - this.membershipDiscountAmount);
+                    return Math.max(0, courtAfterMembership + this.addonsTotal - this.promoDiscount);
                 },
 
                 get isTaxApplicable() {
@@ -1181,7 +1305,10 @@
                                 quantity: Math.max(1, parseInt(a.quantity, 10) || 1)
                             })),
                             voucher_code: this.promoApplied ? this.promoCode : null,
-                            payment_method: this.selectedMethod.code
+                            payment_method: this.selectedMethod.code,
+                            // Kirim 'NONE' kalau customer sengaja matiin toggle membership, biar backend
+                            // beneran skip benefit-nya (bukan cuma tampilan doang) — konsisten dengan preview.
+                            membership_balance_id: (this.membershipBenefit && !this.useMembershipBenefit) ? 'NONE' : null,
                         };
 
                         const idempotencyKey = (crypto && crypto.randomUUID) ?

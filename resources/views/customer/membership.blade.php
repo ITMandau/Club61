@@ -372,21 +372,6 @@
         </div>
     </div>
 
-    <!-- Mobile Sticky Action Bar (visible on mobile screens for easy 1-thumb pay) -->
-    <div class="sm:hidden fixed bottom-16 left-0 right-0 z-20 bg-white/95 backdrop-blur-md border-t border-[#DFC387] p-3.5 shadow-[0_-4px_16px_rgba(0,0,0,0.08)]">
-        <div class="flex items-center justify-between gap-3 max-w-lg mx-auto">
-            <div>
-                <span id="mobilePlanName" class="text-[11px] font-extrabold text-[#1F170D] block line-clamp-1 leading-tight">{{ $initialPlan['name'] }}</span>
-                <span id="mobilePlanPrice" class="text-sm font-black text-[#8C6418] font-mono leading-none">{{ $initialPlan['price_formatted'] }}</span>
-            </div>
-            <button type="button"
-                    onclick="submitMembershipCheckout()"
-                    class="px-5 py-2.5 rounded-xl bg-gradient-to-r from-[#D4AF37] to-[#B38622] text-[#1E160A] font-extrabold text-xs shadow-md active:scale-95 transition-all">
-                Bayar Sekarang &rarr;
-            </button>
-        </div>
-    </div>
-
     <!-- Luxury Club 61 Notice Dialog (Replacing browser native alert) -->
     <div id="luxuryNoticeModal" 
          class="fixed inset-0 z-50 bg-black/75 backdrop-blur-md hidden items-center justify-center p-4 transition-all duration-300">

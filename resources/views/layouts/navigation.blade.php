@@ -24,13 +24,13 @@
                        class="inline-flex items-center px-1 pt-1 border-b-2 {{ request()->routeIs('customer.booking') ? 'border-[#D4AF37] text-[#8C6418]' : 'border-transparent text-[#6B5738] hover:text-[#1F170D] hover:border-[#D4AF37]/50' }} text-xs font-bold uppercase tracking-wider transition-colors">
                         Book Court
                     </a>
-                    <a href="{{ route('customer.my-club') }}" 
-                       class="inline-flex items-center px-1 pt-1 border-b-2 {{ request()->routeIs('customer.my-club') ? 'border-[#D4AF37] text-[#8C6418]' : 'border-transparent text-[#6B5738] hover:text-[#1F170D] hover:border-[#D4AF37]/50' }} text-xs font-bold uppercase tracking-wider transition-colors">
+                    {{-- "Membership" sengaja tidak lagi jadi menu navbar terpisah yang langsung ke halaman
+                         penjualan/katalog. Status & detail membership customer (kode, masa aktif, sisa
+                         benefit per fasilitas) sudah ditampilkan di atas katalog pada halaman "My Club" itu
+                         sendiri — dan dari situ pula customer klik untuk membeli/upgrade paket. --}}
+                    <a href="{{ route('customer.my-club') }}"
+                       class="inline-flex items-center px-1 pt-1 border-b-2 {{ request()->routeIs('customer.my-club') || request()->routeIs('customer.membership') ? 'border-[#D4AF37] text-[#8C6418]' : 'border-transparent text-[#6B5738] hover:text-[#1F170D] hover:border-[#D4AF37]/50' }} text-xs font-bold uppercase tracking-wider transition-colors">
                         My Club
-                    </a>
-                    <a href="{{ route('customer.membership') }}" 
-                       class="inline-flex items-center px-1 pt-1 border-b-2 {{ request()->routeIs('customer.membership') ? 'border-[#D4AF37] text-[#8C6418]' : 'border-transparent text-[#6B5738] hover:text-[#1F170D] hover:border-[#D4AF37]/50' }} text-xs font-bold uppercase tracking-wider transition-colors">
-                        Membership
                     </a>
                     <a href="{{ route('customer.invoice') }}" 
                        class="inline-flex items-center px-1 pt-1 border-b-2 {{ request()->routeIs('customer.invoice') ? 'border-[#D4AF37] text-[#8C6418]' : 'border-transparent text-[#6B5738] hover:text-[#1F170D] hover:border-[#D4AF37]/50' }} text-xs font-bold uppercase tracking-wider transition-colors">
@@ -217,12 +217,37 @@
                 @endif
 
                 <!-- User Info & Logout (Desktop) -->
+                @php
+                    // Badge membership REAL dari database (bukan label statis) — menunjukkan paket aktif
+                    // customer saat ini, tautannya menuju /my-club untuk rincian lengkap per fasilitas.
+                    $navActiveMembership = null;
+                    if (Auth::check()) {
+                        $navActiveMembership = \App\Models\Membership\UserMembership::where('user_id', Auth::id())
+                            ->where('status', 'ACTIVE')
+                            ->where(function ($q) {
+                                $q->whereNull('end_date')->orWhere('end_date', '>=', now()->toDateString());
+                            })
+                            ->with('plan')
+                            ->orderByRaw('end_date IS NULL, end_date ASC')
+                            ->first();
+                    }
+                @endphp
                 <div class="hidden sm:flex items-center gap-3 ms-2">
                     <div class="text-right">
                         <div class="text-xs font-bold text-[#1F170D]">{{ Auth::user()->name }}</div>
-                        <div class="text-[9px] text-[#7A5818] font-mono uppercase bg-[#FAF2DE] px-2 py-0.5 rounded-full border border-[#D9BE84] inline-block">
-                            VIP Platinum
-                        </div>
+                        @if($navActiveMembership && $navActiveMembership->plan)
+                            <a href="{{ route('customer.my-club') }}"
+                               class="text-[9px] text-[#7A5818] font-mono uppercase bg-[#FAF2DE] px-2 py-0.5 rounded-full border border-[#D9BE84] inline-flex items-center gap-1 hover:bg-[#F3DFAD] transition-colors"
+                               title="Lihat detail membership & sisa kuota">
+                                <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                                {{ $navActiveMembership->plan->name }}
+                            </a>
+                        @else
+                            <a href="{{ route('customer.membership') }}"
+                               class="text-[9px] text-[#8C7A58] font-mono uppercase bg-gray-100 px-2 py-0.5 rounded-full border border-gray-300 inline-block hover:bg-gray-200 transition-colors">
+                                Belum Member
+                            </a>
+                        @endif
                     </div>
 
                     <form method="POST" action="{{ route('logout') }}">

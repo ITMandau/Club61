@@ -290,9 +290,24 @@
                 class="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-1 sm:gap-4 pb-2 sm:pb-1.5 border-b border-[#DFC387]/30 text-[#5C410F]">
                 <span
                     class="text-[11px] sm:text-xs font-semibold text-[#8C6418] uppercase tracking-wider shrink-0">Ticket Holder:</span>
+                @php
+                    $ticketHolderMembership = Auth::check()
+                        ? \App\Models\Membership\UserMembership::where('user_id', Auth::id())
+                            ->where('status', 'ACTIVE')
+                            ->where(function ($q) {
+                                $q->whereNull('end_date')->orWhere('end_date', '>=', now()->toDateString());
+                            })
+                            ->with('plan')
+                            ->orderByRaw('end_date IS NULL, end_date ASC')
+                            ->first()
+                        : null;
+                @endphp
                 <span
                     class="font-bold text-xs sm:text-sm text-[#1F170D] sm:text-right break-words leading-snug">{{ Auth::user()->name }}
-                    (VIP Platinum)</span>
+                    @if($ticketHolderMembership && $ticketHolderMembership->plan)
+                        ({{ $ticketHolderMembership->plan->name }})
+                    @endif
+                </span>
             </div>
 
             <!-- Booking Schedule -->

@@ -103,11 +103,31 @@ class MembershipController extends Controller
                     'subtotal' => $price,
                 ]);
 
+                // Cek apakah customer sudah punya membership AKTIF (row-lock: cegah 2 kartu ganda kalau
+                // customer klik beli 2x hampir bersamaan, sama seperti guard di POS JualMembership.php).
+                $existingActive = UserMembership::where('user_id', $user->id)
+                    ->where('status', 'ACTIVE')
+                    ->where(function ($q) {
+                        $q->whereNull('end_date')->orWhere('end_date', '>=', now()->toDateString());
+                    })
+                    ->lockForUpdate()
+                    ->first();
+
+                $membershipOptions = ['order_id' => $order->id, 'status' => 'PENDING_PAYMENT'];
+
+                if ($existingActive && $existingActive->plan_id === $plan->id) {
+                    // Paket SAMA yang masih aktif -> RENEWAL, kuota digabung ke kartu lama saat lunas
+                    // (ditangani MembershipFulfillmentHandler::fulfillRenewal() saat webhook lunas masuk).
+                    $membershipOptions['renewal_of_id'] = $existingActive->id;
+                }
+                // Catatan: kasus "beli paket BEDA sementara kartu lama masih aktif" (upgrade) sengaja belum
+                // ditangani di jalur online self-checkout ini — upgrade butuh rollover kuota yang baru aman
+                // dieksekusi SETELAH pembayaran benar-benar lunas (async webhook), beda dengan alur kasir POS
+                // yang pembayarannya instan tunai. Untuk sekarang tetap jadi pembelian baru independen
+                // (perilaku lama, bukan regresi) — upgrade online menyusul sebagai pekerjaan terpisah.
+
                 // Buat kartu membership dengan status PENDING_PAYMENT (kuota remaining 0.00)
-                $membership = $this->balanceService->purchasePlan($user, $plan, [
-                    'order_id' => $order->id,
-                    'status' => 'PENDING_PAYMENT',
-                ]);
+                $membership = $this->balanceService->purchasePlan($user, $plan, $membershipOptions);
 
                 // Panggil Payment Gateway Manager
                 $paymentMethod = $validated['payment_method'];

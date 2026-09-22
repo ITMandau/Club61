@@ -350,7 +350,7 @@
                         </div>
                         <div class="mt-4 pt-3 border-t border-[#DFC387]/40 flex items-center justify-between text-[11px] font-bold text-[#7A5818]">
                             <span>Muscle Recovery</span>
-                            <span class="text-emerald-700">Free for VIP Platinum</span>
+                            <span class="text-emerald-700">Akses Kuota Member</span>
                         </div>
                     </div>
 
@@ -369,11 +369,11 @@
                         </div>
                         <div class="mt-4 pt-3 border-t border-[#DFC387]/40 flex items-center justify-between text-[11px] font-bold text-[#7A5818]">
                             <span>F&amp;B &bull; Social Lounge</span>
-                            <span class="text-emerald-700">Open 07:00 - 22:30</span>
+                            <span class="text-[#8C6418] font-mono">Open 07:00 - 22:30</span>
                         </div>
                     </div>
 
-                    <!-- Facility 4: Locker & Shower -->
+                    <!-- Facility 4: Smart Locker -->
                     <div class="p-6 rounded-3xl bg-white/95 backdrop-blur-xl border border-[#DFC387] shadow-sm flex flex-col justify-between hover:border-[#D4AF37] hover:shadow-[0_10px_25px_rgba(212,175,55,0.2)] transition-all group">
                         <div class="flex items-start gap-4">
                             <div class="w-12 h-12 rounded-2xl bg-[#FAF2DE] border border-[#DFC387] flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform">
@@ -433,24 +433,24 @@
                 </div>
             </div>
 
-            <!-- 2-Column Section: Rules & Member Perks -->
+            <!-- Club Etiquette & Rules (Left) + Member Status Benefits (Right) -->
             <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
                 
-                <!-- Left: Club Etiquette & Rules (Col 7) -->
-                <div class="lg:col-span-7 bg-white/95 backdrop-blur-xl rounded-3xl border border-[#DFC387] p-6 shadow-sm space-y-4">
-                    <div class="flex items-center gap-2.5 border-b border-[#DFC387]/50 pb-3">
-                        <div class="w-8 h-8 rounded-xl bg-[#FAF2DE] border border-[#DFC387] flex items-center justify-center shrink-0">
-                            <svg class="w-4 h-4 text-[#8C6418]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <!-- Left: Etiquette Guidelines (Col 7) -->
+                <div class="lg:col-span-7 bg-white/95 backdrop-blur-xl rounded-3xl p-6 sm:p-8 border border-[#DFC387] shadow-sm space-y-5">
+                    <div class="flex items-center gap-3">
+                        <div class="w-10 h-10 rounded-2xl bg-[#FAF2DE] border border-[#DFC387] flex items-center justify-center shrink-0 text-[#7A5818]">
+                            <svg class="w-5 h-5 text-[#8C6418]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                             </svg>
                         </div>
                         <div>
-                            <h3 class="font-serif font-black text-base text-[#1F170D]">Club Etiquette &amp; Rules</h3>
-                            <p class="text-[11px] text-[#7A643E]">Maintaining an exceptional standard of comfort for all members</p>
+                            <h3 class="font-serif font-black text-base sm:text-lg text-[#1F170D]">Club Etiquette &amp; Rules</h3>
+                            <p class="text-xs text-[#7A643E]">Maintaining an exceptional standard of comfort for all members</p>
                         </div>
                     </div>
 
-                    <div class="space-y-3 text-xs text-[#3B2B11]">
+                    <div class="space-y-3 text-xs">
                         <div class="flex items-start gap-3 p-3 rounded-2xl bg-[#FAF8F2] border border-[#DFC387]/60">
                             <span class="font-black text-[#8C6418] shrink-0">01.</span>
                             <div>
@@ -477,41 +477,60 @@
                     </div>
                 </div>
 
-                <!-- Right: Privilege Summary & CTA (Col 5) -->
+                <!-- Right: Official Member Privileges (Col 5) -->
                 <div class="lg:col-span-5 space-y-6">
                     <div class="bg-gradient-to-br from-[#1C2E24] to-[#0E1A14] text-white rounded-3xl p-6 border border-[#DFC387]/70 shadow-lg space-y-4">
                         <div class="flex items-center justify-between">
                             <span class="px-3 py-1 rounded-full text-[10px] font-extrabold uppercase tracking-widest bg-[#DFC387]/20 text-[#F5E6BE] border border-[#DFC387]/40">
-                                Your Privileges
+                                Club Privileges
                             </span>
-                            <span class="text-xs text-[#E5C378] font-bold">VIP Platinum</span>
+                            <span class="text-xs text-[#E5C378] font-bold">Club 61 Medan</span>
                         </div>
 
-                        <h4 class="font-serif font-black text-lg text-white">Member Status Benefits</h4>
+                        <div>
+                            <h4 class="font-serif font-black text-lg text-white">Standar Hak Istimewa Member</h4>
+                            <p class="text-xs text-emerald-100/70 mt-1">Hak akses resmi terintegrasi bagi seluruh pemegang keanggotaan aktif Club 61</p>
+                        </div>
                         
-                        <ul class="space-y-2.5 text-xs text-emerald-100/85 font-medium">
-                            <li class="flex items-center gap-2">
-                                <span class="text-[#E5C378] font-bold">&bull;</span>
-                                <span>Priority court booking up to 7 days in advance</span>
+                        <ul class="space-y-3 text-xs text-emerald-100/85 font-medium">
+                            <li class="flex items-start gap-2.5">
+                                <span class="text-[#E5C378] font-bold mt-0.5">&bull;</span>
+                                <div>
+                                    <strong class="text-white block font-bold">Prioritas Reservasi Lapangan (H-7 s/d H-14)</strong>
+                                    <span class="text-[11px] text-emerald-100/70">Akses booking 3 panoramic courts lebih awal sebelum dibuka untuk umum.</span>
+                                </div>
                             </li>
-                            <li class="flex items-center gap-2">
-                                <span class="text-[#E5C378] font-bold">&bull;</span>
-                                <span>25% discount on court rentals &amp; equipment add-ons</span>
+                            <li class="flex items-start gap-2.5">
+                                <span class="text-[#E5C378] font-bold mt-0.5">&bull;</span>
+                                <div>
+                                    <strong class="text-white block font-bold">Turnstile Smart Pass Smartphone</strong>
+                                    <span class="text-[11px] text-emerald-100/70">Check-in mandiri dengan QR Digital Pass tanpa antre di pintu masuk venue.</span>
+                                </div>
                             </li>
-                            <li class="flex items-center gap-2">
-                                <span class="text-[#E5C378] font-bold">&bull;</span>
-                                <span>Unlimited access to Finnish Sauna &amp; Ice Bath</span>
+                            <li class="flex items-start gap-2.5">
+                                <span class="text-[#E5C378] font-bold mt-0.5">&bull;</span>
+                                <div>
+                                    <strong class="text-white block font-bold">Integrated Multi-Facility Access</strong>
+                                    <span class="text-[11px] text-emerald-100/70">Akses terpadu fasilitas Technogym Fitness Center &amp; Finnish Sauna 4°C.</span>
+                                </div>
                             </li>
-                            <li class="flex items-center gap-2">
-                                <span class="text-[#E5C378] font-bold">&bull;</span>
-                                <span>Exclusive invitations to member-only tournaments</span>
+                            <li class="flex items-start gap-2.5">
+                                <span class="text-[#E5C378] font-bold mt-0.5">&bull;</span>
+                                <div>
+                                    <strong class="text-white block font-bold">Free VIP Valet &amp; Member Rate Lounge</strong>
+                                    <span class="text-[11px] text-emerald-100/70">Layanan parkir valet gratis di Indosat Building serta potongan harga di Cafe.</span>
+                                </div>
                             </li>
                         </ul>
 
-                        <div class="pt-3 border-t border-white/15">
+                        <div class="pt-3 border-t border-white/15 space-y-2">
                             <a href="{{ route('customer.booking') }}" 
                                class="w-full py-3.5 px-4 rounded-2xl bg-gradient-to-b from-[#F5DE9B] to-[#D4AF37] text-[#1E160A] text-xs font-black uppercase tracking-wider flex items-center justify-center gap-2 shadow-md hover:brightness-105 active:scale-95 transition-all">
-                                <span>Book Court Now &rarr;</span>
+                                <span>Reservasi Lapangan Sekarang &rarr;</span>
+                            </a>
+                            <a href="{{ route('customer.membership') }}"
+                               class="block w-full text-center py-2 text-[11px] font-bold text-[#E5C378] hover:text-[#FAF5E6] transition-colors">
+                                Lihat &amp; Beli Paket Keanggotaan &rarr;
                             </a>
                         </div>
                     </div>

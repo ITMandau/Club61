@@ -226,14 +226,40 @@ class JualMembership extends Page
                     'subtotal' => $plan->price,
                 ]);
 
-                // 3. Buat UserMembership dengan initial quota 0.00
-                $membership = $balanceService->purchasePlan($customer, $plan, [
+                // 2b. Cek apakah customer ini sudah punya membership AKTIF (row-lock: cegah 2 transaksi
+                // kasir bersamaan buat customer yang sama menghasilkan 2 kartu ganda -> lihat invarian 5.1/5.2 PRD Modul 05)
+                $existingActive = UserMembership::where('user_id', $customer->id)
+                    ->where('status', 'ACTIVE')
+                    ->where(function ($q) {
+                        $q->whereNull('end_date')->orWhere('end_date', '>=', now()->toDateString());
+                    })
+                    ->lockForUpdate()
+                    ->first();
+
+                $membershipOptions = [
                     'order_id' => $order->id,
                     'sold_by_admin_id' => $cashier->id,
                     'manual_discount_percent' => $this->manualDiscountPercent,
                     'manual_discount_reason' => $this->manualDiscountReason,
-                    'status' => 'PENDING_PAYMENT',
-                ]);
+                ];
+
+                if ($existingActive && $existingActive->plan_id === $plan->id) {
+                    // 3a. Paket SAMA yang masih aktif -> RENEWAL. Kuota digabung ke kartu LAMA (bukan kartu baru
+                    // yang berdiri sendiri), lewat renewal_of_id -> ditangani MembershipFulfillmentHandler saat lunas.
+                    $membershipOptions['status'] = 'PENDING_PAYMENT';
+                    $membershipOptions['renewal_of_id'] = $existingActive->id;
+                    $membership = $balanceService->purchasePlan($customer, $plan, $membershipOptions);
+                } elseif ($existingActive) {
+                    // 3b. Paket BEDA sementara kartu lama masih aktif -> UPGRADE. Sisa kuota lama di-rollover
+                    // (ROLLOVER_OUT/ROLLOVER_IN, bukan hangus diam-diam), kartu lama ditandai UPGRADED.
+                    // Aktivasi instan karena kasir sudah terima pembayaran tunai/EDC/QRIS di tempat.
+                    $membershipOptions['activate_now'] = true;
+                    $membership = $balanceService->upgradeMembership($existingActive, $plan, $membershipOptions);
+                } else {
+                    // 3c. Belum punya membership aktif sama sekali -> pembelian baru murni.
+                    $membershipOptions['status'] = 'PENDING_PAYMENT';
+                    $membership = $balanceService->purchasePlan($customer, $plan, $membershipOptions);
+                }
 
                 // 4. Mark Order As Paid (eksekusi pelunasan kasir)
                 $orchestrator->markOrderAsPaid($order, [

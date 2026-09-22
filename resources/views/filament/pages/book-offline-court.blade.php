@@ -1350,18 +1350,28 @@
                                 <div style="font-weight:900; color:#1F170D; font-size:0.8125rem;">{{ $selectedCustomerName }}</div>
                                 <div style="font-size:0.6875rem; color:#8C6418;">{{ $selectedCustomerPhone ?? '-' }}</div>
                                 @if($activeMembershipInfo)
-                                    <div style="margin-top:0.25rem; display:inline-flex; align-items:center; gap:0.25rem; background:#FEF3C7; border:1px solid #F59E0B; border-radius:4px; padding:0.15rem 0.35rem; font-size:0.65rem; color:#92400E; font-weight:700;">
-                                        <span>{{ $activeMembershipInfo['plan_name'] }}</span>
-                                        <span>•</span>
-                                        <span>
-                                            @if($activeMembershipInfo['quota_type'] === 'HOURS')
-                                                Sisa: {{ number_format($activeMembershipInfo['remaining_quota'], 1) }} Jam
-                                            @elseif($activeMembershipInfo['discount_percent'] > 0)
-                                                Diskon {{ $activeMembershipInfo['discount_percent'] }}%
-                                            @else
-                                                Member
-                                            @endif
-                                        </span>
+                                    <div style="margin-top:0.25rem; display:flex; align-items:center; gap:0.35rem; flex-wrap:wrap;">
+                                        <div style="display:inline-flex; align-items:center; gap:0.25rem; background:#FEF3C7; border:1px solid #F59E0B; border-radius:4px; padding:0.15rem 0.35rem; font-size:0.65rem; color:#92400E; font-weight:700;">
+                                            <span>{{ $activeMembershipInfo['plan_name'] }}</span>
+                                            <span>•</span>
+                                            <span>
+                                                @if($activeMembershipInfo['quota_type'] === 'HOURS')
+                                                    Sisa: {{ number_format($activeMembershipInfo['remaining_quota'], 1) }} Jam
+                                                @elseif($activeMembershipInfo['discount_percent'] > 0)
+                                                    Diskon {{ $activeMembershipInfo['discount_percent'] }}%
+                                                @else
+                                                    Member
+                                                @endif
+                                            </span>
+                                        </div>
+                                        @if($posStep === 'selection')
+                                        <button type="button" wire:click="toggleMembershipBenefit"
+                                            style="display:inline-flex; align-items:center; gap:0.3rem; background:{{ $useMembershipBenefit ? '#ECFDF5' : '#F3F4F6' }}; border:1px solid {{ $useMembershipBenefit ? '#6EE7B7' : '#D1D5DB' }}; border-radius:999px; padding:0.15rem 0.5rem 0.15rem 0.3rem; font-size:0.6rem; font-weight:800; color:{{ $useMembershipBenefit ? '#047857' : '#6B7280' }}; cursor:pointer;"
+                                            title="{{ $useMembershipBenefit ? 'Klik untuk tidak memakai benefit membership' : 'Klik untuk memakai benefit membership' }}">
+                                            <span style="width:0.55rem; height:0.55rem; border-radius:999px; background:{{ $useMembershipBenefit ? '#10B981' : '#9CA3AF' }};"></span>
+                                            {{ $useMembershipBenefit ? 'Benefit Dipakai' : 'Benefit Dimatikan' }}
+                                        </button>
+                                        @endif
                                     </div>
                                 @endif
                             </div>
@@ -1464,6 +1474,12 @@
                 <div style="display:flex; justify-content:space-between; font-size:0.6875rem; color:#7A643E; margin-bottom:0.2rem;">
                     <span>Sewa Alat:</span><span>Rp {{ number_format($this->equipmentTotal, 0, ',', '.') }}</span>
                 </div>
+                @if($this->membershipDiscountAmount > 0)
+                <div style="display:flex; justify-content:space-between; font-size:0.6875rem; color:#047857; font-weight:800; margin-bottom:0.2rem;">
+                    <span>Diskon Membership ({{ $activeMembershipInfo['plan_name'] ?? 'Member' }}):</span>
+                    <span>- Rp {{ number_format($this->membershipDiscountAmount, 0, ',', '.') }}</span>
+                </div>
+                @endif
                 @if($this->isTaxEnabled && $this->taxAmount > 0)
                 <div style="display:flex; justify-content:space-between; font-size:0.6875rem; color:#7A643E; margin-bottom:0.2rem;">
                     <span>{{ $this->taxName }}:</span><span>Rp {{ number_format($this->taxAmount, 0, ',', '.') }}</span>

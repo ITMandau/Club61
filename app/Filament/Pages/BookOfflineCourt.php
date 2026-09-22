@@ -65,6 +65,9 @@ class BookOfflineCourt extends Page
 
     public ?array $activeMembershipInfo = null;
 
+    // Toggle kasir: pakai/tidak pakai benefit membership customer ini untuk transaksi sekarang.
+    public bool $useMembershipBenefit = true;
+
     // Form Walk-In Cepat
     public string $walkInName = '';
 
@@ -250,12 +253,15 @@ class BookOfflineCourt extends Page
             $this->customerSearch = '';
 
             // Cek keanggotaan aktif dan benefit fasilitas Padel
+            // Tie-break: kartu yang paling cepat kedaluwarsa dipakai lebih dulu, konsisten dengan
+            // auto-detect balance di ManagesCheckoutAndPayments::applyMembershipBenefitToCourtBookings().
             $activeMbr = \App\Models\Membership\UserMembership::with(['plan', 'balances'])
                 ->where('user_id', $user->id)
                 ->where('status', 'ACTIVE')
                 ->where(function ($q) {
                     $q->whereNull('end_date')->orWhere('end_date', '>=', now()->toDateString());
                 })
+                ->orderByRaw('end_date IS NULL, end_date ASC')
                 ->first();
 
             if ($activeMbr) {
@@ -273,8 +279,17 @@ class BookOfflineCourt extends Page
                 $this->activeMembershipInfo = null;
             }
 
+            // Reset toggle ke default (ON) setiap ganti customer, biar gak kebawa state customer sebelumnya.
+            $this->useMembershipBenefit = true;
+
             $this->saveDraft();
         }
+    }
+
+    public function toggleMembershipBenefit(): void
+    {
+        $this->useMembershipBenefit = ! $this->useMembershipBenefit;
+        $this->saveDraft();
     }
 
     public function clearSelectedCustomer(): void
@@ -282,6 +297,7 @@ class BookOfflineCourt extends Page
         $this->selectedCustomerId = null;
         $this->selectedCustomerName = null;
         $this->selectedCustomerPhone = null;
+        $this->useMembershipBenefit = true;
         $this->activeMembershipInfo = null;
         $this->customerSearch = '';
         $this->saveDraft();
@@ -322,9 +338,41 @@ class BookOfflineCourt extends Page
         return (float) $total;
     }
 
+    /**
+     * Preview (read-only) potongan membership terhadap slot yang lagi dipilih — dihitung pakai aturan
+     * yang SAMA persis dengan ManagesCheckoutAndPayments::applyMembershipBenefitToCourtBookings() (kuota
+     * jam menutup penuh biaya lapangan sampai kuota habis, sisanya/kalau NONE pakai diskon persen flat)
+     * supaya angka yang keliatan di layar kasir gak pernah beda sama yang beneran dipotong pas checkout.
+     */
+    public function getMembershipDiscountAmountProperty(): float
+    {
+        if (! $this->useMembershipBenefit || ! $this->activeMembershipInfo) {
+            return 0.0;
+        }
+
+        $info = $this->activeMembershipInfo;
+        $discountTotal = 0.0;
+
+        if ($info['quota_type'] === 'HOURS') {
+            $remaining = (float) $info['remaining_quota'];
+            foreach ($this->selectedSlots as $slot) {
+                $durationMinutes = \Carbon\Carbon::parse($slot['start_time'])->diffInMinutes(\Carbon\Carbon::parse($slot['end_time']));
+                $hoursNeeded = max(0.5, round($durationMinutes / 60, 2));
+                if ($remaining >= $hoursNeeded) {
+                    $discountTotal += (float) $slot['price'];
+                    $remaining -= $hoursNeeded;
+                }
+            }
+        } elseif ((float) $info['discount_percent'] > 0) {
+            $discountTotal = round($this->courtTotal * ((float) $info['discount_percent'] / 100), 2);
+        }
+
+        return min($discountTotal, $this->courtTotal);
+    }
+
     public function getSubtotalProperty(): float
     {
-        return $this->courtTotal + $this->equipmentTotal;
+        return max(0, $this->courtTotal - $this->membershipDiscountAmount) + $this->equipmentTotal;
     }
 
     public function getFinanceCalculationProperty(): array
@@ -1037,7 +1085,9 @@ class BookOfflineCourt extends Page
                 cashier: $cashier,
                 autoCheckIn: $this->isAutoCheckIn,
                 paymentMeta: $paymentMeta,
-                membershipBalanceId: $this->activeMembershipInfo['balance_id'] ?? null
+                // 'NONE' kalau kasir sengaja matiin toggle benefit membership untuk transaksi ini —
+                // konsisten dengan guard yang sama dipakai di jalur online checkout.
+                membershipBalanceId: $this->useMembershipBenefit ? ($this->activeMembershipInfo['balance_id'] ?? null) : 'NONE'
             );
 
             // Siapkan data struk POS thermal
