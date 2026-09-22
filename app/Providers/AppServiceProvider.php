@@ -19,6 +19,7 @@ class AppServiceProvider extends ServiceProvider
         $this->app->singleton(\App\Services\Payment\PaymentFulfillmentRegistry::class, function () {
             $registry = new \App\Services\Payment\PaymentFulfillmentRegistry();
             $registry->register('PADEL', \App\Services\Padel\Handlers\PadelFulfillmentHandler::class);
+            $registry->register('MEMBERSHIP', \App\Services\Membership\MembershipFulfillmentHandler::class);
 
             return $registry;
         });

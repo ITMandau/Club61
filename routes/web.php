@@ -79,6 +79,18 @@ Route::middleware(['auth', 'verified'])->group(function () {
         return view('customer.my-club');
     })->name('customer.my-club');
 
+    Route::get('/membership', function (\Illuminate\Http\Request $request) {
+        $allPlans = \App\Models\Membership\MembershipPlan::with('benefits')
+            ->where('is_active', true)
+            ->get();
+        $selectedPlanId = $request->query('plan') ?? ($allPlans->firstWhere('code', 'MBR-SILVER')->id ?? $allPlans->first()?->id ?? null);
+
+        return view('customer.membership', [
+            'allPlans' => $allPlans,
+            'selectedPlanId' => $selectedPlanId,
+        ]);
+    })->name('customer.membership');
+
     Route::get('/invoice', function () {
         return view('customer.invoice');
     })->name('customer.invoice');

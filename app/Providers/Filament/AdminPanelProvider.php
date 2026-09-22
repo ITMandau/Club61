@@ -40,6 +40,7 @@ class AdminPanelProvider extends PanelProvider
             ->resources([
                 \App\Filament\Resources\Users\UserResource::class,
                 \App\Filament\Resources\Roles\RoleResource::class,
+                \App\Filament\Resources\Membership\MembershipPlanResource::class,
             ])
             ->plugins([
                 \BezhanSalleh\FilamentShield\FilamentShieldPlugin::make(),
@@ -53,6 +54,7 @@ class AdminPanelProvider extends PanelProvider
                 \App\Filament\Pages\Analytics::class,
                 \App\Filament\Pages\BookingSystem::class,
                 \App\Filament\Pages\BookOfflineCourt::class,
+                \App\Filament\Pages\JualMembership::class,
                 \App\Filament\Pages\KelolaPemesanan::class,
                 \App\Filament\Pages\Kustomer::class,
                 \App\Filament\Pages\KelolaKaryawan::class,
