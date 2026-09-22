@@ -1349,6 +1349,21 @@
                             <div>
                                 <div style="font-weight:900; color:#1F170D; font-size:0.8125rem;">{{ $selectedCustomerName }}</div>
                                 <div style="font-size:0.6875rem; color:#8C6418;">{{ $selectedCustomerPhone ?? '-' }}</div>
+                                @if($activeMembershipInfo)
+                                    <div style="margin-top:0.25rem; display:inline-flex; align-items:center; gap:0.25rem; background:#FEF3C7; border:1px solid #F59E0B; border-radius:4px; padding:0.15rem 0.35rem; font-size:0.65rem; color:#92400E; font-weight:700;">
+                                        <span>{{ $activeMembershipInfo['plan_name'] }}</span>
+                                        <span>•</span>
+                                        <span>
+                                            @if($activeMembershipInfo['quota_type'] === 'HOURS')
+                                                Sisa: {{ number_format($activeMembershipInfo['remaining_quota'], 1) }} Jam
+                                            @elseif($activeMembershipInfo['discount_percent'] > 0)
+                                                Diskon {{ $activeMembershipInfo['discount_percent'] }}%
+                                            @else
+                                                Member
+                                            @endif
+                                        </span>
+                                    </div>
+                                @endif
                             </div>
                             @if($posStep === 'selection')
                             <button type="button" wire:click="clearSelectedCustomer"

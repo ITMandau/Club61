@@ -25,15 +25,15 @@
             <span class="text-[10px] font-bold tracking-tight mt-0.5 {{ request()->routeIs('customer.booking') ? 'text-[#8C6418]' : '' }}">Book Court</span>
         </a>
 
-        <!-- 3. My Club -->
-        <a href="{{ route('customer.my-club') }}" 
-           class="flex flex-col items-center justify-center py-1 group transition-all {{ request()->routeIs('customer.my-club') ? 'text-[#8C6418]' : 'text-[#8A7A64] hover:text-[#5C410F]' }}">
-            <div class="p-1 rounded-xl transition-transform duration-150 {{ request()->routeIs('customer.my-club') ? 'scale-110 bg-[#FAF2DE] text-[#8C6418]' : 'group-hover:scale-105' }}">
+        <!-- 3. My Club & Membership -->
+        <a href="{{ route('customer.membership') }}" 
+           class="flex flex-col items-center justify-center py-1 group transition-all {{ (request()->routeIs('customer.my-club') || request()->routeIs('customer.membership')) ? 'text-[#8C6418]' : 'text-[#8A7A64] hover:text-[#5C410F]' }}">
+            <div class="p-1 rounded-xl transition-transform duration-150 {{ (request()->routeIs('customer.my-club') || request()->routeIs('customer.membership')) ? 'scale-110 bg-[#FAF2DE] text-[#8C6418]' : 'group-hover:scale-105' }}">
                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
                 </svg>
             </div>
-            <span class="text-[10px] font-bold tracking-tight mt-0.5 {{ request()->routeIs('customer.my-club') ? 'text-[#8C6418]' : '' }}">My Club</span>
+            <span class="text-[10px] font-bold tracking-tight mt-0.5 {{ (request()->routeIs('customer.my-club') || request()->routeIs('customer.membership')) ? 'text-[#8C6418]' : '' }}">Membership</span>
         </a>
 
         <!-- 4. Invoice -->

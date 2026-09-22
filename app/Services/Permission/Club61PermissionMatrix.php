@@ -55,6 +55,8 @@ class Club61PermissionMatrix
                             'apply_pos_voucher' => 'Terapkan Voucher Diskon & Promosi',
                             'open_pos_shift' => 'Buka Sesi Shift Kasir Baru',
                             'close_pos_shift' => 'Tutup Sesi Shift & Rekonsiliasi Kas',
+                            'View:JualMembership' => 'Akses Halaman POS Jual Membership',
+                            'sell_membership' => 'Jual & Aktivasi Membership Kasir',
                         ],
                     ],
                 ],

@@ -9,7 +9,8 @@ use App\Models\Fnb\FnbModifierOption;
 use App\Models\Fnb\RawMaterial;
 use App\Models\Fnb\RecipeBom;
 use App\Models\Fnb\TableQrCode;
-use App\Models\Gym\GymPackage;
+use App\Models\Membership\MembershipPlan;
+use App\Models\Membership\MembershipPlanBenefit;
 use App\Models\Merch\MerchProduct;
 use App\Models\Merch\MerchVariant;
 use App\Models\Padel\CourtEquipment;
@@ -251,10 +252,9 @@ class DatabaseSeeder extends Seeder
         SalonService::create(['name' => 'Balayage Color Treatment', 'duration_minutes' => 120, 'price' => 750000.00]);
         SalonService::create(['name' => 'Organic Scalp Spa & Blowdry', 'duration_minutes' => 60, 'price' => 250000.00]);
 
-        // 5. SEED GYM PACKAGES
-        GymPackage::create(['name' => 'Monthly Unlimited Access', 'duration_days' => 30, 'visit_limit' => null, 'price' => 750000.00]);
-        GymPackage::create(['name' => '10-Sessions Flexi Pass', 'duration_days' => 60, 'visit_limit' => 10, 'price' => 500000.00]);
-        GymPackage::create(['name' => 'Annual VIP Membership', 'duration_days' => 365, 'visit_limit' => null, 'price' => 6500000.00]);
+        // 5. SEED MEMBERSHIP PLANS, MULTI-FACILITY BENEFITS & DUMMY MEMBERS
+        $this->call(MembershipSeeder::class);
+
 
         // 6. SEED CAFE (F&B), RAW MATERIALS & BOM
         $catCoffee = FnbCategory::create(['name' => 'Specialty Coffee', 'sort_order' => 1]);

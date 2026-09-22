@@ -236,31 +236,62 @@
                             </div>
                         </div>
 
-                        <h2 class="font-serif font-black text-lg text-[#1F170D] mt-3">{{ Auth::user()->name }}</h2>
-                        <div class="inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-widest bg-[#FAF2DE] text-[#7A5818] border border-[#DFC387] mt-1 shadow-sm">
-                            <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                            <span>VIP Platinum Active</span>
-                        </div>
+                        @php
+                            $activeUserMembership = \App\Models\Membership\UserMembership::with(['plan', 'balances'])
+                                ->where('user_id', Auth::id())
+                                ->where('status', 'ACTIVE')
+                                ->where(function ($q) {
+                                    $q->whereNull('end_date')->orWhere('end_date', '>=', now()->toDateString());
+                                })
+                                ->latest('start_date')
+                                ->first();
+                        @endphp
 
-                        <!-- 4 Stats Micro Grid -->
-                        <div class="grid grid-cols-2 gap-2.5 mt-5 text-left">
-                            <div class="p-3 rounded-xl bg-[#FAF8F2] border border-[#E8DCC0]">
-                                <span class="text-[9px] uppercase font-bold text-[#8C7A58] block">Total Matches</span>
-                                <span class="font-serif font-black text-base text-[#1F170D]" x-text="totalMatchCount + (totalMatchCount === 1 ? ' Session' : ' Sessions')">0 Sessions</span>
+                        <h2 class="font-serif font-black text-lg text-[#1F170D] mt-3">{{ Auth::user()->name }}</h2>
+
+                        @if($activeUserMembership)
+                            <div class="inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-widest bg-[#FAF2DE] text-[#7A5818] border border-[#DFC387] mt-1 shadow-sm">
+                                <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                                <span>{{ $activeUserMembership->plan->name }}</span>
                             </div>
-                            <div class="p-3 rounded-xl bg-[#FAF8F2] border border-[#E8DCC0]">
-                                <span class="text-[9px] uppercase font-bold text-[#8C7A58] block">Rank</span>
-                                <span class="font-serif font-black text-base text-[#B8860B]">Tier Gold III</span>
+                            <div class="text-[11px] font-mono font-bold text-[#8C6418] mt-1">{{ $activeUserMembership->membership_code }}</div>
+
+                            <!-- Facility Quotas -->
+                            <div class="grid grid-cols-3 gap-2 mt-4 text-center">
+                                @foreach($activeUserMembership->balances as $bal)
+                                    <div class="p-2.5 rounded-xl bg-[#FAF8F2] border border-[#E8DCC0]">
+                                        <span class="text-[9px] uppercase font-bold text-[#8C7A58] block">{{ $bal->facility }}</span>
+                                        <span class="font-serif font-black text-xs text-[#1F170D]">
+                                            @if($bal->quota_type === 'HOURS')
+                                                {{ (float)$bal->remaining_quota }} Jam
+                                            @elseif($bal->quota_type === 'VISITS')
+                                                {{ $bal->initial_quota ? ((float)$bal->remaining_quota . ' Sesi') : 'Unlimited' }}
+                                            @else
+                                                Diskon {{ $bal->discount_percent }}%
+                                            @endif
+                                        </span>
+                                    </div>
+                                @endforeach
                             </div>
-                            <div class="p-3 rounded-xl bg-[#FAF8F2] border border-[#E8DCC0]">
-                                <span class="text-[9px] uppercase font-bold text-[#8C7A58] block">Account Status</span>
-                                <span class="font-serif font-black text-base text-emerald-700">Active</span>
+
+                            <div class="grid grid-cols-2 gap-2 mt-2 text-left">
+                                <div class="p-2.5 rounded-xl bg-[#FAF8F2] border border-[#E8DCC0]">
+                                    <span class="text-[9px] uppercase font-bold text-[#8C7A58] block">Status</span>
+                                    <span class="font-serif font-black text-xs text-emerald-700">Aktif</span>
+                                </div>
+                                <div class="p-2.5 rounded-xl bg-[#FAF8F2] border border-[#E8DCC0]">
+                                    <span class="text-[9px] uppercase font-bold text-[#8C7A58] block">Valid Until</span>
+                                    <span class="font-serif font-black text-xs text-[#1F170D]">{{ $activeUserMembership->end_date ? \Carbon\Carbon::parse($activeUserMembership->end_date)->format('d M Y') : 'Lifetime' }}</span>
+                                </div>
                             </div>
-                            <div class="p-3 rounded-xl bg-[#FAF8F2] border border-[#E8DCC0]">
-                                <span class="text-[9px] uppercase font-bold text-[#8C7A58] block">Valid Until</span>
-                                <span class="font-serif font-black text-xs text-[#1F170D]">31 Dec 2026</span>
+                        @else
+                            <div class="inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-widest bg-gray-100 text-gray-700 border border-gray-300 mt-1 shadow-sm">
+                                <span>Regular Member</span>
                             </div>
-                        </div>
+                            <div class="p-3 rounded-xl bg-[#FAF8F2] border border-[#E8DCC0] mt-4 text-xs text-[#8C7A58]">
+                                Dapatkan akses VIP, kuota jam bermain padel, gym harian, dan sauna eksklusif dengan paket membership Club 61.
+                            </div>
+                        @endif
 
                         <div class="mt-5 pt-4 border-t border-[#DFC387]/60">
                             <a href="{{ route('profile.edit') }}" class="text-xs font-bold text-[#8C6418] hover:text-[#5C410F] transition-colors flex items-center justify-center gap-1">

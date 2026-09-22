@@ -28,6 +28,10 @@
                        class="inline-flex items-center px-1 pt-1 border-b-2 {{ request()->routeIs('customer.my-club') ? 'border-[#D4AF37] text-[#8C6418]' : 'border-transparent text-[#6B5738] hover:text-[#1F170D] hover:border-[#D4AF37]/50' }} text-xs font-bold uppercase tracking-wider transition-colors">
                         My Club
                     </a>
+                    <a href="{{ route('customer.membership') }}" 
+                       class="inline-flex items-center px-1 pt-1 border-b-2 {{ request()->routeIs('customer.membership') ? 'border-[#D4AF37] text-[#8C6418]' : 'border-transparent text-[#6B5738] hover:text-[#1F170D] hover:border-[#D4AF37]/50' }} text-xs font-bold uppercase tracking-wider transition-colors">
+                        Membership
+                    </a>
                     <a href="{{ route('customer.invoice') }}" 
                        class="inline-flex items-center px-1 pt-1 border-b-2 {{ request()->routeIs('customer.invoice') ? 'border-[#D4AF37] text-[#8C6418]' : 'border-transparent text-[#6B5738] hover:text-[#1F170D] hover:border-[#D4AF37]/50' }} text-xs font-bold uppercase tracking-wider transition-colors">
                         Invoice

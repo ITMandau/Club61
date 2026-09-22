@@ -28,6 +28,7 @@ require __DIR__ . '/api/padel.php';
 require __DIR__ . '/api/wellness.php';
 require __DIR__ . '/api/salon.php';
 require __DIR__ . '/api/gym.php';
+require __DIR__ . '/api/membership.php';
 require __DIR__ . '/api/fnb.php';
 require __DIR__ . '/api/merch.php';
 require __DIR__ . '/api/pos.php';

@@ -18,6 +18,9 @@ class WellnessBooking extends Model
         'total_amount',
         'status',
         'qr_code_hash',
+        'membership_balance_id',
+        'member_discount_amount',
+        'member_sessions_consumed',
     ];
 
     protected function casts(): array
@@ -25,6 +28,8 @@ class WellnessBooking extends Model
         return [
             'num_persons' => 'integer',
             'total_amount' => 'decimal:2',
+            'member_discount_amount' => 'decimal:2',
+            'member_sessions_consumed' => 'decimal:2',
         ];
     }
 
@@ -36,5 +41,10 @@ class WellnessBooking extends Model
     public function slot()
     {
         return $this->belongsTo(WellnessSlot::class, 'slot_id');
+    }
+
+    public function membershipBalance()
+    {
+        return $this->belongsTo(\App\Models\Membership\UserMembershipBalance::class, 'membership_balance_id');
     }
 }

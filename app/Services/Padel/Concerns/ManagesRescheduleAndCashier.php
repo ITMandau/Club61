@@ -513,6 +513,19 @@ trait ManagesRescheduleAndCashier
                 ]);
             }
 
+            if ($booking->membership_balance_id && (float) $booking->member_hours_consumed > 0) {
+                app(\App\Services\Membership\MembershipBalanceService::class)->adjustQuota(
+                    balanceId: $booking->membership_balance_id,
+                    changeType: 'REVERSAL',
+                    quantity: (float) $booking->member_hours_consumed,
+                    notes: "Reversal pembatalan booking Padel {$booking->booking_code}: [{$reasonCategory}] {$notes}",
+                    relatedType: PadelBooking::class,
+                    relatedId: $booking->id,
+                    performedBy: $adminUser->id
+                );
+                $booking->member_hours_consumed = 0.00;
+            }
+
             $booking->update([
                 'status' => $newStatus,
                 'qr_code_hash' => null,

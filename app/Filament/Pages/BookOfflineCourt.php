@@ -63,6 +63,8 @@ class BookOfflineCourt extends Page
 
     public ?string $selectedCustomerPhone = null;
 
+    public ?array $activeMembershipInfo = null;
+
     // Form Walk-In Cepat
     public string $walkInName = '';
 
@@ -246,6 +248,31 @@ class BookOfflineCourt extends Page
             $this->selectedCustomerName = $user->name;
             $this->selectedCustomerPhone = $user->phone;
             $this->customerSearch = '';
+
+            // Cek keanggotaan aktif dan benefit fasilitas Padel
+            $activeMbr = \App\Models\Membership\UserMembership::with(['plan', 'balances'])
+                ->where('user_id', $user->id)
+                ->where('status', 'ACTIVE')
+                ->where(function ($q) {
+                    $q->whereNull('end_date')->orWhere('end_date', '>=', now()->toDateString());
+                })
+                ->first();
+
+            if ($activeMbr) {
+                $padelBalance = $activeMbr->balanceFor('PADEL');
+                $this->activeMembershipInfo = [
+                    'membership_code' => $activeMbr->membership_code,
+                    'plan_name' => $activeMbr->plan->name,
+                    'facility' => 'PADEL',
+                    'quota_type' => $padelBalance?->quota_type ?? 'NONE',
+                    'remaining_quota' => $padelBalance ? (float) $padelBalance->remaining_quota : 0.00,
+                    'discount_percent' => $padelBalance ? (float) $padelBalance->discount_percent : 0.00,
+                    'balance_id' => $padelBalance?->id,
+                ];
+            } else {
+                $this->activeMembershipInfo = null;
+            }
+
             $this->saveDraft();
         }
     }
@@ -255,6 +282,7 @@ class BookOfflineCourt extends Page
         $this->selectedCustomerId = null;
         $this->selectedCustomerName = null;
         $this->selectedCustomerPhone = null;
+        $this->activeMembershipInfo = null;
         $this->customerSearch = '';
         $this->saveDraft();
     }
@@ -1008,7 +1036,8 @@ class BookOfflineCourt extends Page
                 paymentMethod: $this->paymentMethod,
                 cashier: $cashier,
                 autoCheckIn: $this->isAutoCheckIn,
-                paymentMeta: $paymentMeta
+                paymentMeta: $paymentMeta,
+                membershipBalanceId: $this->activeMembershipInfo['balance_id'] ?? null
             );
 
             // Siapkan data struk POS thermal
