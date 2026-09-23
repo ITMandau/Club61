@@ -62,12 +62,26 @@ trait ManagesCheckoutAndPayments
                 $primaryBooking = $bookings->first();
 
                 foreach ($equipments as $item) {
-                    $eq = CourtEquipment::find($item['equipment_id']);
+                    // Lock row equipment SEBELUM baca stock_quantity — anti-race kalau 2 checkout
+                    // bersamaan rebutan sisa stok BALL yang sama.
+                    $eq = CourtEquipment::where('id', $item['equipment_id'])->lockForUpdate()->first();
                     if (! $eq || ! $eq->is_active) {
                         continue;
                     }
 
                     $qty = max(1, (int)$item['quantity']);
+
+                    // BALL = consumable (dibeli habis, bukan disewa) -> stok dipotong SEKARANG saat checkout.
+                    // RACKET/TOWEL = disewa (dipinjamkan fisik) -> stok baru dipotong nanti saat check-in
+                    // (lihat ManagesCheckInAndTurnstile::checkIn()), dan bisa di-restock manual lewat retur alat.
+                    $isConsumable = strtoupper($eq->type) === 'BALL';
+                    if ($isConsumable) {
+                        if ((int) $eq->stock_quantity < $qty) {
+                            throw new HttpException(422, "Stok {$eq->name} tidak cukup (sisa {$eq->stock_quantity}, diminta {$qty}).");
+                        }
+                        $eq->decrement('stock_quantity', $qty);
+                    }
+
                     $subtotal = $eq->rental_price * $qty;
                     $equipmentTotal += $subtotal;
 
@@ -77,6 +91,7 @@ trait ManagesCheckoutAndPayments
                         'quantity' => $qty,
                         'unit_price' => (float)$eq->rental_price,
                         'subtotal' => (float)$subtotal,
+                        'stock_deducted' => $isConsumable,
                     ];
                 }
 
@@ -153,6 +168,7 @@ trait ManagesCheckoutAndPayments
                         'quantity' => $eqItem['quantity'],
                         'unit_price' => $eqItem['unit_price'],
                         'subtotal' => $eqItem['subtotal'],
+                        'stock_deducted_at' => ! empty($eqItem['stock_deducted']) ? now() : null,
                     ]);
                 }
             }
@@ -790,12 +806,26 @@ trait ManagesCheckoutAndPayments
                 $primaryBooking = $bookings->first();
 
                 foreach ($equipments as $item) {
-                    $eq = CourtEquipment::find($item['equipment_id']);
+                    // Lock row equipment SEBELUM baca stock_quantity — anti-race kalau 2 transaksi kasir
+                    // bersamaan rebutan sisa stok BALL yang sama.
+                    $eq = CourtEquipment::where('id', $item['equipment_id'])->lockForUpdate()->first();
                     if (! $eq || ! $eq->is_active) {
                         continue;
                     }
 
                     $qty = max(1, (int)$item['quantity']);
+
+                    // BALL = consumable (dibeli habis, bukan disewa) -> stok dipotong SEKARANG saat checkout.
+                    // RACKET/TOWEL = disewa (dipinjamkan fisik) -> stok baru dipotong nanti saat check-in
+                    // (lihat ManagesCheckInAndTurnstile::checkIn()), dan bisa di-restock manual lewat retur alat.
+                    $isConsumable = strtoupper($eq->type) === 'BALL';
+                    if ($isConsumable) {
+                        if ((int) $eq->stock_quantity < $qty) {
+                            throw new HttpException(422, "Stok {$eq->name} tidak cukup (sisa {$eq->stock_quantity}, diminta {$qty}).");
+                        }
+                        $eq->decrement('stock_quantity', $qty);
+                    }
+
                     $subtotal = (float) $eq->rental_price * $qty;
                     $equipmentTotal += $subtotal;
 
@@ -805,6 +835,7 @@ trait ManagesCheckoutAndPayments
                         'quantity' => $qty,
                         'unit_price' => (float) $eq->rental_price,
                         'subtotal' => (float) $subtotal,
+                        'stock_deducted' => $isConsumable,
                     ];
                 }
 
@@ -849,6 +880,7 @@ trait ManagesCheckoutAndPayments
                         'quantity' => $eqItem['quantity'],
                         'unit_price' => $eqItem['unit_price'],
                         'subtotal' => $eqItem['subtotal'],
+                        'stock_deducted_at' => ! empty($eqItem['stock_deducted']) ? now() : null,
                     ]);
                 }
             }

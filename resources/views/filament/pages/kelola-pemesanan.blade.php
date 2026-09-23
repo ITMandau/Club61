@@ -420,6 +420,44 @@
                                         </button>
                                     @endif
 
+                                    @php
+                                        $hasPendingEquipmentReturn = $b->equipments->contains(function ($e) {
+                                            return $e->equipment
+                                                && in_array(strtoupper($e->equipment->type), ['RACKET', 'TOWEL'])
+                                                && $e->stock_deducted_at
+                                                && ! $e->returned_at;
+                                        });
+                                    @endphp
+                                    @if (in_array($b->status, ['CHECKED_IN', 'COMPLETED']) && $hasPendingEquipmentReturn)
+                                        <button type="button" wire:click="executeReturnEquipment('{{ $b->id }}')"
+                                            wire:confirm="Tandai alat sewa (raket/handuk) tiket {{ $b->booking_code }} sudah dikembalikan ke frontdesk?"
+                                            wire:loading.attr="disabled" title="Retur Alat Sewa (Restock)"
+                                            class="adm-btn-icon"
+                                            style="background: #EFF6FF; border-color: #BFDBFE; color: #1D4ED8;">
+                                            <span wire:loading.remove
+                                                wire:target="executeReturnEquipment('{{ $b->id }}')">
+                                                <svg style="width: 15px; height: 15px;" fill="none"
+                                                    stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round"
+                                                        stroke-width="2"
+                                                        d="M9 14l-4-4m0 0l4-4m-4 4h11a4 4 0 010 8h-1" />
+                                                </svg>
+                                            </span>
+                                            <span wire:loading
+                                                wire:target="executeReturnEquipment('{{ $b->id }}')">
+                                                <svg style="width: 13px; height: 13px; animation: spin 1s linear infinite;"
+                                                    fill="none" viewBox="0 0 24 24">
+                                                    <circle cx="12" cy="12" r="10"
+                                                        stroke="currentColor" stroke-width="4"
+                                                        style="opacity: 0.25;"></circle>
+                                                    <path fill="currentColor"
+                                                        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+                                                        style="opacity: 0.75;"></path>
+                                                </svg>
+                                            </span>
+                                        </button>
+                                    @endif
+
                                     @if (in_array($b->status, ['PAID', 'LOCKED']))
                                         <button type="button"
                                             wire:click="openRescheduleModal('{{ $b->id }}')"

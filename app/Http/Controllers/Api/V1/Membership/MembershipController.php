@@ -9,6 +9,7 @@ use App\Models\Membership\MembershipUsageLog;
 use App\Models\Membership\UserMembership;
 use App\Models\Pos\Order;
 use App\Models\Pos\Payment;
+use App\Models\User;
 use App\Services\Finance\TaxAndFeeService;
 use App\Services\Membership\MembershipBalanceService;
 use App\Services\Payment\PaymentManager;
@@ -102,6 +103,14 @@ class MembershipController extends Controller
                     'unit_price' => $price,
                     'subtotal' => $price,
                 ]);
+
+                // Anti-race: kunci row user ini DULU sebelum cek existing membership. Ini krusial khusus
+                // untuk pelanggan yang BELUM punya UserMembership sama sekali — lockForUpdate() di query
+                // existingActive di bawah tidak mengunci apa pun kalau belum ada row yang match, jadi tanpa
+                // baris ini 2 request checkout bersamaan (double-klik / 2 tab) bisa sama-sama lolos "belum
+                // ada yang aktif" dan menghasilkan 2 kartu ACTIVE + kuota ke-top-up dua kali padahal uang
+                // yang masuk cuma sekali. Locking row user memaksa request kedua menunggu commit pertama.
+                User::where('id', $user->id)->lockForUpdate()->first();
 
                 // Cek apakah customer sudah punya membership AKTIF (row-lock: cegah 2 kartu ganda kalau
                 // customer klik beli 2x hampir bersamaan, sama seperti guard di POS JualMembership.php).

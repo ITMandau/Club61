@@ -66,6 +66,20 @@ class PaymentOrchestratorService
                 return;
             }
 
+            // Anti-race: settle call TANPA transaction_id (kasir "Settle Cash" / walk-in, bukan webhook
+            // Midtrans atau supplemental delta reschedule yang selalu bawa transaction_id unik) yang sampai
+            // titik ini artinya TIDAK menemukan payment PENDING untuk dilunasi. Kalau order sudah PAID,
+            // ini pasti settle duplikat dari request lain yang barusan commit duluan (mis. 2 kasir menekan
+            // "Settle Cash" hampir bersamaan untuk 2 booking berbeda yang kebetulan satu order yang sama) —
+            // BUKAN pembayaran baru yang sah, karena pembayaran baru yang sah selalu datang lewat salah satu
+            // dari dua jalur: transaction_id unik (webhook/delta reschedule), atau match payment PENDING
+            // yang sudah ada (checkout awal / supplemental payment). Tanpa guard ini request kedua akan
+            // membuat Payment SUCCESS baru dari nol (double revenue record) dan memotong kuota voucher lagi.
+            if (! $transactionId && ! $payment && $order->payment_status === 'PAID') {
+                Log::info("Duplicate settle attempt diabaikan untuk order [{$order->order_number}]: tidak ada payment PENDING tersisa dan order sudah PAID.");
+                return;
+            }
+
             // 2. Proteksi Late Settlement: Jika pesanan sebelumnya telah dibatalkan (CANCELLED)
             if ($order->payment_status === 'CANCELLED') {
                 $paymentUpdates = [

@@ -57,6 +57,10 @@ class BookOfflineCourt extends Page
 
     public string $customerSearch = '';
 
+    // Hasil pencarian customer — diisi lewat updatedCustomerSearch(), BUKAN di-query ulang di getViewData()
+    // supaya query DB-nya cuma jalan pas teks pencarian beneran berubah, bukan di setiap render/klik lain.
+    public array $searchResults = [];
+
     public ?string $selectedCustomerId = null;
 
     public ?string $selectedCustomerName = null;
@@ -318,24 +322,66 @@ class BookOfflineCourt extends Page
         $this->saveDraft();
     }
 
+    public function updatedCustomerSearch(): void
+    {
+        $term = trim($this->customerSearch);
+
+        if (strlen($term) < 2) {
+            $this->searchResults = [];
+            return;
+        }
+
+        $this->searchResults = User::where(function ($q) use ($term) {
+            $q->where('name', 'like', "%{$term}%")
+                ->orWhere('phone', 'like', "%{$term}%")
+                ->orWhere('email', 'like', "%{$term}%");
+        })
+            ->limit(5)
+            ->get()
+            ->all();
+    }
+
+    // Memoisasi per-request buat rantai kalkulasi harga (courtTotal -> membershipDiscountAmount ->
+    // equipmentTotal -> subtotal -> financeCalculation -> grandTotal/taxAmount/adminFeeAmount/dst).
+    // Properti Filament Page pakai magic __get biasa (BUKAN #[Computed] Livewire yang otomatis
+    // di-memoize) — tanpa cache manual ini, tiap `$this->grandTotal` dipanggil di Blade akan
+    // mengeksekusi ULANG seluruh rantai dari nol, termasuk query DB di getEquipmentTotalProperty()
+    // dan getFinanceCalculationProperty(). Karena properti-properti cache ini `protected` (bukan
+    // `public`), Livewire TIDAK menyertakannya saat hydrate/dehydrate antar request — otomatis
+    // "kosong lagi" di setiap request baru, jadi tidak ada resiko data basi nyangkut ke transaksi lain.
+    protected ?float $courtTotalCache = null;
+    protected ?float $equipmentTotalCache = null;
+    protected ?float $membershipDiscountAmountCache = null;
+    protected ?float $subtotalCache = null;
+    protected ?array $financeCalculationCache = null;
+
     public function getCourtTotalProperty(): float
     {
-        return (float) array_sum(array_column($this->selectedSlots, 'price'));
+        return $this->courtTotalCache ??= (float) array_sum(array_column($this->selectedSlots, 'price'));
     }
 
     public function getEquipmentTotalProperty(): float
     {
-        $total = 0;
+        if ($this->equipmentTotalCache !== null) {
+            return $this->equipmentTotalCache;
+        }
+
+        $selectedIds = array_keys(array_filter($this->rentalQuantities, fn ($qty) => $qty > 0));
+        if (empty($selectedIds)) {
+            return $this->equipmentTotalCache = 0.0;
+        }
+
+        // Satu query batch (bukan find() di dalam loop) — menghindari N+1 per macam alat yang disewa.
+        $equipmentsById = CourtEquipment::whereIn('id', $selectedIds)->where('is_active', true)->get()->keyBy('id');
+
+        $total = 0.0;
         foreach ($this->rentalQuantities as $eqId => $qty) {
-            if ($qty > 0) {
-                $eq = CourtEquipment::find($eqId);
-                if ($eq && $eq->is_active) {
-                    $total += ((float) $eq->rental_price * $qty);
-                }
+            if ($qty > 0 && isset($equipmentsById[$eqId])) {
+                $total += ((float) $equipmentsById[$eqId]->rental_price * $qty);
             }
         }
 
-        return (float) $total;
+        return $this->equipmentTotalCache = $total;
     }
 
     /**
@@ -346,8 +392,12 @@ class BookOfflineCourt extends Page
      */
     public function getMembershipDiscountAmountProperty(): float
     {
+        if ($this->membershipDiscountAmountCache !== null) {
+            return $this->membershipDiscountAmountCache;
+        }
+
         if (! $this->useMembershipBenefit || ! $this->activeMembershipInfo) {
-            return 0.0;
+            return $this->membershipDiscountAmountCache = 0.0;
         }
 
         $info = $this->activeMembershipInfo;
@@ -367,17 +417,17 @@ class BookOfflineCourt extends Page
             $discountTotal = round($this->courtTotal * ((float) $info['discount_percent'] / 100), 2);
         }
 
-        return min($discountTotal, $this->courtTotal);
+        return $this->membershipDiscountAmountCache = min($discountTotal, $this->courtTotal);
     }
 
     public function getSubtotalProperty(): float
     {
-        return max(0, $this->courtTotal - $this->membershipDiscountAmount) + $this->equipmentTotal;
+        return $this->subtotalCache ??= max(0, $this->courtTotal - $this->membershipDiscountAmount) + $this->equipmentTotal;
     }
 
     public function getFinanceCalculationProperty(): array
     {
-        return app(\App\Services\Finance\TaxAndFeeService::class)->calculate(
+        return $this->financeCalculationCache ??= app(\App\Services\Finance\TaxAndFeeService::class)->calculate(
             subtotal: $this->subtotal,
             discountAmount: 0,
             channel: 'POS_WALKIN',
@@ -441,36 +491,55 @@ class BookOfflineCourt extends Page
             'Akses ditolak: Anda tidak memiliki izin [open_pos_shift] untuk membuka sesi shift kasir.'
         );
 
-        if ($this->activeShift) {
+        // Anti-race: bungkus cek+create shift dengan distributed lock (pola sama persis dengan
+        // padel_lock di ManagesScheduleAndSlots). Tanpa ini, 2 admin (atau 1 admin yang double-klik
+        // saat koneksi lemot) bisa sama-sama lolos cek "belum ada shift aktif" di bawah dan membentuk
+        // 2 shift OPEN sekaligus untuk counter yang sama — tidak ada unique constraint DB yang menahan
+        // ini (pos_cashier_shifts cuma unique di shift_number, bukan di kombinasi counter+status).
+        $lock = Cache::lock('pos_open_shift:PADEL_FRONTDESK', 10);
+        if (! $lock->get()) {
             Notification::make()
-                ->title('Shift Sudah Terbuka')
-                ->body('Loket Padel Frontdesk sudah memiliki sesi shift yang aktif.')
+                ->title('Sedang Diproses')
+                ->body('Ada permintaan buka shift lain yang sedang diproses. Silakan coba lagi sesaat.')
                 ->warning()
                 ->send();
-            $this->showOpenShiftModal = false;
             return;
         }
 
-        $shiftNumber = PosCashierShift::generateShiftNumber('PADEL_FRONTDESK');
+        try {
+            if ($this->activeShift) {
+                Notification::make()
+                    ->title('Shift Sudah Terbuka')
+                    ->body('Loket Padel Frontdesk sudah memiliki sesi shift yang aktif.')
+                    ->warning()
+                    ->send();
+                $this->showOpenShiftModal = false;
+                return;
+            }
 
-        PosCashierShift::create([
-            'shift_number' => $shiftNumber,
-            'counter' => 'PADEL_FRONTDESK',
-            'status' => 'OPEN',
-            'opened_by_id' => $user->id,
-            'opened_at' => Carbon::now('Asia/Jakarta'),
-            'starting_cash' => (float) $this->startingCashInput,
-            'expected_cash' => (float) $this->startingCashInput,
-            'opening_notes' => trim($this->openingNotes) ?: null,
-        ]);
+            $shiftNumber = PosCashierShift::generateShiftNumber('PADEL_FRONTDESK');
 
-        Notification::make()
-            ->title('Shift Kasir Berhasil Dibuka')
-            ->body("Sesi {$shiftNumber} aktif. Modal awal kas: Rp " . number_format((float) $this->startingCashInput, 0, ',', '.'))
-            ->success()
-            ->send();
+            PosCashierShift::create([
+                'shift_number' => $shiftNumber,
+                'counter' => 'PADEL_FRONTDESK',
+                'status' => 'OPEN',
+                'opened_by_id' => $user->id,
+                'opened_at' => Carbon::now('Asia/Jakarta'),
+                'starting_cash' => (float) $this->startingCashInput,
+                'expected_cash' => (float) $this->startingCashInput,
+                'opening_notes' => trim($this->openingNotes) ?: null,
+            ]);
 
-        $this->showOpenShiftModal = false;
+            Notification::make()
+                ->title('Shift Kasir Berhasil Dibuka')
+                ->body("Sesi {$shiftNumber} aktif. Modal awal kas: Rp " . number_format((float) $this->startingCashInput, 0, ',', '.'))
+                ->success()
+                ->send();
+
+            $this->showOpenShiftModal = false;
+        } finally {
+            $lock->release();
+        }
     }
 
     public function prepareCloseShift(): void
@@ -1177,8 +1246,24 @@ class BookOfflineCourt extends Page
 
     protected function getViewData(): array
     {
-        // Fail-safe sinkronisasi kedaluwarsa
-        app(PadelBookingService::class)->syncExpiredAndCompletedBookings();
+        // WAJIB reset cache kalkulasi harga tepat sebelum render — menjamin angka yang ditampilkan SELALU
+        // dihitung ulang dari state TERBARU (misal setelah selectedSlots di-reset pasca pembayaran sukses
+        // di request yang sama), bukan angka basi yang keburu ke-cache dari pembacaan lebih awal di action
+        // method (misal validasi cashReceived saat checkout). Memoisasi di getter-getter-nya tetap berlaku
+        // SELAMA render ini berlangsung (jadi tetap cuma dihitung sekali walau dipanggil ~18x di Blade).
+        $this->courtTotalCache = null;
+        $this->equipmentTotalCache = null;
+        $this->membershipDiscountAmountCache = null;
+        $this->subtotalCache = null;
+        $this->financeCalculationCache = null;
+
+        // Fail-safe sinkronisasi kedaluwarsa — di-throttle max 1x per 15 detik (bukan tiap render/klik).
+        // Cache::add() atomic: cuma proses PERTAMA dalam window 15 detik yang benar-benar menjalankan sync,
+        // proses lain di window yang sama otomatis skip. Ini murni fail-safe cepat; penegakan expiry yang
+        // sebenarnya sudah dijamin scheduled command terpisah, jadi telat beberapa detik di sini aman.
+        if (Cache::add('padel_offline_sync_throttle', true, 15)) {
+            app(PadelBookingService::class)->syncExpiredAndCompletedBookings();
+        }
 
         $courts = PadelCourt::where('is_active', true)->orderBy('name')->get();
         $isWeekend = Carbon::parse($this->bookingDate)->isWeekend();
@@ -1219,6 +1304,17 @@ class BookOfflineCourt extends Page
                 'full_label' => sprintf('%02d:00 - %02d:00', $h, $h + 1),
             ];
         }
+
+        // Ambil SEMUA kemungkinan cache lock key sekaligus (1 query batch), bukan Cache::has() satu-satu
+        // per slot di dalam loop di bawah — dengan CACHE_STORE=database, itu berarti puluhan query terpisah
+        // per render kalau tidak di-batch (misal 5 lapangan x 17 jam operasional = 85+ query Cache::has()).
+        $allLockKeys = [];
+        foreach ($courts as $court) {
+            foreach ($operationalHours as $oh) {
+                $allLockKeys[] = "padel_lock:{$court->id}:{$this->bookingDate}:" . sprintf('%02d00', $oh['hour']);
+            }
+        }
+        $lockValues = ! empty($allLockKeys) ? Cache::many($allLockKeys) : [];
 
         $gridData = [];
         foreach ($courts as $court) {
@@ -1278,9 +1374,10 @@ class BookOfflineCourt extends Page
                             ];
                         }
                     } else {
-                        // Cek Cache Lock (Hold transaksi online)
+                        // Cek Cache Lock (Hold transaksi online) — dari batch $lockValues yang sudah diambil
+                        // sekaligus di atas, bukan query Cache::has() baru per slot.
                         $lockKey = "padel_lock:{$court->id}:{$this->bookingDate}:" . sprintf('%02d00', $h);
-                        if (Cache::has($lockKey)) {
+                        if (! empty($lockValues[$lockKey])) {
                             $status = 'LOCKED';
                             $bookingDetail = [
                                 'code' => 'HOLD',
@@ -1323,35 +1420,39 @@ class BookOfflineCourt extends Page
             }
         }
 
-        // Statistik & riwayat transaksi walk-in yang diproses HARI INI (bukan tanggal grid)
-        $walkInTodayQuery = \App\Models\Pos\Order::where('order_type', 'WALK_IN')
-            ->whereDate('created_at', now());
+        // Statistik & riwayat transaksi walk-in HARI INI — di-cache 10 detik. Angka ini cuma buat
+        // ditampilin di pojok layar (bukan input keputusan transaksi), jadi selisih beberapa detik
+        // gak masalah, tapi query-nya sendiri gak perlu jalan ulang di SETIAP klik slot/tombol lain.
+        $walkInStatsCacheKey = 'pos_walkin_stats_today:' . now()->format('Y-m-d');
+        $walkInStatsToday = Cache::remember($walkInStatsCacheKey, 10, function () {
+            $query = \App\Models\Pos\Order::where('order_type', 'WALK_IN')->whereDate('created_at', now());
 
-        $walkInStatsToday = [
-            'count' => $walkInTodayQuery->count(),
-            'revenue' => (float) $walkInTodayQuery->sum('grand_total'),
-        ];
+            return [
+                'count' => (clone $query)->count(),
+                'revenue' => (float) (clone $query)->sum('grand_total'),
+            ];
+        });
 
-        $recentWalkInOrders = \App\Models\Pos\Order::where('order_type', 'WALK_IN')
-            ->whereDate('created_at', now())
+        $recentWalkInOrdersCacheKey = 'pos_walkin_recent_orders:' . now()->format('Y-m-d');
+        $recentWalkInOrderIds = Cache::remember($recentWalkInOrdersCacheKey, 10, function () {
+            return \App\Models\Pos\Order::where('order_type', 'WALK_IN')
+                ->whereDate('created_at', now())
+                ->latest()
+                ->limit(8)
+                ->pluck('id');
+        });
+        // Eager-load relasi tetap dijalankan tiap render (bukan ikut di-cache) supaya data user/booking
+        // yang ditampilkan selalu representasi terbaru, hanya DAFTAR ID order-nya yang di-throttle.
+        $recentWalkInOrders = \App\Models\Pos\Order::whereIn('id', $recentWalkInOrderIds)
             ->with(['user', 'padelBookings.court'])
             ->latest()
-            ->limit(8)
             ->get();
 
         $equipments = CourtEquipment::where('is_active', true)->orderBy('type')->orderBy('name')->get();
 
-        $searchResults = [];
-        if (strlen(trim($this->customerSearch)) >= 2) {
-            $term = trim($this->customerSearch);
-            $searchResults = User::where(function ($q) use ($term) {
-                $q->where('name', 'like', "%{$term}%")
-                    ->orWhere('phone', 'like', "%{$term}%")
-                    ->orWhere('email', 'like', "%{$term}%");
-            })
-            ->limit(5)
-            ->get();
-        }
+        // Hasil pencarian customer sekarang diisi via updatedCustomerSearch() (lifecycle hook), bukan
+        // di-query ulang di sini setiap render — lihat method updatedCustomerSearch().
+        $searchResults = $this->searchResults;
 
         return [
             'gridData' => $gridData,

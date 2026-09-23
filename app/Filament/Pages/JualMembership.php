@@ -226,6 +226,15 @@ class JualMembership extends Page
                     'subtotal' => $plan->price,
                 ]);
 
+                // Anti-race: kunci row customer ini DULU sebelum cek existing membership. Krusial khusus
+                // buat customer yang BELUM punya UserMembership sama sekali — lockForUpdate() di query
+                // existingActive di bawah tidak mengunci apa pun kalau belum ada row yang match, jadi tanpa
+                // baris ini 2 kasir yang submit hampir bersamaan buat customer yang sama bisa sama-sama
+                // lolos "belum ada yang aktif" dan bikin 2 kartu ACTIVE + kuota ke-top-up dua kali padahal
+                // uang yang masuk kasir cuma sekali. Locking row user memaksa transaksi kedua menunggu
+                // commit yang pertama selesai.
+                User::where('id', $customer->id)->lockForUpdate()->first();
+
                 // 2b. Cek apakah customer ini sudah punya membership AKTIF (row-lock: cegah 2 transaksi
                 // kasir bersamaan buat customer yang sama menghasilkan 2 kartu ganda -> lihat invarian 5.1/5.2 PRD Modul 05)
                 $existingActive = UserMembership::where('user_id', $customer->id)

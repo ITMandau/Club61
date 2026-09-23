@@ -428,6 +428,28 @@ class KelolaPemesanan extends Page
         }
     }
 
+    public function executeReturnEquipment(string $bookingId, PadelBookingService $service): void
+    {
+        try {
+            $staffUser = auth()->user() ?? \App\Models\User::role(['admin', 'super_admin'])->first();
+            $result = $service->returnEquipment($bookingId, $staffUser);
+
+            $summary = collect($result['items'])->map(fn ($i) => "{$i['quantity']}x {$i['name']}")->join(', ');
+
+            Notification::make()
+                ->title('Alat Sewa Dikembalikan')
+                ->body("Tiket {$result['booking_code']}: {$summary} telah di-restock ke stok alat.")
+                ->success()
+                ->send();
+        } catch (\Throwable $e) {
+            Notification::make()
+                ->title('Gagal Memproses Retur Alat')
+                ->body($e->getMessage())
+                ->danger()
+                ->send();
+        }
+    }
+
     protected function getViewData(): array
     {
         // REAKTIF FAIL-SAFE: Otomatis sinkronkan tiket kedaluwarsa & selesai setiap halaman dibuka

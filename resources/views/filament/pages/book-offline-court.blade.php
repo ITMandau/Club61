@@ -764,14 +764,14 @@
                     <tr>
                         <th>LAPANGAN</th>
                         @foreach($operationalHours as $oh)
-                            <th style="min-width:50px;">{{ $oh['label'] }}</th>
+                            <th wire:key="oh-head-{{ $oh['hour'] }}" style="min-width:50px;">{{ $oh['label'] }}</th>
                         @endforeach
                     </tr>
                 </thead>
                 <tbody>
                     @foreach($gridData as $courtRow)
                         @php $court = $courtRow['court']; @endphp
-                        <tr>
+                        <tr wire:key="court-row-{{ $court->id }}">
                             <td>
                                 <div style="font-weight:900; color:#1F170D; font-size:0.75rem; white-space:nowrap;">{{ $court->name }}</div>
                                 <div style="font-size:0.5625rem; color:#8C6418; font-weight:700; margin-top:0.1rem;">
@@ -783,7 +783,7 @@
                                     $st = $slot['status'];
                                     $rate = number_format($slot['rate']/1000,0).'k';
                                 @endphp
-                                <td>
+                                <td wire:key="slot-cell-{{ $slot['slot_key'] }}">
                                     @if($st === 'SELECTED')
                                         <button type="button"
                                             wire:click="toggleSlot('{{ $court->id }}', '{{ addslashes($court->name) }}', '{{ $slot['start_time'] }}', '{{ $slot['end_time'] }}', {{ $slot['rate'] }})"
@@ -847,7 +847,7 @@
             <div class="pos-recent-header">Transaksi Walk-In Terakhir</div>
             <div class="pos-recent-list">
                 @forelse($recentWalkInOrders as $ro)
-                    <div class="pos-recent-row">
+                    <div wire:key="recent-order-{{ $ro->id }}" class="pos-recent-row">
                         <div>
                             <div class="pos-recent-name">{{ $ro->user?->name ?? 'Walk-In' }}</div>
                             <div class="pos-recent-sub">
@@ -1238,7 +1238,7 @@
                         <div style="border-bottom:1px dashed #000; padding-bottom:0.5rem; margin-bottom:0.5rem;">
                             <div style="font-weight:800; margin-bottom:0.25rem;">ITEM LAPANGAN:</div>
                             @foreach($completedOrderData['bookings'] as $b)
-                                <div style="margin-bottom:0.35rem;">
+                                <div wire:key="receipt-booking-{{ $b['booking_code'] }}" style="margin-bottom:0.35rem;">
                                     <div style="display:flex; justify-content:space-between;">
                                         <span>{{ $b['court_name'] }}</span>
                                         <span>Rp {{ number_format($b['court_fee'], 0, ',', '.') }}</span>
@@ -1250,8 +1250,8 @@
 
                             @if(!empty($completedOrderData['equipments']))
                                 <div style="font-weight:800; margin-top:0.4rem; margin-bottom:0.2rem;">SEWA ALAT:</div>
-                                @foreach($completedOrderData['equipments'] as $eq)
-                                    <div style="display:flex; justify-content:space-between;">
+                                @foreach($completedOrderData['equipments'] as $eqIdx => $eq)
+                                    <div wire:key="receipt-equipment-{{ $eqIdx }}" style="display:flex; justify-content:space-between;">
                                         <span>{{ $eq['quantity'] }}x {{ $eq['name'] }}</span>
                                         <span>Rp {{ number_format($eq['price'], 0, ',', '.') }}</span>
                                     </div>
@@ -1389,7 +1389,7 @@
                             @if(count($searchResults) > 0)
                                 <div style="position:absolute; top:100%; left:0; right:0; z-index:50; background:#FFFFFF; border:1.5px solid #DFC387; border-radius:8px; box-shadow:0 8px 20px rgba(0,0,0,0.1); margin-top:0.2rem; max-height:140px; overflow-y:auto;">
                                     @foreach($searchResults as $res)
-                                        <button type="button" wire:click="selectCustomer('{{ $res->id }}')"
+                                        <button type="button" wire:key="search-result-{{ $res->id }}" wire:click="selectCustomer('{{ $res->id }}')"
                                             style="width:100%; text-align:left; padding:0.4rem 0.65rem; border:none; border-bottom:1px solid #FAF2DE; background:#FFFFFF; cursor:pointer; font-size:0.75rem;"
                                             onmouseover="this.style.background='#FAF5E8'" onmouseout="this.style.background='#FFFFFF'">
                                             <div style="font-weight:800; color:#1F170D;">{{ $res->name }}</div>
@@ -1418,7 +1418,7 @@
                 @else
                     <div style="display:flex; flex-direction:column; gap:0.3rem;">
                         @foreach($selectedSlots as $sKey => $s)
-                            <div class="pos-slot-chip">
+                            <div wire:key="selected-slot-{{ $sKey }}" class="pos-slot-chip">
                                 <div>
                                     <div style="font-weight:800; font-size:0.6875rem; color:#1F170D;">{{ $s['court_name'] }}</div>
                                     <div style="font-size:0.5625rem; color:#8C6418;">{{ $s['time_label'] }} WIB</div>
@@ -1446,7 +1446,7 @@
                 <div style="background:#FFFDF5; border:1px solid #F0DB9D; border-radius:8px; padding:0.35rem 0.65rem;">
                     @foreach($equipments as $eq)
                         @php $qty = $rentalQuantities[$eq->id] ?? 0; @endphp
-                        <div class="pos-eq-row">
+                        <div wire:key="equipment-row-{{ $eq->id }}" class="pos-eq-row">
                             <div>
                                 <div style="font-weight:800; color:#1F170D; font-size:0.6875rem;">{{ $eq->name }}</div>
                                 <div style="font-size:0.5625rem; color:#8C6418;">Rp{{ number_format($eq->rental_price,0,',','.') }} &bull; Stok: {{ $eq->stock_quantity }}</div>
@@ -1587,7 +1587,7 @@
                 <div style="border-bottom:1px dashed #000; padding-bottom:0.45rem; margin-bottom:0.45rem;">
                     <div style="font-weight:800; margin-bottom:0.2rem;">ITEM LAPANGAN:</div>
                     @foreach($completedOrderData['bookings'] as $b)
-                        <div style="margin-bottom:0.3rem;">
+                        <div wire:key="receipt-print-booking-{{ $b['booking_code'] }}" style="margin-bottom:0.3rem;">
                             <div style="display:flex; justify-content:space-between;">
                                 <span>{{ $b['court_name'] }}</span>
                                 <span>Rp {{ number_format($b['court_fee'], 0, ',', '.') }}</span>
@@ -1598,8 +1598,8 @@
                     @endforeach
                     @if(!empty($completedOrderData['equipments']))
                         <div style="font-weight:800; margin-top:0.3rem; margin-bottom:0.15rem;">SEWA ALAT:</div>
-                        @foreach($completedOrderData['equipments'] as $eq)
-                            <div style="display:flex; justify-content:space-between;">
+                        @foreach($completedOrderData['equipments'] as $eqIdx => $eq)
+                            <div wire:key="receipt-print-equipment-{{ $eqIdx }}" style="display:flex; justify-content:space-between;">
                                 <span>{{ $eq['quantity'] }}x {{ $eq['name'] }}</span>
                                 <span>Rp {{ number_format($eq['price'], 0, ',', '.') }}</span>
                             </div>

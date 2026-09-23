@@ -18,6 +18,8 @@ class PadelBookingEquipment extends Model
         'quantity',
         'unit_price',
         'subtotal',
+        'stock_deducted_at',
+        'returned_at',
     ];
 
     protected function casts(): array
@@ -26,6 +28,8 @@ class PadelBookingEquipment extends Model
             'quantity' => 'integer',
             'unit_price' => 'decimal:2',
             'subtotal' => 'decimal:2',
+            'stock_deducted_at' => 'datetime',
+            'returned_at' => 'datetime',
         ];
     }
 
