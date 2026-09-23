@@ -23,7 +23,7 @@ class BookOfflineCourt extends Page
 
     protected static string | BackedEnum | null $navigationIcon = 'heroicon-o-building-storefront';
 
-    protected static ?string $navigationLabel = 'Walk-In Booking';
+    protected static ?string $navigationLabel = 'POS Walk-In Booking';
 
     protected static string | UnitEnum | null $navigationGroup = 'Main Menu';
 

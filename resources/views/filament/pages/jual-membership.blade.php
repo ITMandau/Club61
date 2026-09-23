@@ -1,44 +1,43 @@
-<div class="adm-wrap" style="max-width: 1400px; margin: 0 auto; padding: 1rem;">
-    <!-- Header Banner -->
+<div class="adm-wrap">
+    @include('filament.partials.pos-subnav', ['activePos' => 'membership'])
+
+    {{-- ============================
+         TOP BAR: Judul Loket (selaras gaya pos-topbar di POS Walk-In Booking)
+         ============================ --}}
     <div
-        style="background: linear-gradient(135deg, #1F170D 0%, #2D2314 100%); border: 1.5px solid #DFC387; border-radius: 16px; padding: 1.5rem; margin-bottom: 1.5rem; display: flex; justify-content: space-between; align-items: center;">
-        <div>
-            <div
-                style="display: inline-flex; align-items: center; gap: 0.5rem; background: rgba(212, 175, 55, 0.15); border: 1px solid rgba(212, 175, 55, 0.4); border-radius: 9999px; padding: 0.25rem 0.75rem; font-size: 0.75rem; color: #F5E6BE; font-weight: 700; margin-bottom: 0.5rem;">
-                <span style="width: 6px; height: 6px; border-radius: 50%; background: #D4AF37;"></span>
-                <span>POS Frontdesk &bull; Club 61 Membership</span>
-            </div>
-            <div style="font-size: 1.5rem; font-weight: 900; color: #FAF5E6; font-family: serif;">
-                Kasir Penjualan Membership
-            </div>
-            <div style="font-size: 0.8125rem; color: #D4AF37; margin-top: 0.25rem;">
-                Terbitkan keanggotaan multi-fasilitas (Padel, Gym, Sauna) untuk pelanggan secara instan dan terhubung ke
-                shift kasir.
-            </div>
+        style="display:flex; align-items:center; justify-content:space-between; gap:0.75rem; padding:0.6rem 1rem; background:#FFFDF5; border:1.5px solid #DFC387; border-radius:14px; margin-bottom:0.75rem; flex-wrap:wrap;">
+        <div style="display:flex; align-items:center; gap:0.6rem; flex-wrap:wrap;">
+            <span style="font-size:0.8125rem; font-weight:900; color:#8C6418;">Kasir Penjualan Membership</span>
+            <span style="font-size:0.6875rem; color:#7A643E;">Terbitkan keanggotaan multi-fasilitas (Padel, Gym, Sauna) untuk pelanggan secara instan.</span>
+        </div>
+        <div style="display:flex; align-items:center; gap:0.5rem; background:#FAF5E8; border:1.5px solid #DFC387; padding:0.25rem 0.65rem; border-radius:8px;">
+            <span style="font-size:0.6875rem; font-weight:800; color:#8C6418;">
+                {{ $this->plans->count() }} Paket Aktif Tersedia
+            </span>
         </div>
     </div>
 
     <!-- POS Grid (2 Columns) -->
-    <div style="display: grid; grid-template-columns: 1fr 380px; gap: 1.5rem;">
+    <div style="display: grid; grid-template-columns: 1fr 340px; gap: 0.75rem;">
         <!-- Left: Customer & Plan Selection -->
         <div style="display: flex; flex-direction: column; gap: 1.5rem;">
             <!-- Customer Card -->
-            <div
-                style="background: #FFFFFF; border: 1.5px solid #DFC387; border-radius: 16px; padding: 1.25rem; box-shadow: 0 4px 12px rgba(0,0,0,0.03);">
+            <div style="background: #FFFFFF; border: 1.5px solid #DFC387; border-radius: 14px; overflow: hidden;">
                 <div
-                    style="font-size: 1rem; font-weight: 800; color: #1F170D; margin-bottom: 0.75rem; display: flex; justify-content: space-between; align-items: center;">
-                    <span>1. Data Pelanggan / Member</span>
+                    style="padding: 0.65rem 1rem; background: #FAF5E8; border-bottom: 1.5px solid #DFC387; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem;">
+                    <span style="font-size: 0.8125rem; font-weight: 900; color: #1F170D;">1. Data Pelanggan / Member</span>
                     <div style="display: flex; gap: 0.5rem; font-size: 0.75rem;">
                         <button type="button" wire:click="$set('customerMode', 'quick_create')"
-                            style="padding: 0.25rem 0.75rem; border-radius: 6px; font-weight: 700; cursor: pointer; border: 1px solid #DFC387; {{ $customerMode === 'quick_create' ? 'background: #D4AF37; color: #1F170D;' : 'background: #FAF5E8; color: #7A643E;' }}">
+                            style="padding: 0.25rem 0.75rem; border-radius: 6px; font-weight: 700; cursor: pointer; border: 1px solid #DFC387; {{ $customerMode === 'quick_create' ? 'background: #D4AF37; color: #1F170D;' : 'background: #FFFFFF; color: #7A643E;' }}">
                             Walk-In Baru
                         </button>
                         <button type="button" wire:click="$set('customerMode', 'search')"
-                            style="padding: 0.25rem 0.75rem; border-radius: 6px; font-weight: 700; cursor: pointer; border: 1px solid #DFC387; {{ $customerMode === 'search' ? 'background: #D4AF37; color: #1F170D;' : 'background: #FAF5E8; color: #7A643E;' }}">
+                            style="padding: 0.25rem 0.75rem; border-radius: 6px; font-weight: 700; cursor: pointer; border: 1px solid #DFC387; {{ $customerMode === 'search' ? 'background: #D4AF37; color: #1F170D;' : 'background: #FFFFFF; color: #7A643E;' }}">
                             Cari Member Lama
                         </button>
                     </div>
                 </div>
+                <div style="padding: 1rem 1.25rem;">
 
                 @if ($selectedCustomerId)
                     <div
@@ -92,14 +91,15 @@
                         </div>
                     </div>
                 @endif
+                </div>
             </div>
 
             <!-- Plan Selection Card -->
-            <div
-                style="background: #FFFFFF; border: 1.5px solid #DFC387; border-radius: 16px; padding: 1.25rem; box-shadow: 0 4px 12px rgba(0,0,0,0.03);">
-                <div style="font-size: 1rem; font-weight: 800; color: #1F170D; margin-bottom: 1rem;">
-                    2. Pilih Paket Membership Club 61
+            <div style="background: #FFFFFF; border: 1.5px solid #DFC387; border-radius: 14px; overflow: hidden;">
+                <div style="padding: 0.65rem 1rem; background: #FAF5E8; border-bottom: 1.5px solid #DFC387;">
+                    <span style="font-size: 0.8125rem; font-weight: 900; color: #1F170D;">2. Pilih Paket Membership Club 61</span>
                 </div>
+                <div style="padding: 1.25rem;">
 
                 <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 1rem;">
                     @foreach ($this->plans as $plan)
@@ -143,17 +143,18 @@
                         </div>
                     @endforeach
                 </div>
+                </div>
             </div>
         </div>
 
         <!-- Right: Order Summary & Settlement -->
-        <div style="display: flex; flex-direction: column; gap: 1.25rem;">
-            <div
-                style="background: #FFFFFF; border: 1.5px solid #DFC387; border-radius: 16px; padding: 1.25rem; box-shadow: 0 4px 12px rgba(0,0,0,0.03);">
+        <div style="display: flex; flex-direction: column; gap: 0.75rem;">
+            <div style="background: #FFFFFF; border: 1.5px solid #DFC387; border-radius: 14px; overflow: hidden; display: flex; flex-direction: column;">
                 <div
-                    style="font-size: 1rem; font-weight: 800; color: #1F170D; margin-bottom: 1rem; border-bottom: 1px solid #FAF2DE; padding-bottom: 0.5rem;">
-                    3. Rincian &amp; Pembayaran
+                    style="padding: 0.65rem 1rem; background: linear-gradient(135deg, #FAF5E8 0%, #F5E8C7 100%); border-bottom: 1.5px solid #DFC387;">
+                    <span style="font-size: 0.8125rem; font-weight: 900; color: #1F170D;">3. Rincian &amp; Pembayaran</span>
                 </div>
+                <div style="padding: 1rem 1.25rem;">
 
                 @if ($this->selectedPlan)
                     <div style="margin-bottom: 1rem;">
@@ -259,6 +260,7 @@
                         Pilih paket membership di kolom kiri untuk melanjutkan pembayaran.
                     </div>
                 @endif
+                </div>
             </div>
         </div>
     </div>

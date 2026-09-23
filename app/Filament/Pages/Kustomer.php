@@ -28,7 +28,7 @@ class Kustomer extends Page
 
     protected static ?string $title = 'Data Kustomer & Live Monitoring Membership';
 
-    protected static ?int $navigationSort = 6;
+    protected static ?int $navigationSort = 7;
 
     protected string $view = 'filament.pages.kustomer';
 

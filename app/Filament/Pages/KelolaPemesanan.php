@@ -29,7 +29,7 @@ class KelolaPemesanan extends Page
 
     protected static ?string $title = 'Kelola Pemesanan & Tiket';
 
-    protected static ?int $navigationSort = 5;
+    protected static ?int $navigationSort = 6;
 
     protected string $view = 'filament.pages.kelola-pemesanan';
 

@@ -649,6 +649,8 @@
     }
 </style>
 
+@include('filament.partials.pos-subnav', ['activePos' => 'walkin'])
+
 {{-- ============================
      TOP BAR: Date Navigation
      ============================ --}}

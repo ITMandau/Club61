@@ -30,7 +30,13 @@ class JualMembership extends Page
 
     protected static ?string $title = 'POS Penjualan Membership Frontdesk';
 
-    protected static ?int $navigationSort = 7;
+    protected static ?int $navigationSort = 5;
+
+    // Disembunyikan dari sidebar — sekarang diakses lewat tab "POS Jual Membership" di halaman
+    // Walk-In Booking (lihat resources/views/filament/partials/pos-subnav.blade.php). Halaman &
+    // route-nya tetap aktif penuh (HasPageShield/permission tidak berubah), cuma gak dobel muncul
+    // di sidebar lagi.
+    protected static bool $shouldRegisterNavigation = false;
 
     protected string $view = 'filament.pages.jual-membership';
 
