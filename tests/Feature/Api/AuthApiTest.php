@@ -53,7 +53,7 @@ class AuthApiTest extends TestCase
         $response->assertStatus(401)
             ->assertJson([
                 'success' => false,
-                'message' => 'Email atau password yang Anda masukkan salah.',
+                'message' => 'Email/No HP atau password yang Anda masukkan salah.',
             ]);
     }
 
@@ -146,5 +146,72 @@ class AuthApiTest extends TestCase
         $this->assertNotNull($registeredUser);
         $this->assertTrue($registeredUser->hasRole('customer'));
         $this->assertEquals('CUSTOMER', $registeredUser->role);
+    }
+
+    public function test_register_normalizes_various_phone_formats_to_canonical_08_format(): void
+    {
+        $response = $this->postJson('/api/v1/auth/register', [
+            'name' => 'Siti Rahma',
+            'email' => 'siti.rahma@vantage.id',
+            'phone' => '+62 812-3456-7890',
+            'password' => 'Password123!',
+        ]);
+
+        $response->assertStatus(201);
+
+        $this->assertDatabaseHas('users', [
+            'email' => 'siti.rahma@vantage.id',
+            'phone' => '081234567890',
+        ]);
+    }
+
+    public function test_register_rejects_duplicate_phone_in_different_formats(): void
+    {
+        User::factory()->create(['phone' => '081234567890']);
+
+        $response = $this->postJson('/api/v1/auth/register', [
+            'name' => 'Duplikat',
+            'email' => 'duplikat@vantage.id',
+            'phone' => '6281234567890',
+            'password' => 'Password123!',
+        ]);
+
+        $response->assertStatus(422)->assertJsonValidationErrors('phone');
+    }
+
+    public function test_user_can_login_via_api_using_phone_number(): void
+    {
+        User::factory()->create([
+            'phone' => '081234567890',
+            'password' => Hash::make('Password123!'),
+            'is_active' => true,
+        ]);
+
+        $response = $this->postJson('/api/v1/auth/login', [
+            'login' => '+62 812-3456-7890',
+            'password' => 'Password123!',
+        ]);
+
+        $response->assertStatus(200)
+            ->assertJson([
+                'success' => true,
+                'message' => 'Login berhasil.',
+            ]);
+    }
+
+    public function test_user_can_still_login_via_api_using_legacy_email_field(): void
+    {
+        User::factory()->create([
+            'email' => 'legacy@vantage.id',
+            'password' => Hash::make('Password123!'),
+            'is_active' => true,
+        ]);
+
+        $response = $this->postJson('/api/v1/auth/login', [
+            'email' => 'legacy@vantage.id',
+            'password' => 'Password123!',
+        ]);
+
+        $response->assertStatus(200)->assertJson(['success' => true]);
     }
 }

@@ -552,4 +552,32 @@ class MembershipSystemTest extends TestCase
         // Kuota gym berkurang 1 visit (12 - 1 = 11 visits)
         $this->assertEquals(11.00, (float) $gymBal->remaining_quota);
     }
+
+    /**
+     * Skenario 15 (Security/IDOR): User lain tidak boleh check-in / menguras kuota gym
+     * milik member lain hanya dengan menebak/mengetahui balance_id member tersebut.
+     */
+    public function test_facility_checkin_gym_rejects_balance_owned_by_another_user(): void
+    {
+        $membership = $this->balanceService->purchasePlan($this->user, $this->planBronze);
+        $this->balanceService->activateMembership($membership);
+        $gymBal = $membership->balanceFor('GYM'); // 12 visits, milik $this->user
+
+        $attacker = User::factory()->create([
+            'name' => 'Attacker',
+            'email' => 'attacker@example.com',
+            'phone' => '089999999999',
+        ]);
+
+        $this->expectException(DomainException::class);
+        $this->expectExceptionMessage('Balance ini bukan milik member yang login.');
+
+        try {
+            $this->balanceService->recordCheckin($gymBal->id, $attacker->id);
+        } finally {
+            $gymBal->refresh();
+            // Kuota korban tidak boleh berkurang sama sekali
+            $this->assertEquals(12.00, (float) $gymBal->remaining_quota);
+        }
+    }
 }

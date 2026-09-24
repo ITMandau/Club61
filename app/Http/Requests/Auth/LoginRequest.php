@@ -2,6 +2,8 @@
 
 namespace App\Http\Requests\Auth;
 
+use App\Models\User;
+use App\Support\PhoneNumber;
 use Illuminate\Auth\Events\Lockout;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
@@ -48,10 +50,16 @@ class LoginRequest extends FormRequest
         if (strcasecmp($login, 'admin') === 0) {
             $login = 'admin@club61.com';
         } elseif (! str_contains($login, '@')) {
-            $found = \App\Models\User::where('phone', $login)
-                ->orWhere('email', $login)
-                ->orWhere('email', $login.'@club61.com')
-                ->first();
+            $normalizedPhone = PhoneNumber::normalize($login);
+
+            $found = User::where(function ($query) use ($login, $normalizedPhone) {
+                if ($normalizedPhone) {
+                    $query->orWhere('phone', $normalizedPhone);
+                }
+                $query->orWhere('email', $login)
+                    ->orWhere('email', $login.'@club61.com');
+            })->first();
+
             if ($found) {
                 $login = $found->email;
             }

@@ -369,6 +369,10 @@ class MembershipBalanceService
 
             $membership = $balance->membership;
 
+            if ($membership->user_id !== $userId) {
+                throw new DomainException("Balance ini bukan milik member yang login.");
+            }
+
             if (! $membership->isActive()) {
                 throw new DomainException("Membership tidak aktif atau sudah kadaluarsa.");
             }

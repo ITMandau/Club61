@@ -3,6 +3,7 @@
 namespace App\Filament\Pages\Auth;
 
 use App\Models\User;
+use App\Support\PhoneNumber;
 use Filament\Auth\Pages\Login as BaseLogin;
 use Filament\Forms\Components\TextInput;
 use Filament\Schemas\Components\Component;
@@ -17,7 +18,7 @@ class Login extends BaseLogin
     protected function getEmailFormComponent(): Component
     {
         return TextInput::make('email')
-            ->label('Email atau Username (admin)')
+            ->label('Email, No HP, atau Username (admin)')
             ->placeholder('admin@club61.com atau admin')
             ->required()
             ->autocomplete()
@@ -39,10 +40,16 @@ class Login extends BaseLogin
         if (strcasecmp($login, 'admin') === 0) {
             $login = 'admin@club61.com';
         } elseif (! str_contains($login, '@')) {
-            $found = User::where('phone', $login)
-                ->orWhere('email', $login)
-                ->orWhere('email', $login.'@club61.com')
-                ->first();
+            $normalizedPhone = PhoneNumber::normalize($login);
+
+            $found = User::where(function ($query) use ($login, $normalizedPhone) {
+                if ($normalizedPhone) {
+                    $query->orWhere('phone', $normalizedPhone);
+                }
+                $query->orWhere('email', $login)
+                    ->orWhere('email', $login.'@club61.com');
+            })->first();
+
             if ($found) {
                 $login = $found->email;
             }

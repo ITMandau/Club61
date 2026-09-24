@@ -4,11 +4,13 @@ namespace App\Http\Controllers\Api\V1\Auth;
 
 use App\Http\Controllers\Controller;
 use App\Models\User;
+use App\Support\PhoneNumber;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Rules\Password;
+use Illuminate\Validation\ValidationException;
 
 class AuthController extends Controller
 {
@@ -17,14 +19,28 @@ class AuthController extends Controller
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:100'],
             'email' => ['required', 'string', 'email', 'max:150', Rule::unique('users')->whereNull('deleted_at')],
-            'phone' => ['required', 'string', 'max:20', Rule::unique('users')->whereNull('deleted_at')],
+            'phone' => ['required', 'string', 'max:20'],
             'password' => ['required', 'string', Password::min(8)],
         ]);
+
+        $normalizedPhone = PhoneNumber::normalize($validated['phone']);
+
+        if (! $normalizedPhone) {
+            throw ValidationException::withMessages([
+                'phone' => ['Format nomor HP tidak valid.'],
+            ]);
+        }
+
+        if (User::where('phone', $normalizedPhone)->whereNull('deleted_at')->exists()) {
+            throw ValidationException::withMessages([
+                'phone' => ['Nomor HP ini sudah terdaftar.'],
+            ]);
+        }
 
         $user = User::create([
             'name' => $validated['name'],
             'email' => $validated['email'],
-            'phone' => $validated['phone'],
+            'phone' => $normalizedPhone,
             'password' => Hash::make($validated['password']),
             'role' => 'CUSTOMER',
             'is_active' => true,
@@ -51,16 +67,24 @@ class AuthController extends Controller
     public function login(Request $request): JsonResponse
     {
         $validated = $request->validate([
-            'email' => ['required', 'email'],
+            'login' => ['required_without:email', 'string'],
+            'email' => ['required_without:login', 'string'],
             'password' => ['required', 'string'],
         ]);
 
-        $user = User::where('email', $validated['email'])->first();
+        $identifier = trim($validated['login'] ?? $validated['email']);
+
+        if (str_contains($identifier, '@')) {
+            $user = User::where('email', $identifier)->first();
+        } else {
+            $normalizedPhone = PhoneNumber::normalize($identifier);
+            $user = $normalizedPhone ? User::where('phone', $normalizedPhone)->first() : null;
+        }
 
         if (! $user || ! Hash::check($validated['password'], $user->password)) {
             return response()->json([
                 'success' => false,
-                'message' => 'Email atau password yang Anda masukkan salah.',
+                'message' => 'Email/No HP atau password yang Anda masukkan salah.',
                 'errors' => null,
             ], 401);
         }

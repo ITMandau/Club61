@@ -69,6 +69,18 @@ class AuthenticationTest extends TestCase
         $response->assertRedirect('/admin');
     }
 
+    public function test_users_can_authenticate_using_phone_number_in_various_formats(): void
+    {
+        $user = User::factory()->create(['phone' => '081234567890']);
+
+        $response = $this->post('/login', [
+            'email' => '+62 812-3456-7890',
+            'password' => 'password',
+        ]);
+
+        $this->assertAuthenticatedAs($user);
+    }
+
     public function test_admin_can_login_using_admin_shortcut_and_password123(): void
     {
         $user = User::factory()->create([
