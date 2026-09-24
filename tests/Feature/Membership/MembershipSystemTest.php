@@ -420,7 +420,7 @@ class MembershipSystemTest extends TestCase
             bookingIds: [$booking->id],
             equipments: [],
             voucherCode: null,
-            paymentMethod: 'CASH',
+            paymentMethod: 'QRIS',
             idempotencyKey: Str::uuid()->toString(),
             user: $this->user,
             membershipBalanceId: $padelBal->id

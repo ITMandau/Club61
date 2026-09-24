@@ -264,7 +264,7 @@ class FinanceTaxAndFeeTest extends TestCase
             newStartTimeStr: '18:00',
             reason: 'Permintaan pindah ke malam',
             adminUser: $this->adminUser,
-            paymentMethod: 'CASH',
+            paymentMethod: 'QRIS',
             isDeltaPaid: true
         );
 
@@ -348,7 +348,7 @@ class FinanceTaxAndFeeTest extends TestCase
             newStartTimeStr: '10:00',
             reason: 'Pindah ke jam pagi reguler',
             adminUser: $this->adminUser,
-            paymentMethod: 'CASH',
+            paymentMethod: 'QRIS',
             isDeltaPaid: true
         );
 
@@ -449,7 +449,7 @@ class FinanceTaxAndFeeTest extends TestCase
             ],
             bookingDate: $bookingDate,
             equipments: [],
-            paymentMethod: 'CASH',
+            paymentMethod: 'QRIS',
             cashier: $this->adminUser
         );
 

@@ -116,7 +116,6 @@
                 { id: 'bni', code: 'BNI_VA', name: 'BNI Virtual Account', badge: 'BNI', fee: 0, note: 'Automated Midtrans Verification' },
                 { id: 'cimb', code: 'CIMB_VA', name: 'CIMB Virtual Account', badge: 'CIMB', fee: 0, note: 'Automated Midtrans Verification' },
                 { id: 'bsi', code: 'BSI_VA', name: 'BSI Virtual Account', badge: 'BSI', fee: 0, note: 'Sharia Automated Midtrans' },
-                { id: 'cash', code: 'CASH', name: 'Cash on Arrival (Walk-in)', badge: 'CASH', fee: 0, note: 'Pay at Venue Frontdesk' },
             ],
             isSubmittingPayment: false,
             isCashNotice: false,

@@ -33,13 +33,11 @@ class BookOfflineCourt extends Page
 
     protected string $view = 'filament.pages.book-offline-court';
 
-    // Sesi Shift Kasir POS
+    // Sesi Shift Kasir POS (100% Cashless — tidak ada modal kas fisik / blind cash count)
     public bool $showOpenShiftModal = false;
-    public float $startingCashInput = 0.00;
     public string $openingNotes = '';
 
     public bool $showCloseShiftModal = false;
-    public ?float $actualCashInput = null;
     public string $closingNotes = '';
     public ?array $closingShiftSummary = null;
 
@@ -85,8 +83,8 @@ class BookOfflineCourt extends Page
     // Step Alur Terminal Kasir: 'selection' (Jadwal), 'payment' (Layar Bayar), 'receipt' (Struk)
     public string $posStep = 'selection';
 
-    // Metode Pembayaran Kasir: 'CASH', 'DEBIT_CARD', 'CREDIT_CARD', 'QRIS'
-    public string $paymentMethod = 'CASH';
+    // Metode Pembayaran Kasir (100% Cashless): 'QRIS', 'DEBIT_CARD', 'CREDIT_CARD'
+    public string $paymentMethod = 'QRIS';
 
     // Rincian Pembayaran Mesin EDC (Kartu Debit & Kredit)
     public string $edcTerminal = 'EDC_BCA'; // EDC_BCA, EDC_MANDIRI, EDC_LAINNYA
@@ -101,10 +99,6 @@ class BookOfflineCourt extends Page
     public string $qrisProvider = 'BCA_QRIS'; // BCA_QRIS, MANDIRI_QRIS, GOPAY_QRIS, LAINNYA
     public string $qrisRrn = '';
     public string $qrisSenderName = '';
-
-    // Rincian Pembayaran Tunai
-    public ?float $cashReceived = null;
-    public float $cashChange = 0.00;
 
     // Auto-Recovery Draf Transaksi POS
     public bool $hasPendingDraft = false;
@@ -477,7 +471,6 @@ class BookOfflineCourt extends Page
 
     public function openShiftModal(): void
     {
-        $this->startingCashInput = 0.00;
         $this->openingNotes = '';
         $this->showOpenShiftModal = true;
     }
@@ -519,20 +512,21 @@ class BookOfflineCourt extends Page
 
             $shiftNumber = PosCashierShift::generateShiftNumber('PADEL_FRONTDESK');
 
+            // 100% Cashless: tidak ada modal kas fisik, jadi starting_cash/expected_cash selalu 0.
             PosCashierShift::create([
                 'shift_number' => $shiftNumber,
                 'counter' => 'PADEL_FRONTDESK',
                 'status' => 'OPEN',
                 'opened_by_id' => $user->id,
                 'opened_at' => Carbon::now('Asia/Jakarta'),
-                'starting_cash' => (float) $this->startingCashInput,
-                'expected_cash' => (float) $this->startingCashInput,
+                'starting_cash' => 0.00,
+                'expected_cash' => 0.00,
                 'opening_notes' => trim($this->openingNotes) ?: null,
             ]);
 
             Notification::make()
                 ->title('Shift Kasir Berhasil Dibuka')
-                ->body("Sesi {$shiftNumber} aktif. Modal awal kas: Rp " . number_format((float) $this->startingCashInput, 0, ',', '.'))
+                ->body("Sesi {$shiftNumber} aktif. Loket beroperasi 100% Cashless (QRIS / EDC / Transfer).")
                 ->success()
                 ->send();
 
@@ -556,7 +550,6 @@ class BookOfflineCourt extends Page
 
         $summary = $shift->calculateSummary();
         $this->closingShiftSummary = $summary;
-        $this->actualCashInput = null;
         $this->closingNotes = '';
         $this->showCloseShiftModal = true;
     }
@@ -577,18 +570,10 @@ class BookOfflineCourt extends Page
             return;
         }
 
-        if ($this->actualCashInput === null || $this->actualCashInput === '') {
-            Notification::make()
-                ->title('Hitung Fisik Kas Wajib Diisi')
-                ->body('Silakan masukkan total fisik uang tunai di laci kasir (Blind Cash Count).')
-                ->danger()
-                ->send();
-            return;
-        }
-
+        // 100% Cashless: tidak ada blind cash count fisik, jadi actual_cash & cash_difference selalu 0.
         $summary = $shift->calculateSummary();
-        $actualCash = (float) $this->actualCashInput;
-        $cashDifference = $actualCash - $summary['expected_cash'];
+        $actualCash = 0.00;
+        $cashDifference = 0.00;
 
         $shift->update([
             'status' => 'CLOSED',
@@ -725,7 +710,7 @@ class BookOfflineCourt extends Page
         $this->walkInPhone = $draft['walkInPhone'] ?? '';
         $this->walkInEmail = $draft['walkInEmail'] ?? '';
         $this->rentalQuantities = $draft['rentalQuantities'] ?? [];
-        $this->paymentMethod = $draft['paymentMethod'] ?? 'CASH';
+        $this->paymentMethod = $draft['paymentMethod'] ?? 'QRIS';
         $this->edcTerminal = $draft['edcTerminal'] ?? 'EDC_BCA';
         $this->edcCardType = $draft['edcCardType'] ?? 'DEBIT';
         $this->edcCardNetwork = $draft['edcCardNetwork'] ?? 'GPN';
@@ -784,8 +769,6 @@ class BookOfflineCourt extends Page
                 ->send();
         } else {
             $this->posStep = 'payment';
-            $this->cashReceived = $this->grandTotal;
-            $this->calculateCashChange();
             Notification::make()
                 ->title('Draf Transaksi Dipulihkan')
                 ->body('Layar pembayaran berhasil dipulihkan dari transaksi sebelumnya.')
@@ -873,14 +856,6 @@ class BookOfflineCourt extends Page
             }
         }
 
-        // Default Tunai
-        if ($this->paymentMethod === 'CASH') {
-            if ($this->cashReceived === null || $this->cashReceived < $this->grandTotal) {
-                $this->cashReceived = $this->grandTotal;
-            }
-            $this->calculateCashChange();
-        }
-
         $this->saveDraft();
         $this->posStep = 'payment';
     }
@@ -904,9 +879,7 @@ class BookOfflineCourt extends Page
         $this->selectedCustomerId = null;
         $this->selectedCustomerName = null;
         $this->selectedCustomerPhone = null;
-        $this->paymentMethod = 'CASH';
-        $this->cashReceived = null;
-        $this->cashChange = 0.00;
+        $this->paymentMethod = 'QRIS';
         $this->edcLast4 = '';
         $this->edcApprovalCode = '';
         $this->edcTraceNumber = '';
@@ -921,12 +894,7 @@ class BookOfflineCourt extends Page
     {
         $this->paymentMethod = $method;
 
-        if ($method === 'CASH') {
-            if ($this->cashReceived === null || $this->cashReceived < $this->grandTotal) {
-                $this->cashReceived = $this->grandTotal;
-            }
-            $this->calculateCashChange();
-        } elseif ($method === 'DEBIT_CARD' || $method === 'DEBIT') {
+        if ($method === 'DEBIT_CARD' || $method === 'DEBIT') {
             $this->edcCardType = 'DEBIT';
             if (! in_array($this->edcCardNetwork, ['GPN', 'MASTERCARD', 'VISA'])) {
                 $this->edcCardNetwork = 'GPN';
@@ -939,24 +907,6 @@ class BookOfflineCourt extends Page
         }
 
         $this->saveDraft();
-    }
-
-    public function setQuickCash(float $amount): void
-    {
-        $this->cashReceived = $amount;
-        $this->calculateCashChange();
-    }
-
-    public function updatedCashReceived(): void
-    {
-        $this->calculateCashChange();
-    }
-
-    public function calculateCashChange(): void
-    {
-        $total = $this->grandTotal;
-        $received = (float) ($this->cashReceived ?? 0);
-        $this->cashChange = max(0, $received - $total);
     }
 
     public function submitWalkInBooking(PadelBookingService $service): void
@@ -1042,20 +992,13 @@ class BookOfflineCourt extends Page
         $grandTotal = $this->grandTotal;
         $paymentMeta = [];
 
-        if ($method === 'CASH') {
-            if ($this->cashReceived === null || (float) $this->cashReceived < (float) $grandTotal) {
-                Notification::make()
-                    ->title('Nominal Tunai Kurang')
-                    ->body('Uang tunai yang diterima (Rp ' . number_format((float) ($this->cashReceived ?? 0), 0, ',', '.') . ') kurang dari total tagihan (Rp ' . number_format($grandTotal, 0, ',', '.') . ').')
-                    ->danger()
-                    ->send();
-                return;
-            }
-            $this->calculateCashChange();
-            $paymentMeta = [
-                'cash_received' => (float) $this->cashReceived,
-                'cash_change' => (float) $this->cashChange,
-            ];
+        if (in_array($method, ['CASH', 'TUNAI'])) {
+            Notification::make()
+                ->title('Metode Pembayaran Ditolak')
+                ->body('Pembayaran tunai (CASH) tidak diperbolehkan. Venue Club 61 beroperasi 100% Cashless — gunakan QRIS, EDC, atau Transfer.')
+                ->danger()
+                ->send();
+            return;
         } elseif (in_array($method, ['DEBIT_CARD', 'CREDIT_CARD', 'EDC_BCA', 'EDC_MANDIRI', 'DEBIT', 'CREDIT'])) {
             $last4 = trim($this->edcLast4);
             $approvalCode = trim($this->edcApprovalCode);

@@ -68,7 +68,9 @@ class PendingPaymentSlotProtectionTest extends TestCase
         $startTime = '10:00';
         $endTime = '11:00';
 
-        // User A holds and checks out a slot via CASH (customer cash checkout transitions status to PENDING_PAYMENT)
+        // User A holds and checks out a slot via QRIS, lalu disimulasikan macet menunggu pembayaran
+        // (PENDING_PAYMENT) — skenario ini murni soal proteksi slot saat status PENDING_PAYMENT,
+        // terlepas dari metode pembayarannya (venue sekarang 100% Cashless, CASH tidak lagi tersedia).
         $hold = $this->actingAs($this->userA, 'sanctum')
             ->postJson('/api/v1/padel/hold-slot', [
                 'booking_date' => $this->bookingDate,
@@ -80,13 +82,17 @@ class PendingPaymentSlotProtectionTest extends TestCase
 
         $bookingId = $hold->json('data.bookings.0.id');
 
-        $this->actingAs($this->userA, 'sanctum')
+        $checkout = $this->actingAs($this->userA, 'sanctum')
             ->withHeader('X-Idempotency-Key', (string) Str::uuid())
             ->postJson('/api/v1/padel/checkout', [
                 'booking_ids' => [$bookingId],
-                'payment_method' => 'CASH',
+                'payment_method' => 'QRIS',
             ])
             ->assertStatus(200);
+
+        $orderId = $checkout->json('data.order_id');
+        PadelBooking::where('id', $bookingId)->update(['status' => 'PENDING_PAYMENT']);
+        Order::where('order_number', $orderId)->update(['payment_status' => 'PENDING']);
 
         $booking = PadelBooking::find($bookingId);
         $this->assertEquals('PENDING_PAYMENT', $booking->status);
@@ -184,12 +190,17 @@ class PendingPaymentSlotProtectionTest extends TestCase
             ->withHeader('X-Idempotency-Key', (string) Str::uuid())
             ->postJson('/api/v1/padel/checkout', [
                 'booking_ids' => [$bookingId],
-                'payment_method' => 'CASH',
+                'payment_method' => 'QRIS',
             ])
             ->assertStatus(200);
 
         $orderNumber = $checkout->json('data.order_id');
         $this->assertNotNull($orderNumber);
+
+        // Simulasikan macet menunggu pembayaran (PENDING_PAYMENT) sebelum voluntary release —
+        // venue 100% Cashless, CASH tidak lagi tersedia sebagai cara memicu status ini.
+        PadelBooking::where('id', $bookingId)->update(['status' => 'PENDING_PAYMENT']);
+        Order::where('order_number', $orderNumber)->update(['payment_status' => 'PENDING']);
 
         // User A releases / cancels voluntarily
         $releaseRes = $this->actingAs($this->userA, 'sanctum')

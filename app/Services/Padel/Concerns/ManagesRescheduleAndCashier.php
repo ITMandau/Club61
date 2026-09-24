@@ -153,10 +153,15 @@ trait ManagesRescheduleAndCashier
         string $newStartTimeStr,
         string $reason,
         User $adminUser,
-        ?string $paymentMethod = 'CASH',
+        ?string $paymentMethod = 'QRIS',
         bool $isDeltaPaid = true,
         string $timezone = 'Asia/Jakarta'
     ): array {
+        // 100% Cashless: pembayaran tunai tidak diperbolehkan sama sekali untuk pelunasan selisih reschedule.
+        if ($paymentMethod && in_array(strtoupper($paymentMethod), ['CASH', 'TUNAI'])) {
+            throw new HttpException(422, 'Pembayaran tunai (CASH) tidak diperbolehkan. Venue Club 61 beroperasi 100% Cashless.');
+        }
+
         $parsedDate = Carbon::parse($newDate, $timezone)->startOfDay();
         if ($parsedDate->isPast() && ! $parsedDate->isToday()) {
             throw new HttpException(422, 'Tanggal reschedule tidak boleh di masa lampau.');
@@ -281,7 +286,7 @@ trait ManagesRescheduleAndCashier
                     $orchestrator->markOrderAsPaid($booking->order, [
                         'payment_gateway' => 'CASHIER_POS',
                         'counter' => 'PADEL_FRONTDESK',
-                        'payment_method' => strtoupper($paymentMethod ?? 'CASH'),
+                        'payment_method' => strtoupper($paymentMethod ?? 'QRIS'),
                         'amount' => (float) $totalDeltaToPay,
                         'transaction_id' => 'SUPP-' . strtoupper(Str::random(12)),
                         'admin_user' => $adminUser,
@@ -306,7 +311,7 @@ trait ManagesRescheduleAndCashier
                         'payment_gateway' => 'CASHIER_POS',
                         'transaction_id' => 'SUPP-' . strtoupper(Str::random(12)),
                         'amount' => $totalDeltaToPay,
-                        'payment_method' => strtoupper($paymentMethod ?? 'CASH'),
+                        'payment_method' => strtoupper($paymentMethod ?? 'QRIS'),
                         'status' => 'PENDING',
                         'payload_log' => [
                             'type' => 'RESCHEDULE_PRICE_DELTA',
@@ -408,6 +413,11 @@ trait ManagesRescheduleAndCashier
         float $amountReceived,
         User $cashierUser
     ): array {
+        // 100% Cashless: pembayaran tunai tidak diperbolehkan sama sekali untuk pelunasan kasir.
+        if (in_array(strtoupper($paymentMethod), ['CASH', 'TUNAI'])) {
+            throw new HttpException(422, 'Pembayaran tunai (CASH) tidak diperbolehkan. Venue Club 61 beroperasi 100% Cashless.');
+        }
+
         return DB::transaction(function () use ($bookingId, $paymentMethod, $amountReceived, $cashierUser) {
             $booking = PadelBooking::with(['order', 'court', 'user'])
                 ->where('id', $bookingId)
@@ -420,8 +430,8 @@ trait ManagesRescheduleAndCashier
 
             $order = $this->ensureBookingOrder($booking);
 
-            $gateway = in_array(strtoupper($paymentMethod), ['CASH', 'TUNAI']) ? 'CASH' : strtoupper($paymentMethod);
-            $settleAmount = $amountReceived > 0 
+            $gateway = strtoupper($paymentMethod);
+            $settleAmount = $amountReceived > 0
                 ? $amountReceived 
                 : (float) ($order->grand_total ?: $booking->total_amount);
 
@@ -493,12 +503,14 @@ trait ManagesRescheduleAndCashier
                     ->first();
 
                 if (! $origPayment) {
+                    // Fallback pembukuan: booking ini sudah berstatus PAID tapi tidak ada payment record
+                    // asli (data legacy). Dicatat sebagai TRANSFER_MANUAL, bukan CASH — venue 100% Cashless.
                     $origPayment = Payment::create([
                         'order_id' => $order->id,
-                        'payment_gateway' => 'CASH',
+                        'payment_gateway' => 'TRANSFER_MANUAL',
                         'transaction_id' => 'INIT-' . strtoupper(Str::random(10)),
                         'amount' => (float) $booking->total_amount,
-                        'payment_method' => 'CASH',
+                        'payment_method' => 'TRANSFER_MANUAL',
                         'status' => 'SUCCESS',
                     ]);
                 }

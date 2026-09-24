@@ -234,7 +234,7 @@ class PaymentOrchestrationIntegrityTest extends TestCase
         $service = app(PadelBookingService::class);
         $result = $service->adminSettleCashierPayment(
             bookingId: $booking->id,
-            paymentMethod: 'CASH',
+            paymentMethod: 'QRIS',
             amountReceived: 150000,
             cashierUser: $this->cashier
         );
@@ -247,7 +247,7 @@ class PaymentOrchestrationIntegrityTest extends TestCase
             'order_id' => $result['booking']->order_id,
             'pos_shift_id' => $shift->id,
             'payment_gateway' => 'CASHIER_POS',
-            'payment_method' => 'CASH',
+            'payment_method' => 'QRIS',
             'status' => 'SUCCESS',
         ]);
     }

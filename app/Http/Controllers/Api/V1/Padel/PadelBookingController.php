@@ -185,7 +185,7 @@ class PadelBookingController extends Controller
             'equipments.*.equipment_id' => ['required', 'string'],
             'equipments.*.quantity' => ['required', 'integer', 'min:1'],
             'voucher_code' => ['nullable', 'string'],
-            'payment_method' => ['required', 'string', 'in:QRIS,BCA_VA,MANDIRI_VA,BRI_VA,BNI_VA,CIMB_VA,BSI_VA,CASH'],
+            'payment_method' => ['required', 'string', 'in:QRIS,BCA_VA,MANDIRI_VA,BRI_VA,BNI_VA,CIMB_VA,BSI_VA'],
             // 'NONE' = customer sengaja memilih TIDAK memakai benefit membership untuk booking ini
             // (toggle di halaman checkout), null = auto-detect membership aktif seperti biasa.
             'membership_balance_id' => ['nullable', 'string'],
@@ -210,7 +210,7 @@ class PadelBookingController extends Controller
     public function retryPayment(string $id, Request $request): JsonResponse
     {
         $validated = $request->validate([
-            'payment_method' => ['required', 'string', 'in:QRIS,BCA_VA,MANDIRI_VA,BRI_VA,BNI_VA,CIMB_VA,BSI_VA,CREDIT_CARD,CASH'],
+            'payment_method' => ['required', 'string', 'in:QRIS,BCA_VA,MANDIRI_VA,BRI_VA,BNI_VA,CIMB_VA,BSI_VA,CREDIT_CARD'],
         ]);
 
         $result = $this->bookingService->retryPayment(

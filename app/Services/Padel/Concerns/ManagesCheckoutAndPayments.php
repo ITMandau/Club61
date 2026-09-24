@@ -29,6 +29,11 @@ trait ManagesCheckoutAndPayments
         User $user,
         ?string $membershipBalanceId = null
     ): array {
+        // 100% Cashless: pembayaran tunai tidak diperbolehkan sama sekali di jalur checkout online.
+        if (in_array(strtoupper($paymentMethod), ['CASH', 'TUNAI'])) {
+            throw new HttpException(422, 'Pembayaran tunai (CASH) tidak diperbolehkan. Venue Club 61 beroperasi 100% Cashless.');
+        }
+
         $cacheIdempotencyKey = "idempotency:padel:checkout:{$idempotencyKey}";
 
         // Cek apakah request ini sudah pernah berhasil diproses dalam 24 jam terakhir
@@ -54,8 +59,6 @@ trait ManagesCheckoutAndPayments
             $equipmentTotal = 0;
             $equipmentItems = [];
             $orderNumber = 'ORD-PAD-' . strtoupper(Str::random(10));
-            $isStaff = $user->isStaff();
-            $isCash = strtoupper($paymentMethod) === 'CASH';
 
             // Proses Sewa Peralatan (Raket, Bola, Handuk)
             if (! empty($equipments)) {
@@ -146,7 +149,7 @@ trait ManagesCheckoutAndPayments
             $order = Order::create([
                 'order_number' => $orderNumber,
                 'user_id' => $user->id,
-                'cashier_id' => ($isStaff && $isCash) ? $user->id : null,
+                'cashier_id' => null,
                 'order_type' => 'ONLINE_BOOKING',
                 'subtotal' => $financeCalc['subtotal'],
                 'discount_amount' => $financeCalc['discount_amount'],
@@ -293,14 +296,9 @@ trait ManagesCheckoutAndPayments
                     'payment_method' => $paymentMethod,
                 ]);
 
-                // Tentukan status awal transaksi
-                if ($isCash && ! $isStaff) {
-                    // Customer checkout tunai dari web/mobile wajib PENDING_PAYMENT
-                    $initialStatus = 'PENDING_PAYMENT';
-                } else {
-                    // Tunai hanya langsung PAID jika diproses oleh staf kasir di meja POS, atau gateway mock aktif (non-CASH)
-                    $initialStatus = ($paymentResult['is_mock'] || ($isCash && $isStaff)) ? 'PAID' : 'PENDING_PAYMENT';
-                }
+                // Tentukan status awal transaksi: PAID seketika hanya kalau gateway mock aktif (simulator),
+                // selain itu selalu PENDING_PAYMENT sampai konfirmasi sungguhan dari gateway (Midtrans webhook).
+                $initialStatus = $paymentResult['is_mock'] ? 'PAID' : 'PENDING_PAYMENT';
             }
 
             // Petakan Order ID dan Order Number ke ID Bookings di Cache selama 24 Jam
@@ -330,7 +328,7 @@ trait ManagesCheckoutAndPayments
             $orchestrator = app(\App\Services\Payment\PaymentOrchestratorService::class);
             if ($isConfirmed) {
                 $orchestrator->markOrderAsPaid($order, [
-                    'payment_gateway' => $grandTotal <= 0 ? 'MEMBERSHIP_QUOTA' : ($isCash ? 'CASHIER_POS' : ($paymentResult['is_mock'] ? 'MOCK' : 'MIDTRANS')),
+                    'payment_gateway' => $grandTotal <= 0 ? 'MEMBERSHIP_QUOTA' : ($paymentResult['is_mock'] ? 'MOCK' : 'MIDTRANS'),
                     'counter' => 'PADEL_FRONTDESK',
                     'transaction_id' => $orderNumber,
                     'payment_method' => $grandTotal <= 0 ? 'MEMBERSHIP_QUOTA' : strtoupper($paymentMethod),
@@ -342,7 +340,7 @@ trait ManagesCheckoutAndPayments
                 // Simpan record pembayaran awal PENDING dengan transaction_id = orderNumber
                 Payment::create([
                     'order_id' => $order->id,
-                    'payment_gateway' => strtoupper($paymentMethod === 'CASH' ? 'CASH' : 'MIDTRANS'),
+                    'payment_gateway' => 'MIDTRANS',
                     'transaction_id' => $orderNumber,
                     'snap_token' => $paymentResult['snap_token'] ?? null,
                     'payment_url' => $paymentResult['payment_url'] ?? $paymentResult['redirect_url'] ?? null,
@@ -357,7 +355,7 @@ trait ManagesCheckoutAndPayments
                 'success' => true,
                 'message' => $isConfirmed
                     ? 'Pembayaran berhasil dikonfirmasi. E-Tiket aktif.'
-                    : ($isCash ? 'Reservasi berhasil dibuat. Silakan selesaikan pembayaran tunai di kasir venue.' : 'Sesi transaksi pembayaran berhasil dibuat. Silakan selesaikan pembayaran.'),
+                    : 'Sesi transaksi pembayaran berhasil dibuat. Silakan selesaikan pembayaran.',
                 'data' => [
                     'driver' => $paymentResult['driver'] ?? $paymentManager->getDefaultDriver(),
                     'order_id' => $orderNumber,
@@ -403,6 +401,11 @@ trait ManagesCheckoutAndPayments
      */
     public function retryPayment(string $bookingId, string $paymentMethod, User $user): array
     {
+        // 100% Cashless: pembayaran tunai tidak diperbolehkan sama sekali di jalur retry pembayaran.
+        if (in_array(strtoupper($paymentMethod), ['CASH', 'TUNAI'])) {
+            throw new HttpException(422, 'Pembayaran tunai (CASH) tidak diperbolehkan. Venue Club 61 beroperasi 100% Cashless.');
+        }
+
         return DB::transaction(function () use ($bookingId, $paymentMethod, $user) {
             $order = Order::where('order_number', $bookingId)
                 ->orWhere('id', $bookingId)
@@ -456,29 +459,13 @@ trait ManagesCheckoutAndPayments
 
             $isSupplementalDelta = ($totalPaid > 0 && $pendingSupplementalPayment);
 
-            $isCash = strtoupper($paymentMethod) === 'CASH';
-
             if ($isSupplementalDelta) {
-                // HANYA menagih nominal selisih (delta), bukan menagih ulang seluruh order
+                // HANYA menagih nominal selisih (delta), bukan menagih ulang seluruh order.
+                // Tidak ada biaya gateway tambahan di sini — delta sudah dihitung lengkap dengan
+                // pajak/biaya layanan sejak adminRescheduleBooking() menetapkan nominal PENDING ini.
                 $deltaAmount = (float) $pendingSupplementalPayment->amount;
                 $chargeTotal = max(0, $deltaAmount);
-
-                if ($isCash) {
-                    $pendingSupplementalPayment->update([
-                        'payment_gateway' => 'CASH',
-                        'payment_method' => 'CASH',
-                    ]);
-
-                    return [
-                        'success' => true,
-                        'is_cash' => true,
-                        'order_id' => $order->order_number,
-                        'booking_code' => $booking->booking_code,
-                        'grand_total' => $deltaAmount,
-                        'payment_method' => 'CASH',
-                        'message' => 'Metode pembayaran tagihan sisa diubah ke Tunai di Kasir. Silakan tunjukkan Kode Booking ke kasir venue Club61.',
-                    ];
-                }
+                $newGatewayFee = 0;
 
                 // Midtrans Snap untuk Pelunasan Delta
                 $orderNumber = $order->order_number ?: ('ORD-PAD-' . strtoupper(Str::random(8)));
@@ -562,18 +549,6 @@ trait ManagesCheckoutAndPayments
                 'service_charge' => $totalServiceCharge,
                 'grand_total' => $grandTotal,
             ]);
-
-            if ($isCash) {
-                return [
-                    'success' => true,
-                    'is_cash' => true,
-                    'order_id' => $order->order_number,
-                    'booking_code' => $booking->booking_code,
-                    'grand_total' => $grandTotal,
-                    'payment_method' => 'CASH',
-                    'message' => 'Metode pembayaran diubah ke Tunai di Kasir. Silakan tunjukkan Kode Booking ke kasir venue Club61.',
-                ];
-            }
 
             // On-the-Fly Suffix Logic untuk Midtrans Snap
             $orderNumber = $order->order_number ?: ('ORD-PAD-' . strtoupper(Str::random(8)));
@@ -778,6 +753,11 @@ trait ManagesCheckoutAndPayments
         array $paymentMeta = [],
         ?string $membershipBalanceId = null
     ): array {
+        // 100% Cashless: pembayaran tunai tidak diperbolehkan sama sekali di loket walk-in.
+        if (in_array(strtoupper($paymentMethod), ['CASH', 'TUNAI'])) {
+            throw new HttpException(422, 'Pembayaran tunai (CASH) tidak diperbolehkan. Venue Club 61 beroperasi 100% Cashless.');
+        }
+
         // 1. Hold batch slots untuk customer (melempar SlotConflictException jika tabrakan)
         $holdResult = $this->holdBatchSlots($slots, $bookingDate, $customer);
         $bookingIds = collect($holdResult['bookings'])->pluck('id')->toArray();
@@ -943,11 +923,6 @@ trait ManagesCheckoutAndPayments
                     'provider' => $paymentMeta['qris_provider'] ?? 'BCA_QRIS',
                     'rrn' => $paymentMeta['qris_rrn'] ?? null,
                     'sender_name' => $paymentMeta['qris_sender_name'] ?? null,
-                ];
-            } elseif (in_array(strtoupper($paymentMethod), ['CASH', 'TUNAI'])) {
-                $payloadLog['cash_details'] = [
-                    'cash_received' => isset($paymentMeta['cash_received']) ? (float) $paymentMeta['cash_received'] : (float) $grandTotal,
-                    'cash_change' => isset($paymentMeta['cash_change']) ? (float) $paymentMeta['cash_change'] : 0.00,
                 ];
             }
 

@@ -917,14 +917,6 @@
                         fee: 0,
                         note: ''
                     },
-                    {
-                        id: 'cash',
-                        code: 'CASH',
-                        name: 'Cash on Arrival (Walk-in)',
-                        badge: 'CASH',
-                        fee: 0,
-                        note: 'Pay at Venue Frontdesk'
-                    },
                 ],
 
                 init() {

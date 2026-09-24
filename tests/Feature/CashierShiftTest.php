@@ -154,7 +154,7 @@ class CashierShiftTest extends TestCase
             ],
             bookingDate: $this->bookingDate,
             equipments: [],
-            paymentMethod: 'CASH',
+            paymentMethod: 'QRIS',
             cashier: $this->cashier,
             autoCheckIn: false
         );
@@ -181,7 +181,7 @@ class CashierShiftTest extends TestCase
 
         $this->service->adminSettleCashierPayment(
             bookingId: $booking->id,
-            paymentMethod: 'CASH',
+            paymentMethod: 'QRIS',
             amountReceived: 200000.00,
             cashierUser: $this->cashier
         );
@@ -210,7 +210,7 @@ class CashierShiftTest extends TestCase
             ],
             bookingDate: $this->bookingDate,
             equipments: [],
-            paymentMethod: 'CASH',
+            paymentMethod: 'QRIS',
             cashier: $this->cashier,
             autoCheckIn: false
         );
@@ -225,20 +225,25 @@ class CashierShiftTest extends TestCase
         $this->assertEquals($shift->id, $payment->pos_shift_id);
     }
 
-    public function test_blind_cash_count_closing_calculates_variance_accurately(): void
+    /**
+     * Venue 100% Cashless: shift dibuka tanpa modal kas fisik (starting_cash selalu 0), dan closing
+     * murni rekonsiliasi digital (QRIS + EDC) tanpa blind cash count. Menggantikan test lama yang
+     * menguji hitung selisih kas fisik (fitur tersebut sudah dihapus total dari sistem).
+     */
+    public function test_closing_shift_summary_calculates_digital_sales_accurately(): void
     {
-        // 1. Kasir buka shift pagi dengan modal awal Rp 500.000
+        // 1. Kasir buka shift tanpa modal kas fisik
         $shift = PosCashierShift::create([
             'shift_number' => PosCashierShift::generateShiftNumber('PADEL_FRONTDESK'),
             'counter' => 'PADEL_FRONTDESK',
             'status' => 'OPEN',
             'opened_by_id' => $this->cashier->id,
             'opened_at' => Carbon::now('Asia/Jakarta'),
-            'starting_cash' => 500000.00,
-            'expected_cash' => 500000.00,
+            'starting_cash' => 0.00,
+            'expected_cash' => 0.00,
         ]);
 
-        // 2. Transaksi 1: Walk-In Bayar Tunai Rp 200.000
+        // 2. Transaksi 1: Walk-In Bayar QRIS Rp 200.000
         $this->service->processWalkInCheckout(
             customer: $this->customer,
             slots: [
@@ -250,12 +255,12 @@ class CashierShiftTest extends TestCase
             ],
             bookingDate: $this->bookingDate,
             equipments: [],
-            paymentMethod: 'CASH',
+            paymentMethod: 'QRIS',
             cashier: $this->cashier,
             autoCheckIn: false
         );
 
-        // 3. Transaksi 2: Walk-In Bayar QRIS Rp 200.000
+        // 3. Transaksi 2: Walk-In Bayar EDC BCA Rp 200.000
         $this->service->processWalkInCheckout(
             customer: $this->customer,
             slots: [
@@ -267,52 +272,42 @@ class CashierShiftTest extends TestCase
             ],
             bookingDate: $this->bookingDate,
             equipments: [],
-            paymentMethod: 'QRIS',
+            paymentMethod: 'EDC_BCA',
             cashier: $this->cashier,
             autoCheckIn: false
         );
 
-        // 4. Hitung summary sistem
+        // 4. Hitung summary sistem — tidak ada lagi kategori tunai
         $summary = $shift->calculateSummary();
 
-        $this->assertEquals(200000.00, $summary['total_cash_sales']);
         $this->assertEquals(200000.00, $summary['total_qris_sales']);
+        $this->assertEquals(200000.00, $summary['total_edc_bca_sales']);
         $this->assertEquals(400000.00, $summary['total_sales']);
         $this->assertEquals(2, $summary['total_transactions']);
-        // Ekspektasi kas: modal awal (500k) + penjualan tunai (200k) = 700k
-        $this->assertEquals(700000.00, $summary['expected_cash']);
+        // 100% Cashless: tidak ada modal kas fisik, ekspektasi kas selalu 0.
+        $this->assertEquals(0.00, $summary['expected_cash']);
 
-        // Skenario A: Kasir malam closing dengan uang fisik PAS (Rp 700.000)
-        $actualCashInput = 700000.00;
-        $variance = $actualCashInput - $summary['expected_cash'];
-        $this->assertEquals(0.00, $variance);
-
-        // Skenario B: Kasir malam closing dengan uang fisik KURANG (Rp 680.000 -> short Rp 20.000)
-        $actualCashInputShort = 680000.00;
-        $varianceShort = $actualCashInputShort - $summary['expected_cash'];
-        $this->assertEquals(-20000.00, $varianceShort);
-
-        // Eksekusi closing resmi
+        // Eksekusi closing resmi — actual_cash & cash_difference selalu 0 (tidak ada hitung fisik lagi)
         $shift->update([
             'status' => 'CLOSED',
             'closed_by_id' => $this->cashier2->id,
             'closed_at' => Carbon::now('Asia/Jakarta'),
             'expected_cash' => $summary['expected_cash'],
-            'actual_cash' => $actualCashInputShort,
-            'cash_difference' => $varianceShort,
-            'total_cash_sales' => $summary['total_cash_sales'],
+            'actual_cash' => 0.00,
+            'cash_difference' => 0.00,
             'total_qris_sales' => $summary['total_qris_sales'],
+            'total_edc_bca_sales' => $summary['total_edc_bca_sales'],
             'total_sales' => $summary['total_sales'],
             'total_transactions' => $summary['total_transactions'],
-            'closing_notes' => 'Terdapat selisih kurang Rp 20.000 uang kembalian',
+            'closing_notes' => 'Rekonsiliasi digital 100% Cashless',
         ]);
 
         $this->assertDatabaseHas('pos_cashier_shifts', [
             'id' => $shift->id,
             'status' => 'CLOSED',
             'closed_by_id' => $this->cashier2->id,
-            'actual_cash' => 680000.00,
-            'cash_difference' => -20000.00,
+            'actual_cash' => 0.00,
+            'cash_difference' => 0.00,
         ]);
 
         // Pastikan tidak ada shift aktif lagi
@@ -328,8 +323,8 @@ class CashierShiftTest extends TestCase
             'status' => 'OPEN',
             'opened_by_id' => $this->cashier->id,
             'opened_at' => Carbon::now('Asia/Jakarta')->subDay(),
-            'starting_cash' => 300000.00,
-            'expected_cash' => 300000.00,
+            'starting_cash' => 0.00,
+            'expected_cash' => 0.00,
         ]);
 
         $result1 = $this->service->processWalkInCheckout(
@@ -343,7 +338,7 @@ class CashierShiftTest extends TestCase
             ],
             bookingDate: $this->bookingDate,
             equipments: [],
-            paymentMethod: 'CASH',
+            paymentMethod: 'QRIS',
             cashier: $this->cashier,
             autoCheckIn: false
         );
@@ -358,9 +353,9 @@ class CashierShiftTest extends TestCase
             'closed_by_id' => $this->cashier->id,
             'closed_at' => Carbon::now('Asia/Jakarta')->subDay()->addHours(8),
             'expected_cash' => $summary1['expected_cash'],
-            'actual_cash' => $summary1['expected_cash'],
+            'actual_cash' => 0.00,
             'cash_difference' => 0.00,
-            'total_cash_sales' => $summary1['total_cash_sales'],
+            'total_qris_sales' => $summary1['total_qris_sales'],
             'total_sales' => $summary1['total_sales'],
             'total_transactions' => $summary1['total_transactions'],
         ]);
@@ -372,8 +367,8 @@ class CashierShiftTest extends TestCase
             'status' => 'OPEN',
             'opened_by_id' => $this->cashier2->id,
             'opened_at' => Carbon::now('Asia/Jakarta'),
-            'starting_cash' => 400000.00,
-            'expected_cash' => 400000.00,
+            'starting_cash' => 0.00,
+            'expected_cash' => 0.00,
         ]);
 
         // Simulasikan customer mengajukan reschedule ke slot jam prime sehingga timbul tagihan selisih berstatus PENDING_PAYMENT
@@ -383,7 +378,7 @@ class CashierShiftTest extends TestCase
         // Buat pembayaran selisih reschedule di Shift 2 via adminSettleCashierPayment
         $settleResult = $this->service->adminSettleCashierPayment(
             bookingId: $booking->id,
-            paymentMethod: 'CASH',
+            paymentMethod: 'QRIS',
             amountReceived: 50000.00,
             cashierUser: $this->cashier2
         );
@@ -397,10 +392,10 @@ class CashierShiftTest extends TestCase
         $this->assertEquals($shift1->id, $payments[0]->pos_shift_id);
         $this->assertEquals($shift2->id, $payments[1]->pos_shift_id);
 
-        // Rekapitulasi Shift 2 harus mencatat penjualan kas Rp 50.000 dari pembayaran selisih tersebut
+        // Rekapitulasi Shift 2 harus mencatat penjualan QRIS Rp 50.000 dari pembayaran selisih tersebut
         $summary2 = $shift2->calculateSummary();
-        $this->assertEquals(50000.00, $summary2['total_cash_sales']);
-        $this->assertEquals(450000.00, $summary2['expected_cash']);
+        $this->assertEquals(50000.00, $summary2['total_qris_sales']);
+        $this->assertEquals(0.00, $summary2['expected_cash']);
     }
 
     public function test_super_admin_can_bypass_shift_guard(): void
@@ -420,7 +415,7 @@ class CashierShiftTest extends TestCase
             ],
             bookingDate: $this->bookingDate,
             equipments: [],
-            paymentMethod: 'CASH',
+            paymentMethod: 'QRIS',
             cashier: $this->superAdmin,
             autoCheckIn: false
         );
@@ -539,7 +534,7 @@ class CashierShiftTest extends TestCase
         $this->assertEquals('Budi Santoso', $payloadLog['qris_details']['sender_name']);
     }
 
-    public function test_livewire_edc_and_cash_validation_and_draft_lifecycle(): void
+    public function test_livewire_edc_validation_cash_rejection_and_draft_lifecycle(): void
     {
         PosCashierShift::create([
             'shift_number' => PosCashierShift::generateShiftNumber('PADEL_FRONTDESK'),
@@ -580,7 +575,7 @@ class CashierShiftTest extends TestCase
 
         $this->assertEquals(0, Order::where('order_type', 'WALK_IN')->count());
 
-        // 2. Uji Validasi Tunai: Uang diterima kurang dari total
+        // 2. Uji 100% Cashless: metode CASH wajib ditolak (properti cashReceived sudah tidak ada sama sekali)
         Livewire::test(BookOfflineCourt::class)
             ->set('bookingDate', $this->bookingDate)
             ->set('selectedSlots', $slotData)
@@ -588,7 +583,6 @@ class CashierShiftTest extends TestCase
             ->set('walkInName', 'Budi Santoso')
             ->set('walkInPhone', '081299887766')
             ->set('paymentMethod', 'CASH')
-            ->set('cashReceived', 50000.00)
             ->call('submitWalkInBooking');
 
         $this->assertEquals(0, Order::where('order_type', 'WALK_IN')->count());

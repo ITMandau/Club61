@@ -771,9 +771,8 @@
                                             Bayar Selisih:</label>
                                         <select wire:model="reschedulePaymentMethod"
                                             style="width: 100%; border: 1px solid #F87171; border-radius: 6px; padding: 0.4rem; font-size: 0.75rem;">
-                                            <option value="CASH">Tunai Kasir Frontdesk</option>
-                                            <option value="EDC_BCA">Mesin EDC BCA / Mandiri</option>
                                             <option value="QRIS">QRIS Kasir Frontdesk</option>
+                                            <option value="EDC_BCA">Mesin EDC BCA / Mandiri</option>
                                         </select>
                                     @endif
                                 </div>
@@ -855,10 +854,9 @@
                             Pembayaran:</label>
                         <select wire:model="settlePaymentMethod"
                             style="width: 100%; border: 1px solid #D4AF37; border-radius: 8px; padding: 0.5rem; font-size: 0.8125rem;">
-                            <option value="CASH">Tunai Kasir Frontdesk</option>
+                            <option value="QRIS">QRIS Kasir Frontdesk</option>
                             <option value="EDC_BCA">Mesin EDC BCA / Mandiri</option>
                             <option value="TRANSFER">Transfer Rekening Kasir</option>
-                            <option value="QRIS">QRIS Kasir Frontdesk</option>
                         </select>
                     </div>
 
@@ -943,7 +941,6 @@
                             Pengembalian:</label>
                         <select wire:model="refundMethod"
                             style="width: 100%; border: 1px solid #D4AF37; border-radius: 8px; padding: 0.5rem; font-size: 0.8125rem;">
-                            <option value="TUNAI_KASIR">Tunai Kasir Frontdesk</option>
                             <option value="TRANSFER_MANUAL">Transfer Bank Manual</option>
                             <option value="DEPOSIT_MEMBER">Saldo Deposit Member</option>
                         </select>

@@ -56,6 +56,14 @@ class MembershipController extends Controller
             'payment_method' => 'required|string|max:50',
         ]);
 
+        // 100% Cashless: pembayaran tunai tidak diperbolehkan sama sekali di jalur checkout online.
+        if (in_array(strtoupper($validated['payment_method']), ['CASH', 'TUNAI'])) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Pembayaran tunai (CASH) tidak diperbolehkan. Venue Club 61 beroperasi 100% Cashless.',
+            ], 422);
+        }
+
         $user = $request->user();
         $plan = MembershipPlan::with('benefits')->findOrFail($validated['plan_id']);
 
@@ -175,7 +183,7 @@ class MembershipController extends Controller
                 } else {
                     Payment::create([
                         'order_id' => $order->id,
-                        'payment_gateway' => strtoupper($paymentMethod === 'CASH' ? 'CASH' : 'MIDTRANS'),
+                        'payment_gateway' => 'MIDTRANS',
                         'transaction_id' => $orderNumber,
                         'snap_token' => $paymentResult['snap_token'] ?? null,
                         'payment_url' => $paymentResult['payment_url'] ?? $paymentResult['redirect_url'] ?? null,

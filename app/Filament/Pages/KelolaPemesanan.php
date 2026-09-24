@@ -54,7 +54,7 @@ class KelolaPemesanan extends Page
     public float $rescheduleEstimatedFee = 0.0;
     public float $rescheduleDelta = 0.0;
     public bool $rescheduleIsDeltaPaidNow = true;
-    public string $reschedulePaymentMethod = 'CASH';
+    public string $reschedulePaymentMethod = 'QRIS';
     public string $rescheduleReason = '';
 
     // Settle Modal State
@@ -62,7 +62,7 @@ class KelolaPemesanan extends Page
     public ?string $settleBookingCode = null;
     public ?string $settleCustomerName = null;
     public float $settleAmount = 0.0;
-    public string $settlePaymentMethod = 'CASH';
+    public string $settlePaymentMethod = 'QRIS';
 
     // Cancel & Refund Form State
     public ?string $cancelBookingId = null;
@@ -70,7 +70,7 @@ class KelolaPemesanan extends Page
     public ?string $cancelCustomerName = null;
     public float $originalTotalAmount = 0.0;
     public float $refundAmount = 0.0;
-    public string $refundMethod = 'TUNAI_KASIR';
+    public string $refundMethod = 'TRANSFER_MANUAL';
     public string $refundCategory = 'SALAH_BAYAR';
     public string $refundNotes = '';
 
@@ -128,7 +128,7 @@ class KelolaPemesanan extends Page
 
         $this->rescheduleReason = '';
         $this->rescheduleIsDeltaPaidNow = true;
-        $this->reschedulePaymentMethod = 'CASH';
+        $this->reschedulePaymentMethod = 'QRIS';
 
         $this->loadAvailableSlots($service);
         $this->showRescheduleModal = true;
@@ -270,7 +270,7 @@ class KelolaPemesanan extends Page
         $this->settleAmount = $pendingPayment 
             ? (float) $pendingPayment->amount 
             : (float) ($booking->order?->grand_total ?: $booking->total_amount);
-        $this->settlePaymentMethod = 'CASH';
+        $this->settlePaymentMethod = 'QRIS';
 
         $this->showSettleModal = true;
     }
@@ -319,7 +319,7 @@ class KelolaPemesanan extends Page
         $this->cancelCustomerName = $booking->user?->name ?? 'Guest';
         $this->originalTotalAmount = (float) $booking->total_amount;
         $this->refundAmount = (float) $booking->total_amount;
-        $this->refundMethod = 'TUNAI_KASIR';
+        $this->refundMethod = 'TRANSFER_MANUAL';
         $this->refundCategory = 'SALAH_BAYAR';
         $this->refundNotes = '';
 

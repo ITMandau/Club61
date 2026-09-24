@@ -98,7 +98,7 @@ class EquipmentStockTest extends TestCase
             slots: [['court_id' => $this->court->id, 'start_time' => $start, 'end_time' => $end]],
             bookingDate: $this->bookingDate,
             equipments: $equipments,
-            paymentMethod: 'CASH',
+            paymentMethod: 'QRIS',
             cashier: $this->cashier,
             autoCheckIn: false,
         );

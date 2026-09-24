@@ -230,7 +230,7 @@ class WalkInBookingTest extends TestCase
             ],
             bookingDate: $this->bookingDate,
             equipments: [],
-            paymentMethod: 'CASH',
+            paymentMethod: 'QRIS',
             cashier: $this->cashier,
             autoCheckIn: false
         );
@@ -265,7 +265,7 @@ class WalkInBookingTest extends TestCase
             ],
             bookingDate: $this->bookingDate,
             equipments: [],
-            paymentMethod: 'CASH',
+            paymentMethod: 'QRIS',
             cashier: $this->cashier,
             autoCheckIn: false
         );
@@ -455,7 +455,7 @@ class WalkInBookingTest extends TestCase
             ],
             bookingDate: $this->bookingDate,
             equipments: [],
-            paymentMethod: 'CASH',
+            paymentMethod: 'QRIS',
             cashier: $this->cashier,
             autoCheckIn: false
         );

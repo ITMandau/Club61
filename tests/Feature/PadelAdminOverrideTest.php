@@ -302,7 +302,7 @@ class PadelAdminOverrideTest extends TestCase
             newStartTimeStr: '19:00',
             reason: 'Pindah ke jam prime',
             adminUser: $this->admin,
-            paymentMethod: 'CASH',
+            paymentMethod: 'QRIS',
             isDeltaPaid: false
         );
 
@@ -371,18 +371,18 @@ class PadelAdminOverrideTest extends TestCase
 
         Payment::create([
             'order_id' => $order->id,
-            'payment_gateway' => 'CASH',
+            'payment_gateway' => 'MIDTRANS',
             'transaction_id' => 'SUPP-DELTA-PENDING',
             'amount' => 100000.00,
-            'payment_method' => 'CASH',
+            'payment_method' => 'QRIS',
             'status' => 'PENDING',
         ]);
 
-        // 1. Retry dengan CASH
-        $resCash = $this->service->retryPayment($booking->id, 'CASH', $this->customer);
-        $this->assertTrue($resCash['success']);
-        $this->assertTrue($resCash['is_cash']);
-        $this->assertEquals(100000.00, $resCash['grand_total'], 'Nominal CASH harus persis delta 100.000');
+        // 1. Retry dengan QRIS (100% Cashless, CASH tidak lagi tersedia)
+        $resRetry = $this->service->retryPayment($booking->id, 'QRIS', $this->customer);
+        $this->assertTrue($resRetry['success']);
+        $this->assertFalse($resRetry['is_cash']);
+        $this->assertEquals(100000.00, $resRetry['grand_total'], 'Nominal retry harus persis delta 100.000');
 
         // 2. Data tiket API harus membaca has_pending_delta
         $ticket = $this->service->getTicket($booking->id, $this->customer);
@@ -422,10 +422,10 @@ class PadelAdminOverrideTest extends TestCase
 
         Payment::create([
             'order_id' => $order->id,
-            'payment_gateway' => 'CASH',
+            'payment_gateway' => 'MIDTRANS',
             'transaction_id' => 'SUPP-TEST-123',
             'amount' => 100000.00,
-            'payment_method' => 'CASH',
+            'payment_method' => 'QRIS',
             'status' => 'PENDING',
         ]);
 
@@ -443,7 +443,7 @@ class PadelAdminOverrideTest extends TestCase
         // Kasir melunasi tagihan saat pemain tiba di lokasi
         $res = $this->service->adminSettleSupplementalPayment(
             bookingId: $booking->id,
-            paymentMethod: 'CASH',
+            paymentMethod: 'QRIS',
             adminUser: $this->admin
         );
 

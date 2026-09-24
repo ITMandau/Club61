@@ -1,4 +1,20 @@
 <div class="adm-wrap">
+    <style>
+        .pos-method-selector-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.65rem; }
+        .pos-method-tab { border: 2px solid #E5E7EB; background: #F9FAFB; border-radius: 10px; padding: 0.7rem 0.5rem; text-align: center; cursor: pointer; transition: all 0.15s ease; user-select: none; }
+        .pos-method-tab:hover { border-color: #DFC387; background: #FFFDF5; }
+        .pos-method-tab.active { border-color: #B38622; background: linear-gradient(180deg, #FFFDF5 0%, #FAF5E8 100%); box-shadow: 0 4px 12px rgba(179, 134, 34, 0.18); }
+        .pos-method-tab-title { font-size: 0.8125rem; font-weight: 900; color: #1F170D; }
+        .pos-method-tab.active .pos-method-tab-title { color: #8C6418; }
+        .pos-method-tab-sub { font-size: 0.625rem; color: #6B7280; margin-top: 0.15rem; }
+        .pos-pay-content-card { background: #FFFDF5; border: 1.5px solid #DFC387; border-radius: 12px; padding: 1.1rem 1.25rem; }
+        .pos-input { width: 100%; border: 1px solid #DFC387; border-radius: 7px; padding: 0.35rem 0.6rem; font-size: 0.75rem; font-weight: 700; color: #1F170D; background: #FFFFFF; outline: none; box-sizing: border-box; }
+        .pos-input:focus { border-color: #B38622; box-shadow: 0 0 0 2px rgba(180,134,11,0.15); }
+        .pos-terminal-card { background: #FFFFFF; border: 1.5px solid #DFC387; border-radius: 14px; display: flex; flex-direction: column; overflow: hidden; min-height: 0; }
+        .pos-terminal-header { padding: 0.75rem 1.2rem; background: linear-gradient(135deg, #FAF5E8 0%, #F5E8C7 100%); border-bottom: 1.5px solid #DFC387; display: flex; justify-content: space-between; align-items: center; flex-shrink: 0; flex-wrap: wrap; gap: 0.5rem; }
+        .pos-terminal-body { flex: 1; overflow-y: auto; padding: 1.2rem 1.4rem; display: flex; flex-direction: column; gap: 1.1rem; }
+    </style>
+
     @include('filament.partials.pos-subnav', ['activePos' => 'membership'])
 
     {{-- ============================
@@ -19,12 +35,16 @@
 
     <!-- POS Grid (2 Columns) -->
     <div style="display: grid; grid-template-columns: 1fr 340px; gap: 0.75rem;">
-        <!-- Left: Customer & Plan Selection -->
+
+        @if ($posStep === 'selection')
+        {{-- ==================== KIRI: PILIH PELANGGAN & PAKET ==================== --}}
         <div style="display: flex; flex-direction: column; gap: 1.5rem;">
-            <!-- Customer Card -->
-            <div style="background: #FFFFFF; border: 1.5px solid #DFC387; border-radius: 14px; overflow: hidden;">
+            <!-- Customer Card (TANPA overflow:hidden — dropdown hasil pencarian member butuh render
+                 di luar batas card lewat position:absolute, jadi rounded-corner header dibuat manual
+                 pakai border-radius di header-nya sendiri, bukan clip dari parent) -->
+            <div style="background: #FFFFFF; border: 1.5px solid #DFC387; border-radius: 14px;">
                 <div
-                    style="padding: 0.65rem 1rem; background: #FAF5E8; border-bottom: 1.5px solid #DFC387; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem;">
+                    style="padding: 0.65rem 1rem; background: #FAF5E8; border-bottom: 1.5px solid #DFC387; border-top-left-radius: 12.5px; border-top-right-radius: 12.5px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem;">
                     <span style="font-size: 0.8125rem; font-weight: 900; color: #1F170D;">1. Data Pelanggan / Member</span>
                     <div style="display: flex; gap: 0.5rem; font-size: 0.75rem;">
                         <button type="button" wire:click="$set('customerMode', 'quick_create')"
@@ -147,16 +167,281 @@
             </div>
         </div>
 
-        <!-- Right: Order Summary & Settlement -->
+        @elseif ($posStep === 'payment')
+        {{-- ==================== KIRI: TERMINAL PEMBAYARAN KASIR IN-PAGE (sama persis dengan
+             POS Walk-In Booking) ==================== --}}
+        <div class="pos-terminal-card">
+            <div class="pos-terminal-header">
+                <div>
+                    <div style="font-size:0.625rem; font-weight:900; color:#8C6418; text-transform:uppercase; letter-spacing:0.06em; background:#FAF5E8; border:1px solid #DFC387; border-radius:5px; padding:0.1rem 0.45rem; display:inline-block;">TERMINAL KASIR LOKET</div>
+                    <div style="font-size:1.0625rem; font-weight:900; color:#1F170D; margin-top:0.2rem;">Layar Pembayaran &amp; Penyelesaian Transaksi</div>
+                </div>
+                <button type="button" wire:click="backToSelection"
+                    style="padding:0.4rem 0.85rem; font-size:0.75rem; font-weight:800; border:1.5px solid #DFC387; background:#FFFFFF; border-radius:8px; cursor:pointer; color:#1F170D; display:flex; align-items:center; gap:0.3rem;">
+                    &larr; Ubah Pilihan Paket
+                </button>
+            </div>
+
+            <div class="pos-terminal-body">
+                {{-- Tabs Metode Bayar --}}
+                <div>
+                    <div style="font-size:0.75rem; font-weight:900; color:#1F170D; margin-bottom:0.45rem;">Pilih Metode Pembayaran:</div>
+                    <div class="pos-method-selector-grid">
+                        <div wire:click="setPaymentMethod('DEBIT_CARD')" class="pos-method-tab {{ in_array($paymentMethod, ['DEBIT_CARD', 'DEBIT']) || ($paymentMethod === 'EDC_BCA' && $edcCardType === 'DEBIT') ? 'active' : '' }}">
+                            <div class="pos-method-tab-title">KARTU DEBIT</div>
+                            <div class="pos-method-tab-sub">Semua Bank (Via EDC)</div>
+                        </div>
+                        <div wire:click="setPaymentMethod('CREDIT_CARD')" class="pos-method-tab {{ in_array($paymentMethod, ['CREDIT_CARD', 'CREDIT']) || ($paymentMethod === 'EDC_BCA' && $edcCardType === 'CREDIT') || ($paymentMethod === 'EDC_MANDIRI') ? 'active' : '' }}">
+                            <div class="pos-method-tab-title">KARTU KREDIT</div>
+                            <div class="pos-method-tab-sub">Visa, MC, JCB, Amex</div>
+                        </div>
+                        <div wire:click="setPaymentMethod('QRIS')" class="pos-method-tab {{ in_array($paymentMethod, ['QRIS', 'QRIS_STATIS']) ? 'active' : '' }}">
+                            <div class="pos-method-tab-title">QRIS</div>
+                            <div class="pos-method-tab-sub">QR Code / E-Wallet</div>
+                        </div>
+                    </div>
+                </div>
+
+                {{-- Detail Form Metode Bayar --}}
+                {{-- Form KARTU DEBIT --}}
+                @if(in_array($paymentMethod, ['DEBIT_CARD', 'DEBIT']) || ($paymentMethod === 'EDC_BCA' && $edcCardType === 'DEBIT'))
+                    <div class="pos-pay-content-card">
+                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem; border-bottom:1px solid #DFC387; padding-bottom:0.75rem;">
+                            <div>
+                                <div style="font-size:0.875rem; font-weight:900; color:#1F170D;">
+                                    Pembayaran Kartu Debit (Debit Card)
+                                </div>
+                                <div style="font-size:0.6875rem; color:#7A643E;">
+                                    Gesek, dip, atau tap kartu debit pada mesin EDC fisik kasir lalu catat rincian slip transaksi di bawah ini.
+                                </div>
+                            </div>
+                            <div style="text-align:right;">
+                                <div style="font-size:0.625rem; font-weight:800; color:#8C6418; text-transform:uppercase;">Nominal Charge EDC</div>
+                                <div style="font-size:1.25rem; font-weight:900; color:#B38622;">Rp {{ number_format($this->grandTotal, 0, ',', '.') }}</div>
+                            </div>
+                        </div>
+
+                        <div style="display:grid; grid-template-columns:repeat(3, 1fr); gap:0.85rem;">
+                            <div>
+                                <label style="display:block; font-size:0.75rem; font-weight:800; color:#1F170D; margin-bottom:0.3rem;">Mesin EDC Fisik *</label>
+                                <select wire:model="edcTerminal" class="pos-input" style="background:#FFFFFF; font-weight:700;">
+                                    <option value="EDC_BCA">Mesin EDC BCA</option>
+                                    <option value="EDC_MANDIRI">Mesin EDC Mandiri</option>
+                                    <option value="EDC_LAINNYA">Mesin EDC Lainnya</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label style="display:block; font-size:0.75rem; font-weight:800; color:#1F170D; margin-bottom:0.3rem;">Bank Penerbit *</label>
+                                <select wire:model="edcBank" class="pos-input" style="background:#FFFFFF; font-weight:700;">
+                                    <option value="BCA">BCA</option>
+                                    <option value="MANDIRI">Bank Mandiri</option>
+                                    <option value="BNI">BNI</option>
+                                    <option value="BRI">BRI</option>
+                                    <option value="CIMB">CIMB Niaga</option>
+                                    <option value="PERMATA">Bank Permata</option>
+                                    <option value="DANAMON">Bank Danamon</option>
+                                    <option value="BSI">BSI (Bank Syariah Indonesia)</option>
+                                    <option value="LAINNYA">Bank Lainnya</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label style="display:block; font-size:0.75rem; font-weight:800; color:#1F170D; margin-bottom:0.3rem;">Jaringan Kartu (Scheme)</label>
+                                <select wire:model="edcCardNetwork" class="pos-input" style="background:#FFFFFF; font-weight:700;">
+                                    <option value="GPN">GPN (Gerbang Pembayaran Nasional)</option>
+                                    <option value="MASTERCARD">Mastercard Debit</option>
+                                    <option value="VISA">Visa Debit</option>
+                                    <option value="LAINNYA">Debit Lainnya</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div style="display:grid; grid-template-columns:repeat(3, 1fr); gap:0.85rem; margin-top:0.85rem;">
+                            <div>
+                                <label style="display:block; font-size:0.75rem; font-weight:800; color:#1F170D; margin-bottom:0.3rem;">4 Digit Terakhir Kartu *</label>
+                                <input type="text" wire:model="edcLast4" maxlength="4" placeholder="4 digit, contoh: 8842" class="pos-input" style="background:#FFFFFF; font-weight:800; letter-spacing:0.1em;" autocomplete="off">
+                            </div>
+                            <div>
+                                <label style="display:block; font-size:0.75rem; font-weight:800; color:#1F170D; margin-bottom:0.3rem;">No. Approval / Auth Code *</label>
+                                <input type="text" wire:model="edcApprovalCode" placeholder="Tertera di slip EDC, contoh: 128941" class="pos-input" style="background:#FFFFFF; font-weight:800;" autocomplete="off">
+                            </div>
+                            <div>
+                                <label style="display:block; font-size:0.75rem; font-weight:800; color:#1F170D; margin-bottom:0.3rem;">No. Trace / Audit Slip EDC *</label>
+                                <input type="text" wire:model="edcTraceNumber" placeholder="Tertera di slip EDC, contoh: 004812" class="pos-input" style="background:#FFFFFF; font-weight:800;" autocomplete="off">
+                            </div>
+                        </div>
+
+                        <div style="margin-top:0.85rem; background:#FAF5E8; border:1px dashed #DFC387; border-radius:8px; padding:0.5rem 0.75rem; font-size:0.65rem; color:#7A643E;">
+                            Keamanan PCI-DSS: Sistem hanya mencatat 4 digit terakhir kartu fisik sebagai bukti rekonsiliasi slip audit perbankan. Dilarang mencatat atau meminta nomor kartu lengkap maupun kode CVV.
+                        </div>
+                    </div>
+
+                {{-- Form KARTU KREDIT --}}
+                @elseif(in_array($paymentMethod, ['CREDIT_CARD', 'CREDIT']) || ($paymentMethod === 'EDC_BCA' && $edcCardType === 'CREDIT') || ($paymentMethod === 'EDC_MANDIRI'))
+                    <div class="pos-pay-content-card">
+                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem; border-bottom:1px solid #DFC387; padding-bottom:0.75rem;">
+                            <div>
+                                <div style="font-size:0.875rem; font-weight:900; color:#1F170D;">
+                                    Pembayaran Kartu Kredit (Credit Card)
+                                </div>
+                                <div style="font-size:0.6875rem; color:#7A643E;">
+                                    Gesek, dip, atau tap kartu kredit pada mesin EDC fisik kasir lalu catat rincian slip transaksi di bawah ini.
+                                </div>
+                            </div>
+                            <div style="text-align:right;">
+                                <div style="font-size:0.625rem; font-weight:800; color:#8C6418; text-transform:uppercase;">Nominal Charge EDC</div>
+                                <div style="font-size:1.25rem; font-weight:900; color:#B38622;">Rp {{ number_format($this->grandTotal, 0, ',', '.') }}</div>
+                            </div>
+                        </div>
+
+                        <div style="display:grid; grid-template-columns:repeat(3, 1fr); gap:0.85rem;">
+                            <div>
+                                <label style="display:block; font-size:0.75rem; font-weight:800; color:#1F170D; margin-bottom:0.3rem;">Mesin EDC Fisik *</label>
+                                <select wire:model="edcTerminal" class="pos-input" style="background:#FFFFFF; font-weight:700;">
+                                    <option value="EDC_BCA">Mesin EDC BCA</option>
+                                    <option value="EDC_MANDIRI">Mesin EDC Mandiri</option>
+                                    <option value="EDC_LAINNYA">Mesin EDC Lainnya</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label style="display:block; font-size:0.75rem; font-weight:800; color:#1F170D; margin-bottom:0.3rem;">Bank Penerbit *</label>
+                                <select wire:model="edcBank" class="pos-input" style="background:#FFFFFF; font-weight:700;">
+                                    <option value="BCA">BCA</option>
+                                    <option value="MANDIRI">Bank Mandiri</option>
+                                    <option value="BNI">BNI</option>
+                                    <option value="BRI">BRI</option>
+                                    <option value="CIMB">CIMB Niaga</option>
+                                    <option value="MEGA">Bank Mega</option>
+                                    <option value="PERMATA">Bank Permata</option>
+                                    <option value="OVERSEAS">Bank Internasional / Luar Negeri</option>
+                                    <option value="LAINNYA">Bank Lainnya</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label style="display:block; font-size:0.75rem; font-weight:800; color:#1F170D; margin-bottom:0.3rem;">Brand Jaringan Kartu *</label>
+                                <select wire:model="edcCardNetwork" class="pos-input" style="background:#FFFFFF; font-weight:700;">
+                                    <option value="VISA">Visa</option>
+                                    <option value="MASTERCARD">Mastercard</option>
+                                    <option value="JCB">JCB</option>
+                                    <option value="AMEX">American Express (Amex)</option>
+                                    <option value="UNIONPAY">UnionPay</option>
+                                    <option value="LAINNYA">Brand Lainnya</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div style="display:grid; grid-template-columns:repeat(3, 1fr); gap:0.85rem; margin-top:0.85rem;">
+                            <div>
+                                <label style="display:block; font-size:0.75rem; font-weight:800; color:#1F170D; margin-bottom:0.3rem;">4 Digit Terakhir Kartu *</label>
+                                <input type="text" wire:model="edcLast4" maxlength="4" placeholder="4 digit, contoh: 8842" class="pos-input" style="background:#FFFFFF; font-weight:800; letter-spacing:0.1em;" autocomplete="off">
+                            </div>
+                            <div>
+                                <label style="display:block; font-size:0.75rem; font-weight:800; color:#1F170D; margin-bottom:0.3rem;">No. Approval / Auth Code *</label>
+                                <input type="text" wire:model="edcApprovalCode" placeholder="Tertera di slip EDC, contoh: 128941" class="pos-input" style="background:#FFFFFF; font-weight:800;" autocomplete="off">
+                            </div>
+                            <div>
+                                <label style="display:block; font-size:0.75rem; font-weight:800; color:#1F170D; margin-bottom:0.3rem;">No. Trace / Audit Slip EDC *</label>
+                                <input type="text" wire:model="edcTraceNumber" placeholder="Tertera di slip EDC, contoh: 004812" class="pos-input" style="background:#FFFFFF; font-weight:800;" autocomplete="off">
+                            </div>
+                        </div>
+
+                        <div style="margin-top:0.85rem; background:#FAF5E8; border:1px dashed #DFC387; border-radius:8px; padding:0.5rem 0.75rem; font-size:0.65rem; color:#7A643E;">
+                            Keamanan PCI-DSS: Sistem hanya mencatat 4 digit terakhir kartu fisik sebagai bukti rekonsiliasi slip audit perbankan. Dilarang mencatat atau meminta nomor kartu lengkap maupun kode CVV.
+                        </div>
+                    </div>
+
+                {{-- Form QRIS --}}
+                @elseif(in_array($paymentMethod, ['QRIS', 'QRIS_STATIS']))
+                    <div class="pos-pay-content-card">
+                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem; border-bottom:1px solid #DFC387; padding-bottom:0.75rem;">
+                            <div>
+                                <div style="font-size:0.875rem; font-weight:900; color:#1F170D;">Pembayaran QRIS (QR Code)</div>
+                                <div style="font-size:0.6875rem; color:#7A643E;">Pelanggan memindai QRIS kasir frontdesk dan pastikan transaksi berhasil di aplikasi customer.</div>
+                            </div>
+                            <div style="text-align:right;">
+                                <div style="font-size:0.625rem; font-weight:800; color:#8C6418; text-transform:uppercase;">Total Bayar QRIS</div>
+                                <div style="font-size:1.25rem; font-weight:900; color:#B38622;">Rp {{ number_format($this->grandTotal, 0, ',', '.') }}</div>
+                            </div>
+                        </div>
+
+                        <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.85rem;">
+                            <div>
+                                <label style="display:block; font-size:0.75rem; font-weight:800; color:#1F170D; margin-bottom:0.3rem;">Penyedia / Acquirer QRIS *</label>
+                                <select wire:model="qrisProvider" class="pos-input" style="background:#FFFFFF; font-weight:700;">
+                                    <option value="BCA_QRIS">QRIS BCA Frontdesk</option>
+                                    <option value="MANDIRI_QRIS">QRIS Bank Mandiri</option>
+                                    <option value="GOPAY">GoPay / Midtrans QRIS</option>
+                                    <option value="OVO">OVO</option>
+                                    <option value="SHOPEEPAY">ShopeePay</option>
+                                    <option value="DANA">DANA</option>
+                                    <option value="LIVIN">Livin Mandiri</option>
+                                    <option value="LAINNYA">Lainnya / Bank Lain</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label style="display:block; font-size:0.75rem; font-weight:800; color:#1F170D; margin-bottom:0.3rem;">Nomor RRN (Retrieval Reference Number) *</label>
+                                <input type="text" wire:model="qrisRrn" placeholder="Min. 6 digit di mutasi / resi app customer" class="pos-input" style="background:#FFFFFF; font-weight:800;" autocomplete="off">
+                            </div>
+                        </div>
+
+                        <div style="margin-top:0.85rem;">
+                            <label style="display:block; font-size:0.75rem; font-weight:800; color:#1F170D; margin-bottom:0.3rem;">Nama Pengirim di Resi QRIS (Opsional)</label>
+                            <input type="text" wire:model="qrisSenderName" placeholder="Contoh: Budi Santoso / BCA Mobile" class="pos-input" style="background:#FFFFFF;" autocomplete="off">
+                        </div>
+                    </div>
+                @endif
+
+                {{-- Action Buttons --}}
+                <div style="display:flex; justify-content:space-between; align-items:center; gap:0.75rem; margin-top:0.5rem;">
+                    <button type="button" wire:click="backToSelection"
+                        style="padding:0.7rem 1.2rem; border-radius:10px; border:1.5px solid #DFC387; background:#FFFFFF; color:#1F170D; font-weight:800; font-size:0.8125rem; cursor:pointer;">
+                        &larr; Kembali ke Pilih Paket
+                    </button>
+                    <button type="button" wire:click="submitSale" wire:loading.attr="disabled"
+                        style="flex:1; padding:0.75rem 1.5rem; border-radius:10px; background:linear-gradient(180deg,#F0DB9D 0%,#D4AF37 30%,#B38622 100%); color:#281A05; border:1px solid #FBF0CE; font-weight:900; font-size:0.9375rem; cursor:pointer; box-shadow:0 4px 14px rgba(184,134,11,0.35); text-transform:uppercase; letter-spacing:0.05em;">
+                        <span wire:loading.remove wire:target="submitSale">Terbitkan &amp; Lunaskan</span>
+                        <span wire:loading wire:target="submitSale">Memproses Transaksi...</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+        @endif
+
+        <!-- Right: Order Summary (persisten di kedua langkah, sama seperti panel kanan Walk-In) -->
         <div style="display: flex; flex-direction: column; gap: 0.75rem;">
             <div style="background: #FFFFFF; border: 1.5px solid #DFC387; border-radius: 14px; overflow: hidden; display: flex; flex-direction: column;">
                 <div
-                    style="padding: 0.65rem 1rem; background: linear-gradient(135deg, #FAF5E8 0%, #F5E8C7 100%); border-bottom: 1.5px solid #DFC387;">
-                    <span style="font-size: 0.8125rem; font-weight: 900; color: #1F170D;">3. Rincian &amp; Pembayaran</span>
+                    style="padding: 0.65rem 1rem; background: linear-gradient(135deg, #FAF5E8 0%, #F5E8C7 100%); border-bottom: 1.5px solid #DFC387; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.5rem;">
+                    <div>
+                        @if ($posStep === 'payment')
+                            <div style="font-size:0.625rem; font-weight:900; color:#8C6418; text-transform:uppercase; letter-spacing:0.06em; background:#FAF5E8; border:1px solid #DFC387; border-radius:5px; padding:0.1rem 0.45rem; display:inline-block;">LANGKAH 2 DARI 2</div>
+                            <div style="font-size:0.9375rem; font-weight:900; color:#1F170D; margin-top:0.2rem;">Ringkasan Tagihan</div>
+                        @else
+                            <span style="font-size: 0.8125rem; font-weight: 900; color: #1F170D;">3. Rincian &amp; Pembayaran</span>
+                        @endif
+                    </div>
+                    @if ($this->selectedPlan)
+                        <div style="text-align:right;">
+                            <div style="font-size:1.0625rem; font-weight:900; color:#B38622;">Rp {{ number_format($this->grandTotal, 0, ',', '.') }}</div>
+                        </div>
+                    @endif
                 </div>
                 <div style="padding: 1rem 1.25rem;">
 
                 @if ($this->selectedPlan)
+                    {{-- Data Customer (ringkasan, persisten di kedua langkah) --}}
+                    <div style="background:#FAF5E8; border:1px solid #DFC387; border-radius:8px; padding:0.65rem 0.85rem; margin-bottom:1rem; font-size:0.75rem;">
+                        <div style="font-size:0.625rem; font-weight:800; color:#7A5818; text-transform:uppercase; margin-bottom:0.2rem;">Data Customer</div>
+                        @if ($selectedCustomerId)
+                            <div style="font-weight:900; color:#1F170D;">{{ $selectedCustomerName }}</div>
+                            <div style="color:#8C6418;">{{ $selectedCustomerPhone ?? '-' }}</div>
+                        @elseif (trim($walkInName) !== '' || trim($walkInPhone) !== '')
+                            <div style="font-weight:900; color:#1F170D;">{{ $walkInName ?: '(Nama belum diisi)' }}</div>
+                            <div style="color:#8C6418;">{{ $walkInPhone ?: '(Nomor belum diisi)' }}</div>
+                        @else
+                            <div style="color:#9CA3AF; font-style:italic;">Belum diisi</div>
+                        @endif
+                    </div>
+
                     <div style="margin-bottom: 1rem;">
                         <div style="font-size: 0.8125rem; color: #7A643E;">Paket Terpilih</div>
                         <div style="font-size: 0.9375rem; font-weight: 900; color: #1F170D;">
@@ -166,40 +451,13 @@
                             {{ $this->selectedPlan->duration_days }} Hari</div>
                     </div>
 
-                    <!-- Diskon Manual Admin -->
-                    <div
-                        style="background: #FAF5E8; border: 1px solid #DFC387; border-radius: 8px; padding: 0.75rem; margin-bottom: 1rem;">
-                        <label
-                            style="display: block; font-size: 0.6875rem; font-weight: 800; color: #7A5818; margin-bottom: 0.25rem;">Diskon
-                            Manual Kasir (%)</label>
-                        <div style="display: flex; gap: 0.5rem; margin-bottom: 0.5rem;">
-                            <input type="number" step="1" min="0" max="100"
-                                wire:model.live="manualDiscountPercent" placeholder="0"
-                                style="width: 80px; border: 1.5px solid #DFC387; border-radius: 6px; padding: 0.35rem 0.5rem; font-size: 0.8125rem; text-align: right;">
-                            <input type="text" wire:model="manualDiscountReason"
-                                placeholder="Alasan diskon (wajib jika > 0%)..."
-                                style="flex: 1; border: 1.5px solid #DFC387; border-radius: 6px; padding: 0.35rem 0.5rem; font-size: 0.75rem;">
-                        </div>
-                        @if ($this->manualDiscountPercent > 0)
-                            <div style="font-size: 0.6875rem; color: #047857; font-weight: 700;">
-                                Potongan: -Rp {{ number_format($this->discountAmount, 0, ',', '.') }}
-                            </div>
-                        @endif
-                    </div>
-
                     <!-- Ringkasan Finansial -->
                     <div
-                        style="display: flex; flex-direction: column; gap: 0.35rem; font-size: 0.75rem; border-top: 1px solid #FAF2DE; padding-top: 0.75rem; margin-bottom: 1rem;">
+                        style="display: flex; flex-direction: column; gap: 0.35rem; font-size: 0.75rem; border-top: 1px solid #FAF2DE; padding-top: 0.75rem;">
                         <div style="display: flex; justify-content: space-between; color: #665033;">
                             <span>Subtotal</span>
                             <span>Rp {{ number_format($this->subtotal, 0, ',', '.') }}</span>
                         </div>
-                        @if ($this->discountAmount > 0)
-                            <div style="display: flex; justify-content: space-between; color: #047857;">
-                                <span>Diskon Kasir</span>
-                                <span>-Rp {{ number_format($this->discountAmount, 0, ',', '.') }}</span>
-                            </div>
-                        @endif
                         @if ($this->financeCalculation['tax_amount'] > 0)
                             <div style="display: flex; justify-content: space-between; color: #665033;">
                                 <span>{{ $this->financeCalculation['tax_name'] ?: 'Pajak PB1' }}</span>
@@ -221,46 +479,35 @@
                         </div>
                     </div>
 
-                    <!-- Metode Pembayaran -->
-                    <div style="margin-bottom: 1rem;">
-                        <label
-                            style="display: block; font-size: 0.75rem; font-weight: 800; color: #7A5818; margin-bottom: 0.35rem;">Metode
-                            Pembayaran</label>
-                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.4rem;">
-                            @foreach (['CASH' => 'Tunai (Cash)', 'DEBIT_CARD' => 'EDC Debit', 'CREDIT_CARD' => 'EDC Kredit', 'QRIS' => 'QRIS Dinamis'] as $k => $label)
-                                <button type="button" wire:click="$set('paymentMethod', '{{ $k }}')"
-                                    style="padding: 0.45rem 0.5rem; border-radius: 6px; font-size: 0.6875rem; font-weight: 700; cursor: pointer; border: 1.5px solid #DFC387; {{ $paymentMethod === $k ? 'background: #D4AF37; color: #1F170D;' : 'background: #FAF5E8; color: #665033;' }}">
-                                    {{ $label }}
-                                </button>
-                            @endforeach
-                        </div>
-                    </div>
-
-                    @if ($paymentMethod === 'CASH')
-                        <div style="margin-bottom: 1rem;">
-                            <label
-                                style="display: block; font-size: 0.75rem; font-weight: 800; color: #7A5818; margin-bottom: 0.25rem;">Uang
-                                Tunai Diterima (Rp)</label>
-                            <input type="number" wire:model.live="cashReceived" placeholder="Nominal tunai..."
-                                style="width: 100%; border: 1.5px solid #DFC387; border-radius: 8px; padding: 0.5rem 0.75rem; font-size: 0.875rem; font-weight: 700;">
-                            @if ($this->cashReceived >= $this->grandTotal)
-                                <div style="font-size: 0.75rem; font-weight: 800; color: #047857; margin-top: 0.25rem;">
-                                    Kembalian: Rp {{ number_format($this->cashChange, 0, ',', '.') }}
-                                </div>
-                            @endif
+                    @if ($posStep === 'payment')
+                        <div style="margin-top:1rem; background:#FFFDF5; border:1px solid #DFC387; border-radius:8px; padding:0.65rem 0.85rem; font-size:0.75rem;">
+                            <div style="color:#7A643E;">Metode Pembayaran</div>
+                            <div style="font-weight:900; color:#1F170D;">{{ str_replace('_', ' ', $paymentMethod) }}</div>
                         </div>
                     @endif
-
-                    <button type="button" wire:click="submitSale"
-                        style="width: 100%; background: linear-gradient(135deg, #D4AF37 0%, #B89327 100%); color: #1F170D; font-size: 0.875rem; font-weight: 900; text-transform: uppercase; padding: 0.75rem; border-radius: 10px; border: none; cursor: pointer; box-shadow: 0 4px 12px rgba(212,175,55,0.3);">
-                        Terbitkan &amp; Lunaskan
-                    </button>
                 @else
                     <div style="text-align: center; padding: 2rem 1rem; color: #8C7A58; font-size: 0.8125rem;">
                         Pilih paket membership di kolom kiri untuk melanjutkan pembayaran.
                     </div>
                 @endif
                 </div>
+
+                {{-- Footer: Action Button --}}
+                @if ($this->selectedPlan)
+                    <div style="padding: 0.85rem 1.25rem; background:#FAF5E8; border-top:1px solid #DFC387;">
+                        @if ($posStep === 'selection')
+                            <button type="button" wire:click="proceedToPayment"
+                                style="width: 100%; background: linear-gradient(135deg, #D4AF37 0%, #B89327 100%); color: #1F170D; font-size: 0.875rem; font-weight: 900; text-transform: uppercase; padding: 0.75rem; border-radius: 10px; border: none; cursor: pointer; box-shadow: 0 4px 12px rgba(212,175,55,0.3);">
+                                Lanjut ke Pembayaran &rarr;
+                            </button>
+                        @elseif ($posStep === 'payment')
+                            <button type="button" wire:click="backToSelection"
+                                style="width:100%; padding:0.65rem; border-radius:10px; border:1.5px solid #DFC387; background:#FFFFFF; color:#1F170D; font-weight:800; font-size:0.8125rem; cursor:pointer;">
+                                &larr; Ubah Pilihan Paket
+                            </button>
+                        @endif
+                    </div>
+                @endif
             </div>
         </div>
     </div>

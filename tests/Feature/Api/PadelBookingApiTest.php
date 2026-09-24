@@ -768,7 +768,7 @@ class PadelBookingApiTest extends TestCase
     /**
      * 17. Test Ganti Metode Pembayaran ke Tunai di Meja Kasir (CASH).
      */
-    public function test_retry_payment_with_cash_returns_frontdesk_instruction(): void
+    public function test_retry_payment_with_cash_is_rejected(): void
     {
         $tomorrow = Carbon::parse('next Tuesday')->format('Y-m-d');
         $hold = $this->withHeader('Authorization', "Bearer {$this->customerToken}")
@@ -800,21 +800,12 @@ class PadelBookingApiTest extends TestCase
         PadelBooking::where('id', $bookingId)->update(['status' => 'PENDING_PAYMENT']);
         \App\Models\Pos\Order::where('order_number', $orderId)->update(['payment_status' => 'PENDING']);
 
-        // Ganti ke CASH
-        $retry = $this->withHeader('Authorization', "Bearer {$this->customerToken}")
+        // Venue 100% Cashless: retry-payment ke CASH wajib ditolak validasi.
+        $this->withHeader('Authorization', "Bearer {$this->customerToken}")
             ->postJson("/api/v1/padel/bookings/{$bookingId}/retry-payment", [
                 'payment_method' => 'CASH',
             ])
-            ->assertStatus(200)
-            ->assertJson([
-                'success' => true,
-                'is_cash' => true,
-                'order_id' => $orderId,
-                'grand_total' => 200000,
-                'payment_method' => 'CASH',
-            ]);
-
-        $this->assertStringContainsString('kasir', strtolower($retry->json('message')));
+            ->assertStatus(422);
     }
 
     /**
@@ -923,7 +914,7 @@ class PadelBookingApiTest extends TestCase
         $service = app(\App\Services\Padel\PadelBookingService::class);
         $result = $service->adminSettleCashierPayment(
             bookingId: $booking->id,
-            paymentMethod: 'CASH',
+            paymentMethod: 'QRIS',
             amountReceived: 300000,
             cashierUser: $this->cashier
         );
@@ -937,7 +928,7 @@ class PadelBookingApiTest extends TestCase
             'order_id' => $result['booking']->order_id,
             'pos_shift_id' => $shift->id,
             'payment_gateway' => 'CASHIER_POS',
-            'payment_method' => 'CASH',
+            'payment_method' => 'QRIS',
             'amount' => 300000,
             'status' => 'SUCCESS',
         ]);
