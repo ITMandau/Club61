@@ -84,7 +84,7 @@
             </h1>
 
             <p class="text-sm sm:text-lg text-[#5A4523] max-w-2xl mx-auto leading-relaxed font-medium">
-                Fasilitas terpadu berstandar internasional di Gedung Indosat Medan: 4 Lapangan Padel Panoramic ber-AC, Thermal Wellness Recovery (Sauna &amp; Ice Bath 4&deg;C), Specialty Artisan Lounge, dan Sistem POS Kasir terintegrasi.
+                Fasilitas terpadu berstandar internasional di Gedung Indosat Medan: 3 Lapangan Padel Panoramic Full Indoor ber-AC, Thermal Wellness Recovery (Sauna &amp; Ice Bath 4&deg;C).
             </p>
 
             <!-- CTA Action Buttons -->
@@ -129,8 +129,8 @@
                 <div class="p-4 rounded-2xl backdrop-blur-md shadow-md hover:-translate-y-0.5 transition-all"
                      style="background: rgba(255, 255, 255, 0.9); border: 1.5px solid #DFC387; box-shadow: 0 10px 25px -10px rgba(160, 120, 30, 0.15);">
                     <div class="text-[10px] font-black tracking-widest text-[#8C6418] uppercase mb-1">ARENA</div>
-                    <div class="font-extrabold text-xs text-[#1F170D]">4 Lapangan Padel</div>
-                    <div class="text-[10px] text-[#7A5818] font-medium">Panoramic Glass Arena</div>
+                    <div class="font-extrabold text-xs text-[#1F170D]">3 Lapangan Padel</div>
+                    <div class="text-[10px] text-[#7A5818] font-medium">Full Indoor Panoramic Arena</div>
                 </div>
                 <div class="p-4 rounded-2xl backdrop-blur-md shadow-md hover:-translate-y-0.5 transition-all"
                      style="background: rgba(255, 255, 255, 0.9); border: 1.5px solid #DFC387; box-shadow: 0 10px 25px -10px rgba(160, 120, 30, 0.15);">

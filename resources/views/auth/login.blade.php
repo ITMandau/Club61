@@ -36,12 +36,12 @@
                     <div class="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full shadow-md backdrop-blur-md"
                          style="color: #FFFFFF !important; background: rgba(0,0,0,0.75); border: 1.5px solid #D4AF37;">
                         <span class="w-2 h-2 rounded-full animate-pulse" style="background-color: #D4AF37; box-shadow: 0 0 8px #D4AF37;"></span>
-                        <span class="font-bold tracking-wider text-[11px] uppercase" style="color: #FFFFFF !important;">&bull; VENUE LIVE &bull; 4 COURTS OPEN</span>
+                        <span class="font-bold tracking-wider text-[11px] uppercase" style="color: #FFFFFF !important;">&bull; VENUE LIVE &bull; 3 COURTS OPEN</span>
                     </div>
                 </div>
 
                 <!-- Center Content: Editorial Typography & Luxury Value Proposition -->
-                <div class="relative z-10 px-6 sm:px-8 py-3 my-auto">
+                <div class="relative z-10 px-6 sm:px-8 py-8 sm:py-10 my-auto">
                     <div class="inline-block px-3.5 py-1 rounded-full text-[11px] font-bold uppercase tracking-widest mb-3 shadow-sm"
                          style="color: #FFFFFF !important; background: rgba(212, 175, 55, 0.25); border: 1.5px solid #E5C378;">
                         EXCLUSIVE MEMBER SANCTUARY
@@ -54,17 +54,8 @@
                               style="color: #F7E7B4; text-shadow: 0 0 20px rgba(212,175,55,0.7);">Refined Luxury.</span>
                     </h2>
 
-                    <!-- Crisp High-Contrast Description Box -->
-                    <div class="mt-3.5 max-w-xl p-3.5 sm:p-4 rounded-2xl backdrop-blur-md"
-                         style="background: rgba(14, 10, 4, 0.65); border: 1px solid rgba(212, 175, 55, 0.35); box-shadow: 0 4px 20px rgba(0,0,0,0.5);">
-                        <p class="text-xs sm:text-sm leading-relaxed"
-                           style="color: #FFFFFF !important; text-shadow: 0 1px 4px rgba(0,0,0,0.8); font-weight: 500;">
-                            Satu gerbang akses terintegrasi untuk reservasi lapangan padel panoramic, thermal recovery suite (ice bath &amp; sauna), pemesanan F&amp;B lounge, hingga point-of-sale kasir venue.
-                        </p>
-                    </div>
-
-                    <!-- 4 Brushed Metallic Gold Experience Cards -->
-                    <div class="grid grid-cols-2 sm:grid-cols-4 gap-2.5 mt-4">
+                    <!-- 3 Brushed Metallic Gold Experience Cards -->
+                    <div class="grid grid-cols-3 gap-2.5 mt-4">
                         <!-- Card 1: Padel Arena -->
                         <div class="p-2.5 rounded-2xl backdrop-blur-md transition-all group shadow-md hover:-translate-y-0.5 cursor-pointer"
                              style="background: linear-gradient(135deg, rgba(235, 205, 130, 0.45) 0%, rgba(184, 134, 11, 0.35) 50%, rgba(120, 85, 20, 0.45) 100%); border: 1.5px solid rgba(245, 222, 145, 0.6); box-shadow: 0 4px 15px rgba(0,0,0,0.4), inset 0 1px 1px rgba(255,255,255,0.4);">
@@ -99,18 +90,6 @@
                             </div>
                             <div class="font-extrabold text-[11px]" style="color: #FFFFFF !important; text-shadow: 0 1px 3px rgba(0,0,0,0.8);">Social Lounge</div>
                             <div class="text-[9px] font-semibold" style="color: #FFF2D1 !important; text-shadow: 0 1px 3px rgba(0,0,0,0.8);">Artisan Cafe &amp; Bar</div>
-                        </div>
-
-                        <!-- Card 4: Tournaments -->
-                        <div class="p-2.5 rounded-2xl backdrop-blur-md transition-all group shadow-md hover:-translate-y-0.5 cursor-pointer"
-                             style="background: linear-gradient(135deg, rgba(235, 205, 130, 0.45) 0%, rgba(184, 134, 11, 0.35) 50%, rgba(120, 85, 20, 0.45) 100%); border: 1.5px solid rgba(245, 222, 145, 0.6); box-shadow: 0 4px 15px rgba(0,0,0,0.4), inset 0 1px 1px rgba(255,255,255,0.4);">
-                            <div class="mb-1 group-hover:scale-110 transition-transform" style="color: #FFFFFF !important;">
-                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="stroke: #FFFFFF;">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
-                                </svg>
-                            </div>
-                            <div class="font-extrabold text-[11px]" style="color: #FFFFFF !important; text-shadow: 0 1px 3px rgba(0,0,0,0.8);">Tournaments</div>
-                            <div class="text-[9px] font-semibold" style="color: #FFF2D1 !important; text-shadow: 0 1px 3px rgba(0,0,0,0.8);">Ranked League 2026</div>
                         </div>
                     </div>
                 </div>
