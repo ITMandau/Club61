@@ -61,6 +61,273 @@
                 </div>
             </div>
 
+            @php
+                $activeMbr = \App\Models\Membership\UserMembership::with(['plan', 'balances'])
+                    ->where('user_id', Auth::id())
+                    ->where('status', 'ACTIVE')
+                    ->where(function ($q) {
+                        $q->whereNull('end_date')->orWhere('end_date', '>=', now()->toDateString());
+                    })
+                    ->latest('start_date')
+                    ->first();
+                $allPlans = \App\Models\Membership\MembershipPlan::with('benefits')->where('is_active', true)->get();
+
+                $plansData = $allPlans->map(function($p) {
+                    $padel = $p->benefits->firstWhere('facility', 'PADEL');
+                    $gym = $p->benefits->firstWhere('facility', 'GYM');
+                    $sauna = $p->benefits->firstWhere('facility', 'SAUNA');
+
+                    return [
+                        'id' => $p->id,
+                        'code' => $p->code,
+                        'name' => $p->name,
+                        'ownership_type' => $p->ownership_type,
+                        'duration_days' => $p->duration_days,
+                        'price' => (float) $p->price,
+                        'price_formatted' => 'Rp ' . number_format($p->price, 0, ',', '.'),
+                        'padel' => [
+                            'quota_type' => $padel->quota_type ?? 'NONE',
+                            'quota_value' => (float) ($padel->quota_value ?? 0),
+                            'discount_percent' => (float) ($padel->discount_percent ?? 0),
+                            'booking_priority_days' => (int) ($padel->booking_priority_days ?? 0),
+                        ],
+                        'gym' => [
+                            'quota_type' => $gym->quota_type ?? 'NONE',
+                            'quota_value' => $gym && $gym->quota_value ? (float) $gym->quota_value : null,
+                            'is_unlimited' => $gym && $gym->quota_type === 'VISITS' && is_null($gym->quota_value),
+                        ],
+                        'sauna' => [
+                            'quota_type' => $sauna->quota_type ?? 'NONE',
+                            'quota_value' => $sauna && $sauna->quota_value ? (float) $sauna->quota_value : null,
+                            'is_unlimited' => $sauna && $sauna->quota_type === 'VISITS' && is_null($sauna->quota_value),
+                            'discount_percent' => (float) ($sauna->discount_percent ?? 0),
+                        ],
+                    ];
+                })->keyBy('id');
+            @endphp
+
+            @if($activeMbr)
+                <!-- Active Membership Digital Pass -->
+                <div class="relative overflow-hidden rounded-3xl p-6 sm:p-8 border-2 border-[#D4AF37] shadow-[0_15px_35px_rgba(212,175,55,0.2)]"
+                     style="background: linear-gradient(135deg, #FAF5E8 0%, #FFFFFF 100%);">
+                    <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
+                        <div>
+                            <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full text-[10px] font-extrabold uppercase bg-[#FAF2DE] text-[#7A5818] border border-[#DFC387]">
+                                <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                                <span>Digital Member Pass</span>
+                            </div>
+                            <div class="font-serif font-black text-2xl sm:text-3xl text-[#1F170D] mt-2">{{ $activeMbr->plan->name }}</div>
+                            <div class="text-xs font-mono font-bold text-[#8C6418] mt-0.5">KODE: {{ $activeMbr->membership_code }}</div>
+                            <div class="text-xs text-[#7A643E] mt-1">
+                                Masa Aktif: <strong>{{ \Carbon\Carbon::parse($activeMbr->start_date)->format('d M Y') }}</strong> s/d <strong>{{ \Carbon\Carbon::parse($activeMbr->end_date)->format('d M Y') }}</strong>
+                                @if($activeMbr->end_date)
+                                    ({{ now()->diffInDays(\Carbon\Carbon::parse($activeMbr->end_date), false) }} hari tersisa)
+                                @endif
+                            </div>
+                        </div>
+
+                        <!-- Balances Grid -->
+                        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 min-w-[320px] lg:min-w-[480px]">
+                            @foreach($activeMbr->balances as $bal)
+                                <div class="p-4 rounded-2xl bg-white border border-[#DFC387] shadow-sm text-center">
+                                    <div class="text-[10px] font-extrabold uppercase tracking-wider text-[#8C6418]">{{ $bal->facility }}</div>
+                                    <div class="font-serif font-black text-xl text-[#1F170D] mt-1">
+                                        @if($bal->quota_type === 'HOURS')
+                                            {{ (float)$bal->remaining_quota }} Jam
+                                        @elseif($bal->quota_type === 'VISITS')
+                                            {{ $bal->initial_quota ? ((float)$bal->remaining_quota . ' Sesi') : 'Unlimited' }}
+                                        @else
+                                            Diskon {{ $bal->discount_percent }}%
+                                        @endif
+                                    </div>
+                                    <div class="text-[10px] text-[#7A643E] mt-0.5">
+                                        @if($bal->discount_percent > 0 && $bal->quota_type !== 'NONE')
+                                            Diskon {{ $bal->discount_percent }}%
+                                        @elseif($bal->booking_priority_days > 0)
+                                            Prioritas H-{{ $bal->booking_priority_days }}
+                                        @else
+                                            Entitlement Aktif
+                                        @endif
+                                    </div>
+                                </div>
+                            @endforeach
+                        </div>
+                    </div>
+                </div>
+            @endif
+
+            @php
+                $myCorporateMember = \App\Models\Sponsor\SponsorOrganizationMember::where('user_id', Auth::id())
+                    ->where('status', 'ACTIVE')
+                    ->with(['organization', 'vouchers' => fn ($q) => $q->orderByDesc('issued_at')])
+                    ->first();
+            @endphp
+
+            @if($myCorporateMember)
+                <!-- Corporate Team Voucher -->
+                <div id="corporate-vouchers" class="relative overflow-hidden rounded-3xl p-6 sm:p-8 border-2 border-[#D4AF37] shadow-[0_15px_35px_rgba(212,175,55,0.2)] scroll-mt-24"
+                     style="background: linear-gradient(135deg, #FAF5E8 0%, #FFFFFF 100%);">
+                    <div class="flex items-center justify-between gap-4 flex-wrap mb-4">
+                        <div>
+                            <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full text-[10px] font-extrabold uppercase bg-[#FAF2DE] text-[#7A5818] border border-[#DFC387]">
+                                <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                                <span>Corporate Team Benefit</span>
+                            </div>
+                            <div class="font-serif font-black text-xl sm:text-2xl text-[#1F170D] mt-2">{{ $myCorporateMember->organization->name ?? 'Corporate Team' }}</div>
+                            <p class="text-xs text-[#7A643E] mt-0.5">Free play-hour vouchers granted by your company. Hours are already active as soon as they're released — no need to activate anything before booking.</p>
+                        </div>
+                        <div class="p-4 rounded-2xl bg-white border border-[#DFC387] shadow-sm text-center shrink-0">
+                            <div class="text-[10px] font-extrabold uppercase tracking-wider text-[#8C6418]">Total Active Hours</div>
+                            <div class="font-serif font-black text-2xl text-[#1F170D] mt-1">{{ number_format($myCorporateMember->totalRemainingHours(), 1) }}</div>
+                        </div>
+                    </div>
+
+                    @if($myCorporateMember->vouchers->isEmpty())
+                        <p class="text-xs text-[#8C7A58] italic">No vouchers issued yet.</p>
+                    @else
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-xs">
+                                <thead>
+                                    <tr class="text-left text-[10px] uppercase font-extrabold text-[#8C6418] border-b border-[#DFC387]">
+                                        <th class="py-2 pr-3">Hours Granted</th>
+                                        <th class="py-2 pr-3">Used</th>
+                                        <th class="py-2 pr-3">Remaining</th>
+                                        <th class="py-2 pr-3">Issued</th>
+                                        <th class="py-2 pr-3">Expires</th>
+                                        <th class="py-2 pr-3">Status</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach($myCorporateMember->vouchers as $v)
+                                        <tr class="border-b border-[#FAF2DE] {{ $v->isExpired() ? 'opacity-50' : '' }}">
+                                            <td class="py-2 pr-3 font-bold text-[#1F170D]">{{ number_format((float) $v->hours_granted, 1) }}</td>
+                                            <td class="py-2 pr-3">{{ number_format((float) $v->hours_used, 1) }}</td>
+                                            <td class="py-2 pr-3 font-bold">{{ number_format($v->remainingHours(), 1) }}</td>
+                                            <td class="py-2 pr-3">{{ $v->issued_at->format('d M Y') }}</td>
+                                            <td class="py-2 pr-3">{{ $v->expires_at->format('d M Y') }}</td>
+                                            <td class="py-2 pr-3">
+                                                @if($v->isExpired())
+                                                    <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-gray-100 text-gray-600 border border-gray-300">Expired</span>
+                                                @elseif(! $v->isAcknowledged())
+                                                    <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200">New</span>
+                                                @else
+                                                    <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">Claimed</span>
+                                                @endif
+                                            </td>
+                                        </tr>
+                                    @endforeach
+                                </tbody>
+                            </table>
+                        </div>
+                    @endif
+                </div>
+            @endif
+
+            <!-- Membership Plans Catalog -->
+            <div class="space-y-4">
+                <div class="flex items-center justify-between px-1">
+                    <div>
+                        <h3 class="font-serif font-extrabold text-lg text-[#1F170D]">Paket Keanggotaan Club 61</h3>
+                        <p class="text-xs text-[#7A643E]">Satu keanggotaan terintegrasi untuk seluruh fasilitas: Padel Court, Gym Fitness, dan Finnish Sauna</p>
+                    </div>
+                    <span class="text-xs font-bold text-[#8C6418]">{{ $allPlans->count() }} Pilihan Paket</span>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                    @foreach($allPlans as $p)
+                        @php
+                            $padel = $p->benefits->firstWhere('facility', 'PADEL');
+                            $gym = $p->benefits->firstWhere('facility', 'GYM');
+                            $sauna = $p->benefits->firstWhere('facility', 'SAUNA');
+                        @endphp
+                        <div onclick="window.location.href='{{ route('customer.membership', ['plan' => $p->id]) }}'"
+                             class="p-5 rounded-3xl bg-white/95 border border-[#DFC387] shadow-sm hover:border-[#D4AF37] hover:shadow-xl hover:-translate-y-1 transition-all flex flex-col justify-between group cursor-pointer">
+                            <div>
+                                <div class="flex justify-between items-center mb-2">
+                                    <span class="text-[10px] font-extrabold uppercase text-[#8C6418]">{{ $p->ownership_type }}</span>
+                                    <span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#FAF2DE] text-[#7A5818]">{{ $p->duration_days }} Hari</span>
+                                </div>
+                                <div class="font-serif font-black text-lg text-[#1F170D] group-hover:text-[#8C6418] transition-colors">{{ $p->name }}</div>
+                                <div class="font-black text-base text-[#8C6418] mt-1">Rp {{ number_format($p->price, 0, ',', '.') }}</div>
+
+                                <div class="mt-4 border-t border-[#FAF2DE] pt-3 space-y-2 text-xs text-[#665033]">
+                                    <!-- Padel Highlight -->
+                                    <div class="flex items-start gap-1.5">
+                                        <span class="w-1.5 h-1.5 rounded-full bg-[#D4AF37] mt-1 shrink-0"></span>
+                                        <span>
+                                            <strong>Padel:</strong>
+                                            @if($padel && $padel->quota_type === 'HOURS')
+                                                {{ (float)$padel->quota_value }} Jam Main (H-{{ $padel->booking_priority_days }})
+                                            @elseif($padel && $padel->discount_percent > 0)
+                                                Diskon {{ $padel->discount_percent }}% Semua Court
+                                            @else
+                                                Akses Reservasi Reguler
+                                            @endif
+                                        </span>
+                                    </div>
+
+                                    <!-- Gym Highlight -->
+                                    <div class="flex items-start gap-1.5">
+                                        <span class="w-1.5 h-1.5 rounded-full bg-[#D4AF37] mt-1 shrink-0"></span>
+                                        <span>
+                                            <strong>Gym:</strong>
+                                            @if($gym && $gym->quota_type === 'VISITS' && is_null($gym->quota_value))
+                                                Akses Unlimited Gym &amp; Fitness
+                                            @elseif($gym && $gym->quota_value)
+                                                {{ (float)$gym->quota_value }} Sesi Kunjungan
+                                            @else
+                                                Akses Reguler
+                                            @endif
+                                        </span>
+                                    </div>
+
+                                    <!-- Sauna Highlight -->
+                                    <div class="flex items-start gap-1.5">
+                                        <span class="w-1.5 h-1.5 rounded-full bg-[#D4AF37] mt-1 shrink-0"></span>
+                                        <span>
+                                            <strong>Sauna:</strong>
+                                            @if($sauna && $sauna->quota_type === 'VISITS' && is_null($sauna->quota_value))
+                                                Akses Unlimited Sauna &amp; Ice Bath
+                                            @elseif($sauna && $sauna->quota_value)
+                                                {{ (float)$sauna->quota_value }} Sesi Sauna &amp; Ice Bath
+                                            @else
+                                                Akses Reguler
+                                            @endif
+                                        </span>
+                                    </div>
+
+                                    <!-- Club Privileges Highlight -->
+                                    <div class="flex items-start gap-1.5">
+                                        <span class="w-1.5 h-1.5 rounded-full bg-[#D4AF37] mt-1 shrink-0"></span>
+                                        <span>
+                                            <strong>Privilese:</strong>
+                                            @if($p->ownership_type === 'ORGANIZATIONAL')
+                                                Roster 10 Karyawan &amp; Free Valet
+                                            @else
+                                                Digital Pass, Free Valet &amp; Lounge
+                                            @endif
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="mt-5 pt-3 border-t border-[#FAF2DE] space-y-2">
+                                <a href="{{ route('customer.membership', ['plan' => $p->id]) }}" 
+                                   class="block w-full text-center py-2.5 px-3 rounded-xl bg-gradient-to-r from-[#D4AF37] to-[#B38622] hover:brightness-105 text-[#1E160A] font-extrabold text-xs shadow-md transition-all active:scale-95 cursor-pointer">
+                                    Lihat Detail &amp; Beli Online &rarr;
+                                </a>
+                                <a href="https://wa.me/6281261617233?text=Halo%20Club%2061%2C%20saya%20tertarik%20mendaftar%20paket%20{{ urlencode($p->name) }}"
+                                   target="_blank"
+                                   onclick="event.stopPropagation()"
+                                   class="block w-full text-center py-1.5 px-3 rounded-xl bg-[#FAF2DE] hover:bg-[#F3DFAD] border border-[#DFC387] text-[#7A5818] font-bold text-[11px] transition-colors">
+                                    Tanya Concierge WA
+                                </a>
+                            </div>
+                        </div>
+                    @endforeach
+                </div>
+            </div>
+
             <!-- Key Info Bar (3 Cards) -->
             <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div class="p-5 rounded-3xl bg-white/95 backdrop-blur-xl border border-[#DFC387] shadow-sm flex items-start gap-4">
@@ -150,7 +417,7 @@
                         </div>
                         <div class="mt-4 pt-3 border-t border-[#DFC387]/40 flex items-center justify-between text-[11px] font-bold text-[#7A5818]">
                             <span>Muscle Recovery</span>
-                            <span class="text-emerald-700">Free for VIP Platinum</span>
+                            <span class="text-emerald-700">Akses Kuota Member</span>
                         </div>
                     </div>
 
@@ -169,11 +436,11 @@
                         </div>
                         <div class="mt-4 pt-3 border-t border-[#DFC387]/40 flex items-center justify-between text-[11px] font-bold text-[#7A5818]">
                             <span>F&amp;B &bull; Social Lounge</span>
-                            <span class="text-emerald-700">Open 07:00 - 22:30</span>
+                            <span class="text-[#8C6418] font-mono">Open 07:00 - 22:30</span>
                         </div>
                     </div>
 
-                    <!-- Facility 4: Locker & Shower -->
+                    <!-- Facility 4: Smart Locker -->
                     <div class="p-6 rounded-3xl bg-white/95 backdrop-blur-xl border border-[#DFC387] shadow-sm flex flex-col justify-between hover:border-[#D4AF37] hover:shadow-[0_10px_25px_rgba(212,175,55,0.2)] transition-all group">
                         <div class="flex items-start gap-4">
                             <div class="w-12 h-12 rounded-2xl bg-[#FAF2DE] border border-[#DFC387] flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform">
@@ -233,24 +500,24 @@
                 </div>
             </div>
 
-            <!-- 2-Column Section: Rules & Member Perks -->
+            <!-- Club Etiquette & Rules (Left) + Member Status Benefits (Right) -->
             <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
                 
-                <!-- Left: Club Etiquette & Rules (Col 7) -->
-                <div class="lg:col-span-7 bg-white/95 backdrop-blur-xl rounded-3xl border border-[#DFC387] p-6 shadow-sm space-y-4">
-                    <div class="flex items-center gap-2.5 border-b border-[#DFC387]/50 pb-3">
-                        <div class="w-8 h-8 rounded-xl bg-[#FAF2DE] border border-[#DFC387] flex items-center justify-center shrink-0">
-                            <svg class="w-4 h-4 text-[#8C6418]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <!-- Left: Etiquette Guidelines (Col 7) -->
+                <div class="lg:col-span-7 bg-white/95 backdrop-blur-xl rounded-3xl p-6 sm:p-8 border border-[#DFC387] shadow-sm space-y-5">
+                    <div class="flex items-center gap-3">
+                        <div class="w-10 h-10 rounded-2xl bg-[#FAF2DE] border border-[#DFC387] flex items-center justify-center shrink-0 text-[#7A5818]">
+                            <svg class="w-5 h-5 text-[#8C6418]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                             </svg>
                         </div>
                         <div>
-                            <h3 class="font-serif font-black text-base text-[#1F170D]">Club Etiquette &amp; Rules</h3>
-                            <p class="text-[11px] text-[#7A643E]">Maintaining an exceptional standard of comfort for all members</p>
+                            <h3 class="font-serif font-black text-base sm:text-lg text-[#1F170D]">Club Etiquette &amp; Rules</h3>
+                            <p class="text-xs text-[#7A643E]">Maintaining an exceptional standard of comfort for all members</p>
                         </div>
                     </div>
 
-                    <div class="space-y-3 text-xs text-[#3B2B11]">
+                    <div class="space-y-3 text-xs">
                         <div class="flex items-start gap-3 p-3 rounded-2xl bg-[#FAF8F2] border border-[#DFC387]/60">
                             <span class="font-black text-[#8C6418] shrink-0">01.</span>
                             <div>
@@ -277,41 +544,60 @@
                     </div>
                 </div>
 
-                <!-- Right: Privilege Summary & CTA (Col 5) -->
+                <!-- Right: Official Member Privileges (Col 5) -->
                 <div class="lg:col-span-5 space-y-6">
                     <div class="bg-gradient-to-br from-[#1C2E24] to-[#0E1A14] text-white rounded-3xl p-6 border border-[#DFC387]/70 shadow-lg space-y-4">
                         <div class="flex items-center justify-between">
                             <span class="px-3 py-1 rounded-full text-[10px] font-extrabold uppercase tracking-widest bg-[#DFC387]/20 text-[#F5E6BE] border border-[#DFC387]/40">
-                                Your Privileges
+                                Club Privileges
                             </span>
-                            <span class="text-xs text-[#E5C378] font-bold">VIP Platinum</span>
+                            <span class="text-xs text-[#E5C378] font-bold">Club 61 Medan</span>
                         </div>
 
-                        <h4 class="font-serif font-black text-lg text-white">Member Status Benefits</h4>
+                        <div>
+                            <h4 class="font-serif font-black text-lg text-white">Standar Hak Istimewa Member</h4>
+                            <p class="text-xs text-emerald-100/70 mt-1">Hak akses resmi terintegrasi bagi seluruh pemegang keanggotaan aktif Club 61</p>
+                        </div>
                         
-                        <ul class="space-y-2.5 text-xs text-emerald-100/85 font-medium">
-                            <li class="flex items-center gap-2">
-                                <span class="text-[#E5C378] font-bold">&bull;</span>
-                                <span>Priority court booking up to 7 days in advance</span>
+                        <ul class="space-y-3 text-xs text-emerald-100/85 font-medium">
+                            <li class="flex items-start gap-2.5">
+                                <span class="text-[#E5C378] font-bold mt-0.5">&bull;</span>
+                                <div>
+                                    <strong class="text-white block font-bold">Prioritas Reservasi Lapangan (H-7 s/d H-14)</strong>
+                                    <span class="text-[11px] text-emerald-100/70">Akses booking 3 panoramic courts lebih awal sebelum dibuka untuk umum.</span>
+                                </div>
                             </li>
-                            <li class="flex items-center gap-2">
-                                <span class="text-[#E5C378] font-bold">&bull;</span>
-                                <span>25% discount on court rentals &amp; equipment add-ons</span>
+                            <li class="flex items-start gap-2.5">
+                                <span class="text-[#E5C378] font-bold mt-0.5">&bull;</span>
+                                <div>
+                                    <strong class="text-white block font-bold">Turnstile Smart Pass Smartphone</strong>
+                                    <span class="text-[11px] text-emerald-100/70">Check-in mandiri dengan QR Digital Pass tanpa antre di pintu masuk venue.</span>
+                                </div>
                             </li>
-                            <li class="flex items-center gap-2">
-                                <span class="text-[#E5C378] font-bold">&bull;</span>
-                                <span>Unlimited access to Finnish Sauna &amp; Ice Bath</span>
+                            <li class="flex items-start gap-2.5">
+                                <span class="text-[#E5C378] font-bold mt-0.5">&bull;</span>
+                                <div>
+                                    <strong class="text-white block font-bold">Integrated Multi-Facility Access</strong>
+                                    <span class="text-[11px] text-emerald-100/70">Akses terpadu fasilitas Technogym Fitness Center &amp; Finnish Sauna 4°C.</span>
+                                </div>
                             </li>
-                            <li class="flex items-center gap-2">
-                                <span class="text-[#E5C378] font-bold">&bull;</span>
-                                <span>Exclusive invitations to member-only tournaments</span>
+                            <li class="flex items-start gap-2.5">
+                                <span class="text-[#E5C378] font-bold mt-0.5">&bull;</span>
+                                <div>
+                                    <strong class="text-white block font-bold">Free VIP Valet &amp; Member Rate Lounge</strong>
+                                    <span class="text-[11px] text-emerald-100/70">Layanan parkir valet gratis di Indosat Building serta potongan harga di Cafe.</span>
+                                </div>
                             </li>
                         </ul>
 
-                        <div class="pt-3 border-t border-white/15">
+                        <div class="pt-3 border-t border-white/15 space-y-2">
                             <a href="{{ route('customer.booking') }}" 
                                class="w-full py-3.5 px-4 rounded-2xl bg-gradient-to-b from-[#F5DE9B] to-[#D4AF37] text-[#1E160A] text-xs font-black uppercase tracking-wider flex items-center justify-center gap-2 shadow-md hover:brightness-105 active:scale-95 transition-all">
-                                <span>Book Court Now &rarr;</span>
+                                <span>Reservasi Lapangan Sekarang &rarr;</span>
+                            </a>
+                            <a href="{{ route('customer.membership') }}"
+                               class="block w-full text-center py-2 text-[11px] font-bold text-[#E5C378] hover:text-[#FAF5E6] transition-colors">
+                                Lihat &amp; Beli Paket Keanggotaan &rarr;
                             </a>
                         </div>
                     </div>
@@ -322,3 +608,5 @@
         </div>
     </div>
 </x-app-layout>
+
+

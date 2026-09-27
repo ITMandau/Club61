@@ -2,10 +2,12 @@
 
 namespace App\Services\Padel\Concerns;
 
+use App\Models\Padel\CourtEquipment;
 use App\Models\Padel\PadelBooking;
 use App\Models\Padel\PadelBookingEquipment;
 use App\Models\User;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 use Symfony\Component\HttpKernel\Exception\HttpException;
 
 trait ManagesCheckInAndTurnstile
@@ -91,11 +93,17 @@ trait ManagesCheckInAndTurnstile
             ];
         }
 
-        // Scan Pertama: Ubah status menjadi CHECKED_IN
-        $booking->update([
-            'status' => 'CHECKED_IN',
-            'checked_in_at' => $now,
-        ]);
+        // Scan Pertama: Ubah status menjadi CHECKED_IN + potong stock alat SEWA (RACKET/TOWEL) pada
+        // momen serah-terima fisik. Dibungkus 1 transaksi biar atomik — kalau potong stock gagal di
+        // tengah jalan, perubahan status booking ikut ter-rollback juga.
+        DB::transaction(function () use ($booking, $now) {
+            $booking->update([
+                'status' => 'CHECKED_IN',
+                'checked_in_at' => $now,
+            ]);
+
+            $this->deductRentalEquipmentStock($booking);
+        });
 
         Cache::forget('kelola_pemesanan_tab_counts');
 
@@ -110,6 +118,99 @@ trait ManagesCheckInAndTurnstile
             'equipments' => $equipmentList,
             'gate_marshall' => $staffUser->name,
         ];
+    }
+
+    /**
+     * Potong stock_quantity untuk alat SEWA (RACKET/TOWEL) milik booking ini saat serah-terima di check-in.
+     * BALL tidak disentuh di sini karena sudah dipotong lebih awal saat checkout (consumable, "dibeli habis").
+     * Idempotent: hanya memproses baris PadelBookingEquipment yang stock_deducted_at-nya masih NULL, jadi
+     * aman dipanggil berkali-kali (mis. double-scan check-in) tanpa memotong stock dua kali.
+     */
+    protected function deductRentalEquipmentStock(PadelBooking $booking): void
+    {
+        $query = PadelBookingEquipment::with('equipment')->whereNull('stock_deducted_at');
+        $query = $booking->order_id
+            ? $query->where('order_id', $booking->order_id)
+            : $query->where('booking_id', $booking->id);
+
+        $pendingItems = $query->get();
+
+        foreach ($pendingItems as $item) {
+            if (! $item->equipment || ! in_array(strtoupper($item->equipment->type), ['RACKET', 'TOWEL'])) {
+                continue;
+            }
+
+            // Lock row equipment SEBELUM baca/tulis stock_quantity — anti-race kalau ada beberapa
+            // check-in yang butuh alat sama diproses hampir bersamaan di gate/kasir berbeda.
+            $equipment = CourtEquipment::where('id', $item->equipment_id)->lockForUpdate()->first();
+            if (! $equipment) {
+                continue;
+            }
+
+            // Jangan sampai stock minus kalau kebetulan sisa stok sudah tidak cukup (mis. alat lain
+            // hilang/rusak belum di-adjust admin) — kurangi maksimal sampai 0, jangan blokir check-in
+            // customer yang sudah bayar hanya gara-gara selisih pembukuan stok alat.
+            $deduction = min((int) $equipment->stock_quantity, (int) $item->quantity);
+            if ($deduction > 0) {
+                $equipment->decrement('stock_quantity', $deduction);
+            }
+
+            $item->update(['stock_deducted_at' => now()]);
+        }
+    }
+
+    /**
+     * Tandai alat SEWA (RACKET/TOWEL) milik booking ini sudah dikembalikan fisik ke frontdesk, dan
+     * kembalikan (+qty) ke stock_quantity. BALL tidak pernah bisa diretur (consumable, sudah dibeli habis
+     * sejak checkout) sehingga baris BALL otomatis dilewati di sini.
+     * Idempotent: baris yang returned_at-nya sudah terisi dilewati, aman dipanggil berkali-kali.
+     *
+     * @return array{restored_count: int, items: array, booking_code: string}
+     */
+    public function returnEquipment(string $bookingId, User $staffUser): array
+    {
+        $booking = PadelBooking::findOrFail($bookingId);
+
+        return DB::transaction(function () use ($booking) {
+            $query = PadelBookingEquipment::with('equipment')
+                ->whereNotNull('stock_deducted_at')
+                ->whereNull('returned_at');
+            $query = $booking->order_id
+                ? $query->where('order_id', $booking->order_id)
+                : $query->where('booking_id', $booking->id);
+
+            $pendingReturns = $query->get();
+
+            $restoredItems = [];
+            foreach ($pendingReturns as $item) {
+                if (! $item->equipment || ! in_array(strtoupper($item->equipment->type), ['RACKET', 'TOWEL'])) {
+                    continue;
+                }
+
+                $equipment = CourtEquipment::where('id', $item->equipment_id)->lockForUpdate()->first();
+                if (! $equipment) {
+                    continue;
+                }
+
+                $equipment->increment('stock_quantity', $item->quantity);
+                $item->update(['returned_at' => now()]);
+
+                $restoredItems[] = [
+                    'name' => $equipment->name,
+                    'quantity' => $item->quantity,
+                ];
+            }
+
+            if (empty($restoredItems)) {
+                throw new HttpException(422, 'Tidak ada alat sewa (raket/handuk) yang tertunda untuk dikembalikan pada tiket ini.');
+            }
+
+            return [
+                'restored_count' => count($restoredItems),
+                'items' => $restoredItems,
+                'booking_code' => $booking->booking_code,
+            ];
+        });
     }
 
     /**

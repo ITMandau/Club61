@@ -188,6 +188,126 @@
                         <h3 class="font-serif font-black text-base text-[#1F170D] border-b border-[#DFC387]/50 pb-3">
                             Payment Summary</h3>
 
+                        <!-- Membership Benefit Banner (Muncul Otomatis Kalau Ada Membership Aktif) -->
+                        <template x-if="isLoadingMembershipPreview">
+                            <div class="p-3 rounded-2xl bg-[#FAF8F2] border border-[#DFC387]/70 text-[11px] text-[#7A643E] flex items-center gap-2">
+                                <div class="w-3.5 h-3.5 border-2 border-[#D4AF37] border-t-transparent rounded-full animate-spin"></div>
+                                <span>Checking membership benefit...</span>
+                            </div>
+                        </template>
+
+                        <template x-if="!isLoadingMembershipPreview && membershipBenefit">
+                            <div class="p-3.5 rounded-2xl border space-y-2.5 transition-all shadow-sm"
+                                :style="useMembershipBenefit 
+                                    ? 'background-color: #FAF6EC; border: 1.5px solid #D4AF37;' 
+                                    : 'background-color: #F4EFE6; border: 1.5px solid #CDBFA8;'">
+                                <div class="flex items-center justify-between gap-3">
+                                    <div class="flex items-center gap-2 min-w-0">
+                                        <span class="px-2 py-0.5 rounded-full text-[9px] font-extrabold uppercase tracking-wider shrink-0 transition-colors"
+                                            :style="useMembershipBenefit 
+                                                ? 'background-color: #D1FAE5; color: #065F46; border: 1px solid #6EE7B7;' 
+                                                : 'background-color: #E6DCCD; color: #5C4A26; border: 1px solid #C4B59D;'">
+                                            Member
+                                        </span>
+                                        <span class="text-xs font-bold text-[#1F170D] truncate" x-text="membershipBenefit.plan_name"></span>
+                                    </div>
+
+                                    <!-- Toggle Switch Pakai / Tidak Pakai Benefit -->
+                                    <div class="flex items-center gap-2 shrink-0">
+                                        <span class="text-[10px] font-extrabold uppercase tracking-wider select-none transition-colors"
+                                            :style="useMembershipBenefit ? 'color: #8C6418;' : 'color: #786546;'"
+                                            x-text="useMembershipBenefit ? 'Dipakai' : 'Nonaktif'">
+                                        </span>
+                                        <button type="button" @click="toggleMembershipBenefit()"
+                                            class="relative inline-flex items-center rounded-full transition-all shrink-0 cursor-pointer focus:outline-none p-0.5"
+                                            :style="useMembershipBenefit 
+                                                ? 'width: 44px; height: 24px; background: linear-gradient(135deg, #D4AF37 0%, #B38622 100%); border: 1.5px solid #997015; box-shadow: inset 0 1px 2px rgba(0,0,0,0.15);' 
+                                                : 'width: 44px; height: 24px; background-color: #8C7A58; border: 1.5px solid #635338; box-shadow: inset 0 1px 3px rgba(0,0,0,0.3);'"
+                                            :title="useMembershipBenefit ? 'Klik untuk menonaktifkan benefit membership' : 'Klik untuk mengaktifkan benefit membership'">
+                                            <span class="inline-block rounded-full bg-white transition-all shadow-md"
+                                                :style="useMembershipBenefit 
+                                                    ? 'width: 18px; height: 18px; transform: translateX(21px); box-shadow: 0 2px 4px rgba(0,0,0,0.35);' 
+                                                    : 'width: 18px; height: 18px; transform: translateX(2px); box-shadow: 0 2px 4px rgba(0,0,0,0.3);'">
+                                            </span>
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <div x-show="useMembershipBenefit" class="text-[11px] text-[#7A643E]">
+                                    <template x-if="membershipBenefit.benefit_type === 'HOURS'">
+                                        <span>
+                                            Pakai <span class="font-bold text-[#8C6418]" x-text="membershipBenefit.hours_to_consume + ' jam'"></span>
+                                            kuota membership &mdash; sisa jadi
+                                            <span class="font-bold" x-text="membershipBenefit.remaining_quota_after + ' jam'"></span>.
+                                        </span>
+                                    </template>
+                                    <template x-if="membershipBenefit.benefit_type === 'DISCOUNT_PERCENT'">
+                                        <span>
+                                            Diskon member
+                                            <span class="font-bold text-[#8C6418]" x-text="membershipBenefit.discount_percent + '%'"></span>
+                                            untuk sewa lapangan ini.
+                                        </span>
+                                    </template>
+                                </div>
+
+                                <div x-show="!useMembershipBenefit" class="text-[10px] font-semibold text-[#6B5B3E] bg-[#EBE2D3] p-2.5 rounded-xl border border-[#CDBFA8] leading-relaxed">
+                                    Benefit membership dinonaktifkan untuk booking ini &mdash; kuota jam / diskon Anda tetap aman dan tidak akan berkurang.
+                                </div>
+                            </div>
+                        </template>
+
+                        <!-- Corporate Sponsor Voucher Benefit -->
+                        <template x-if="!isLoadingMembershipPreview && sponsorVoucherBenefit">
+                            <div class="p-3.5 rounded-2xl border space-y-2.5 transition-all shadow-sm"
+                                :style="useSponsorVoucherBenefit
+                                    ? 'background-color: #F0F7F2; border: 1.5px solid #1E3327;'
+                                    : 'background-color: #F4EFE6; border: 1.5px solid #CDBFA8;'">
+                                <div class="flex items-center justify-between gap-3">
+                                    <div class="flex items-center gap-2 min-w-0">
+                                        <span class="px-2 py-0.5 rounded-full text-[9px] font-extrabold uppercase tracking-wider shrink-0 transition-colors"
+                                            :style="useSponsorVoucherBenefit
+                                                ? 'background-color: #1E3327; color: #FAF5E6; border: 1px solid #1E3327;'
+                                                : 'background-color: #E6DCCD; color: #5C4A26; border: 1px solid #C4B59D;'">
+                                            🎟️ Corporate
+                                        </span>
+                                        <span class="text-xs font-bold text-[#1F170D] truncate" x-text="sponsorVoucherBenefit.plan_name || sponsorVoucherBenefit.organization_name"></span>
+                                    </div>
+
+                                    <!-- Toggle Switch Pakai / Tidak Pakai Voucher -->
+                                    <div class="flex items-center gap-2 shrink-0">
+                                        <span class="text-[10px] font-extrabold uppercase tracking-wider select-none transition-colors"
+                                            :style="useSponsorVoucherBenefit ? 'color: #1E3327;' : 'color: #786546;'"
+                                            x-text="useSponsorVoucherBenefit ? 'Dipakai' : 'Nonaktif'">
+                                        </span>
+                                        <button type="button" @click="toggleSponsorVoucherBenefit()"
+                                            class="relative inline-flex items-center rounded-full transition-all shrink-0 cursor-pointer focus:outline-none p-0.5"
+                                            :style="useSponsorVoucherBenefit
+                                                ? 'width: 44px; height: 24px; background: linear-gradient(135deg, #1E3327 0%, #15241B 100%); border: 1.5px solid #0F1A13; box-shadow: inset 0 1px 2px rgba(0,0,0,0.15);'
+                                                : 'width: 44px; height: 24px; background-color: #8C7A58; border: 1.5px solid #635338; box-shadow: inset 0 1px 3px rgba(0,0,0,0.3);'"
+                                            :title="useSponsorVoucherBenefit ? 'Klik untuk menonaktifkan voucher corporate' : 'Klik untuk mengaktifkan voucher corporate'">
+                                            <span class="inline-block rounded-full bg-white transition-all shadow-md"
+                                                :style="useSponsorVoucherBenefit
+                                                    ? 'width: 18px; height: 18px; transform: translateX(21px); box-shadow: 0 2px 4px rgba(0,0,0,0.35);'
+                                                    : 'width: 18px; height: 18px; transform: translateX(2px); box-shadow: 0 2px 4px rgba(0,0,0,0.3);'">
+                                            </span>
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <div x-show="useSponsorVoucherBenefit" class="text-[11px] text-[#7A643E]">
+                                    <span>
+                                        Pakai <span class="font-bold text-[#1E3327]" x-text="sponsorVoucherBenefit.hours_to_consume + ' jam'"></span>
+                                        voucher gratis dari perusahaan &mdash; sisa jadi
+                                        <span class="font-bold" x-text="sponsorVoucherBenefit.remaining_hours_after + ' jam'"></span>.
+                                    </span>
+                                </div>
+
+                                <div x-show="!useSponsorVoucherBenefit" class="text-[10px] font-semibold text-[#6B5B3E] bg-[#EBE2D3] p-2.5 rounded-xl border border-[#CDBFA8] leading-relaxed">
+                                    Voucher corporate dinonaktifkan untuk booking ini &mdash; jam Anda tetap aman dan tidak akan berkurang.
+                                </div>
+                            </div>
+                        </template>
+
                         <!-- Promo Code Input -->
                         <div class="space-y-2">
                             <label class="text-[11px] font-bold text-[#7A5818] uppercase tracking-wider block">Discount Promo Code</label>
@@ -218,6 +338,14 @@
                             <div class="flex justify-between" x-show="addonsTotal > 0">
                                 <span>Equipment Add-ons:</span>
                                 <span class="font-mono font-bold" x-text="'Rp ' + formatNumber(addonsTotal)"></span>
+                            </div>
+                            <div x-show="membershipDiscountAmount > 0" class="flex justify-between text-[#8C6418] font-bold">
+                                <span x-text="'Membership Benefit (' + (membershipBenefit ? membershipBenefit.plan_name : '') + '):'"></span>
+                                <span class="font-mono" x-text="'- Rp ' + formatNumber(membershipDiscountAmount)"></span>
+                            </div>
+                            <div x-show="sponsorVoucherDiscountAmount > 0" class="flex justify-between text-[#1E3327] font-bold">
+                                <span>🎟️ Corporate Voucher:</span>
+                                <span class="font-mono" x-text="'- Rp ' + formatNumber(sponsorVoucherDiscountAmount)"></span>
                             </div>
                             <div x-show="promoApplied" class="flex justify-between text-emerald-700 font-bold">
                                 <span>Voucher Discount:</span>
@@ -418,7 +546,11 @@
             </div>
         </div>
 
-        <!-- Success QRIS Simulation Modal (Sandbox Mode) -->
+        <!-- Payment Confirmed Modal (shown after a FULLY-SETTLED transaction — either free/covered
+             by voucher/membership, or via the local mock payment simulator. By the time this modal
+             renders, the order is ALREADY marked PAID server-side — there is no pending decision
+             left to make, so this only ever offers ONE way forward (view the e-ticket), never a
+             "close without paying" escape that would misleadingly imply the charge didn't happen. -->
         <div x-show="showPaymentSuccessModal" style="display: none; z-index: 99999 !important;"
             class="fixed inset-0 overflow-y-auto bg-black/75 backdrop-blur-md flex items-center justify-center p-4 sm:p-6">
 
@@ -429,28 +561,22 @@
                 <div class="flex items-center justify-between border-b border-[#DFC387]/50 pb-4">
                     <div class="flex items-center gap-3">
                         <div
-                            class="w-10 h-10 rounded-xl bg-[#FAF2DE] border border-[#DFC387] flex items-center justify-center font-serif font-black text-xs text-[#7A5818] shadow-sm">
-                            61
+                            class="w-10 h-10 rounded-xl bg-emerald-50 border border-emerald-300 flex items-center justify-center text-emerald-700 shadow-sm">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7" />
+                            </svg>
                         </div>
                         <div>
                             <div class="flex items-center gap-2">
-                                <h3 class="font-serif font-black text-base sm:text-lg text-[#1F170D]">Complete Payment</h3>
+                                <h3 class="font-serif font-black text-base sm:text-lg text-[#1F170D]">Payment Confirmed</h3>
                                 <span
                                     class="px-2 py-0.5 rounded-full text-[9px] font-extrabold uppercase tracking-wider bg-emerald-100 text-emerald-800 border border-emerald-300">
-                                    Midtrans Sandbox
+                                    Paid
                                 </span>
                             </div>
-                            <p class="text-xs text-[#7A643E]">Scan QRIS or complete the simulated payment for your order</p>
+                            <p class="text-xs text-[#7A643E]">Your booking has been settled and is ready — no further action needed.</p>
                         </div>
                     </div>
-                    <button type="button" @click="showPaymentSuccessModal = false"
-                        class="p-2 text-[#8C7A58] hover:text-[#1F170D] rounded-xl hover:bg-[#FAF2DE] transition-colors cursor-pointer"
-                        title="Close">
-                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                d="M6 18L18 6M6 6l12 12" />
-                        </svg>
-                    </button>
                 </div>
 
                 <!-- Modal Body: 2-Column Responsive Layout -->
@@ -460,14 +586,14 @@
                     <div class="md:col-span-7 space-y-4">
                         <div class="p-4 rounded-2xl bg-[#FAF8F2] border border-[#E8DCC0] space-y-3">
                             <div class="flex justify-between items-center text-xs text-[#5C410F]">
-                                <span>Selected Method:</span>
+                                <span>Payment Method:</span>
                                 <span class="font-bold text-[#1F170D]"
-                                    x-text="selectedMethod.name || 'QRIS Instant'"></span>
+                                    x-text="grandTotal <= 0 ? 'Fully Covered (No Charge)' : (selectedMethod.name || 'QRIS Instant')"></span>
                             </div>
                             <div class="flex justify-between items-center text-xs text-[#5C410F]">
                                 <span>System Status:</span>
                                 <span
-                                    class="font-mono text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">Awaiting Payment</span>
+                                    class="font-mono text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">PAID</span>
                             </div>
                             <div class="pt-2 border-t border-[#DFC387]/60 flex justify-between items-baseline">
                                 <span class="text-xs font-serif font-black text-[#1F170D]">Grand Total:</span>
@@ -483,7 +609,7 @@
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                         d="M5 13l4 4L19 7" />
                                 </svg>
-                                <span>Supports BCA, Mandiri, GoPay, OVO, Dana, ShopeePay.</span>
+                                <span>Your court slot is locked in and confirmed.</span>
                             </div>
                             <div class="flex items-center gap-1.5 font-medium">
                                 <svg class="w-4 h-4 text-[#8C6418] shrink-0" fill="none" stroke="currentColor"
@@ -499,31 +625,26 @@
                             <button type="button" @click="completePaymentAndRedirect()"
                                 class="w-full py-3.5 px-4 rounded-2xl text-xs font-black uppercase tracking-wider shadow-lg active:scale-95 transition-all cursor-pointer flex items-center justify-center gap-2"
                                 style="background: linear-gradient(180deg, #F5DE9B 0%, #D4AF37 50%, #A87D18 100%); color: #1E160A; border: 1.5px solid #FFF3CD;">
-                                <span>Confirm Paid &amp; View E-Ticket</span>
+                                <span>View My E-Ticket</span>
                                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"
                                         d="M9 5l7 7-7 7" />
                                 </svg>
                             </button>
-                            <button type="button" @click="showPaymentSuccessModal = false"
-                                class="w-full py-2 text-xs font-bold text-[#8C7A58] hover:text-[#1F170D] cursor-pointer text-center">
-                                Close Window
-                            </button>
                         </div>
                     </div>
 
-                    <!-- Right Column: Big QRIS Display (Col 5) -->
+                    <!-- Right Column: Confirmation Badge (Col 5) -->
                     <div
-                        class="md:col-span-5 flex flex-col items-center justify-center p-4 bg-[#FAF8F2] rounded-2xl border border-[#DFC387]/70">
-                        <div
-                            class="p-3 bg-white rounded-2xl border-2 border-dashed border-[#DFC387] shadow-md inline-block">
-                            <img src="https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=CLUB61-MIDTRANS-DEMO"
-                                alt="QRIS Payment Club 61"
-                                class="w-48 h-48 sm:w-52 sm:h-52 mx-auto rounded-lg object-contain" />
+                        class="md:col-span-5 flex flex-col items-center justify-center p-6 bg-[#FAF8F2] rounded-2xl border border-[#DFC387]/70">
+                        <div class="w-20 h-20 rounded-full bg-emerald-50 border-2 border-emerald-300 flex items-center justify-center text-emerald-600">
+                            <svg class="w-10 h-10" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                            </svg>
                         </div>
                         <div class="mt-3 text-center">
-                            <div class="text-[10px] font-mono font-bold tracking-widest text-[#8C6418] uppercase">QRIS NATIONAL STANDARD</div>
-                            <div class="text-[10px] text-[#7A643E] mt-0.5">NMID: ID102061617233 &bull; Club 61</div>
+                            <div class="text-xs font-serif font-black text-[#1F170D]">Booking Secured</div>
+                            <div class="text-[10px] text-[#7A643E] mt-0.5">Club 61 Padel Court</div>
                         </div>
                     </div>
 
@@ -738,6 +859,11 @@
 
                 bookingItems: [],
                 bookingDateFormatted: 'Today',
+                membershipBenefit: null,
+                useMembershipBenefit: true,
+                sponsorVoucherBenefit: null,
+                useSponsorVoucherBenefit: true,
+                isLoadingMembershipPreview: false,
                 holdData: null,
                 expiresAtTime: null,
                 timerDisplay: '10:00',
@@ -842,14 +968,6 @@
                         fee: 0,
                         note: ''
                     },
-                    {
-                        id: 'cash',
-                        code: 'CASH',
-                        name: 'Cash on Arrival (Walk-in)',
-                        badge: 'CASH',
-                        fee: 0,
-                        note: 'Pay at Venue Frontdesk'
-                    },
                 ],
 
                 init() {
@@ -898,6 +1016,57 @@
                     // Load catalog from database & sync finance settings
                     this.fetchEquipments();
                     this.fetchFinanceSettings();
+                    this.fetchMembershipBenefitPreview();
+                },
+
+                /**
+                 * Preview (read-only) benefit membership SEBELUM customer menekan Pay Now — supaya
+                 * potongan jam/diskon kelihatan di muka, bukan baru ketahuan setelah bayar.
+                 */
+                async fetchMembershipBenefitPreview() {
+                    let bookingIds = [];
+                    if (this.holdData && this.holdData.bookings && this.holdData.bookings.length > 0) {
+                        bookingIds = this.holdData.bookings.map(b => b.id);
+                    }
+                    if (bookingIds.length === 0) return;
+
+                    this.isLoadingMembershipPreview = true;
+                    try {
+                        const res = await fetch('/api/v1/padel/preview-membership-benefit', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'Accept': 'application/json',
+                                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
+                            },
+                            body: JSON.stringify({ booking_ids: bookingIds })
+                        });
+                        const json = await res.json();
+                        if (json.success && json.data && json.data.has_benefit) {
+                            this.membershipBenefit = json.data;
+                        } else {
+                            this.membershipBenefit = null;
+                        }
+                        if (json.success && json.data && json.data.sponsor_voucher_benefit && json.data.sponsor_voucher_benefit.has_benefit) {
+                            this.sponsorVoucherBenefit = json.data.sponsor_voucher_benefit;
+                        } else {
+                            this.sponsorVoucherBenefit = null;
+                        }
+                    } catch (e) {
+                        // Tidak fatal — customer tanpa membership/voucher tetap bisa checkout normal
+                        this.membershipBenefit = null;
+                        this.sponsorVoucherBenefit = null;
+                    } finally {
+                        this.isLoadingMembershipPreview = false;
+                    }
+                },
+
+                toggleMembershipBenefit() {
+                    this.useMembershipBenefit = !this.useMembershipBenefit;
+                },
+
+                toggleSponsorVoucherBenefit() {
+                    this.useSponsorVoucherBenefit = !this.useSponsorVoucherBenefit;
                 },
 
                 async fetchFinanceSettings() {
@@ -1000,8 +1169,23 @@
                     return this.selectedAddOns.reduce((sum, item) => sum + (item.price * (item.quantity || 1)), 0);
                 },
 
+                get membershipDiscountAmount() {
+                    if (!this.membershipBenefit || !this.useMembershipBenefit) return 0;
+                    return this.membershipBenefit.court_discount_amount || 0;
+                },
+
+                get sponsorVoucherDiscountAmount() {
+                    if (!this.sponsorVoucherBenefit || !this.useSponsorVoucherBenefit) return 0;
+                    return this.sponsorVoucherBenefit.court_discount_amount || 0;
+                },
+
                 get taxableAmount() {
-                    return Math.max(0, this.subtotal + this.addonsTotal - this.promoDiscount);
+                    // Urutan potongan mengikuti persis urutan backend checkout(): benefit membership
+                    // individual dipotong dari sewa lapangan dulu, baru voucher jam sponsor corporate
+                    // dipotong dari SISA sewa lapangan yang belum ter-cover, baru promo code ke total.
+                    const courtAfterMembership = Math.max(0, this.subtotal - this.membershipDiscountAmount);
+                    const courtAfterSponsorVoucher = Math.max(0, courtAfterMembership - this.sponsorVoucherDiscountAmount);
+                    return Math.max(0, courtAfterSponsorVoucher + this.addonsTotal - this.promoDiscount);
                 },
 
                 get isTaxApplicable() {
@@ -1181,7 +1365,11 @@
                                 quantity: Math.max(1, parseInt(a.quantity, 10) || 1)
                             })),
                             voucher_code: this.promoApplied ? this.promoCode : null,
-                            payment_method: this.selectedMethod.code
+                            payment_method: this.selectedMethod.code,
+                            // Kirim 'NONE' kalau customer sengaja matiin toggle membership, biar backend
+                            // beneran skip benefit-nya (bukan cuma tampilan doang) — konsisten dengan preview.
+                            membership_balance_id: (this.membershipBenefit && !this.useMembershipBenefit) ? 'NONE' : null,
+                            sponsor_voucher_id: (this.sponsorVoucherBenefit && !this.useSponsorVoucherBenefit) ? 'NONE' : null,
                         };
 
                         const idempotencyKey = (crypto && crypto.randomUUID) ?

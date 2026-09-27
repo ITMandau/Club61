@@ -8,4 +8,5 @@ Artisan::command('inspire', function () {
 })->purpose('Display an inspiring quote')->hourly();
 
 \Illuminate\Support\Facades\Schedule::command('padel:release-expired-slots')->everyMinute();
+\Illuminate\Support\Facades\Schedule::command('membership:sync-expired')->dailyAt('00:01');
 

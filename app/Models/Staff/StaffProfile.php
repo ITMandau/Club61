@@ -19,6 +19,13 @@ class StaffProfile extends Model
         'is_available',
     ];
 
+    // hourly_rate/commission_rate itu data payroll internal — jangan pernah ikut ke-serialize
+    // ke JSON kalau model ini (atau relasi 'user') dikembalikan langsung dari sebuah endpoint.
+    protected $hidden = [
+        'hourly_rate',
+        'commission_rate',
+    ];
+
     protected function casts(): array
     {
         return [

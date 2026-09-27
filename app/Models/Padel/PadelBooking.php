@@ -30,6 +30,13 @@ class PadelBooking extends Model
         'checked_in_at',
         'reschedule_count',
         'cancel_reason',
+        'membership_balance_id',
+        'member_discount_court',
+        'member_hours_consumed',
+        'sponsor_organization_id',
+        'sponsor_member_voucher_id',
+        'sponsor_discount_court',
+        'sponsor_hours_consumed',
     ];
 
     protected function casts(): array
@@ -44,6 +51,10 @@ class PadelBooking extends Model
             'equipment_fee' => 'decimal:2',
             'total_amount' => 'decimal:2',
             'reschedule_count' => 'integer',
+            'member_discount_court' => 'decimal:2',
+            'member_hours_consumed' => 'decimal:2',
+            'sponsor_discount_court' => 'decimal:2',
+            'sponsor_hours_consumed' => 'decimal:2',
         ];
     }
 
@@ -70,5 +81,20 @@ class PadelBooking extends Model
     public function order()
     {
         return $this->belongsTo(\App\Models\Pos\Order::class, 'order_id');
+    }
+
+    public function membershipBalance()
+    {
+        return $this->belongsTo(\App\Models\Membership\UserMembershipBalance::class, 'membership_balance_id');
+    }
+
+    public function sponsorOrganization()
+    {
+        return $this->belongsTo(\App\Models\Sponsor\SponsorOrganization::class, 'sponsor_organization_id');
+    }
+
+    public function sponsorMemberVoucher()
+    {
+        return $this->belongsTo(\App\Models\Sponsor\SponsorMemberVoucher::class, 'sponsor_member_voucher_id');
     }
 }

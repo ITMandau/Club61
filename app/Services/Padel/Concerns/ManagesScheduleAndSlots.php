@@ -390,6 +390,29 @@ trait ManagesScheduleAndSlots
                     $currLock->addHour();
                 }
 
+                if ($booking->membership_balance_id && (float) $booking->member_hours_consumed > 0) {
+                    app(\App\Services\Membership\MembershipBalanceService::class)->adjustQuota(
+                        balanceId: $booking->membership_balance_id,
+                        changeType: 'REVERSAL',
+                        quantity: (float) $booking->member_hours_consumed,
+                        notes: 'Reversal pembatalan/expired booking Padel ' . $booking->booking_code,
+                        relatedType: PadelBooking::class,
+                        relatedId: $booking->id
+                    );
+                    $booking->member_hours_consumed = 0.00;
+                }
+
+                if ($booking->sponsor_member_voucher_id && (float) $booking->sponsor_hours_consumed > 0) {
+                    $sponsorVoucher = \App\Models\Sponsor\SponsorMemberVoucher::where('id', $booking->sponsor_member_voucher_id)
+                        ->lockForUpdate()
+                        ->first();
+                    if ($sponsorVoucher) {
+                        $sponsorVoucher->hours_used = max(0, (float) $sponsorVoucher->hours_used - (float) $booking->sponsor_hours_consumed);
+                        $sponsorVoucher->save();
+                    }
+                    $booking->sponsor_hours_consumed = 0.00;
+                }
+
                 $booking->update(['status' => 'CANCELLED']);
                 $c++;
             }

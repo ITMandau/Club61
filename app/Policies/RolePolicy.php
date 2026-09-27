@@ -11,35 +11,39 @@ use Illuminate\Auth\Access\HandlesAuthorization;
 class RolePolicy
 {
     use HandlesAuthorization;
-    
+
+    // Slug di sini SENGAJA dicocokkan ke App\Services\Permission\Club61PermissionMatrix
+    // (view_roles/create_roles/update_roles/delete_roles) — bukan gaya Filament Shield
+    // ("ViewAny:Role" dkk) yang tidak pernah ke-sync ke database sama sekali, sama seperti
+    // di UserPolicy.
     public function viewAny(AuthUser $authUser): bool
     {
-        return $authUser->can('ViewAny:Role');
+        return $authUser->can('view_roles');
     }
 
     public function view(AuthUser $authUser, Role $role): bool
     {
-        return $authUser->can('View:Role');
+        return $authUser->can('view_roles');
     }
 
     public function create(AuthUser $authUser): bool
     {
-        return $authUser->can('Create:Role');
+        return $authUser->can('create_roles');
     }
 
     public function update(AuthUser $authUser, Role $role): bool
     {
-        return $authUser->can('Update:Role');
+        return $authUser->can('update_roles');
     }
 
     public function delete(AuthUser $authUser, Role $role): bool
     {
-        return $authUser->can('Delete:Role');
+        return $authUser->can('delete_roles');
     }
 
     public function deleteAny(AuthUser $authUser): bool
     {
-        return $authUser->can('DeleteAny:Role');
+        return $authUser->can('delete_roles');
     }
 
     public function restore(AuthUser $authUser, Role $role): bool

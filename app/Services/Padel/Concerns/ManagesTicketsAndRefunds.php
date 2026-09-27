@@ -96,12 +96,18 @@ trait ManagesTicketsAndRefunds
 
             $totalEquipmentFee = $orderEquipments->sum('subtotal');
             $totalCourtFee = $orderBookings->sum('court_fee');
+            $totalMemberDiscount = $orderBookings->sum('member_discount_court');
+            $totalSponsorDiscount = $orderBookings->sum('sponsor_discount_court');
+            $totalSponsorHours = $orderBookings->sum('sponsor_hours_consumed');
 
             $booking->setAttribute('order_bookings', $orderBookings);
             $booking->setAttribute('order_equipments', $orderEquipments);
             $booking->setAttribute('order_court_fee', (float) $totalCourtFee);
             $booking->setAttribute('order_equipment_fee', (float) $totalEquipmentFee);
             $booking->setAttribute('order_grand_total', (float) ($totalCourtFee + $totalEquipmentFee));
+            $booking->setAttribute('order_member_discount_court', (float) $totalMemberDiscount);
+            $booking->setAttribute('order_sponsor_discount_court', (float) $totalSponsorDiscount);
+            $booking->setAttribute('order_sponsor_hours_consumed', (float) $totalSponsorHours);
 
             // Load order dan data transaksi pembayaran riil
             $order = Order::with(['payments' => function ($q) {

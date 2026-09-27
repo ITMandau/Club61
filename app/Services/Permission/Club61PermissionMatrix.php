@@ -7,7 +7,7 @@ use Spatie\Permission\Models\Permission;
 class Club61PermissionMatrix
 {
     /**
-     * Definisi lengkap 11 kategori modul beserta sub-modul dan aksi izin.
+     * Definisi lengkap 12 kategori modul beserta sub-modul dan aksi izin.
      * Semua teks murni tanpa emoji maupun ikon.
      *
      * @return array<string, array<string, mixed>>
@@ -55,6 +55,8 @@ class Club61PermissionMatrix
                             'apply_pos_voucher' => 'Terapkan Voucher Diskon & Promosi',
                             'open_pos_shift' => 'Buka Sesi Shift Kasir Baru',
                             'close_pos_shift' => 'Tutup Sesi Shift & Rekonsiliasi Kas',
+                            'View:JualMembership' => 'Akses Halaman POS Jual Membership',
+                            'sell_membership' => 'Jual & Aktivasi Membership Kasir',
                         ],
                     ],
                 ],
@@ -246,6 +248,33 @@ class Club61PermissionMatrix
                             'manage_court_pricing' => 'Kelola Tarif Sewa Lapangan Per Jam',
                             'manage_court_equipment' => 'Kelola Tarif Sewa Raket & Bola Padel',
                             'manage_tax_and_fees' => 'Kelola Pengaturan Biaya Layanan & Pajak',
+                        ],
+                    ],
+                    'membership_plans' => [
+                        'label' => 'Paket Membership',
+                        'actions' => [
+                            'view_membership_plans' => 'Lihat Daftar Paket Membership',
+                            'manage_membership_plans' => 'Kelola Paket, Harga & Benefit Membership',
+                        ],
+                    ],
+                ],
+            ],
+
+            'sponsor_corporate' => [
+                'title' => '12. Sponsor / Corporate Account',
+                'submodules' => [
+                    'sponsor_organizations' => [
+                        'label' => 'Kelola Sponsor Korporat',
+                        'actions' => [
+                            'view_sponsor_organizations' => 'Lihat Daftar Akun Sponsor Corporate',
+                            'manage_sponsor_organizations' => 'Kelola (Tambah/Ubah/Hapus) Akun Sponsor Corporate',
+                        ],
+                    ],
+                    'sponsor_access_schedules' => [
+                        'label' => 'Jadwal Akses Sponsor',
+                        'actions' => [
+                            'view_sponsor_access_schedules' => 'Lihat Jadwal Akses Lapangan Sponsor',
+                            'manage_sponsor_access_schedules' => 'Kelola (Tambah/Ubah/Hapus) Jadwal Akses Sponsor',
                         ],
                     ],
                 ],

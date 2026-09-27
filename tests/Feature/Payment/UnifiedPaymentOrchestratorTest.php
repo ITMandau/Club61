@@ -108,12 +108,18 @@ class UnifiedPaymentOrchestratorTest extends TestCase
                     ['equipment_id' => $this->racket->id, 'quantity' => 2],
                 ],
                 'voucher_code' => 'PADEL61',
-                'payment_method' => 'CASH', // Cash customer = PENDING_PAYMENT
+                'payment_method' => 'QRIS',
             ])
             ->assertStatus(200);
 
         $orderNumber = $checkout->json('data.order_id');
         $this->assertNotEmpty($orderNumber);
+
+        // MockSimulatorDriver selalu aktif di environment testing (lihat MidtransService::createSnapTransaction,
+        // is_mock dipaksa true kalau app()->environment('testing')), jadi checkout di atas langsung PAID.
+        // Untuk memverifikasi invarian "Order & Items dibuat eagerly SEBELUM lunas" (independen dari kapan
+        // pelunasan terjadi), status di-override manual meniru window saat webhook Midtrans belum masuk.
+        Order::where('order_number', $orderNumber)->update(['payment_status' => 'UNPAID']);
 
         // Assert Order row tercipta eagerly di tabel orders
         $order = Order::where('order_number', $orderNumber)->first();
@@ -127,7 +133,6 @@ class UnifiedPaymentOrchestratorTest extends TestCase
         foreach ($bookingIds as $bId) {
             $booking = PadelBooking::find($bId);
             $this->assertEquals($order->id, $booking->order_id);
-            $this->assertEquals('PENDING_PAYMENT', $booking->status);
         }
 
         // Assert order_items tercipta
@@ -158,7 +163,7 @@ class UnifiedPaymentOrchestratorTest extends TestCase
                 'equipments' => [
                     ['equipment_id' => $this->racket->id, 'quantity' => 1],
                 ],
-                'payment_method' => 'CASH',
+                'payment_method' => 'QRIS',
             ])
             ->assertStatus(200);
 
@@ -213,6 +218,25 @@ class UnifiedPaymentOrchestratorTest extends TestCase
      */
     public function test_pending_payment_record_uses_order_number_as_transaction_id(): void
     {
+        // MockSimulatorDriver selalu aktif di environment testing (is_mock dipaksa true di
+        // MidtransService::createSnapTransaction saat app()->environment('testing')), sehingga checkout
+        // normal selalu langsung PAID dan tidak pernah menyentuh cabang "Payment::create status PENDING"
+        // yang mau diuji di sini. PaymentManager di-stub supaya cabang tersebut benar-benar tereksekusi.
+        $this->app->instance(\App\Services\Payment\PaymentManager::class, new class extends \App\Services\Payment\PaymentManager {
+            public function createPayment(array $params): array
+            {
+                return [
+                    'driver' => 'midtrans',
+                    'order_id' => $params['order_id'],
+                    'snap_token' => 'STUB-SNAP-TOKEN',
+                    'payment_url' => null,
+                    'redirect_url' => 'https://app.sandbox.midtrans.com/snap/v2/vtweb/stub',
+                    'is_mock' => false,
+                    'checkout_mode' => 'POPUP',
+                ];
+            }
+        });
+
         $date = now()->addDays(4)->format('Y-m-d');
         $hold = $this->withHeader('Authorization', "Bearer {$this->customerToken}")
             ->postJson('/api/v1/padel/hold-slot', [
@@ -229,7 +253,7 @@ class UnifiedPaymentOrchestratorTest extends TestCase
             ->withHeader('X-Idempotency-Key', (string) Str::uuid())
             ->postJson('/api/v1/padel/checkout', [
                 'booking_ids' => [$bookingId],
-                'payment_method' => 'CASH',
+                'payment_method' => 'QRIS',
             ])
             ->assertStatus(200);
 

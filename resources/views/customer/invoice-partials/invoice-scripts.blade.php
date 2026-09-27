@@ -8,6 +8,8 @@
             pollingInterval: null,
             ticket: null,
             currentTicket: null,
+            isMembershipTicket: false,
+            allMembershipPurchases: [],
             pastBookings: [],
             isDownloadingPng: false,
             customerName: @json(Auth::user()->name ?? 'Customer VIP'),
@@ -53,19 +55,22 @@
                     const q = this.searchQuery.toLowerCase().trim();
                     list = list.filter(b => {
                         const courtName = (b.court && b.court.name) ? b.court.name.toLowerCase() : '';
+                        const planName = (b.plan_name) ? b.plan_name.toLowerCase() : '';
                         const bookingCode = (b.booking_code) ? b.booking_code.toLowerCase() : '';
+                        const membershipCode = (b.membership_code) ? b.membership_code.toLowerCase() : '';
                         const bookingId = (b.id) ? b.id.toLowerCase() : '';
                         const status = (b.status) ? b.status.toLowerCase() : '';
-                        const rawDate = (b.booking_date) ? String(b.booking_date).toLowerCase() : '';
-                        const formattedDate = this.formatDate(b.booking_date).toLowerCase();
-                        return courtName.includes(q) || bookingCode.includes(q) || bookingId.includes(q) || status.includes(q) || rawDate.includes(q) || formattedDate.includes(q);
+                        const rawDate = (b.booking_date || b.created_at) ? String(b.booking_date || b.created_at).toLowerCase() : '';
+                        const formattedDate = this.formatDate(b.booking_date || b.created_at).toLowerCase();
+                        return courtName.includes(q) || planName.includes(q) || bookingCode.includes(q) || membershipCode.includes(q) || bookingId.includes(q) || status.includes(q) || rawDate.includes(q) || formattedDate.includes(q);
                     });
                 }
                 if (this.searchDate && this.searchDate.trim() !== '') {
                     const targetDate = this.searchDate.trim();
                     list = list.filter(b => {
-                        if (!b.booking_date) return false;
-                        const bDate = String(b.booking_date).substring(0, 10);
+                        const d = b.booking_date || b.created_at;
+                        if (!d) return false;
+                        const bDate = String(d).substring(0, 10);
                         return bDate === targetDate;
                     });
                 }
@@ -116,7 +121,6 @@
                 { id: 'bni', code: 'BNI_VA', name: 'BNI Virtual Account', badge: 'BNI', fee: 0, note: 'Automated Midtrans Verification' },
                 { id: 'cimb', code: 'CIMB_VA', name: 'CIMB Virtual Account', badge: 'CIMB', fee: 0, note: 'Automated Midtrans Verification' },
                 { id: 'bsi', code: 'BSI_VA', name: 'BSI Virtual Account', badge: 'BSI', fee: 0, note: 'Sharia Automated Midtrans' },
-                { id: 'cash', code: 'CASH', name: 'Cash on Arrival (Walk-in)', badge: 'CASH', fee: 0, note: 'Pay at Venue Frontdesk' },
             ],
             isSubmittingPayment: false,
             isCashNotice: false,
@@ -135,6 +139,24 @@
             get displayGrandTotal() {
                 if (this.ticket && this.ticket.order_grand_total) return this.ticket.order_grand_total;
                 return this.ticket ? this.ticket.total_amount : 0;
+            },
+
+            get totalMemberDiscount() {
+                if (!this.ticket) return 0;
+                if (this.ticket.order_member_discount_court !== undefined) return parseFloat(this.ticket.order_member_discount_court) || 0;
+                return parseFloat(this.ticket.member_discount_court) || 0;
+            },
+
+            get totalSponsorDiscount() {
+                if (!this.ticket) return 0;
+                if (this.ticket.order_sponsor_discount_court !== undefined) return parseFloat(this.ticket.order_sponsor_discount_court) || 0;
+                return parseFloat(this.ticket.sponsor_discount_court) || 0;
+            },
+
+            get totalSponsorHours() {
+                if (!this.ticket) return 0;
+                if (this.ticket.order_sponsor_hours_consumed !== undefined) return parseFloat(this.ticket.order_sponsor_hours_consumed) || 0;
+                return parseFloat(this.ticket.sponsor_hours_consumed) || 0;
             },
 
             getPaymentMethodObject(rawCodeOrName) {
@@ -296,14 +318,20 @@
             async init() {
                 const urlParams = new URLSearchParams(window.location.search);
                 const lookupKey = urlParams.get('booking_id') || urlParams.get('order_id') || urlParams.get('booking_code') || urlParams.get('id');
+                const membershipLookupKey = urlParams.get('membership_id');
 
                 let loaded = false;
-                if (lookupKey) {
+                if (membershipLookupKey) {
+                    loaded = await this.loadMembershipTicket(membershipLookupKey);
+                } else if (lookupKey) {
                     loaded = await this.loadTicket(lookupKey);
                 }
 
                 if (!loaded) {
-                    await this.loadLatestBooking();
+                    loaded = await this.loadLatestBooking();
+                }
+                if (!loaded) {
+                    await this.loadLatestMembershipPurchase();
                 }
 
                 await this.loadMyBookings();
@@ -312,14 +340,19 @@
                 window.addEventListener('popstate', async () => {
                     const params = new URLSearchParams(window.location.search);
                     const key = params.get('booking_id') || params.get('order_id') || params.get('booking_code') || params.get('id');
-                    if (key) {
+                    const membershipKey = params.get('membership_id');
+                    if (key || membershipKey) {
                         this.isLoading = true;
                         if (this.pollingInterval) {
                             clearInterval(this.pollingInterval);
                             this.pollingInterval = null;
                             this.isPolling = false;
                         }
-                        await this.loadTicket(key);
+                        if (membershipKey) {
+                            await this.loadMembershipTicket(membershipKey);
+                        } else {
+                            await this.loadTicket(key);
+                        }
                         await this.loadMyBookings();
                         this.isLoading = false;
                     }
@@ -333,9 +366,10 @@
                     if (json.success && json.data) {
                         this.ticket = json.data;
                         this.currentTicket = json.data;
+                        this.isMembershipTicket = false;
 
-                        const rawMethod = this.ticket.payment_method_label 
-                            || this.ticket.payment_method 
+                        const rawMethod = this.ticket.payment_method_label
+                            || this.ticket.payment_method
                             || (this.ticket.order && (this.ticket.order.payment_method_label || this.ticket.order.payment_method));
 
                         if (rawMethod) {
@@ -361,8 +395,64 @@
                 }
             },
 
-            async switchToBooking(id) {
-                if (!id) return;
+            /**
+             * Muat daftar SEMUA pembelian membership user (bukan cuma yang aktif) — dipakai buat
+             * "current ticket" fallback (kalau belum ada booking sama sekali) DAN riwayat gabungan
+             * di kolom kanan, jadi cuma 1x fetch API per kunjungan halaman.
+             */
+            async loadMembershipPurchases() {
+                try {
+                    const res = await fetch('/api/v1/membership/my-purchases');
+                    const json = await res.json();
+                    if (json.success && json.data) {
+                        this.allMembershipPurchases = json.data;
+                        return json.data;
+                    }
+                } catch(e) {
+                    console.error('Failed to load membership purchases:', e);
+                }
+                return [];
+            },
+
+            async loadLatestMembershipPurchase() {
+                const list = this.allMembershipPurchases.length ? this.allMembershipPurchases : await this.loadMembershipPurchases();
+                if (list.length > 0) {
+                    this.setMembershipTicket(list[0]);
+                    return true;
+                }
+                return false;
+            },
+
+            async loadMembershipTicket(id) {
+                const list = this.allMembershipPurchases.length ? this.allMembershipPurchases : await this.loadMembershipPurchases();
+                const found = list.find(m => m.id === id || m.order_number === id || m.membership_code === id);
+                if (found) {
+                    this.setMembershipTicket(found);
+                    return true;
+                }
+                return false;
+            },
+
+            setMembershipTicket(data) {
+                this.ticket = data;
+                this.currentTicket = data;
+                this.isMembershipTicket = true;
+
+                if (data.payment_method) {
+                    const methodObj = this.getPaymentMethodObject(data.payment_method);
+                    if (methodObj) {
+                        this.selectedMethod = methodObj;
+                    }
+                }
+            },
+
+            /**
+             * Ganti "current ticket" yang sedang ditampilkan dari daftar riwayat gabungan (bisa
+             * booking lapangan ATAU pembelian membership) — mengganti loadTicket()/switchToBooking()
+             * lama yang cuma tau soal booking.
+             */
+            async switchToEntry(item) {
+                if (!item || !item.id) return;
                 this.isLoading = true;
                 if (this.pollingInterval) {
                     clearInterval(this.pollingInterval);
@@ -371,16 +461,30 @@
                 }
 
                 const newUrl = new URL(window.location.href);
-                newUrl.searchParams.set('booking_id', id);
                 newUrl.searchParams.delete('order_id');
                 newUrl.searchParams.delete('id');
                 newUrl.searchParams.delete('booking_code');
-                window.history.pushState({ booking_id: id }, '', newUrl);
+                newUrl.searchParams.delete('booking_id');
+                newUrl.searchParams.delete('membership_id');
 
-                await this.loadTicket(id);
+                if (item.type === 'MEMBERSHIP') {
+                    newUrl.searchParams.set('membership_id', item.id);
+                    window.history.pushState({ membership_id: item.id }, '', newUrl);
+                    await this.loadMembershipTicket(item.id);
+                } else {
+                    newUrl.searchParams.set('booking_id', item.id);
+                    window.history.pushState({ booking_id: item.id }, '', newUrl);
+                    await this.loadTicket(item.id);
+                }
+
                 await this.loadMyBookings();
                 this.isLoading = false;
                 window.scrollTo({ top: 0, behavior: 'smooth' });
+            },
+
+            // Kept for backward compatibility with any inline handler still referencing it directly.
+            async switchToBooking(id) {
+                return this.switchToEntry({ id, type: 'BOOKING' });
             },
 
             switchSession(sBooking) {
@@ -393,30 +497,40 @@
                     const json = await res.json();
                     if (json.success && json.data && json.data.length > 0) {
                         const latest = json.data[0];
-                        await this.loadTicket(latest.id);
+                        return await this.loadTicket(latest.id);
                     }
                 } catch(e) {
                     console.error('Failed to load latest booking:', e);
                 }
+                return false;
             },
 
             async loadMyBookings() {
                 try {
-                    const res = await fetch('/api/v1/padel/my-bookings');
-                    const json = await res.json();
-                    if (json.success && json.data) {
-                        const currentId = this.ticket?.id;
-                        const currentOrderId = this.ticket?.order_id || this.ticket?.order?.id;
-                        const currentOrderNumber = this.ticket?.order?.order_number;
+                    const [bookingsJson, membershipList] = await Promise.all([
+                        fetch('/api/v1/padel/my-bookings').then(r => r.json()),
+                        this.allMembershipPurchases.length ? Promise.resolve(this.allMembershipPurchases) : this.loadMembershipPurchases(),
+                    ]);
 
-                        this.pastBookings = json.data.filter(b => {
-                            if (!this.ticket) return true;
-                            if (b.id === currentId) return false;
-                            if (currentOrderId && b.order_id === currentOrderId) return false;
-                            if (currentOrderNumber && (b.order_id === currentOrderNumber || b.order?.order_number === currentOrderNumber)) return false;
-                            return true;
-                        });
+                    let combined = [];
+                    if (bookingsJson.success && bookingsJson.data) {
+                        combined = combined.concat(bookingsJson.data.map(b => ({ ...b, type: 'BOOKING' })));
                     }
+                    combined = combined.concat(membershipList || []);
+
+                    combined.sort((a, b) => new Date(b.created_at || b.booking_date || 0) - new Date(a.created_at || a.booking_date || 0));
+
+                    const currentId = this.ticket?.id;
+                    const currentOrderId = this.ticket?.order_id || this.ticket?.order?.id;
+                    const currentOrderNumber = this.ticket?.order?.order_number || this.ticket?.order_number;
+
+                    this.pastBookings = combined.filter(b => {
+                        if (!this.ticket) return true;
+                        if (b.id === currentId) return false;
+                        if (currentOrderId && b.order_id === currentOrderId) return false;
+                        if (currentOrderNumber && (b.order_id === currentOrderNumber || b.order?.order_number === currentOrderNumber || b.order_number === currentOrderNumber)) return false;
+                        return true;
+                    });
                 } catch(e) {
                     console.error('Failed to load booking history:', e);
                 }

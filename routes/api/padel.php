@@ -23,6 +23,9 @@ Route::prefix('v1/padel')->group(function () {
         Route::post('/hold-slot', [PadelBookingController::class, 'hold'])->middleware('throttle:booking-throttle');
         Route::post('/release-slot', [PadelBookingController::class, 'release']);
 
+        // Preview Benefit Membership (Read-Only, Sebelum Bayar)
+        Route::post('/preview-membership-benefit', [PadelBookingController::class, 'previewMembershipBenefit']);
+
         // Checkout & Payment Initialization (Midtrans Snap)
         Route::post('/checkout', [PadelBookingController::class, 'checkout']);
 

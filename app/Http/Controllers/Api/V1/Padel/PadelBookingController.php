@@ -143,6 +143,34 @@ class PadelBookingController extends Controller
     }
 
     /**
+     * Preview Benefit Membership (Read-Only) — dipanggil halaman "Payment Details & Checkout"
+     * SEBELUM customer menekan tombol bayar, supaya potongan diskon/kuota membership terlihat
+     * di muka, bukan baru ketahuan setelah pembayaran diproses.
+     */
+    public function previewMembershipBenefit(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'booking_ids' => ['required', 'array', 'min:1'],
+            'booking_ids.*' => ['required', 'string'],
+            'membership_balance_id' => ['nullable', 'string'],
+            'sponsor_voucher_id' => ['nullable', 'string'],
+        ]);
+
+        $preview = $this->bookingService->previewMembershipBenefit(
+            $validated['booking_ids'],
+            $request->user(),
+            $validated['membership_balance_id'] ?? null,
+            $validated['sponsor_voucher_id'] ?? null
+        );
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Preview benefit membership berhasil dihitung.',
+            'data' => $preview,
+        ]);
+    }
+
+    /**
      * Checkout Pembayaran (Idempotent 24 Jam).
      */
     public function checkout(Request $request): JsonResponse
@@ -159,7 +187,13 @@ class PadelBookingController extends Controller
             'equipments.*.equipment_id' => ['required', 'string'],
             'equipments.*.quantity' => ['required', 'integer', 'min:1'],
             'voucher_code' => ['nullable', 'string'],
-            'payment_method' => ['required', 'string', 'in:QRIS,BCA_VA,MANDIRI_VA,BRI_VA,BNI_VA,CIMB_VA,BSI_VA,CASH'],
+            'payment_method' => ['required', 'string', 'in:QRIS,BCA_VA,MANDIRI_VA,BRI_VA,BNI_VA,CIMB_VA,BSI_VA'],
+            // 'NONE' = customer sengaja memilih TIDAK memakai benefit membership untuk booking ini
+            // (toggle di halaman checkout), null = auto-detect membership aktif seperti biasa.
+            'membership_balance_id' => ['nullable', 'string'],
+            // Sama seperti membership_balance_id tapi untuk voucher jam sponsor corporate — 'NONE'
+            // = customer matiin toggle voucher, null = auto-detect voucher aktif miliknya.
+            'sponsor_voucher_id' => ['nullable', 'string'],
         ]);
 
         $checkoutResult = $this->bookingService->checkout(
@@ -168,7 +202,9 @@ class PadelBookingController extends Controller
             $validated['voucher_code'] ?? null,
             $validated['payment_method'],
             $idempotencyKey,
-            $request->user()
+            $request->user(),
+            $validated['membership_balance_id'] ?? null,
+            $validated['sponsor_voucher_id'] ?? null
         );
 
         return response()->json($checkoutResult, 200);
@@ -180,7 +216,7 @@ class PadelBookingController extends Controller
     public function retryPayment(string $id, Request $request): JsonResponse
     {
         $validated = $request->validate([
-            'payment_method' => ['required', 'string', 'in:QRIS,BCA_VA,MANDIRI_VA,BRI_VA,BNI_VA,CIMB_VA,BSI_VA,CREDIT_CARD,CASH'],
+            'payment_method' => ['required', 'string', 'in:QRIS,BCA_VA,MANDIRI_VA,BRI_VA,BNI_VA,CIMB_VA,BSI_VA,CREDIT_CARD'],
         ]);
 
         $result = $this->bookingService->retryPayment(

@@ -136,9 +136,12 @@ class FinancialIntegrityAuditFixTest extends TestCase
     }
 
     /**
-     * Test 2: Checkout tunai oleh staf wajib ada shift aktif (guard shift check)
+     * Test 2: Venue 100% Cashless — checkout() (jalur online/API) menolak CASH sama sekali,
+     * termasuk untuk staf, terlepas dari status shift kasir. Cakupan "shift guard wajib aktif" dan
+     * "pos_shift_id terikat ke Order/Payment" untuk transaksi frontdesk sungguhan sudah dicek lewat
+     * jalur POS resmi (processWalkInCheckout / adminSettleCashierPayment) di CashierShiftTest.
      */
-    public function test_staff_cash_checkout_strictly_requires_active_shift(): void
+    public function test_staff_cash_checkout_via_online_api_is_rejected(): void
     {
         $dateStr = now()->addDays(2)->format('Y-m-d');
         $hold = $this->bookingService->holdBatchSlots([
@@ -151,66 +154,17 @@ class FinancialIntegrityAuditFixTest extends TestCase
 
         $bookingId = $hold['bookings'][0]['id'];
 
-        // Skenario A: Belum ada shift aktif -> Wajib ditolak dengan Exception
-        $this->expectException(\Exception::class);
-        $this->expectExceptionMessage('Tidak ada shift kasir yang aktif untuk loket [PADEL_FRONTDESK]. Silakan buka shift terlebih dahulu.');
+        $this->expectException(\Symfony\Component\HttpKernel\Exception\HttpException::class);
+        $this->expectExceptionMessage('Pembayaran tunai (CASH) tidak diperbolehkan. Venue Club 61 beroperasi 100% Cashless.');
 
         $this->bookingService->checkout(
             bookingIds: [$bookingId],
             equipments: [],
             voucherCode: null,
             paymentMethod: 'CASH',
-            idempotencyKey: 'IDEM-STAFF-CASH-NO-SHIFT',
+            idempotencyKey: 'IDEM-STAFF-CASH-REJECTED',
             user: $this->staffUser
         );
-    }
-
-    /**
-     * Test 3: Checkout tunai oleh staf dengan shift aktif berhasil dan mengikat pos_shift_id
-     */
-    public function test_staff_cash_checkout_with_active_shift_attaches_pos_shift_id(): void
-    {
-        // Buka shift kasir aktif
-        $shift = PosCashierShift::create([
-            'shift_number' => 'SHIFT-CASH-TEST-01',
-            'counter' => 'PADEL_FRONTDESK',
-            'status' => 'OPEN',
-            'opened_by_id' => $this->staffUser->id,
-            'opened_at' => now(),
-            'starting_cash' => 200000.00,
-            'expected_cash' => 200000.00,
-        ]);
-
-        $dateStr = now()->addDays(2)->format('Y-m-d');
-        $hold = $this->bookingService->holdBatchSlots([
-            [
-                'court_id' => $this->court->id,
-                'start_time' => '12:00',
-                'end_time' => '13:00',
-            ],
-        ], $dateStr, $this->staffUser);
-
-        $bookingId = $hold['bookings'][0]['id'];
-
-        $result = $this->bookingService->checkout(
-            bookingIds: [$bookingId],
-            equipments: [],
-            voucherCode: null,
-            paymentMethod: 'CASH',
-            idempotencyKey: 'IDEM-STAFF-CASH-WITH-SHIFT',
-            user: $this->staffUser
-        );
-
-        $this->assertTrue($result['success']);
-        $this->assertSame('PAID', $result['data']['payment_status']);
-
-        $order = Order::where('order_number', $result['data']['order_id'])->firstOrFail();
-        $this->assertSame($shift->id, $order->pos_shift_id, 'Order wajib terikat ke active shift');
-
-        $payment = Payment::where('order_id', $order->id)->firstOrFail();
-        $this->assertSame($shift->id, $payment->pos_shift_id, 'Payment wajib terikat ke active shift');
-        $this->assertSame('CASHIER_POS', $payment->payment_gateway);
-        $this->assertSame('SUCCESS', $payment->status);
     }
 
     /**

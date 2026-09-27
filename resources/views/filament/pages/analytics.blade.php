@@ -190,6 +190,77 @@
         </div>
     </div>
 
+    <!-- Ringkasan Membership: Pemasukan Penjualan Paket vs Nilai Benefit yang Diredeem (2 hal BEDA, sengaja dipisah) -->
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); gap: 1.25rem; margin-bottom: 1.5rem;">
+        <!-- Kolom 1: Pemasukan Kas dari Penjualan Membership (ini UANG RIIL) -->
+        <div class="adm-card" style="padding: 1.25rem; border: 2px solid #D4AF37;">
+            <div class="adm-card-head" style="margin-bottom: 1rem;">
+                <div>
+                    <div class="adm-card-title">Pemasukan Penjualan Paket Membership</div>
+                    <div class="adm-card-sub">Uang riil diterima saat paket dibeli (Padel/Gym/Sauna) &mdash; kanal terpisah dari sewa lapangan</div>
+                </div>
+                <span class="adm-pill adm-pill-gold">Cash In</span>
+            </div>
+
+            <div style="display: flex; flex-direction: column; gap: 0.75rem;">
+                <div style="display: flex; align-items: center; justify-content: space-between; padding: 0.75rem 1rem; background: #FAF5E8; border-radius: 12px; border: 1px solid #DFC387;">
+                    <div>
+                        <div style="font-weight: 800; font-size: 0.875rem; color: #1F170D;">Omzet Penjualan Membership</div>
+                        <div style="font-size: 0.6875rem; color: #7A643E;">Total order lunas dengan item paket membership</div>
+                    </div>
+                    <div style="font-family: var(--font-mono, monospace); font-weight: 900; font-size: 1rem; color: #1F170D;">
+                        Rp {{ number_format($membershipSalesRevenue, 0, ',', '.') }}
+                    </div>
+                </div>
+
+                <div style="display: flex; align-items: center; justify-content: space-between; padding: 0.75rem 1rem; background: #FFFDF5; border-radius: 12px; border: 1px solid #DFC387;">
+                    <div>
+                        <div style="font-weight: 800; font-size: 0.875rem; color: #1F170D;">Omzet Gabungan Venue</div>
+                        <div style="font-size: 0.6875rem; color: #7A643E;">Booking (Net Revenue) + Penjualan Membership</div>
+                    </div>
+                    <div style="font-family: var(--font-mono, monospace); font-weight: 900; font-size: 1rem; color: #8C6418;">
+                        Rp {{ number_format($combinedRevenue, 0, ',', '.') }}
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Kolom 2: Nilai Benefit yang Diredeem Member (INFORMASIONAL, BUKAN uang masuk baru) -->
+        <div class="adm-card" style="padding: 1.25rem; background: #FAFAFA;">
+            <div class="adm-card-head" style="margin-bottom: 1rem;">
+                <div>
+                    <div class="adm-card-title">Nilai Benefit Member Terpakai (Informasional)</div>
+                    <div class="adm-card-sub">Bukan pendapatan baru &mdash; uangnya sudah diakui saat paket dibeli. Ini cuma indikator utilisasi.</div>
+                </div>
+                <span class="adm-pill" style="background: #E5E7EB; color: #374151; border: 1px solid #D1D5DB; font-weight: 700;">
+                    Bukan Omzet
+                </span>
+            </div>
+
+            <div style="display: flex; flex-direction: column; gap: 0.75rem;">
+                <div style="display: flex; align-items: center; justify-content: space-between; padding: 0.75rem 1rem; background: #FFFFFF; border-radius: 12px; border: 1px solid #E5E7EB;">
+                    <div>
+                        <div style="font-weight: 800; font-size: 0.875rem; color: #1F170D;">Nilai Diskon/Kuota yang Dipakai</div>
+                        <div style="font-size: 0.6875rem; color: #7A643E;">Setara tarif reguler yang "dibayar" pakai membership</div>
+                    </div>
+                    <div style="font-family: var(--font-mono, monospace); font-weight: 900; font-size: 1rem; color: #6B7280;">
+                        Rp {{ number_format($memberBenefitRedeemedValue, 0, ',', '.') }}
+                    </div>
+                </div>
+
+                <div style="display: flex; align-items: center; justify-content: space-between; padding: 0.75rem 1rem; background: #FFFFFF; border-radius: 12px; border: 1px solid #E5E7EB;">
+                    <div>
+                        <div style="font-weight: 800; font-size: 0.875rem; color: #1F170D;">Jam Padel Terpakai via Kuota</div>
+                        <div style="font-size: 0.6875rem; color: #7A643E;">{{ $bookingsUsingMembership }} booking menggunakan benefit membership</div>
+                    </div>
+                    <div style="font-family: var(--font-mono, monospace); font-weight: 900; font-size: 1rem; color: #6B7280;">
+                        {{ number_format($memberBenefitHoursConsumed, 1) }} Jam
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Tabel 10 Mutasi Uang Masuk Terkini (Live Audit Log untuk PM) -->
     <div class="adm-card" style="padding: 1.5rem; margin-bottom: 1.5rem;">
         <div class="adm-card-head" style="margin-bottom: 1rem;">

@@ -415,12 +415,13 @@ class MasterDataPricingAndAddonsTest extends TestCase
         $this->expectExceptionMessage('berada di luar jam operasional');
 
         // Coba hold slot jam 09:00 - 10:00 (sebelum jam 11:00 buka)
+        $bookingDate = \Carbon\Carbon::tomorrow()->toDateString();
         $service->holdBatchSlots([
             [
                 'court_id' => $this->court->id,
                 'start_time' => '09:00:00',
                 'end_time' => '10:00:00',
             ],
-        ], '2026-09-21', $this->adminUser);
+        ], $bookingDate, $this->adminUser);
     }
 }

@@ -111,7 +111,7 @@ class SecurityHardeningAuditTest extends TestCase
     /**
      * Uji Celah 2: Customer Checkout dengan CASH Wajib PENDING_PAYMENT (Bukan PAID)
      */
-    public function test_customer_checkout_with_cash_forces_pending_payment(): void
+    public function test_customer_checkout_with_cash_is_rejected(): void
     {
         $date = now()->addDays(3)->format('Y-m-d');
 
@@ -127,24 +127,22 @@ class SecurityHardeningAuditTest extends TestCase
 
         $bookingId = $hold->json('data.bookings.0.id');
 
-        // Checkout memilih CASH
-        $checkout = $this->withHeader('Authorization', "Bearer {$this->customerToken}")
+        // Venue 100% Cashless: checkout memilih CASH harus ditolak (validasi payment_method).
+        $this->withHeader('Authorization', "Bearer {$this->customerToken}")
             ->withHeader('X-Idempotency-Key', (string) Str::uuid())
             ->postJson('/api/v1/padel/checkout', [
                 'booking_ids' => [$bookingId],
                 'payment_method' => 'CASH',
             ])
-            ->assertStatus(200);
+            ->assertStatus(422);
 
-        // Status WAJIB PENDING_PAYMENT, BUKAN PAID!
-        $this->assertEquals('PENDING_PAYMENT', $checkout->json('data.payment_status'));
-        $this->assertEquals('PENDING_PAYMENT', PadelBooking::find($bookingId)->status);
+        $this->assertEquals('LOCKED', PadelBooking::find($bookingId)->status);
     }
 
     /**
-     * Uji Celah 2: Staff Kasir / Admin di POS Checkout CASH Langsung Berstatus PAID
+     * Uji Celah 2: Staff Kasir / Admin di POS Checkout CASH Tetap Ditolak (100% Cashless)
      */
-    public function test_staff_checkout_with_cash_at_pos_is_immediately_paid(): void
+    public function test_staff_checkout_with_cash_at_pos_is_rejected(): void
     {
         \App\Models\Pos\PosCashierShift::create([
             'shift_number' => 'SHIFT-CASHIER-TEST',
@@ -152,8 +150,8 @@ class SecurityHardeningAuditTest extends TestCase
             'status' => 'OPEN',
             'opened_by_id' => $this->cashier->id,
             'opened_at' => now(),
-            'starting_cash' => 200000.00,
-            'expected_cash' => 200000.00,
+            'starting_cash' => 0.00,
+            'expected_cash' => 0.00,
         ]);
 
         $date = now()->addDays(3)->format('Y-m-d');
@@ -170,17 +168,16 @@ class SecurityHardeningAuditTest extends TestCase
 
         $bookingId = $hold->json('data.bookings.0.id');
 
-        $checkout = $this->withHeader('Authorization', "Bearer {$cashierToken}")
+        // Kasir sekalipun TIDAK bisa checkout via CASH lagi — venue 100% Cashless tanpa pengecualian.
+        $this->withHeader('Authorization', "Bearer {$cashierToken}")
             ->withHeader('X-Idempotency-Key', (string) Str::uuid())
             ->postJson('/api/v1/padel/checkout', [
                 'booking_ids' => [$bookingId],
                 'payment_method' => 'CASH',
             ])
-            ->assertStatus(200);
+            ->assertStatus(422);
 
-        // Kasir yang menerima uang tunai langsung menghasilkan status PAID
-        $this->assertEquals('PAID', $checkout->json('data.payment_status'));
-        $this->assertEquals('PAID', PadelBooking::find($bookingId)->status);
+        $this->assertEquals('LOCKED', PadelBooking::find($bookingId)->status);
     }
 
     /**

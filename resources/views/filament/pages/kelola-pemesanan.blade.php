@@ -420,6 +420,44 @@
                                         </button>
                                     @endif
 
+                                    @php
+                                        $hasPendingEquipmentReturn = $b->equipments->contains(function ($e) {
+                                            return $e->equipment
+                                                && in_array(strtoupper($e->equipment->type), ['RACKET', 'TOWEL'])
+                                                && $e->stock_deducted_at
+                                                && ! $e->returned_at;
+                                        });
+                                    @endphp
+                                    @if (in_array($b->status, ['CHECKED_IN', 'COMPLETED']) && $hasPendingEquipmentReturn)
+                                        <button type="button" wire:click="executeReturnEquipment('{{ $b->id }}')"
+                                            wire:confirm="Tandai alat sewa (raket/handuk) tiket {{ $b->booking_code }} sudah dikembalikan ke frontdesk?"
+                                            wire:loading.attr="disabled" title="Retur Alat Sewa (Restock)"
+                                            class="adm-btn-icon"
+                                            style="background: #EFF6FF; border-color: #BFDBFE; color: #1D4ED8;">
+                                            <span wire:loading.remove
+                                                wire:target="executeReturnEquipment('{{ $b->id }}')">
+                                                <svg style="width: 15px; height: 15px;" fill="none"
+                                                    stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round"
+                                                        stroke-width="2"
+                                                        d="M9 14l-4-4m0 0l4-4m-4 4h11a4 4 0 010 8h-1" />
+                                                </svg>
+                                            </span>
+                                            <span wire:loading
+                                                wire:target="executeReturnEquipment('{{ $b->id }}')">
+                                                <svg style="width: 13px; height: 13px; animation: spin 1s linear infinite;"
+                                                    fill="none" viewBox="0 0 24 24">
+                                                    <circle cx="12" cy="12" r="10"
+                                                        stroke="currentColor" stroke-width="4"
+                                                        style="opacity: 0.25;"></circle>
+                                                    <path fill="currentColor"
+                                                        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+                                                        style="opacity: 0.75;"></path>
+                                                </svg>
+                                            </span>
+                                        </button>
+                                    @endif
+
                                     @if (in_array($b->status, ['PAID', 'LOCKED']))
                                         <button type="button"
                                             wire:click="openRescheduleModal('{{ $b->id }}')"
@@ -508,8 +546,7 @@
                             <td colspan="{{ $activeTab === 'CANCELLED' ? 8 : 7 }}"
                                 style="text-align: center; padding: 2.5rem 1rem; color: #8C7A58;">
                                 @if ($search)
-                                    <div style="font-weight: 700; color: #1F170D; margin-bottom: 0.25rem;">Tidak ada
-                                        reservasi yang cocok</div>
+                                    <div style="font-weight: 700; color: #1F170D; margin-bottom: 0.25rem;">Tidak ada reservasi yang cocok</div>
                                     <div style="font-size: 0.75rem; color: #8C7A58; margin-bottom: 0.75rem;">
                                         Tidak ditemukan hasil untuk kata kunci "<strong>{{ $search }}</strong>".
                                     </div>
@@ -733,9 +770,8 @@
                                             Bayar Selisih:</label>
                                         <select wire:model="reschedulePaymentMethod"
                                             style="width: 100%; border: 1px solid #F87171; border-radius: 6px; padding: 0.4rem; font-size: 0.75rem;">
-                                            <option value="CASH">Tunai Kasir Frontdesk</option>
-                                            <option value="EDC_BCA">Mesin EDC BCA / Mandiri</option>
                                             <option value="QRIS">QRIS Kasir Frontdesk</option>
+                                            <option value="EDC_BCA">Mesin EDC BCA / Mandiri</option>
                                         </select>
                                     @endif
                                 </div>
@@ -817,10 +853,9 @@
                             Pembayaran:</label>
                         <select wire:model="settlePaymentMethod"
                             style="width: 100%; border: 1px solid #D4AF37; border-radius: 8px; padding: 0.5rem; font-size: 0.8125rem;">
-                            <option value="CASH">Tunai Kasir Frontdesk</option>
+                            <option value="QRIS">QRIS Kasir Frontdesk</option>
                             <option value="EDC_BCA">Mesin EDC BCA / Mandiri</option>
                             <option value="TRANSFER">Transfer Rekening Kasir</option>
-                            <option value="QRIS">QRIS Kasir Frontdesk</option>
                         </select>
                     </div>
 
@@ -905,7 +940,6 @@
                             Pengembalian:</label>
                         <select wire:model="refundMethod"
                             style="width: 100%; border: 1px solid #D4AF37; border-radius: 8px; padding: 0.5rem; font-size: 0.8125rem;">
-                            <option value="TUNAI_KASIR">Tunai Kasir Frontdesk</option>
                             <option value="TRANSFER_MANUAL">Transfer Bank Manual</option>
                             <option value="DEPOSIT_MEMBER">Saldo Deposit Member</option>
                         </select>

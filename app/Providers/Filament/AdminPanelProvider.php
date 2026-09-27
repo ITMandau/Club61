@@ -26,7 +26,12 @@ class AdminPanelProvider extends PanelProvider
             ->default()
             ->id('admin')
             ->path('admin')
-            ->login(\App\Filament\Pages\Auth\Login::class)
+            // Sengaja TIDAK register login page Filament sendiri — supaya cuma ada SATU pintu
+            // login untuk semua orang (staf maupun customer), yaitu /login (LoginRequest.php,
+            // sudah mendukung email/No HP + auto-redirect ke /admin kalau stafnya admin/staff).
+            // Efeknya: akses /admin tanpa login otomatis diarahkan ke /login (fallback bawaan
+            // Laravel saat Filament::getLoginUrl() null), dan logout dari /admin juga diarahkan
+            // ke /login lewat binding LogoutResponse custom di AppServiceProvider.
             ->darkMode(false)
             ->brandName('Club 61 Padel Court')
             ->brandLogo(asset('images/club61-logo.png'))
@@ -40,6 +45,9 @@ class AdminPanelProvider extends PanelProvider
             ->resources([
                 \App\Filament\Resources\Users\UserResource::class,
                 \App\Filament\Resources\Roles\RoleResource::class,
+                \App\Filament\Resources\Membership\MembershipPlanResource::class,
+                \App\Filament\Resources\Sponsor\SponsorOrganizationResource::class,
+                \App\Filament\Resources\Sponsor\SponsorAccessScheduleResource::class,
             ])
             ->plugins([
                 \BezhanSalleh\FilamentShield\FilamentShieldPlugin::make(),
@@ -53,6 +61,7 @@ class AdminPanelProvider extends PanelProvider
                 \App\Filament\Pages\Analytics::class,
                 \App\Filament\Pages\BookingSystem::class,
                 \App\Filament\Pages\BookOfflineCourt::class,
+                \App\Filament\Pages\JualMembership::class,
                 \App\Filament\Pages\KelolaPemesanan::class,
                 \App\Filament\Pages\Kustomer::class,
                 \App\Filament\Pages\KelolaKaryawan::class,

@@ -24,6 +24,11 @@ class PasswordController extends Controller
             'password' => Hash::make($validated['password']),
         ]);
 
+        // Cabut semua Sanctum token API (mis. sesi mobile app) begitu password diganti,
+        // supaya token yang mungkin sudah bocor tidak tetap valid selamanya (Sanctum token
+        // di app ini tidak auto-expire, lihat config/sanctum.php).
+        $request->user()->tokens()->delete();
+
         return back()->with('status', 'password-updated');
     }
 }
