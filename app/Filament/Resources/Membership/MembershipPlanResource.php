@@ -37,6 +37,40 @@ class MembershipPlanResource extends Resource
 
     protected static ?int $navigationSort = 6;
 
+    // Model MembershipPlan tidak punya Gate::policy() apa pun terdaftar — tanpa override ini,
+    // Filament fallback ke Gate::before-only (default ALLOW ke semua staf yang login, apapun
+    // rolenya). Override langsung di sini supaya cuma staf dengan permission eksplisit yang bisa
+    // mengubah harga/benefit paket membership.
+    public static function canViewAny(): bool
+    {
+        return (bool) auth()->user()?->can('view_membership_plans');
+    }
+
+    public static function canView(\Illuminate\Database\Eloquent\Model $record): bool
+    {
+        return (bool) auth()->user()?->can('view_membership_plans');
+    }
+
+    public static function canCreate(): bool
+    {
+        return (bool) auth()->user()?->can('manage_membership_plans');
+    }
+
+    public static function canEdit(\Illuminate\Database\Eloquent\Model $record): bool
+    {
+        return (bool) auth()->user()?->can('manage_membership_plans');
+    }
+
+    public static function canDelete(\Illuminate\Database\Eloquent\Model $record): bool
+    {
+        return (bool) auth()->user()?->can('manage_membership_plans');
+    }
+
+    public static function canDeleteAny(): bool
+    {
+        return (bool) auth()->user()?->can('manage_membership_plans');
+    }
+
     public static function form(Schema $schema): Schema
     {
         return $schema

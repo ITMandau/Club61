@@ -23,6 +23,21 @@ class AppServiceProvider extends ServiceProvider
 
             return $registry;
         });
+
+        // Filament tidak punya login page sendiri lagi (AdminPanelProvider), jadi begitu staf
+        // logout dari /admin, arahkan langsung ke satu-satunya pintu login (/login) — bukan ke
+        // dashboard panel /admin (yang defaultnya dituju Filament\Auth\Http\Responses\LogoutResponse
+        // kalau tidak ada login page terdaftar), supaya tidak ada hop redirect tambahan.
+        $this->app->bind(
+            \Filament\Auth\Http\Responses\Contracts\LogoutResponse::class,
+            fn () => new class implements \Filament\Auth\Http\Responses\Contracts\LogoutResponse
+            {
+                public function toResponse($request)
+                {
+                    return redirect()->route('login');
+                }
+            }
+        );
     }
 
     /**
@@ -35,6 +50,7 @@ class AppServiceProvider extends ServiceProvider
         });
 
         Gate::policy(\Spatie\Permission\Models\Role::class, \App\Policies\RolePolicy::class);
+        Gate::policy(\App\Models\Sponsor\SponsorOrganization::class, \App\Policies\Sponsor\SponsorOrganizationPolicy::class);
 
         if (! app()->environment('production') && (request()->header('x-forwarded-proto') === 'https' || str_contains(request()->header('host') ?? '', 'ngrok'))) {
             URL::forceScheme('https');

@@ -23,8 +23,9 @@
                 </div>
 
                 <div class="flex items-center gap-2.5 sm:gap-3 w-full sm:w-auto">
-                    <button type="button" 
-                            @click="downloadTicketPng()" 
+                    <button type="button"
+                            x-show="!isMembershipTicket"
+                            @click="downloadTicketPng()"
                             :disabled="isDownloadingPng || !currentTicket || currentTicket.status === 'EXPIRED' || currentTicket.status === 'CANCELLED' || currentTicket.status === 'REFUNDED'"
                             class="flex-1 sm:flex-none justify-center px-4 py-2.5 rounded-2xl bg-[#FAF2DE] hover:bg-[#F3DFAD] border border-[#DFC387] text-[#7A5818] text-xs font-bold transition-all shadow-sm flex items-center gap-2 disabled:opacity-50 cursor-pointer">
                         <template x-if="!isDownloadingPng">
@@ -73,17 +74,58 @@
             <template x-if="!isLoading && currentTicket">
                 <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
 
-                    <!-- Left Column: Active E-Ticket Card (Col 7) -->
+                    <!-- Left Column: Active E-Ticket / Membership Invoice Card (Col 7) -->
+                    <!-- NOTE: uses x-show (not x-if/<template>) deliberately — ticket-card.blade.php
+                         has more than one top-level sibling element, and Alpine's x-if only ever
+                         clones the FIRST child of its <template>, silently dropping the rest. -->
                     <div class="lg:col-span-7 flex flex-col gap-4">
-                        @include('customer.invoice-partials.ticket-card')
+                        <div x-show="!isMembershipTicket">
+                            @include('customer.invoice-partials.ticket-card')
+                        </div>
+                        <div x-show="isMembershipTicket">
+                            @include('customer.invoice-partials.membership-invoice-card')
+                        </div>
                     </div>
 
                     <!-- Right Column: Invoice Details & Past History (Col 5) -->
                     <div class="lg:col-span-5 flex flex-col gap-6">
-                        @include('customer.invoice-partials.invoice-summary')
+                        <div x-show="!isMembershipTicket">
+                            @include('customer.invoice-partials.invoice-summary')
+                        </div>
+                        <div x-show="isMembershipTicket">
+                            @include('customer.invoice-partials.membership-summary')
+                        </div>
                         @include('customer.invoice-partials.booking-history')
                     </div>
 
+                </div>
+            </template>
+
+            <!-- Empty State: No Bookings or Membership Purchases at All Yet -->
+            <template x-if="!isLoading && !currentTicket">
+                <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+                    <div class="lg:col-span-7">
+                        <div class="bg-white/95 backdrop-blur-xl rounded-3xl border border-[#DFC387] shadow-sm p-8 sm:p-12 text-center space-y-3">
+                            <div class="w-14 h-14 rounded-2xl bg-[#FAF2DE] border border-[#DFC387] flex items-center justify-center mx-auto text-[#8C6418]">
+                                <svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                </svg>
+                            </div>
+                            <h3 class="font-serif font-black text-base text-[#1F170D]">No Invoices Yet</h3>
+                            <p class="text-xs text-[#7A643E] max-w-sm mx-auto">You don't have any court booking or membership purchase yet. Once you book a court or buy a membership package, the invoice will show up here.</p>
+                            <div class="flex items-center justify-center gap-2 pt-2 flex-wrap">
+                                <a href="{{ route('customer.booking') }}" class="px-4 py-2.5 rounded-xl bg-gradient-to-b from-[#F5DE9B] to-[#D4AF37] text-[#1E160A] text-xs font-black uppercase tracking-wider shadow-md hover:brightness-105 active:scale-95 transition-all">
+                                    Book a Court
+                                </a>
+                                <a href="{{ route('customer.membership') }}" class="px-4 py-2.5 rounded-xl bg-[#FAF2DE] hover:bg-[#F3DFAD] border border-[#DFC387] text-[#7A5818] text-xs font-bold transition-all">
+                                    View Membership Packages
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="lg:col-span-5 flex flex-col gap-6">
+                        @include('customer.invoice-partials.booking-history')
+                    </div>
                 </div>
             </template>
 

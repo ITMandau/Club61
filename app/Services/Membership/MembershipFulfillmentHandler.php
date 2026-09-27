@@ -5,13 +5,15 @@ namespace App\Services\Membership;
 use App\Models\Membership\UserMembership;
 use App\Models\Pos\Order;
 use App\Services\Payment\Contracts\DomainFulfillmentHandlerInterface;
+use App\Services\Sponsor\SponsorOrganizationService;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
 
 class MembershipFulfillmentHandler implements DomainFulfillmentHandlerInterface
 {
     public function __construct(
-        protected MembershipBalanceService $balanceService
+        protected MembershipBalanceService $balanceService,
+        protected SponsorOrganizationService $sponsorOrganizationService
     ) {}
 
     /**
@@ -62,6 +64,13 @@ class MembershipFulfillmentHandler implements DomainFulfillmentHandlerInterface
                 );
             }
             $membership->save();
+
+            // Sponsor/Corporate: pembeli paket ORGANIZATIONAL otomatis jadi PIC tim-nya, berlaku
+            // sama rata dari kanal manapun (POS Jual Membership walk-in maupun online) karena
+            // fulfillment handler ini satu-satunya titik aktivasi membership. Nama perusahaan
+            // default masih placeholder — staf bisa perbaiki lewat halaman "Kelola Sponsor
+            // Korporat" (SponsorOrganizationResource).
+            $this->sponsorOrganizationService->ensureOrganizationForMembership($membership);
 
             // Isi saldo kuota dari initial_quota via TOPUP
             foreach ($membership->balances as $balance) {

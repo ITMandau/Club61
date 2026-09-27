@@ -156,6 +156,73 @@
                 </div>
             @endif
 
+            @php
+                $myCorporateMember = \App\Models\Sponsor\SponsorOrganizationMember::where('user_id', Auth::id())
+                    ->where('status', 'ACTIVE')
+                    ->with(['organization', 'vouchers' => fn ($q) => $q->orderByDesc('issued_at')])
+                    ->first();
+            @endphp
+
+            @if($myCorporateMember)
+                <!-- Corporate Team Voucher -->
+                <div id="corporate-vouchers" class="relative overflow-hidden rounded-3xl p-6 sm:p-8 border-2 border-[#D4AF37] shadow-[0_15px_35px_rgba(212,175,55,0.2)] scroll-mt-24"
+                     style="background: linear-gradient(135deg, #FAF5E8 0%, #FFFFFF 100%);">
+                    <div class="flex items-center justify-between gap-4 flex-wrap mb-4">
+                        <div>
+                            <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full text-[10px] font-extrabold uppercase bg-[#FAF2DE] text-[#7A5818] border border-[#DFC387]">
+                                <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                                <span>Corporate Team Benefit</span>
+                            </div>
+                            <div class="font-serif font-black text-xl sm:text-2xl text-[#1F170D] mt-2">{{ $myCorporateMember->organization->name ?? 'Corporate Team' }}</div>
+                            <p class="text-xs text-[#7A643E] mt-0.5">Free play-hour vouchers granted by your company. Hours are already active as soon as they're released — no need to activate anything before booking.</p>
+                        </div>
+                        <div class="p-4 rounded-2xl bg-white border border-[#DFC387] shadow-sm text-center shrink-0">
+                            <div class="text-[10px] font-extrabold uppercase tracking-wider text-[#8C6418]">Total Active Hours</div>
+                            <div class="font-serif font-black text-2xl text-[#1F170D] mt-1">{{ number_format($myCorporateMember->totalRemainingHours(), 1) }}</div>
+                        </div>
+                    </div>
+
+                    @if($myCorporateMember->vouchers->isEmpty())
+                        <p class="text-xs text-[#8C7A58] italic">No vouchers issued yet.</p>
+                    @else
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-xs">
+                                <thead>
+                                    <tr class="text-left text-[10px] uppercase font-extrabold text-[#8C6418] border-b border-[#DFC387]">
+                                        <th class="py-2 pr-3">Hours Granted</th>
+                                        <th class="py-2 pr-3">Used</th>
+                                        <th class="py-2 pr-3">Remaining</th>
+                                        <th class="py-2 pr-3">Issued</th>
+                                        <th class="py-2 pr-3">Expires</th>
+                                        <th class="py-2 pr-3">Status</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach($myCorporateMember->vouchers as $v)
+                                        <tr class="border-b border-[#FAF2DE] {{ $v->isExpired() ? 'opacity-50' : '' }}">
+                                            <td class="py-2 pr-3 font-bold text-[#1F170D]">{{ number_format((float) $v->hours_granted, 1) }}</td>
+                                            <td class="py-2 pr-3">{{ number_format((float) $v->hours_used, 1) }}</td>
+                                            <td class="py-2 pr-3 font-bold">{{ number_format($v->remainingHours(), 1) }}</td>
+                                            <td class="py-2 pr-3">{{ $v->issued_at->format('d M Y') }}</td>
+                                            <td class="py-2 pr-3">{{ $v->expires_at->format('d M Y') }}</td>
+                                            <td class="py-2 pr-3">
+                                                @if($v->isExpired())
+                                                    <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-gray-100 text-gray-600 border border-gray-300">Expired</span>
+                                                @elseif(! $v->isAcknowledged())
+                                                    <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200">New</span>
+                                                @else
+                                                    <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">Claimed</span>
+                                                @endif
+                                            </td>
+                                        </tr>
+                                    @endforeach
+                                </tbody>
+                            </table>
+                        </div>
+                    @endif
+                </div>
+            @endif
+
             <!-- Membership Plans Catalog -->
             <div class="space-y-4">
                 <div class="flex items-center justify-between px-1">

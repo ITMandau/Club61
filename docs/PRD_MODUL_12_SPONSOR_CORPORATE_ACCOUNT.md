@@ -7,8 +7,8 @@
 | Metadata Dokumen | Spesifikasi |
 | :--- | :--- |
 | **Kode Dokumen** | `PRD-MODUL-12-SPONSOR-CORPORATE-ACCOUNT` |
-| **Versi** | `v2.0.0-DRAFT` — **revisi arsitektur: kuota sponsor tidak lagi ledger terpisah, lihat §2.4** |
-| **Status** | **Proposed — Menunggu Persetujuan Implementasi** |
+| **Versi** | `v2.0.0-DRAFT` (arsitektur di §2–§7 di bawah **SUDAH DIGANTI** oleh implementasi nyata — lihat §8 untuk arsitektur final yang berjalan) |
+| **Status** | **Sebagian Diimplementasikan, Dihentikan Sementara — lihat §8 untuk status detail & keputusan yang masih menunggu PM** |
 | **Sumber Requirement** | Permintaan langsung Head IT (Pak Sadrakh) melalui diskusi chat internal |
 | **Dependensi Teknis** | **`PRD_MODUL_05_MEMBERSHIP_SYSTEM.md` (v2) — modul ini dibangun DI ATAS infrastruktur Membership, bukan berdiri sendiri. Wajib dibaca §6 & §8 PRD Modul 05 sebelum implementasi.** |
 | **Target Pengguna** | Perusahaan/Instansi Sponsor (B2B), Admin Sponsor (penanggung jawab kuota), Member Karyawan Sponsor |
@@ -259,3 +259,37 @@ DB::transaction(function () use ($member, $organization, $hours, $bookingId, $ac
 - Top-up/penambahan jam ke membership organisasional yang sudah `EXPIRED` — mengikuti aturan perpanjangan vs upgrade yang sama seperti membership individual (lihat PRD Modul 05).
 
 **Urutan Implementasi**: modul ini **wajib** dibangun setelah skema inti Modul 05 (`membership_plans`, `membership_plan_benefits`, `user_memberships`, `user_membership_balances`, `MembershipBalanceService::adjustQuota()`) selesai dan lolos test — karena Modul 12 murni lapisan wrapper/alokasi di atasnya, tidak punya ledger sendiri untuk berdiri independen.
+
+---
+
+## 8. Status Implementasi Aktual (Update Terkini — Menggantikan §2–§7 di Atas)
+
+> **Catatan penting**: setelah diskusi lanjutan dengan PM, arsitektur yang benar-benar dibangun **berbeda** dari draft `v2.0.0` di atas. §2–§7 di atas dibiarkan sebagai arsip sejarah keputusan, **BUKAN** acuan aktif lagi. Ringkasan di bawah ini yang jadi acuan.
+
+### 8.1 Perubahan Arsitektur dari Draft v2.0.0
+
+| Draft v2.0.0 (§2–§7 di atas) | Yang Benar-Benar Dibangun |
+| :--- | :--- |
+| Kuota member = 1 kolom `allocated_hours`/`hours_used` (plafon statis, tanpa expired) | Kuota member = **ledger voucher** (`sponsor_member_vouchers`): tiap "release" jam (dari CSV import atau tombol manual PIC) bikin 1 baris baru, **expired mandiri 1 bulan** dari tanggal terbit. 1 member bisa punya beberapa voucher aktif sekaligus (sengaja tidak digabung/direset saat re-release). |
+| Kuota real tetap 1 sumber di `user_membership_balances.remaining_quota` (shared pool level membership) | Kuota real ada di level **voucher per-individu** (`sponsor_member_vouchers`), bukan pool bersama di level membership — karena model bisnis final: tiap karyawan dapat jam sendiri-sendiri lewat CSV (`nama, no_hp, jam`), bukan pool yang dibagi rata/manual oleh Admin Sponsor. |
+| Jam main sponsor = 1 `time_window_start`/`time_window_end` tetap, diatur sendiri oleh Admin Sponsor (self-service, FR-02) | Jam main sponsor = **jadwal akses ber-periode** (`sponsor_access_schedules`): banyak baris aturan per sponsor, masing-masing punya rentang tanggal + hari opsional + jam mulai/selesai. **Dikontrol STAF venue lewat Filament (`/admin/sponsor/sponsor-access-schedules`), BUKAN self-service PIC** — karena venue cuma punya 3 lapangan yang harus digilir gantian antar beberapa sponsor supaya tidak rebutan jam ramai. |
+| Payment method baru `SPONSOR_QUOTA` disisipkan ke `checkout()` biasa | **Belum diimplementasikan** — lihat §8.3, ini bagian yang masih terbuka/terhenti. |
+
+### 8.2 Yang SUDAH Selesai & Lolos Test Otomatis
+
+- Migration: `sponsor_organizations`, `sponsor_organization_members`, `sponsor_member_vouchers`, `sponsor_access_schedules`, + kolom `sponsor_organization_id`/`sponsor_member_voucher_id` di `padel_bookings`.
+- Model: `SponsorOrganization`, `SponsorOrganizationMember`, `SponsorMemberVoucher`, `SponsorAccessSchedule` (`app/Models/Sponsor/`).
+- `SponsorOrganizationPolicy` — scoped ke `sponsor_admin_user_id`, terpisah total dari Filament Shield (PIC tidak pernah dapat akses `/admin`).
+- **API PIC** (`app/Http/Controllers/Api/V1/Sponsor/SponsorOrganizationController.php`, route `/api/v1/sponsor/organization/*`, guard `auth:sanctum,web`): lihat ringkasan org, tambah anggota manual + voucher awal, release voucher tambahan, revoke/reaktivasi anggota, **import CSV roster + jam** (`nama, no_hp, jam`). **Catatan: ini baru API, belum ada halaman/portal customer-facing untuk PIC memakainya secara visual** (FR-02 di draft lama belum dibangun UI-nya).
+- **Panel Staf Filament** (`app/Filament/Resources/Sponsor/SponsorAccessScheduleResource.php`, menu "Jadwal Akses Sponsor"): staf bisa bikin/hapus aturan jadwal akses per sponsor (tanggal, hari opsional, jam).
+- Test coverage: `tests/Feature/Sponsor/*.php` (schema, model, policy IDOR, API PIC end-to-end, CSV import, schedule service, smoke test halaman Filament) — semua hijau, tidak ada regresi ke suite lama.
+
+### 8.3 Yang BELUM Selesai — Dihentikan Sementara, Menunggu Keputusan PM
+
+**Ini bagian paling kritis yang belum ada sama sekali:** integrasi ke mesin booking/checkout asli (`ManagesCheckoutAndPayments.php`). Saat ini kalau ada booking beneran masuk, sistem **belum** melakukan: (1) cek jadwal akses sponsor sebelum mengizinkan slot, (2) potong voucher jam milik member yang bersangkutan (FIFO — voucher yang paling dekat expired duluan), (3) tandai booking dengan `sponsor_organization_id`/`sponsor_member_voucher_id`, (4) hitung bagian yang gratis (dari voucher) vs bagian yang harus dibayar (jika jam booking melebihi sisa voucher).
+
+**Alasan dihentikan**: muncul pertanyaan terbuka dari PM soal **siapa yang menginisiasi booking** — apakah member karyawan booking mandiri sendiri lewat app/portal (asumsi yang dipakai sepanjang desain di atas, mengikuti pola industri Wellhub/Gympass/corporate golf club), **atau** ternyata dikendalikan/dibantu oleh **resepsionis** (staf frontdesk venue) saat karyawan datang. Ini keputusan yang mengubah signifikan DI MANA logic voucher-deduction & schedule-check ini harus dipasang:
+- Kalau member self-book → titik integrasinya di API booking customer (`PadelBookingController`/`ManagesCheckoutAndPayments.php` jalur online).
+- Kalau resepsionis yang input → titik integrasinya di POS Walk-In Booking (`BookOfflineCourt.php`), bukan API customer — perlu tambahan UI di layar kasir untuk pilih "bayar pakai voucher sponsor" + pilih member/voucher mana yang dipakai.
+
+**Belum boleh dilanjutkan sampai poin ini dikonfirmasi PM.** Begitu jelas, sisa pekerjaan (integrasi checkout + UI portal PIC di §8.2) baru lanjut dikerjakan.

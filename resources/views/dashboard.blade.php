@@ -1,5 +1,18 @@
+@php
+    $myCorporateMemberForDashboard = \App\Models\Sponsor\SponsorOrganizationMember::where('user_id', Auth::id())
+        ->where('status', 'ACTIVE')
+        ->with(['organization.userMembership.plan', 'vouchers' => fn ($q) => $q->whereNull('acknowledged_at')->where('expires_at', '>', now())->orderBy('expires_at')])
+        ->first();
+    $unacknowledgedVouchers = $myCorporateMemberForDashboard ? $myCorporateMemberForDashboard->vouchers : collect();
+@endphp
 <x-app-layout>
-    <div x-data="dashboardApp()" x-init="init()" class="py-6 sm:py-8 text-[#1F170D]">
+    <div x-data="dashboardApp(@js($unacknowledgedVouchers->map(fn ($v) => [
+            'id' => $v->id,
+            'hours' => (float) $v->remainingHours(),
+            'expires_at' => $v->expires_at->format('d M Y'),
+            'organization' => $myCorporateMemberForDashboard->organization->name ?? 'your company',
+            'plan_name' => $myCorporateMemberForDashboard->organization->userMembership->plan->name ?? 'Corporate Team Voucher',
+        ])->values()))" x-init="init()" class="py-6 sm:py-8 text-[#1F170D]">
         <div class="w-full px-4 sm:px-8 lg:px-12 2xl:px-16 space-y-6">
 
             <!-- Desktop & Mobile Responsive Multi-Column Layout -->
@@ -66,7 +79,24 @@
                             <span class="text-[11px] text-[#8C7A58] font-medium">Club 61 Concierge</span>
                         </div>
 
-                        <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
+                        <div class="grid grid-cols-2 {{ $myCorporateMemberForDashboard ? 'sm:grid-cols-5' : 'sm:grid-cols-4' }} gap-3 sm:gap-4">
+                            @if($myCorporateMemberForDashboard)
+                                <!-- Action 0: My Vouchers (corporate team member only) -->
+                                <a href="{{ route('customer.my-club') }}#corporate-vouchers"
+                                   class="flex flex-col items-center justify-center p-4 sm:p-5 rounded-2xl bg-white/95 backdrop-blur-xl border border-[#DFC387]/80 hover:border-[#D4AF37] hover:shadow-[0_10px_25px_rgba(212,175,55,0.25)] transition-all group active:scale-95 relative">
+                                    @if($unacknowledgedVouchers->isNotEmpty())
+                                        <span class="absolute top-2 right-2 w-2.5 h-2.5 rounded-full bg-rose-500 animate-pulse"></span>
+                                    @endif
+                                    <div class="w-12 h-12 rounded-2xl flex items-center justify-center shadow-sm transition-transform group-hover:scale-110"
+                                         style="background: linear-gradient(135deg, #FAF2DE 0%, #F3DFAD 100%); border: 1.5px solid #DFC387;">
+                                        <svg class="w-6 h-6 text-[#8C6418]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2zM9 7h1" />
+                                        </svg>
+                                    </div>
+                                    <span class="text-xs font-extrabold text-[#3B2B11] mt-2.5 group-hover:text-[#8C6418]">My Vouchers</span>
+                                    <span class="text-[10px] text-[#8C7A58] mt-0.5">{{ number_format($myCorporateMemberForDashboard->totalRemainingHours(), 1) }} hrs active</span>
+                                </a>
+                            @endif
                             <!-- Action 1: Booking -->
                             <a href="{{ route('customer.booking') }}" 
                                class="flex flex-col items-center justify-center p-4 sm:p-5 rounded-2xl bg-white/95 backdrop-blur-xl border border-[#DFC387]/80 hover:border-[#D4AF37] hover:shadow-[0_10px_25px_rgba(212,175,55,0.25)] transition-all group active:scale-95">
@@ -377,14 +407,86 @@
                 </div>
             </div>
         </div>
+
+        <!-- VOUCHER CLAIM MODAL (ticket/coupon styled) -->
+        <div x-show="voucherModalOpen"
+             style="display: none; z-index: 99999 !important;"
+             x-transition:enter="transition ease-out duration-200"
+             x-transition:enter-start="opacity-0"
+             x-transition:enter-end="opacity-100"
+             x-transition:leave="transition ease-in duration-150"
+             x-transition:leave-start="opacity-100"
+             x-transition:leave-end="opacity-0"
+             class="fixed inset-0 overflow-y-auto bg-black/75 backdrop-blur-md flex items-center justify-center p-4">
+
+            <!-- Sengaja TANPA @click.away — popup ini cuma boleh hilang lewat tombol "Claim & Continue"
+                 di bawah, tidak lewat klik di luar modal, biar karyawan gak kelewat klaim tanpa sadar. -->
+            <div class="w-full max-w-md bg-white rounded-3xl border-2 border-[#D4AF37] shadow-2xl p-6 sm:p-7 animate-scaleIn relative">
+
+                <div class="text-center mb-5">
+                    <div class="inline-flex items-center gap-2 px-3.5 py-1 rounded-full text-[10px] font-extrabold uppercase tracking-widest bg-[#FAF2DE] text-[#7A5818] border border-[#DFC387] mb-2">
+                        <span>🎟️ New Voucher<span x-show="unclaimedVouchers.length > 1">s</span></span>
+                    </div>
+                    <h3 class="font-serif font-black text-lg sm:text-xl text-[#1F170D]">Free Play-Hour Voucher<span x-show="unclaimedVouchers.length > 1">s</span> Available!</h3>
+                    <p class="text-xs text-[#7A643E] mt-1">Already active — ready to use for your next court booking.</p>
+                </div>
+
+                <div class="space-y-3 max-h-[45vh] overflow-y-auto pr-0.5">
+                    <template x-for="v in unclaimedVouchers" :key="v.id">
+                        <div class="relative flex rounded-2xl overflow-hidden shadow-md border border-[#D4AF37]/70">
+                            <!-- Ticket stub: hero value -->
+                            <div class="w-24 shrink-0 flex flex-col items-center justify-center text-center py-4 relative"
+                                 style="background: linear-gradient(160deg, #1F382B 0%, #15271E 100%);">
+                                <div class="font-serif font-black text-3xl text-[#F5E6BE]" x-text="v.hours"></div>
+                                <div class="text-[8px] uppercase tracking-widest text-emerald-200 font-bold mt-0.5">Hours Free</div>
+                            </div>
+
+                            <!-- Perforated seam -->
+                            <div class="relative w-0 border-l-2 border-dashed border-[#D4AF37]/50">
+                                <div class="absolute -top-1.5 -left-2 w-3 h-3 rounded-full bg-white"></div>
+                                <div class="absolute -bottom-1.5 -left-2 w-3 h-3 rounded-full bg-white"></div>
+                            </div>
+
+                            <!-- Details -->
+                            <div class="flex-1 bg-[#FFFDF8] p-3.5 text-left">
+                                <div class="text-[9px] uppercase font-extrabold text-[#8C6418] tracking-wider" x-text="v.organization"></div>
+                                <div class="font-bold text-sm text-[#1F170D] mt-0.5" x-text="v.plan_name"></div>
+                                <div class="text-[10px] text-[#7A643E] mt-1.5 flex items-center gap-1">
+                                    <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                    </svg>
+                                    <span>Expires <span x-text="v.expires_at"></span></span>
+                                </div>
+                            </div>
+                        </div>
+                    </template>
+                </div>
+
+                <div class="pt-5 space-y-2">
+                    <button type="button"
+                            @click="claimVouchers()"
+                            class="w-full py-3.5 px-6 rounded-2xl text-xs font-black uppercase tracking-wider text-[#1E160A] transition-all transform active:scale-95 shadow-md cursor-pointer"
+                            style="background: linear-gradient(180deg, #F5DE9B 0%, #D4AF37 50%, #A87D18 100%); border: 1.5px solid #FFF3CD;">
+                        Claim & Continue
+                    </button>
+                    <a href="{{ route('customer.my-club') }}#corporate-vouchers"
+                       class="block w-full text-center py-2 text-xs font-bold text-[#8C6418] hover:text-[#5C410F] transition-colors">
+                        View All My Vouchers &rarr;
+                    </a>
+                    <p class="text-center text-[10px] text-[#8C7A58] italic pt-1">This voucher stays unclaimed until you tap "Claim &amp; Continue" above.</p>
+                </div>
+            </div>
+        </div>
     </div>
 
     <script>
-        function dashboardApp() {
+        function dashboardApp(unclaimedVouchers = []) {
             return {
                 bookings: [],
                 activeMatch: null,
                 isLoadingBookings: true,
+                unclaimedVouchers,
+                voucherModalOpen: false,
                 noticeModal: {
                     show: false,
                     title: '',
@@ -416,6 +518,30 @@
 
                 async init() {
                     await this.loadMyBookings();
+                    if (this.unclaimedVouchers.length) {
+                        this.voucherModalOpen = true;
+                    }
+                },
+
+                async claimVouchers() {
+                    if (!this.voucherModalOpen) return; // sudah diklaim (mis. klik ganda tombol "Claim & Continue")
+                    this.voucherModalOpen = false;
+
+                    const ids = this.unclaimedVouchers.map(v => v.id);
+                    this.unclaimedVouchers = [];
+                    for (const id of ids) {
+                        try {
+                            await fetch('/api/v1/sponsor/my-vouchers/' + id + '/acknowledge', {
+                                method: 'POST',
+                                headers: {
+                                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
+                                    'Accept': 'application/json',
+                                },
+                            });
+                        } catch (e) {
+                            console.error('Failed to acknowledge voucher', id, e);
+                        }
+                    }
                 },
 
                 async loadMyBookings() {

@@ -3,12 +3,14 @@
 namespace App\Models\Membership;
 
 use App\Models\Pos\Order;
+use App\Models\Sponsor\SponsorOrganization;
 use App\Models\User;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 class UserMembership extends Model
@@ -67,6 +69,11 @@ class UserMembership extends Model
     public function balances(): HasMany
     {
         return $this->hasMany(UserMembershipBalance::class, 'user_membership_id');
+    }
+
+    public function sponsorOrganization(): HasOne
+    {
+        return $this->hasOne(SponsorOrganization::class, 'user_membership_id');
     }
 
     public function soldByAdmin(): BelongsTo

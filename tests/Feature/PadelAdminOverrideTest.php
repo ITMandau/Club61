@@ -615,7 +615,7 @@ class PadelAdminOverrideTest extends TestCase
 
         \Livewire\Livewire::test(\App\Filament\Pages\KelolaPemesanan::class)
             ->assertStatus(200)
-            ->assertSee('Kelola Pemesanan &amp; Tiket Masuk', false)
+            ->assertSee('Kelola Pemesanan &amp; Booking', false)
             ->assertDontSee('Note / Keterangan')
             ->set('search', 'BK-TEST-LIVEWIRE')
             ->assertSee('BK-TEST-LIVEWIRE')

@@ -32,10 +32,16 @@
                        class="inline-flex items-center px-1 pt-1 border-b-2 {{ request()->routeIs('customer.my-club') || request()->routeIs('customer.membership') ? 'border-[#D4AF37] text-[#8C6418]' : 'border-transparent text-[#6B5738] hover:text-[#1F170D] hover:border-[#D4AF37]/50' }} text-xs font-bold uppercase tracking-wider transition-colors">
                         My Club
                     </a>
-                    <a href="{{ route('customer.invoice') }}" 
+                    <a href="{{ route('customer.invoice') }}"
                        class="inline-flex items-center px-1 pt-1 border-b-2 {{ request()->routeIs('customer.invoice') ? 'border-[#D4AF37] text-[#8C6418]' : 'border-transparent text-[#6B5738] hover:text-[#1F170D] hover:border-[#D4AF37]/50' }} text-xs font-bold uppercase tracking-wider transition-colors">
                         Invoice
                     </a>
+                    @if(Auth::check() && \App\Models\Sponsor\SponsorOrganization::where('sponsor_admin_user_id', Auth::id())->exists())
+                        <a href="{{ route('customer.corporate') }}"
+                           class="inline-flex items-center px-1 pt-1 border-b-2 {{ request()->routeIs('customer.corporate') ? 'border-[#D4AF37] text-[#8C6418]' : 'border-transparent text-[#6B5738] hover:text-[#1F170D] hover:border-[#D4AF37]/50' }} text-xs font-bold uppercase tracking-wider transition-colors">
+                            Sponsor Team
+                        </a>
+                    @endif
                 </div>
             </div>
 

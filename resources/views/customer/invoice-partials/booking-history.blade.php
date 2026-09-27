@@ -2,11 +2,11 @@
 <div class="bg-white/95 backdrop-blur-xl rounded-3xl border border-[#DFC387] shadow-[0_12px_35px_rgba(160,120,30,0.15)] p-4 sm:p-6 space-y-4">
     <div class="flex items-center justify-between border-b border-[#DFC387]/50 pb-3">
         <div>
-            <h3 class="font-serif font-black text-base text-[#1F170D]">Other Booking History</h3>
-            <p class="text-[11px] text-[#7A643E]">Your previous match reservations</p>
+            <h3 class="font-serif font-black text-base text-[#1F170D]">Other Invoices</h3>
+            <p class="text-[11px] text-[#7A643E]">Your previous bookings & membership purchases</p>
         </div>
-        <span class="text-[11px] text-[#7A643E] font-medium bg-[#FAF8F2] px-2.5 py-1 rounded-full border border-[#DFC387]/60" 
-              x-text="(searchQuery || searchDate) ? (filteredPastBookings.length + ' of ' + pastBookings.length + ' Bookings') : (pastBookings.length + ' Bookings')"></span>
+        <span class="text-[11px] text-[#7A643E] font-medium bg-[#FAF8F2] px-2.5 py-1 rounded-full border border-[#DFC387]/60"
+              x-text="(searchQuery || searchDate) ? (filteredPastBookings.length + ' of ' + pastBookings.length + ' Items') : (pastBookings.length + ' Items')"></span>
     </div>
 
     <!-- Filter & Compact Search (Search by Lapangan & Date) -->
@@ -60,30 +60,34 @@
 
     <!-- Empty State: No History -->
     <div x-show="pastBookings.length === 0" class="text-xs text-[#8C7A58] italic py-3 text-center">
-        No previous booking history found.
+        No previous booking or membership history found.
     </div>
 
     <!-- Empty State: Filter Results Empty -->
     <div x-show="pastBookings.length > 0 && filteredPastBookings.length === 0" class="text-center py-6 space-y-2 bg-[#FAF8F2] rounded-2xl border border-dashed border-[#DFC387]">
-        <div class="text-xs text-[#7A643E]">No booking history matching the filter was found.</div>
+        <div class="text-xs text-[#7A643E]">No history matching the filter was found.</div>
         <button type="button" @click="resetFilters()" class="px-3 py-1 text-xs font-bold bg-white border border-[#DFC387] rounded-xl text-[#7A5818] hover:bg-[#FAF2DE] transition-colors cursor-pointer">
             Reset Search
         </button>
     </div>
 
-    <!-- Paginated Booking List -->
+    <!-- Paginated Booking/Membership List -->
     <div x-show="paginatedBookings.length > 0" class="space-y-2.5 text-xs">
         <template x-for="item in paginatedBookings" :key="item.id">
-            <a :href="'{{ route('customer.invoice') }}?booking_id=' + item.id"
-               @click.prevent="switchToBooking(item.id)"
+            <a :href="'{{ route('customer.invoice') }}?' + (item.type === 'MEMBERSHIP' ? 'membership_id=' : 'booking_id=') + item.id"
+               @click.prevent="switchToEntry(item)"
                class="p-3 rounded-2xl bg-[#FAF8F2] hover:bg-[#FAF2DE] border border-[#DFC387]/70 flex items-center justify-between transition-colors block group cursor-pointer">
-                <div>
-                    <div class="font-bold text-[#1F170D] group-hover:text-[#8C6418] transition-colors" x-text="item.court ? item.court.name : 'Court Arena'"></div>
-                    <div class="text-[10px] text-[#7A643E]" x-text="formatDate(item.booking_date) + ' &bull; #' + (item.booking_code || item.id.substring(0, 8))"></div>
+                <div class="min-w-0">
+                    <div class="flex items-center gap-1.5">
+                        <span x-show="item.type === 'MEMBERSHIP'" class="px-1.5 py-0.5 rounded text-[8px] font-extrabold uppercase bg-[#1E3327] text-[#FAF5E6] shrink-0">Membership</span>
+                        <div class="font-bold text-[#1F170D] group-hover:text-[#8C6418] transition-colors truncate" x-text="item.type === 'MEMBERSHIP' ? item.plan_name : (item.court ? item.court.name : 'Court Arena')"></div>
+                    </div>
+                    <div class="text-[10px] text-[#7A643E]"
+                         x-text="item.type === 'MEMBERSHIP' ? ('#' + item.membership_code) : (formatDate(item.booking_date) + ' &bull; #' + (item.booking_code || item.id.substring(0, 8)))"></div>
                 </div>
-                <div class="text-right">
-                    <div class="font-mono font-bold text-[#1F170D] whitespace-nowrap" x-text="'Rp ' + formatNumber(item.total_amount)"></div>
-                    <span :class="item.status === 'PAID' || item.status === 'CHECKED_IN' ? 'text-emerald-700' : 'text-amber-700'"
+                <div class="text-right shrink-0">
+                    <div class="font-mono font-bold text-[#1F170D] whitespace-nowrap" x-text="'Rp ' + formatNumber(item.type === 'MEMBERSHIP' ? item.grand_total : item.total_amount)"></div>
+                    <span :class="(item.status === 'PAID' || item.status === 'CHECKED_IN' || item.status === 'ACTIVE') ? 'text-emerald-700' : 'text-amber-700'"
                           class="text-[9px] font-bold uppercase"
                           x-text="item.status">
                     </span>

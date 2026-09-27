@@ -546,8 +546,7 @@
                             <td colspan="{{ $activeTab === 'CANCELLED' ? 8 : 7 }}"
                                 style="text-align: center; padding: 2.5rem 1rem; color: #8C7A58;">
                                 @if ($search)
-                                    <div style="font-weight: 700; color: #1F170D; margin-bottom: 0.25rem;">Tidak ada
-                                        reservasi yang cocok</div>
+                                    <div style="font-weight: 700; color: #1F170D; margin-bottom: 0.25rem;">Tidak ada reservasi yang cocok</div>
                                     <div style="font-size: 0.75rem; color: #8C7A58; margin-bottom: 0.75rem;">
                                         Tidak ditemukan hasil untuk kata kunci "<strong>{{ $search }}</strong>".
                                     </div>

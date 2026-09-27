@@ -120,11 +120,25 @@ class AuthenticationTest extends TestCase
         $this->assertFalse(\Illuminate\Support\Facades\Hash::check('wrongpassword', $freshUser->password));
     }
 
-    public function test_filament_admin_login_page_renders_successfully(): void
+    public function test_guest_accessing_admin_panel_is_redirected_to_the_single_unified_login_page(): void
     {
-        $response = $this->get('/admin/login');
+        // Filament tidak lagi punya login page terpisah (/admin/login) — cuma ada SATU pintu
+        // login untuk semua orang (staf maupun customer), yaitu /login.
+        $this->get('/admin')->assertRedirect('/login');
+        $this->get('/admin/login')->assertStatus(404);
+    }
 
-        $response->assertStatus(200);
+    public function test_logging_out_from_admin_panel_redirects_to_the_unified_login_page(): void
+    {
+        $admin = User::factory()->create(['role' => 'SUPER_ADMIN']);
+        \App\Models\Role::firstOrCreate(['name' => 'super_admin', 'guard_name' => 'web']);
+        $admin->syncRoles(['super_admin']);
+
+        $this->actingAs($admin)->get('/admin')->assertStatus(200);
+
+        $response = $this->post('/admin/logout');
+        $response->assertRedirect('/login');
+        $this->assertGuest();
     }
 
     public function test_custom_shield_role_like_admin12_is_redirected_to_admin_panel(): void

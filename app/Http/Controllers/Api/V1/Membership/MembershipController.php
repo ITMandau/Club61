@@ -238,6 +238,53 @@ class MembershipController extends Controller
     }
 
     /**
+     * Riwayat SEMUA pembelian paket membership user (bukan cuma yang aktif) beserta detail
+     * pembayarannya — dipakai halaman "Invoice & Digital E-Ticket" supaya pembelian membership
+     * ikut muncul di sana, tidak cuma booking lapangan padel.
+     */
+    public function myPurchases(Request $request): JsonResponse
+    {
+        $user = $request->user();
+
+        $purchases = UserMembership::with(['plan', 'order.payments' => fn ($q) => $q->latest()])
+            ->where('user_id', $user->id)
+            ->orderByDesc('created_at')
+            ->get()
+            ->map(function (UserMembership $m) {
+                $order = $m->order;
+                $latestPayment = $order?->payments->first();
+
+                return [
+                    'id' => $m->id,
+                    'type' => 'MEMBERSHIP',
+                    'membership_code' => $m->membership_code,
+                    'plan_name' => $m->plan->name ?? '-',
+                    'owner_type' => $m->owner_type,
+                    'status' => $m->status,
+                    'start_date' => $m->start_date,
+                    'end_date' => $m->end_date,
+                    'qr_pass_hash' => $m->qr_pass_hash,
+                    'order_id' => $order?->id,
+                    'order_number' => $order?->order_number,
+                    'payment_status' => $order?->payment_status,
+                    'payment_method' => $latestPayment?->payment_method,
+                    'subtotal' => (float) ($order?->subtotal ?? $m->purchase_price_snapshot ?? 0),
+                    'discount_amount' => (float) ($order?->discount_amount ?? 0),
+                    'tax_amount' => (float) ($order?->tax_amount ?? 0),
+                    'service_charge' => (float) ($order?->service_charge ?? 0),
+                    'grand_total' => (float) ($order?->grand_total ?? $m->purchase_price_snapshot ?? 0),
+                    'created_at' => $m->created_at,
+                ];
+            });
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Riwayat pembelian membership saya berhasil diambil.',
+            'data' => $purchases,
+        ]);
+    }
+
+    /**
      * Riwayat mutasi kuota membership user (audit log).
      */
     public function history(Request $request): JsonResponse

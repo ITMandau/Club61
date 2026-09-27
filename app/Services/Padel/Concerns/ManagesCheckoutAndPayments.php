@@ -27,7 +27,8 @@ trait ManagesCheckoutAndPayments
         string $paymentMethod,
         string $idempotencyKey,
         User $user,
-        ?string $membershipBalanceId = null
+        ?string $membershipBalanceId = null,
+        ?string $sponsorVoucherId = null
     ): array {
         // 100% Cashless: pembayaran tunai tidak diperbolehkan sama sekali di jalur checkout online.
         if (in_array(strtoupper($paymentMethod), ['CASH', 'TUNAI'])) {
@@ -51,9 +52,18 @@ trait ManagesCheckoutAndPayments
             throw new HttpException(422, 'Satu atau lebih slot booking tidak valid atau masa kuncian (10 menit) telah kedaluwarsa.');
         }
 
-        return DB::transaction(function () use ($bookings, $equipments, $voucherCode, $paymentMethod, $user, $cacheIdempotencyKey, $membershipBalanceId) {
+        return DB::transaction(function () use ($bookings, $equipments, $voucherCode, $paymentMethod, $user, $cacheIdempotencyKey, $membershipBalanceId, $sponsorVoucherId) {
             // Terapkan kuota atau diskon membership jika ada
-            $this->applyMembershipBenefitToCourtBookings($bookings, $user, $membershipBalanceId);
+            $membershipBenefitResult = $this->applyMembershipBenefitToCourtBookings($bookings, $user, $membershipBalanceId);
+
+            // Voucher jam sponsor corporate HANYA dipakai untuk booking yang belum ter-cover 100%
+            // oleh benefit membership individual di atas — mencegah 1 booking "gratis dobel" dari
+            // dua sumber benefit sekaligus. Mayoritas kasus: customer cuma punya salah satu.
+            $sponsorBenefitResult = $this->applySponsorVoucherBenefitToCourtBookings(
+                $bookings->filter(fn ($b) => (float) $b->court_fee > 0),
+                $user,
+                $sponsorVoucherId
+            );
 
             $courtTotal = (float) $bookings->sum('court_fee');
             $equipmentTotal = 0;
@@ -271,14 +281,24 @@ trait ManagesCheckoutAndPayments
             }
 
             if ($grandTotal <= 0) {
+                // Tentukan sumber sebenarnya yang menutup 100% biaya ini — dulu selalu di-hardcode
+                // 'MEMBERSHIP_QUOTA' walau yang benar-benar menutupnya voucher jam sponsor corporate
+                // (atau kombinasi keduanya), bikin invoice/payment method salah label.
+                $coveredBy = match (true) {
+                    $membershipBenefitResult['benefit_type'] !== 'NONE' && $sponsorBenefitResult['benefit_type'] !== 'NONE' => 'MEMBERSHIP_AND_SPONSOR_VOUCHER',
+                    $sponsorBenefitResult['benefit_type'] !== 'NONE' => 'SPONSOR_VOUCHER',
+                    $membershipBenefitResult['benefit_type'] !== 'NONE' => 'MEMBERSHIP_QUOTA',
+                    default => 'PROMO_VOUCHER',
+                };
+
                 $paymentResult = [
                     'is_mock' => true,
-                    'driver' => 'MEMBERSHIP_QUOTA',
+                    'driver' => $coveredBy,
                     'snap_token' => null,
                     'payment_url' => null,
                     'redirect_url' => null,
                     'checkout_mode' => 'NONE',
-                    'raw' => ['covered_by' => 'MEMBERSHIP_QUOTA'],
+                    'raw' => ['covered_by' => $coveredBy],
                 ];
                 $initialStatus = 'PAID';
             } else {
@@ -328,10 +348,10 @@ trait ManagesCheckoutAndPayments
             $orchestrator = app(\App\Services\Payment\PaymentOrchestratorService::class);
             if ($isConfirmed) {
                 $orchestrator->markOrderAsPaid($order, [
-                    'payment_gateway' => $grandTotal <= 0 ? 'MEMBERSHIP_QUOTA' : ($paymentResult['is_mock'] ? 'MOCK' : 'MIDTRANS'),
+                    'payment_gateway' => $grandTotal <= 0 ? $paymentResult['driver'] : ($paymentResult['is_mock'] ? 'MOCK' : 'MIDTRANS'),
                     'counter' => 'PADEL_FRONTDESK',
                     'transaction_id' => $orderNumber,
-                    'payment_method' => $grandTotal <= 0 ? 'MEMBERSHIP_QUOTA' : strtoupper($paymentMethod),
+                    'payment_method' => $grandTotal <= 0 ? $paymentResult['driver'] : strtoupper($paymentMethod),
                     'amount' => (float) $grandTotal,
                     'user' => $user,
                     'payload_log' => $paymentResult['raw'] ?? null,
@@ -684,6 +704,10 @@ trait ManagesCheckoutAndPayments
             'EDC_MANDIRI' => 'Debit/Kartu EDC Mandiri',
             'QRIS_STATIS' => 'QRIS Kasir Frontdesk',
             'BANK_TRANSFER' => 'Transfer Bank (VA)',
+            'MEMBERSHIP_QUOTA' => 'Kuota Jam Membership (Gratis)',
+            'SPONSOR_VOUCHER' => 'Voucher Jam Corporate (Gratis)',
+            'MEMBERSHIP_AND_SPONSOR_VOUCHER' => 'Kuota Membership + Voucher Corporate (Gratis)',
+            'PROMO_VOUCHER' => 'Kode Promo (Gratis)',
             default => $method ?: 'QRIS Instan (GoPay/OVO/BCA)',
         };
     }
@@ -1167,12 +1191,156 @@ trait ManagesCheckoutAndPayments
     }
 
     /**
+     * Terapkan voucher jam sponsor corporate (App\Models\Sponsor\SponsorMemberVoucher) pada
+     * koleksi booking lapangan padel — mirip applyMembershipBenefitToCourtBookings() di atas,
+     * tapi sumber jamnya voucher yang dirilis PIC ke karyawan (bukan kartu membership pribadi).
+     *
+     * Setiap voucher yang belum expired & masih ada sisa jam dianggap "usable", diurutkan yang
+     * PALING CEPAT EXPIRED dipakai lebih dulu (FIFO) supaya jam tidak hangus sia-sia. 1 booking
+     * BOLEH memotong dari lebih dari 1 voucher sekaligus kalau perlu (mis. voucher A sisa 0.5 jam,
+     * voucher B sisa 5 jam, booking butuh 1.5 jam) — kolom sponsor_member_voucher_id di booking
+     * cuma mencatat voucher PERTAMA yang kepotong untuk booking itu (buat tampilan/telusur, bukan
+     * audit trail lengkap; total jam yang benar-benar terpakai tetap akurat di kolom
+     * sponsor_hours_consumed & masing-masing voucher.hours_used).
+     *
+     * All-or-nothing per booking: kalau total sisa jam voucher TIDAK CUKUP buat nutup 1 booking
+     * penuh, booking itu dilewati (court_fee tidak berubah) — tidak ada potongan diskon parsial
+     * seperti membership individual (voucher sponsor tidak punya skema diskon persentase).
+     */
+    protected function applySponsorVoucherBenefitToCourtBookings(
+        iterable $bookings,
+        User $user,
+        ?string $sponsorVoucherId = null,
+        bool $commit = true
+    ): array {
+        $noBenefit = [
+            'organization_name' => null,
+            'plan_name' => null,
+            'hours_consumed' => 0.0,
+            'total_court_discount' => 0.0,
+            'benefit_type' => 'NONE',
+            'remaining_hours_after' => null,
+            'rejected_reason' => null,
+        ];
+
+        if ($sponsorVoucherId === 'none' || $sponsorVoucherId === 'NONE') {
+            return $noBenefit;
+        }
+
+        $member = \App\Models\Sponsor\SponsorOrganizationMember::where('user_id', $user->id)
+            ->where('status', 'ACTIVE')
+            ->first();
+
+        if (! $member) {
+            return $noBenefit;
+        }
+
+        $voucherQuery = \App\Models\Sponsor\SponsorMemberVoucher::where('sponsor_organization_member_id', $member->id)
+            ->where('expires_at', '>', now())
+            ->orderBy('expires_at');
+
+        // Kalau customer secara eksplisit pilih 1 voucher tertentu (bukan auto-detect), batasi ke
+        // voucher itu saja — mirip parameter membershipBalanceId di atas.
+        if ($sponsorVoucherId) {
+            $voucherQuery->where('id', $sponsorVoucherId);
+        }
+
+        $vouchers = $commit ? $voucherQuery->lockForUpdate()->get() : $voucherQuery->get();
+        $usable = $vouchers->filter(fn ($v) => $v->remainingHours() > 0)->values();
+
+        if ($usable->isEmpty()) {
+            return $noBenefit;
+        }
+
+        $totalHoursConsumed = 0.0;
+        $totalCourtDiscount = 0.0;
+        $benefitType = 'NONE';
+
+        foreach ($bookings as $booking) {
+            $durationMinutes = \Carbon\Carbon::parse($booking->start_time)->diffInMinutes(\Carbon\Carbon::parse($booking->end_time));
+            $hoursNeeded = max(0.5, round($durationMinutes / 60, 2));
+
+            $totalAvailable = round((float) $usable->sum(fn ($v) => $v->remainingHours()), 2);
+            if ($totalAvailable <= 0) {
+                // Voucher sudah habis (dipakai booking lain dalam keranjang yang sama, atau memang
+                // sisa 0) — booking ini dilewati sepenuhnya, bayar normal.
+                continue;
+            }
+
+            // PARTIAL COVERAGE: kalau sisa jam voucher lebih SEDIKIT dari yang dibutuhkan booking
+            // ini (mis. sisa 6 jam buat booking 7 jam), tetap pakai semampunya (6 jam gratis) dan
+            // customer cuma bayar sisanya (1 jam) — bukan all-or-nothing seperti sebelumnya, yang
+            // bikin voucher kelihatan "tidak aktif" padahal customer masih punya sisa jam.
+            $coveredHours = min($totalAvailable, $hoursNeeded);
+
+            $remainingToConsume = $coveredHours;
+            $firstVoucherId = null;
+
+            foreach ($usable as $voucher) {
+                if ($remainingToConsume <= 0) {
+                    break;
+                }
+
+                $availableHere = $voucher->remainingHours();
+                if ($availableHere <= 0) {
+                    continue;
+                }
+
+                $take = min($availableHere, $remainingToConsume);
+                $voucher->hours_used = round((float) $voucher->hours_used + $take, 2);
+
+                if ($commit) {
+                    $voucher->save();
+                }
+
+                $remainingToConsume = round($remainingToConsume - $take, 2);
+                $firstVoucherId ??= $voucher->id;
+            }
+
+            $originalCourtFee = (float) $booking->court_fee;
+            // Proporsional terhadap durasi: voucher cuma nutup court_fee versi 1 jam kali jumlah
+            // jam yang benar-benar ke-cover, sisanya (kalau ada) tetap ditagih normal.
+            $discount = $coveredHours >= $hoursNeeded
+                ? $originalCourtFee
+                : min($originalCourtFee, round(($originalCourtFee / $hoursNeeded) * $coveredHours, 2));
+
+            if ($commit) {
+                $booking->sponsor_organization_id = $member->sponsor_organization_id;
+                $booking->sponsor_member_voucher_id = $firstVoucherId;
+                $booking->sponsor_hours_consumed = $coveredHours;
+                $booking->sponsor_discount_court = $discount;
+                $booking->court_fee = round($originalCourtFee - $discount, 2);
+                $booking->total_amount = max(0, (float) $booking->total_amount - $discount);
+                $booking->save();
+            }
+
+            $totalHoursConsumed += $coveredHours;
+            $totalCourtDiscount += $discount;
+            $benefitType = 'HOURS';
+        }
+
+        return [
+            'organization_name' => $member->organization->name ?? null,
+            'plan_name' => $member->organization->userMembership->plan->name ?? null,
+            'hours_consumed' => $totalHoursConsumed,
+            'total_court_discount' => $totalCourtDiscount,
+            'benefit_type' => $benefitType,
+            'remaining_hours_after' => round((float) $usable->sum(fn ($v) => $v->remainingHours()), 2),
+            'rejected_reason' => null,
+        ];
+    }
+
+    /**
      * Preview (read-only, tanpa efek samping) benefit membership untuk booking yang sudah di-hold,
      * dipakai halaman "Payment Details & Checkout" (online) maupun POS walk-in agar customer/kasir
      * tahu ada potongan SEBELUM menekan tombol bayar — bukan baru ketahuan setelah checkout dieksekusi.
      */
-    public function previewMembershipBenefit(array $bookingIds, User $user, ?string $membershipBalanceId = null): array
-    {
+    public function previewMembershipBenefit(
+        array $bookingIds,
+        User $user,
+        ?string $membershipBalanceId = null,
+        ?string $sponsorVoucherId = null
+    ): array {
         $bookings = PadelBooking::with('court')
             ->whereIn('id', $bookingIds)
             ->where('user_id', $user->id)
@@ -1188,6 +1356,15 @@ trait ManagesCheckoutAndPayments
         $courtSubtotal = (float) $bookings->sum('court_fee');
         $projectedCourtTotal = max(0, $courtSubtotal - $result['total_court_discount']);
 
+        // Preview voucher sponsor dihitung SECARA TERPISAH (bukan berantai dari sisa hasil membership
+        // di atas), karena mode preview tidak benar-benar memotong court_fee per booking (lihat
+        // applyMembershipBenefitToCourtBookings, commit:false tidak menyentuh $booking->court_fee).
+        // Edge case customer yang PUNYA KEDUANYA (membership pribadi + voucher sponsor) bisa sedikit
+        // melebih-lebihkan potensi potongan di preview; commit sesungguhnya (checkout()) tetap benar
+        // 100% karena berjalan berurutan terhadap court_fee yang sudah nyata berkurang.
+        $sponsorResult = $this->applySponsorVoucherBenefitToCourtBookings($bookings, $user, $sponsorVoucherId, commit: false);
+        $sponsorProjectedCourtTotal = max(0, $courtSubtotal - $sponsorResult['total_court_discount']);
+
         return [
             'has_benefit' => $result['applied_balance'] !== null,
             'benefit_type' => $result['benefit_type'], // NONE | HOURS | DISCOUNT_PERCENT
@@ -1199,6 +1376,16 @@ trait ManagesCheckoutAndPayments
             'court_subtotal' => $courtSubtotal,
             'projected_court_total' => $projectedCourtTotal,
             'rejected_reason' => $result['rejected_reason'],
+            'sponsor_voucher_benefit' => [
+                'has_benefit' => $sponsorResult['benefit_type'] !== 'NONE',
+                'organization_name' => $sponsorResult['organization_name'],
+                'plan_name' => $sponsorResult['plan_name'],
+                'hours_to_consume' => $sponsorResult['hours_consumed'],
+                'remaining_hours_after' => $sponsorResult['remaining_hours_after'],
+                'court_discount_amount' => $sponsorResult['total_court_discount'],
+                'court_subtotal' => $courtSubtotal,
+                'projected_court_total' => $sponsorProjectedCourtTotal,
+            ],
         ];
     }
 }

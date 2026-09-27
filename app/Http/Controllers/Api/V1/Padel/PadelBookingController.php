@@ -153,12 +153,14 @@ class PadelBookingController extends Controller
             'booking_ids' => ['required', 'array', 'min:1'],
             'booking_ids.*' => ['required', 'string'],
             'membership_balance_id' => ['nullable', 'string'],
+            'sponsor_voucher_id' => ['nullable', 'string'],
         ]);
 
         $preview = $this->bookingService->previewMembershipBenefit(
             $validated['booking_ids'],
             $request->user(),
-            $validated['membership_balance_id'] ?? null
+            $validated['membership_balance_id'] ?? null,
+            $validated['sponsor_voucher_id'] ?? null
         );
 
         return response()->json([
@@ -189,6 +191,9 @@ class PadelBookingController extends Controller
             // 'NONE' = customer sengaja memilih TIDAK memakai benefit membership untuk booking ini
             // (toggle di halaman checkout), null = auto-detect membership aktif seperti biasa.
             'membership_balance_id' => ['nullable', 'string'],
+            // Sama seperti membership_balance_id tapi untuk voucher jam sponsor corporate — 'NONE'
+            // = customer matiin toggle voucher, null = auto-detect voucher aktif miliknya.
+            'sponsor_voucher_id' => ['nullable', 'string'],
         ]);
 
         $checkoutResult = $this->bookingService->checkout(
@@ -198,7 +203,8 @@ class PadelBookingController extends Controller
             $validated['payment_method'],
             $idempotencyKey,
             $request->user(),
-            $validated['membership_balance_id'] ?? null
+            $validated['membership_balance_id'] ?? null,
+            $validated['sponsor_voucher_id'] ?? null
         );
 
         return response()->json($checkoutResult, 200);

@@ -15,8 +15,21 @@
         </div>
         <div class="flex justify-between items-center gap-3">
             <span>Court Rental Total:</span>
-            <span class="font-mono text-[#1F170D] whitespace-nowrap text-right" x-text="'Rp ' + formatNumber(displayCourtFee)"></span>
+            <span class="font-mono text-[#1F170D] whitespace-nowrap text-right"
+                  x-text="'Rp ' + formatNumber(displayCourtFee + totalMemberDiscount + totalSponsorDiscount)"></span>
         </div>
+        <template x-if="totalMemberDiscount > 0">
+            <div class="flex justify-between items-center gap-3 text-[#8C6418] font-bold">
+                <span>Membership Benefit Discount:</span>
+                <span class="font-mono whitespace-nowrap text-right" x-text="'- Rp ' + formatNumber(totalMemberDiscount)"></span>
+            </div>
+        </template>
+        <template x-if="totalSponsorDiscount > 0">
+            <div class="flex justify-between items-center gap-3 text-[#1E3327] font-bold">
+                <span>🎟️ Corporate Voucher Discount <span x-text="'(' + totalSponsorHours + ' hrs)'"></span>:</span>
+                <span class="font-mono whitespace-nowrap text-right" x-text="'- Rp ' + formatNumber(totalSponsorDiscount)"></span>
+            </div>
+        </template>
         <div class="flex justify-between items-center gap-3">
             <span>Rental Equipment (Flat):</span>
             <span class="font-mono text-[#1F170D] whitespace-nowrap text-right" x-text="'Rp ' + formatNumber(displayEquipmentFee)"></span>

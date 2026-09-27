@@ -11,6 +11,7 @@ Route::prefix('v1/membership')->group(function () {
     Route::middleware(['auth:sanctum,web'])->group(function () {
         Route::post('/checkout', [MembershipController::class, 'checkout']);
         Route::get('/my-membership', [MembershipController::class, 'myMembership']);
+        Route::get('/my-purchases', [MembershipController::class, 'myPurchases']);
         Route::get('/history', [MembershipController::class, 'history']);
         Route::post('/checkin-gym', [MembershipController::class, 'checkinGym']);
     });
