@@ -42,17 +42,23 @@ trait ManagesCheckoutAndPayments
             return $cachedResponse;
         }
 
-        $bookings = PadelBooking::with('court')
-            ->whereIn('id', $bookingIds)
-            ->where('user_id', $user->id)
-            ->where('status', 'LOCKED')
-            ->get();
+        return DB::transaction(function () use ($bookingIds, $equipments, $voucherCode, $paymentMethod, $user, $cacheIdempotencyKey, $membershipBalanceId, $sponsorVoucherId) {
+            // lockForUpdate() DI DALAM transaksi, bukan SELECT biasa sebelum transaksi dimulai —
+            // tanpa ini, dua request checkout bersamaan (klik ganda / retry) untuk booking yang
+            // sama-sama masih 'LOCKED' bisa lolos cek status ini dua-duanya sebelum salah satunya
+            // sempat commit, lalu dua-duanya lanjut memotong kuota membership/voucher sponsor dan
+            // membuat 2 Order terpisah untuk 1 slot yang sama.
+            $bookings = PadelBooking::with('court')
+                ->whereIn('id', $bookingIds)
+                ->where('user_id', $user->id)
+                ->where('status', 'LOCKED')
+                ->lockForUpdate()
+                ->get();
 
-        if ($bookings->count() !== count($bookingIds)) {
-            throw new HttpException(422, 'Satu atau lebih slot booking tidak valid atau masa kuncian (10 menit) telah kedaluwarsa.');
-        }
+            if ($bookings->count() !== count($bookingIds)) {
+                throw new HttpException(422, 'Satu atau lebih slot booking tidak valid atau masa kuncian (10 menit) telah kedaluwarsa.');
+            }
 
-        return DB::transaction(function () use ($bookings, $equipments, $voucherCode, $paymentMethod, $user, $cacheIdempotencyKey, $membershipBalanceId, $sponsorVoucherId) {
             // Terapkan kuota atau diskon membership jika ada
             $membershipBenefitResult = $this->applyMembershipBenefitToCourtBookings($bookings, $user, $membershipBalanceId);
 
@@ -117,17 +123,35 @@ trait ManagesCheckoutAndPayments
             $appliedVoucherCode = null;
             if ($voucherCode) {
                 $code = strtoupper(trim($voucherCode));
+                // lockForUpdate() men-serialize baris voucher ini antar checkout yang konkuren.
+                // Kuota (kolom `quota`) sendiri baru benar-benar dipotong permanen saat pembayaran
+                // lunas (lihat PaymentOrchestratorService::markOrderAsPaid) — dipertahankan seperti
+                // itu karena jalur lain (settle tunai POS, dsb.) juga bergantung ke situ. Tapi kalau
+                // eligibility DI SINI cuma dicek terhadap `quota` yang belum berkurang itu, order
+                // yang statusnya masih UNPAID/PENDING_PAYMENT (belum lunas) tidak ikut kehitung —
+                // jadi kalau kuota tinggal 1, checkout paralel/berurutan yang sama-sama belum bayar
+                // bisa semua lolos dapat diskon sebelum salah satunya lunas duluan. Makanya di sini
+                // kita hitung juga order yang SUDAH mengklaim kode ini tapi belum lunas ("reserved
+                // in-flight"), dan kurangi itu dari quota yang tersisa sebelum memutuskan eligible.
                 $voucher = \App\Models\Pos\Voucher::where('code', $code)
                     ->where('is_active', true)
                     ->where(function ($q) {
                         $q->whereNull('valid_until')->orWhere('valid_until', '>=', now());
                     })
+                    ->lockForUpdate()
                     ->first();
 
                 if ($voucher) {
                     $orderAmount = $courtTotal + $equipmentTotal;
                     $minOrder = (float) ($voucher->min_order_amount ?? 0);
-                    $hasQuota = ($voucher->quota === null || $voucher->quota > 0);
+
+                    $hasQuota = true;
+                    if ($voucher->quota !== null) {
+                        $reservedInFlight = Order::where('voucher_code', $voucher->code)
+                            ->whereIn('payment_status', ['UNPAID', 'PENDING_PAYMENT', 'PARTIALLY_PAID'])
+                            ->count();
+                        $hasQuota = ($voucher->quota - $reservedInFlight) > 0;
+                    }
 
                     if ($orderAmount >= $minOrder && $hasQuota) {
                         if ($voucher->discount_type === 'PERCENT') {

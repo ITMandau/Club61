@@ -118,6 +118,23 @@ class PaymentWebhookController extends Controller
             $orchestrator = app(\App\Services\Payment\PaymentOrchestratorService::class);
 
             if ($status === 'PAID') {
+                // Defense-in-depth: signature webhook sudah diverifikasi valid (hash_equals di
+                // driver masing-masing), tapi itu cuma membuktikan notifikasi ini datang dari
+                // gateway asli — bukan berarti gross_amount yang diklaim webhook otomatis cocok
+                // dengan grand_total order di database kita. Selisih besar di sini janggal (order
+                // rusak, notifikasi basi/duplikat untuk order yang sudah berubah, dsb.) dan wajib
+                // masuk log supaya kelihatan di monitoring, walau proses pelunasan tetap lanjut
+                // (grand_total milik kita sendiri yang tetap jadi acuan `payment_status`, bukan
+                // klaim gross_amount dari webhook — lihat markOrderAsPaid()).
+                if ($order->grand_total !== null && abs((float) $grossAmount - (float) $order->grand_total) > 1) {
+                    Log::warning("[ALERT] Webhook gross_amount tidak cocok dengan grand_total order [{$order->order_number}]", [
+                        'order_id' => $order->id,
+                        'gross_amount_from_webhook' => $grossAmount,
+                        'grand_total_in_db' => (float) $order->grand_total,
+                        'driver' => $driver,
+                    ]);
+                }
+
                 $orchestrator->markOrderAsPaid($order, [
                     'payment_gateway' => strtoupper($driver),
                     'transaction_id' => $incomingOrderId,

@@ -55,15 +55,26 @@ class AppServiceProvider extends ServiceProvider
         if (! app()->environment('production') && (request()->header('x-forwarded-proto') === 'https' || str_contains(request()->header('host') ?? '', 'ngrok'))) {
             URL::forceScheme('https');
         }
-        // 1. Rate Limiting Otentikasi (10 hit/menit/IP) - Anti Brute-Force
-        RateLimiter::for('auth-throttle', function (Request $request) {
-            return Limit::perMinute(10)->by($request->ip())->response(function () {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Terlalu banyak percobaan autentikasi. Silakan tunggu 1 menit.',
-                    'errors' => null,
-                ], 429);
-            });
+        // 1. Rate Limiting Otentikasi - Anti Brute-Force
+        // Dua limit independen: per-IP (10/menit) DAN per-akun (5/menit, dikunci ke
+        // identifier login/email-nya sendiri, bukan IP). Tanpa limit per-akun, attacker
+        // yang gonta-ganti IP (proxy/botnet) bisa nyoba password tanpa batas ke satu akun
+        // yang sama karena limit per-IP tidak pernah kena untuk akun itu.
+        $authThrottleResponse = function () {
+            return response()->json([
+                'success' => false,
+                'message' => 'Terlalu banyak percobaan autentikasi. Silakan tunggu 1 menit.',
+                'errors' => null,
+            ], 429);
+        };
+
+        RateLimiter::for('auth-throttle', function (Request $request) use ($authThrottleResponse) {
+            $identifier = strtolower(trim((string) ($request->input('login') ?? $request->input('email') ?? '')));
+
+            return [
+                Limit::perMinute(10)->by('ip:'.$request->ip())->response($authThrottleResponse),
+                Limit::perMinute(5)->by('account:'.($identifier !== '' ? $identifier : $request->ip()))->response($authThrottleResponse),
+            ];
         });
 
         // 2. Rate Limiting Booking Padel (5 hit/menit/User) - Anti Calo & Bot

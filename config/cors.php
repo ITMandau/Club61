@@ -18,9 +18,14 @@ return [
 
     'allowed_origins' => array_filter([
         env('FRONTEND_URL', 'http://localhost:3000'),
-        'http://127.0.0.1:3000',
-        'http://localhost:8000',
-        'http://127.0.0.1:8000',
+        // Origin localhost cuma relevan buat dev lokal — jangan pernah ikut ke-load di
+        // production (supports_credentials=true di bawah, jadi origin manapun yang lolos
+        // di sini otomatis dipercaya kirim cookie/credential).
+        ...(env('APP_ENV') === 'production' ? [] : [
+            'http://127.0.0.1:3000',
+            'http://localhost:8000',
+            'http://127.0.0.1:8000',
+        ]),
     ]),
 
     'allowed_origins_patterns' => [],

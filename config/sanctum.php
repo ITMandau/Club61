@@ -50,7 +50,10 @@ return [
     |
     */
 
-    'expiration' => null,
+    // Sebelumnya null (token API tidak pernah kedaluwarsa selamanya) — token yang bocor
+    // jadi valid tanpa batas waktu. Default 43200 menit = 30 hari; override lewat
+    // SANCTUM_TOKEN_EXPIRATION di .env kalau perlu durasi lain.
+    'expiration' => env('SANCTUM_TOKEN_EXPIRATION', 43200),
 
     /*
     |--------------------------------------------------------------------------

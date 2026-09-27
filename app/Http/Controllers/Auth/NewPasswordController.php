@@ -48,6 +48,11 @@ class NewPasswordController extends Controller
                     'remember_token' => Str::random(60),
                 ])->save();
 
+                // Cabut semua Sanctum token API yang sudah diterbitkan sebelumnya — reset
+                // password biasanya dipicu karena akun dicurigai kompromi, jadi token lama
+                // (termasuk yang dicuri) tidak boleh tetap valid setelah password diganti.
+                $user->tokens()->delete();
+
                 event(new PasswordReset($user));
             }
         );
