@@ -304,7 +304,7 @@ class FinanceTaxAndFeeTest extends TestCase
         ]);
         Cache::forget(ClubFinanceSetting::CACHE_KEY);
 
-        $dateStr = now()->addDays(4)->format('Y-m-d');
+        $dateStr = \Carbon\Carbon::now()->next(\Carbon\Carbon::WEDNESDAY)->format('Y-m-d');
         $booking = PadelBooking::create([
             'court_id' => $this->court1->id,
             'user_id' => $this->customerUser->id,

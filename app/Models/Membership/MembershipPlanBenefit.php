@@ -33,4 +33,39 @@ class MembershipPlanBenefit extends Model
     {
         return $this->belongsTo(MembershipPlan::class, 'plan_id');
     }
+
+    /**
+     * Kalimat benefit siap tampil (dipakai di Membership Teaser halaman depan). quota_type
+     * "NONE" BUKAN berarti benefit-nya kosong — itu artinya "tanpa kuota tetap, bayar per
+     * pakai dengan diskon" (lihat MembershipPlanResource). quota_value null pada VISITS
+     * berarti akses unlimited. Tanpa penanganan ini, render lama menampilkan teks rusak
+     * seperti "0 none GYM" untuk baris diskon.
+     */
+    public function describe(): string
+    {
+        $facilityLabel = match ($this->facility) {
+            'PADEL' => 'Padel Court',
+            'GYM' => 'Fitness & Gym',
+            'SAUNA' => 'Sauna & Ice Bath',
+            default => (string) $this->facility,
+        };
+
+        if ($this->quota_type === 'HOURS' && $this->quota_value !== null) {
+            return __('site.benefit_hours', ['value' => (int) $this->quota_value, 'facility' => $facilityLabel]);
+        }
+
+        if ($this->quota_type === 'VISITS') {
+            return $this->quota_value !== null
+                ? __('site.benefit_visits', ['value' => (int) $this->quota_value, 'facility' => $facilityLabel])
+                : __('site.benefit_visits_unlimited', ['facility' => $facilityLabel]);
+        }
+
+        if ((float) $this->discount_percent > 0) {
+            $percent = rtrim(rtrim(number_format((float) $this->discount_percent, 2, '.', ''), '0'), '.');
+
+            return __('site.benefit_discount', ['percent' => $percent, 'facility' => $facilityLabel]);
+        }
+
+        return $facilityLabel;
+    }
 }

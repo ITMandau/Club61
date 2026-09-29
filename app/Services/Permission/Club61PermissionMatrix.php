@@ -7,7 +7,7 @@ use Spatie\Permission\Models\Permission;
 class Club61PermissionMatrix
 {
     /**
-     * Definisi lengkap 12 kategori modul beserta sub-modul dan aksi izin.
+     * Definisi lengkap 13 kategori modul beserta sub-modul dan aksi izin.
      * Semua teks murni tanpa emoji maupun ikon.
      *
      * @return array<string, array<string, mixed>>
@@ -275,6 +275,19 @@ class Club61PermissionMatrix
                         'actions' => [
                             'view_sponsor_access_schedules' => 'Lihat Jadwal Akses Lapangan Sponsor',
                             'manage_sponsor_access_schedules' => 'Kelola (Tambah/Ubah/Hapus) Jadwal Akses Sponsor',
+                        ],
+                    ],
+                ],
+            ],
+
+            'website_content' => [
+                'title' => '13. Konten Website (Company Profile)',
+                'submodules' => [
+                    'company_profile' => [
+                        'label' => 'Konten Landing Page & Profil Perusahaan',
+                        'actions' => [
+                            'View:KelolaKontenWebsite' => 'Akses Halaman Konten Website',
+                            'manage_company_profile_content' => 'Ubah & Simpan Konten Landing Page',
                         ],
                     ],
                 ],

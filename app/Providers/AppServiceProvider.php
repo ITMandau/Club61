@@ -2,11 +2,13 @@
 
 namespace App\Providers;
 
+use App\Models\Setting\CompanyProfileSetting;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Facades\URL;
+use Illuminate\Support\Facades\View;
 use Illuminate\Support\ServiceProvider;
 
 class AppServiceProvider extends ServiceProvider
@@ -51,6 +53,41 @@ class AppServiceProvider extends ServiceProvider
 
         Gate::policy(\Spatie\Permission\Models\Role::class, \App\Policies\RolePolicy::class);
         Gate::policy(\App\Models\Sponsor\SponsorOrganization::class, \App\Policies\Sponsor\SponsorOrganizationPolicy::class);
+
+        // Satu sumber data company profile dipakai ulang di halaman depan publik (welcome)
+        // DAN panel kiri halaman login — supaya fakta venue (jumlah lapangan, daftar
+        // fasilitas, alamat/jam) tidak pernah drift antar 2 file lagi seperti insiden
+        // "4 vs 3 lapangan" yang memicu Modul 14 (Company Profile Content).
+        View::composer(['welcome', 'auth.login'], function ($view) {
+            $view->with('companyProfile', CompanyProfileSetting::current());
+        });
+
+        // Facilities Showcase, "Kenapa Pilih Club61", Membership Teaser, & stats bar cuma
+        // tampil di halaman depan publik (bukan panel login, yang cuma butuh kartu ringkas
+        // dari $companyProfile di atas).
+        View::composer('welcome', function ($view) {
+            $view->with('companyFacilities', \App\Models\Setting\CompanyProfileFacility::active()->get());
+            $view->with('companyValueProps', \App\Models\Setting\CompanyProfileValueProp::active()->get());
+
+            // Semua paket individual yang aktif ditampilkan (bukan cuma 3 termurah) — supaya
+            // staf yang menambah/menonaktifkan paket lewat resource Membership tidak perlu
+            // sentuh halaman depan lagi, cukup 1 sumber data yang sama.
+            $view->with(
+                'membershipPlans',
+                \App\Models\Membership\MembershipPlan::query()
+                    ->where('is_active', true)
+                    ->where('ownership_type', 'INDIVIDUAL')
+                    ->with('benefits')
+                    ->orderBy('price')
+                    ->get()
+            );
+
+            // Angka nyata dari database, bukan dummy — biar hero page ga cuma dekorasi kosong.
+            $view->with('venueStats', [
+                'active_members' => \App\Models\Membership\UserMembership::where('status', 'ACTIVE')->distinct('user_id')->count('user_id'),
+                'sponsor_partners' => \App\Models\Sponsor\SponsorOrganization::count(),
+            ]);
+        });
 
         if (! app()->environment('production') && (request()->header('x-forwarded-proto') === 'https' || str_contains(request()->header('host') ?? '', 'ngrok'))) {
             URL::forceScheme('https');

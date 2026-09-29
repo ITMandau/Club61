@@ -70,6 +70,7 @@ class AdminPanelProvider extends PanelProvider
                 \App\Filament\Pages\Marketing::class,
                 \App\Filament\Pages\MasterData::class,
                 \App\Filament\Pages\PengaturanBiayaPajak::class,
+                \App\Filament\Pages\KelolaKontenWebsite::class,
             ])
             ->widgets([])
             ->middleware([

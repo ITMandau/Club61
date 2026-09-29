@@ -14,6 +14,15 @@ Route::get('/', function () {
     return view('welcome');
 });
 
+// Toggle bahasa ID/EN untuk halaman depan — disimpan di session (lihat SetLocale
+// middleware), redirect balik ke halaman asal supaya posisi scroll/section tidak berubah.
+Route::get('/lang/{locale}', function (string $locale) {
+    abort_unless(in_array($locale, \App\Http\Middleware\SetLocale::ALLOWED_LOCALES, true), 404);
+    session(['site_locale' => $locale]);
+
+    return redirect()->back();
+})->name('lang.switch');
+
 // 2. Layar POS Kasir Frontdesk & KDS Dapur (Wajib Auth & Otorisasi Staf)
 Route::middleware(['auth'])->group(function () {
     Route::get('/pos', function () {
