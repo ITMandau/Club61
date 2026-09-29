@@ -131,10 +131,12 @@
         </div>
 
         <div style="display: flex; align-items: center; gap: 0.5rem;">
+            @if ($this->canCheckIn)
             <button type="button" wire:click="openCheckInModal()" class="adm-btn-sec"
                 style="background: linear-gradient(180deg, #F0DB9D 0%, #D4AF37 35%, #B38622 100%); color: #281A05; border: 1px solid #FBF0CE; font-weight: 800; cursor: pointer; box-shadow: 0 4px 12px rgba(184, 134, 11, 0.25);">
                 <span>Scan QR / Check-In Gate</span>
             </button>
+            @endif
             <a href="/admin/booking-system" class="adm-btn-sec">
                 <span>Lihat Matriks Lapangan</span>
             </a>
@@ -333,7 +335,7 @@
                             <td style="text-align: center; white-space: nowrap;">
                                 <div
                                     style="display: inline-flex; gap: 0.4rem; align-items: center; justify-content: center;">
-                                    @if (($b->status === 'LOCKED' && $pendingAmount > 0) || $b->status === 'PENDING_PAYMENT')
+                                    @if ($this->canSettle && (($b->status === 'LOCKED' && $pendingAmount > 0) || $b->status === 'PENDING_PAYMENT'))
                                         <button type="button" wire:click="openSettleModal('{{ $b->id }}')"
                                             wire:loading.attr="disabled"
                                             title="Pelunasan Kasir / Settle Tunai (Rp {{ number_format($pendingAmount ?: $b->total_amount, 0, ',', '.') }})"
@@ -361,7 +363,7 @@
                                         </button>
                                     @endif
 
-                                    @if ($b->status === 'PAID')
+                                    @if ($this->canCheckIn && $b->status === 'PAID')
                                         <button type="button"
                                             wire:click="openCheckInModal('{{ $b->booking_code }}')"
                                             wire:loading.attr="disabled" title="Check-In Customer (Scan QR)"
@@ -391,7 +393,7 @@
                                         </button>
                                     @endif
 
-                                    @if ($b->status === 'CHECKED_IN')
+                                    @if ($this->canCheckIn && $b->status === 'CHECKED_IN')
                                         <button type="button" wire:click="executeComplete('{{ $b->id }}')"
                                             wire:confirm="Tandai sesi bermain tiket {{ $b->booking_code }} telah selesai (COMPLETED)?"
                                             wire:loading.attr="disabled" title="Tandai Selesai (Complete)"
@@ -428,7 +430,7 @@
                                                 && ! $e->returned_at;
                                         });
                                     @endphp
-                                    @if (in_array($b->status, ['CHECKED_IN', 'COMPLETED']) && $hasPendingEquipmentReturn)
+                                    @if ($this->canCheckIn && in_array($b->status, ['CHECKED_IN', 'COMPLETED']) && $hasPendingEquipmentReturn)
                                         <button type="button" wire:click="executeReturnEquipment('{{ $b->id }}')"
                                             wire:confirm="Tandai alat sewa (raket/handuk) tiket {{ $b->booking_code }} sudah dikembalikan ke frontdesk?"
                                             wire:loading.attr="disabled" title="Retur Alat Sewa (Restock)"
@@ -458,7 +460,7 @@
                                         </button>
                                     @endif
 
-                                    @if (in_array($b->status, ['PAID', 'LOCKED']))
+                                    @if ($this->canReschedule && in_array($b->status, ['PAID', 'LOCKED']))
                                         <button type="button"
                                             wire:click="openRescheduleModal('{{ $b->id }}')"
                                             wire:loading.attr="disabled" title="Pindah Jadwal (Reschedule)"
@@ -487,10 +489,7 @@
                                         </button>
                                     @endif
 
-                                    @if (in_array($b->status, ['PAID', 'LOCKED', 'REFUND_PENDING']) &&
-                                            (auth()->user()->can('cancel_refund_padel') ||
-                                                auth()->user()->can('cancel_padel_booking') ||
-                                                auth()->user()->isAdmin()))
+                                    @if ($this->canRefund && in_array($b->status, ['PAID', 'LOCKED', 'REFUND_PENDING']))
                                         <button type="button"
                                             wire:click="openCancelRefundModal('{{ $b->id }}')"
                                             wire:loading.attr="disabled" title="Batalkan Reservasi &amp; Refund"

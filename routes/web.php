@@ -26,7 +26,7 @@ Route::get('/lang/{locale}', function (string $locale) {
 // 2. Layar POS Kasir Frontdesk & KDS Dapur (Wajib Auth & Otorisasi Staf)
 Route::middleware(['auth'])->group(function () {
     Route::get('/pos', function () {
-        if (! auth()->user()->isStaff()) {
+        if (! auth()->user()->isStaff() || ! auth()->user()->can('access_pos_terminal')) {
             abort(403, 'Akses Ditolak: Hanya staf kasir atau admin yang dapat mengakses terminal POS.');
         }
         return view('pos.index');
@@ -34,7 +34,7 @@ Route::middleware(['auth'])->group(function () {
 
     Route::post('/pos/check-in', function (\Illuminate\Http\Request $request, \App\Services\Padel\PadelBookingService $service) {
         $user = auth()->user();
-        if (! $user || ! $user->isStaff()) {
+        if (! $user || ! $user->isStaff() || ! $user->can('checkin_padel_ticket')) {
             return response()->json([
                 'success' => false,
                 'message' => 'Akses Ditolak: Hanya staf kasir atau admin yang berhak melakukan check-in tiket.',
@@ -56,7 +56,7 @@ Route::middleware(['auth'])->group(function () {
 
     // 3. Layar Monitor Dapur / KOT (Kitchen Display System)
     Route::get('/kitchen', function () {
-        if (! (auth()->user()->hasRole('kitchen') || auth()->user()->isAdmin())) {
+        if (! (auth()->user()->hasRole('kitchen') || auth()->user()->isAdmin()) || ! auth()->user()->can('view_kitchen_kds')) {
             abort(403, 'Akses Ditolak: Hanya staf dapur atau admin yang dapat mengakses KDS.');
         }
         return view('kitchen.kds');
@@ -66,9 +66,9 @@ Route::middleware(['auth'])->group(function () {
 // 4. Dashboard Member / Customer
 Route::get('/dashboard', function () {
     return view('dashboard');
-})->middleware(['auth', 'verified'])->name('dashboard');
+})->middleware(['auth', 'verified', \App\Http\Middleware\CustomerPortalOnly::class])->name('dashboard');
 
-Route::middleware(['auth', 'verified'])->group(function () {
+Route::middleware(['auth', 'verified', \App\Http\Middleware\CustomerPortalOnly::class])->group(function () {
     Route::get('/booking', function () {
         return view('customer.booking');
     })->name('customer.booking');
@@ -113,61 +113,14 @@ Route::middleware(['auth', 'verified'])->group(function () {
         ]);
     })->name('customer.corporate.sample-csv');
 
-    Route::get('/corporate', function (\Illuminate\Http\Request $request) {
-        $organization = \App\Models\Sponsor\SponsorOrganization::with(['userMembership.plan', 'userMembership.balances', 'accessSchedules' => function ($q) {
-            $q->where('valid_until', '>=', now()->toDateString())->orderBy('valid_from');
-        }])
-            ->where('sponsor_admin_user_id', auth()->id())
-            ->first();
-
-        $search = trim((string) $request->query('search', ''));
-
-        // Roster table/cards are paginated + searchable so the page stays fast once a
-        // sponsor's team grows large. Summary stats and the bulk-release modal below need
-        // the FULL active roster regardless of the current search/page, so they're fetched
-        // separately rather than derived from the paginated $members collection.
-        $members = $organization
-            ? \App\Models\Sponsor\SponsorOrganizationMember::where('sponsor_organization_id', $organization->id)
-                ->with(['user:id,name,phone', 'vouchers'])
-                ->when($search !== '', fn ($q) => $q->whereHas('user', fn ($uq) => $uq
-                    ->where('name', 'like', '%'.$search.'%')
-                    ->orWhere('phone', 'like', '%'.$search.'%')))
-                ->latest('created_at')
-                ->paginate(10)
-                ->withQueryString()
-            : new \Illuminate\Pagination\LengthAwarePaginator(collect(), 0, 10);
-
-        $allActiveMembers = $organization
-            ? \App\Models\Sponsor\SponsorOrganizationMember::where('sponsor_organization_id', $organization->id)
-                ->where('status', 'ACTIVE')
-                ->with(['user:id,name,phone', 'vouchers'])
-                ->get()
-            : collect();
-
-        // "Hours Used" is scoped to currently-active, non-expired vouchers (what employees still
-        // have actually spent so far). "Hours Released" / "Quota Remaining" below are LIFETIME
-        // figures on the organization itself (every voucher ever issued, even expired ones or
-        // ones belonging to a since-revoked member) — once a voucher is released it permanently
-        // consumes contract quota, whether or not it ends up being used before it expires.
-        $activeVouchers = $allActiveMembers->flatMap->vouchers->filter(fn ($v) => ! $v->isExpired());
-        $totalHoursUsed = (float) $activeVouchers->sum(fn ($v) => (float) $v->hours_used);
-        $totalHoursReleased = $organization ? $organization->totalHoursReleased() : 0.0;
-        $totalQuota = $organization ? $organization->totalQuota() : null;
-        $quotaRemaining = $organization ? $organization->remainingQuota() : null;
-
-        return view('customer.corporate', [
-            'organization' => $organization,
-            'members' => $members,
-            'search' => $search,
-            'activeMemberCount' => $allActiveMembers->count(),
-            'totalHoursReleased' => $totalHoursReleased,
-            'totalHoursUsed' => $totalHoursUsed,
-            'totalQuota' => $totalQuota,
-            'quotaRemaining' => $quotaRemaining,
-            'activeMembersForBulk' => $allActiveMembers,
-        ]);
-    })->name('customer.corporate');
+    Route::get('/corporate', [\App\Http\Controllers\CorporateDashboardController::class, 'show'])->name('customer.corporate');
 });
+
+// Pratinjau read-only dashboard PIC untuk STAF (di-iframe oleh halaman panel "Dashboard Sponsor").
+// Sengaja di luar grup portal customer supaya staf tidak ter-redirect.
+Route::get('/corporate/preview/{organization}', [\App\Http\Controllers\CorporateDashboardController::class, 'preview'])
+    ->middleware('auth')
+    ->name('corporate.preview');
 
 Route::middleware('auth')->group(function () {
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');

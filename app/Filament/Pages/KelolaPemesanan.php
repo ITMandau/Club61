@@ -100,8 +100,48 @@ class KelolaPemesanan extends Page
         $this->resetPage();
     }
 
+    public function getCanRescheduleProperty(): bool
+    {
+        return (bool) auth()->user()?->can('reschedule_padel_booking');
+    }
+
+    public function getCanRefundProperty(): bool
+    {
+        return (bool) auth()->user()?->can('cancel_refund_padel');
+    }
+
+    public function getCanSettleProperty(): bool
+    {
+        return (bool) auth()->user()?->can('settle_unpaid_booking');
+    }
+
+    public function getCanCheckInProperty(): bool
+    {
+        return (bool) auth()->user()?->can('checkin_padel_ticket');
+    }
+
+    /** true = aksi ditolak (notifikasi sudah dikirim); tombolnya juga disembunyikan di Blade. */
+    protected function deniedWithout(string $permission): bool
+    {
+        if (auth()->user()?->can($permission)) {
+            return false;
+        }
+
+        Notification::make()
+            ->title('Akses Ditolak')
+            ->body("Anda tidak memiliki izin [{$permission}] untuk aksi ini.")
+            ->danger()
+            ->send();
+
+        return true;
+    }
+
     public function openRescheduleModal(string $bookingId, PadelBookingService $service): void
     {
+        if ($this->deniedWithout('reschedule_padel_booking')) {
+            return;
+        }
+
         $booking = PadelBooking::with(['court', 'user', 'order'])->findOrFail($bookingId);
 
         $this->selectedBookingId = $booking->id;
@@ -214,6 +254,10 @@ class KelolaPemesanan extends Page
 
     public function executeReschedule(PadelBookingService $service): void
     {
+        if ($this->deniedWithout('reschedule_padel_booking')) {
+            return;
+        }
+
         if (! $this->rescheduleStartTime) {
             Notification::make()
                 ->title('Pilih Jam Main')
@@ -257,6 +301,10 @@ class KelolaPemesanan extends Page
 
     public function openSettleModal(string $bookingId): void
     {
+        if ($this->deniedWithout('settle_unpaid_booking')) {
+            return;
+        }
+
         $booking = PadelBooking::with(['user', 'order.payments'])->findOrFail($bookingId);
 
         $pendingPayment = Payment::where('order_id', $booking->order_id)
@@ -277,6 +325,10 @@ class KelolaPemesanan extends Page
 
     public function executeSettleSupplemental(PadelBookingService $service): void
     {
+        if ($this->deniedWithout('settle_unpaid_booking')) {
+            return;
+        }
+
         try {
             $adminUser = auth()->user() ?? \App\Models\User::role(['admin', 'super_admin'])->first();
 
@@ -307,8 +359,9 @@ class KelolaPemesanan extends Page
 
     public function openCancelRefundModal(string $bookingId): void
     {
-        if (! auth()->user()->can('cancel_refund_padel') && ! auth()->user()->can('cancel_padel_booking') && ! auth()->user()->isAdmin()) {
-            Notification::make()->title('Akses Ditolak: Anda tidak memiliki izin membatalkan pesanan.')->danger()->send();
+        // Hanya cancel_refund_padel — cancel_padel_booking itu izin customer membatalkan
+        // pesanannya sendiri, bukan izin staf memindahkan uang kembali.
+        if ($this->deniedWithout('cancel_refund_padel')) {
             return;
         }
 
@@ -328,8 +381,7 @@ class KelolaPemesanan extends Page
 
     public function executeCancelRefund(PadelBookingService $service): void
     {
-        if (! auth()->user()->can('cancel_refund_padel') && ! auth()->user()->can('cancel_padel_booking') && ! auth()->user()->isAdmin()) {
-            Notification::make()->title('Akses Ditolak: Anda tidak memiliki izin membatalkan pesanan.')->danger()->send();
+        if ($this->deniedWithout('cancel_refund_padel')) {
             return;
         }
 
@@ -379,6 +431,10 @@ class KelolaPemesanan extends Page
 
     public function executeCheckIn(PadelBookingService $service): void
     {
+        if ($this->deniedWithout('checkin_padel_ticket')) {
+            return;
+        }
+
         $code = trim($this->checkInQuery);
         if (empty($code)) {
             Notification::make()
@@ -410,6 +466,10 @@ class KelolaPemesanan extends Page
 
     public function executeComplete(string $bookingId, PadelBookingService $service): void
     {
+        if ($this->deniedWithout('checkin_padel_ticket')) {
+            return;
+        }
+
         try {
             $staffUser = auth()->user() ?? \App\Models\User::role(['admin', 'super_admin'])->first();
             $booking = $service->completeBooking($bookingId, $staffUser);
@@ -430,6 +490,10 @@ class KelolaPemesanan extends Page
 
     public function executeReturnEquipment(string $bookingId, PadelBookingService $service): void
     {
+        if ($this->deniedWithout('checkin_padel_ticket')) {
+            return;
+        }
+
         try {
             $staffUser = auth()->user() ?? \App\Models\User::role(['admin', 'super_admin'])->first();
             $result = $service->returnEquipment($bookingId, $staffUser);

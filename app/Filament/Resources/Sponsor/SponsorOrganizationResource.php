@@ -9,6 +9,7 @@ use App\Models\Membership\UserMembership;
 use App\Models\Sponsor\SponsorOrganization;
 use App\Models\User;
 use BackedEnum;
+use Filament\Actions\Action;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\DeleteBulkAction;
@@ -36,7 +37,7 @@ class SponsorOrganizationResource extends Resource
 
     protected static string|BackedEnum|null $navigationIcon = 'heroicon-o-building-office-2';
 
-    protected static ?string $navigationLabel = 'Kelola Sponsor Korporat';
+    protected static ?string $navigationLabel = 'Kelola Sponsor ';
 
     protected static string|UnitEnum|null $navigationGroup = 'Main Menu';
 
@@ -108,10 +109,11 @@ class SponsorOrganizationResource extends Resource
                         ->options(fn ($record) => UserMembership::query()
                             ->where('owner_type', 'ORGANIZATIONAL')
                             ->whereDoesntHave('sponsorOrganization', fn ($q) => $record ? $q->where('id', '!=', $record->id) : $q)
-                            ->with('plan')
+                            ->with(['plan', 'sponsorOrganization' => fn ($q) => $q->onlyTrashed()])
                             ->limit(50)
                             ->get()
-                            ->mapWithKeys(fn ($m) => [$m->id => $m->membership_code.' — '.($m->plan->name ?? '-')]))
+                            ->mapWithKeys(fn ($m) => [$m->id => $m->membership_code.' — '.($m->plan->name ?? '-')
+                                .($m->sponsorOrganization ? ' (sponsor lama "'.$m->sponsorOrganization->name.'" akan dipulihkan)' : '')]))
                         ->searchable()
                         ->required()
                         ->disabledOn('edit'),
@@ -168,12 +170,24 @@ class SponsorOrganizationResource extends Resource
                     ->color(fn (string $state): string => $state === 'ACTIVE' ? 'success' : 'gray'),
             ])
             ->recordActions([
-                EditAction::make(),
-                DeleteAction::make(),
+                Action::make('previewPicDashboard')
+                    ->label('Lihat Dashboard PIC')
+                    ->icon('heroicon-o-eye')
+                    ->color('gray')
+                    ->visible(fn (): bool => \App\Filament\Pages\SponsorDashboard::canAccess())
+                    ->url(fn (SponsorOrganization $record): string => \App\Filament\Pages\SponsorDashboard::getUrl(['organization' => $record->id])),
+                // Tombol tabel Filament mengotorisasi lewat Gate policy model — dan policy
+                // SponsorOrganization itu khusus PIC portal customer (sponsor_admin_user_id ===
+                // user login), jadi staf non-super_admin selalu ditolak. Paksa pakai izin staf.
+                EditAction::make()
+                    ->authorize(fn (SponsorOrganization $record): bool => static::canEdit($record)),
+                DeleteAction::make()
+                    ->authorize(fn (SponsorOrganization $record): bool => static::canDelete($record)),
             ])
             ->toolbarActions([
                 BulkActionGroup::make([
-                    DeleteBulkAction::make(),
+                    DeleteBulkAction::make()
+                        ->authorize(fn (): bool => static::canDeleteAny()),
                 ]),
             ]);
     }

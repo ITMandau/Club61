@@ -289,13 +289,15 @@
 
         <div style="display:flex; align-items:center; gap:0.5rem; flex-wrap:wrap;">
             @if($activeTab === 'courts')
-                <button type="button" wire:click="openOperatingHoursModal" class="md-btn-action" style="background:#FAF5E8; border:1.5px solid #DFC387; color:#8C6418; font-weight:800; padding:0.65rem 1.15rem; border-radius:10px; cursor:pointer;">
-                    <span>Atur Jam Buka-Tutup Massal</span>
-                </button>
-                <button type="button" wire:click="openCreateCourtModal" class="md-btn-gold">
-                    <span>+ Tambah Lapangan Baru</span>
-                </button>
-            @else
+                @if($this->canManageCourts)
+                    <button type="button" wire:click="openOperatingHoursModal" class="md-btn-action" style="background:#FAF5E8; border:1.5px solid #DFC387; color:#8C6418; font-weight:800; padding:0.65rem 1.15rem; border-radius:10px; cursor:pointer;">
+                        <span>Atur Jam Buka-Tutup Massal</span>
+                    </button>
+                    <button type="button" wire:click="openCreateCourtModal" class="md-btn-gold">
+                        <span>+ Tambah Lapangan Baru</span>
+                    </button>
+                @endif
+            @elseif($this->canManageEquipment)
                 <button type="button" wire:click="openCreateEquipmentModal" class="md-btn-gold">
                     <span>+ Tambah Add-on Baru</span>
                 </button>
@@ -377,8 +379,8 @@
                                     <div style="font-size:0.7rem; color:#9CA3AF;">per jam prime time</div>
                                 </td>
                                 <td style="text-align:center;">
-                                    <div style="display:inline-flex; align-items:center; gap:0.5rem; cursor:pointer;"
-                                        wire:click="toggleCourtStatus('{{ $court->id }}')">
+                                    <div style="display:inline-flex; align-items:center; gap:0.5rem; {{ $this->canManageCourts ? 'cursor:pointer;' : '' }}"
+                                        @if($this->canManageCourts) wire:click="toggleCourtStatus('{{ $court->id }}')" @endif>
                                         <div class="md-switch {{ $court->is_active ? 'on' : '' }}">
                                             <div class="md-switch-knob"></div>
                                         </div>
@@ -388,15 +390,17 @@
                                     </div>
                                 </td>
                                 <td style="text-align:right;">
-                                    <button type="button" wire:click="openEditCourtModal('{{ $court->id }}')" class="md-btn-action md-btn-edit">
-                                        <span>Edit Tarif</span>
-                                    </button>
+                                    @if($this->canManageCourts)
+                                        <button type="button" wire:click="openEditCourtModal('{{ $court->id }}')" class="md-btn-action md-btn-edit">
+                                            <span>Edit Tarif</span>
+                                        </button>
+                                    @endif
                                 </td>
                             </tr>
                         @empty
                             <tr>
                                 <td colspan="6" style="text-align:center; padding:2.5rem; color:#6B7280;">
-                                    Belum ada data lapangan. Silakan klik tombol "+ Tambah Lapangan Baru".
+                                    Belum ada data lapangan.{{ $this->canManageCourts ? ' Silakan klik tombol "+ Tambah Lapangan Baru".' : '' }}
                                 </td>
                             </tr>
                         @endforelse
@@ -496,8 +500,8 @@
                                     @endif
                                 </td>
                                 <td style="text-align:center;">
-                                    <div style="display:inline-flex; align-items:center; gap:0.5rem; cursor:pointer;"
-                                        wire:click="toggleEquipmentStatus('{{ $eq->id }}')">
+                                    <div style="display:inline-flex; align-items:center; gap:0.5rem; {{ $this->canManageEquipment ? 'cursor:pointer;' : '' }}"
+                                        @if($this->canManageEquipment) wire:click="toggleEquipmentStatus('{{ $eq->id }}')" @endif>
                                         <div class="md-switch {{ $eq->is_active ? 'on' : '' }}">
                                             <div class="md-switch-knob"></div>
                                         </div>
@@ -507,6 +511,7 @@
                                     </div>
                                 </td>
                                 <td style="text-align:right;">
+                                    @if($this->canManageEquipment)
                                     <div style="display:inline-flex; align-items:center; gap:0.35rem;">
                                         <button type="button" wire:click="openEditEquipmentModal('{{ $eq->id }}')" class="md-btn-action md-btn-edit">
                                             <span>Edit</span>
@@ -530,12 +535,13 @@
                                             </button>
                                         @endif
                                     </div>
+                                    @endif
                                 </td>
                             </tr>
                         @empty
                             <tr>
                                 <td colspan="7" style="text-align:center; padding:2.5rem; color:#6B7280;">
-                                    Belum ada data Add-on. Silakan klik tombol "+ Tambah Add-on Baru".
+                                    Belum ada data Add-on.{{ $this->canManageEquipment ? ' Silakan klik tombol "+ Tambah Add-on Baru".' : '' }}
                                 </td>
                             </tr>
                         @endforelse

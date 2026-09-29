@@ -31,8 +31,13 @@ class SponsorOrganizationService
             return null;
         }
 
-        $existing = SponsorOrganization::where('user_membership_id', $membership->id)->first();
+        // withTrashed: baris yang di-soft-delete tetap memegang unique user_membership_id.
+        $existing = SponsorOrganization::withTrashed()->where('user_membership_id', $membership->id)->first();
         if ($existing) {
+            if ($existing->trashed()) {
+                $existing->restore();
+            }
+
             return $existing;
         }
 
@@ -42,6 +47,40 @@ class SponsorOrganizationService
             'sponsor_admin_user_id' => $membership->user_id,
             'status' => 'ACTIVE',
         ]);
+    }
+
+    /**
+     * Pintu kedua selain pembelian: super_admin memberikan paket ORGANIZATIONAL langsung ke
+     * PIC (mis. kontrak sponsor yang dibayar di luar sistem / kompensasi). Lewat jalur yang
+     * SAMA dengan pembelian (purchasePlan + activateMembership) supaya kuota & ledger identik,
+     * tapi dengan diskon 100% + alasan wajib — jadi omzet tidak tercatat palsu dan jejaknya
+     * (siapa yang memberi, kenapa) tetap ada di kartu membership.
+     */
+    public function grantCorporateMembership(User $pic, \App\Models\Membership\MembershipPlan $plan, string $companyName, User $grantedBy, string $reason): SponsorOrganization
+    {
+        if ($plan->ownership_type !== 'ORGANIZATIONAL') {
+            throw new DomainException('Paket yang dipilih bukan paket Corporate / Sponsor (ORGANIZATIONAL).');
+        }
+
+        if (trim($reason) === '') {
+            throw new DomainException('Alasan pemberian membership wajib diisi.');
+        }
+
+        return DB::transaction(function () use ($pic, $plan, $companyName, $grantedBy, $reason) {
+            $membership = $this->balanceService->purchasePlan($pic, $plan, [
+                'owner_type' => 'ORGANIZATIONAL',
+                'manual_discount_percent' => 100,
+                'manual_discount_reason' => 'Diberikan langsung oleh '.$grantedBy->name.' (tanpa pembelian): '.trim($reason),
+                'sold_by_admin_id' => $grantedBy->id,
+            ]);
+
+            $membership = $this->balanceService->activateMembership($membership);
+
+            $organization = $this->ensureOrganizationForMembership($membership);
+            $organization->update(['name' => trim($companyName)]);
+
+            return $organization;
+        });
     }
 
     /**

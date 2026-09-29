@@ -77,6 +77,8 @@ class MasterData extends Page
 
     public function openCreateCourtModal(): void
     {
+        $this->authorizeCourtManagement();
+
         $this->editingCourtId = null;
         $this->courtName = '';
         $this->courtType = 'INDOOR';
@@ -91,6 +93,8 @@ class MasterData extends Page
 
     public function openEditCourtModal(string $courtId): void
     {
+        $this->authorizeCourtManagement();
+
         $court = PadelCourt::find($courtId);
         if (! $court) {
             Notification::make()->title('Lapangan tidak ditemukan')->danger()->send();
@@ -118,6 +122,8 @@ class MasterData extends Page
 
     public function openOperatingHoursModal(): void
     {
+        $this->authorizeCourtManagement();
+
         $firstCourt = PadelCourt::first();
         $this->bulkOpenTime = (string) ($firstCourt?->open_time ?: '06:00');
         $this->bulkCloseTime = (string) ($firstCourt?->close_time ?: '23:00');
@@ -131,7 +137,7 @@ class MasterData extends Page
 
     public function saveOperatingHoursAllCourts(): void
     {
-        $this->authorizeAdminAction();
+        $this->authorizeCourtManagement();
 
         $this->validate([
             'bulkOpenTime' => ['required', 'string'],
@@ -165,7 +171,7 @@ class MasterData extends Page
 
     public function saveCourt(): void
     {
-        $this->authorizeAdminAction();
+        $this->authorizeCourtManagement();
 
         $this->validate([
             'courtName' => ['required', 'string', 'max:50'],
@@ -241,7 +247,7 @@ class MasterData extends Page
 
     public function toggleCourtStatus(string $courtId): void
     {
-        $this->authorizeAdminAction();
+        $this->authorizeCourtManagement();
 
         $court = PadelCourt::find($courtId);
         if (! $court) {
@@ -266,6 +272,8 @@ class MasterData extends Page
 
     public function openCreateEquipmentModal(): void
     {
+        $this->authorizeEquipmentManagement();
+
         $this->editingEquipmentId = null;
         $this->equipmentName = '';
         $this->equipmentType = 'RACKET';
@@ -277,6 +285,8 @@ class MasterData extends Page
 
     public function openEditEquipmentModal(string $equipmentId): void
     {
+        $this->authorizeEquipmentManagement();
+
         $equipment = CourtEquipment::find($equipmentId);
         if (! $equipment) {
             Notification::make()->title('Add-on tidak ditemukan')->danger()->send();
@@ -300,7 +310,7 @@ class MasterData extends Page
 
     public function saveEquipment(): void
     {
-        $this->authorizeAdminAction();
+        $this->authorizeEquipmentManagement();
 
         $this->validate([
             'equipmentName' => ['required', 'string', 'max:100'],
@@ -357,7 +367,7 @@ class MasterData extends Page
 
     public function toggleEquipmentStatus(string $equipmentId): void
     {
-        $this->authorizeAdminAction();
+        $this->authorizeEquipmentManagement();
 
         $equipment = CourtEquipment::find($equipmentId);
         if (! $equipment) {
@@ -383,7 +393,7 @@ class MasterData extends Page
      */
     public function deleteEquipment(string $equipmentId): void
     {
-        $this->authorizeAdminAction();
+        $this->authorizeEquipmentManagement();
 
         $actionTaken = DB::transaction(function () use ($equipmentId) {
             $equipment = CourtEquipment::where('id', $equipmentId)->lockForUpdate()->first();
@@ -451,16 +461,31 @@ class MasterData extends Page
         });
     }
 
-    protected function authorizeAdminAction(): void
+    public function getCanManageCourtsProperty(): bool
+    {
+        return (bool) auth()->user()?->can('manage_court_pricing');
+    }
+
+    public function getCanManageEquipmentProperty(): bool
+    {
+        return (bool) auth()->user()?->can('manage_court_equipment');
+    }
+
+    protected function authorizeCourtManagement(): void
     {
         abort_unless(
-            auth()->user() && (
-                auth()->user()->hasAnyRole(['super_admin', 'admin']) ||
-                auth()->user()->can('manage_court_pricing') ||
-                auth()->user()->can('manage_court_equipment')
-            ),
+            $this->canManageCourts,
             403,
-            'Akses ditolak: Anda tidak memiliki izin untuk mengelola master data dan tarif.'
+            'Akses ditolak: Anda tidak memiliki izin [manage_court_pricing] untuk mengelola lapangan, jam operasional & tarif.'
+        );
+    }
+
+    protected function authorizeEquipmentManagement(): void
+    {
+        abort_unless(
+            $this->canManageEquipment,
+            403,
+            'Akses ditolak: Anda tidak memiliki izin [manage_court_equipment] untuk mengelola alat sewa.'
         );
     }
 }

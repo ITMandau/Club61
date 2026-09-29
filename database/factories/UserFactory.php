@@ -47,9 +47,8 @@ class UserFactory extends Factory
     {
         return $this->afterCreating(function (\App\Models\User $user) use ($role) {
             $r = \Spatie\Permission\Models\Role::findOrCreate(strtolower($role), 'web');
-            if (strtolower($role) === 'admin' && $r->permissions()->count() === 0 && class_exists(\App\Services\Permission\Club61PermissionMatrix::class)) {
-                \App\Services\Permission\Club61PermissionMatrix::syncAllPermissions('web');
-                $r->syncPermissions(\App\Services\Permission\Club61PermissionMatrix::getAllPermissionSlugs());
+            if ($r->wasRecentlyCreated) {
+                \App\Services\Permission\Club61PermissionMatrix::applyDefaultPermissionsTo($r);
             }
             $user->syncRoles([$r]);
         });
@@ -68,6 +67,11 @@ class UserFactory extends Factory
     public function cashier(): static
     {
         return $this->role('cashier');
+    }
+
+    public function receptionist(): static
+    {
+        return $this->role('receptionist');
     }
 
     public function kitchen(): static

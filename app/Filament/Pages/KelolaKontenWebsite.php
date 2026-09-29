@@ -5,6 +5,7 @@ namespace App\Filament\Pages;
 use App\Models\Setting\CompanyProfileFacility;
 use App\Models\Setting\CompanyProfileSetting;
 use App\Models\Setting\CompanyProfileValueProp;
+use App\Services\Media\SecureImageUploader;
 use BackedEnum;
 use BezhanSalleh\FilamentShield\Traits\HasPageShield;
 use Filament\Notifications\Notification;
@@ -232,58 +233,20 @@ class KelolaKontenWebsite extends Page
     }
 
     /**
-     * Validasi + proses ulang foto upload sebelum disimpan permanen. SELALU di-decode ulang
-     * lewat GD dan di-render ke file JPEG baru (bukan sekadar dipindah) — ini yang menghapus
-     * metadata EXIF (termasuk lokasi GPS) dan payload tersembunyi apa pun yang menumpang di
-     * file asli, sesuai checklist keamanan proyek ini soal upload gambar. Tipe file divalidasi
-     * dari ISI file (getimagesize), bukan dari ekstensi/nama file semata.
+     * Validasi + proses ulang foto upload sebelum disimpan permanen — didelegasikan ke
+     * SecureImageUploader (satu implementasi dipakai bersama seluruh panel admin, lihat
+     * app/Services/Media/SecureImageUploader.php), supaya pipeline keamanan upload gambar
+     * tidak punya 2 salinan kode yang bisa saling drift.
      */
     private function processFacilityPhotoUpload(\Livewire\Features\SupportFileUploads\TemporaryUploadedFile $upload): string
     {
-        $realPath = $upload->getRealPath();
-        $info = @getimagesize($realPath);
-
-        abort_unless($info !== false, 422, 'File yang diunggah bukan gambar yang valid.');
-
-        $mime = $info['mime'];
-        $source = match ($mime) {
-            'image/jpeg' => @imagecreatefromjpeg($realPath),
-            'image/png' => @imagecreatefrompng($realPath),
-            'image/webp' => @imagecreatefromwebp($realPath),
-            default => null,
-        };
-
-        abort_unless($source !== null && $source !== false, 422, 'Format gambar tidak didukung. Gunakan JPG, PNG, atau WEBP.');
-
-        // Batasi lebar maksimum 1600px (foto marketing tidak perlu resolusi lebih dari itu),
-        // sekalian menekan ukuran file.
-        $width = imagesx($source);
-        $height = imagesy($source);
-        $maxWidth = 1600;
-
-        if ($width > $maxWidth) {
-            $newHeight = (int) round($height * ($maxWidth / $width));
-            $resized = imagecreatetruecolor($maxWidth, $newHeight);
-            imagecopyresampled($resized, $source, 0, 0, 0, 0, $maxWidth, $newHeight, $width, $height);
-            imagedestroy($source);
-            $source = $resized;
-        }
-
-        $directory = 'company-profile/facilities';
-        Storage::disk('public')->makeDirectory($directory);
-        $filename = $directory.'/'.Str::uuid().'.jpg';
-        $absolutePath = Storage::disk('public')->path($filename);
-
-        imagejpeg($source, $absolutePath, 82);
-        imagedestroy($source);
-
-        return $filename;
+        return SecureImageUploader::store($upload, 'company-profile/facilities');
     }
 
     public function save(): void
     {
         abort_unless(
-            auth()->user() && (auth()->user()->hasAnyRole(['super_admin', 'admin']) || auth()->user()->can('manage_company_profile_content')),
+            auth()->user() && auth()->user()->can('manage_company_profile_content'),
             403,
             'Akses ditolak: Anda tidak memiliki izin [manage_company_profile_content] untuk mengubah konten website.'
         );

@@ -71,6 +71,8 @@ class AdminPanelProvider extends PanelProvider
                 \App\Filament\Pages\MasterData::class,
                 \App\Filament\Pages\PengaturanBiayaPajak::class,
                 \App\Filament\Pages\KelolaKontenWebsite::class,
+                \App\Filament\Pages\KelolaMenuFnb::class,
+                \App\Filament\Pages\SponsorDashboard::class,
             ])
             ->widgets([])
             ->middleware([
@@ -86,6 +88,7 @@ class AdminPanelProvider extends PanelProvider
             ])
             ->authMiddleware([
                 Authenticate::class,
+                \App\Http\Middleware\RedirectToFirstAccessiblePanelPage::class,
             ]);
     }
 }

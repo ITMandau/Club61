@@ -118,6 +118,7 @@ class UserResource extends Resource
                         'super_admin' => 'danger',
                         'admin' => 'warning',
                         'cashier' => 'success',
+                        'receptionist' => 'success',
                         'kitchen' => 'info',
                         'trainer' => 'purple',
                         'stylist' => 'pink',

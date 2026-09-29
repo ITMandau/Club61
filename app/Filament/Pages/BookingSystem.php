@@ -92,6 +92,12 @@ class BookingSystem extends Page
 
     public function executeCheckIn(PadelBookingService $service): void
     {
+        if (! auth()->user()?->can('checkin_padel_ticket')) {
+            Notification::make()->title('Akses Ditolak')->body('Anda tidak memiliki izin [checkin_padel_ticket] untuk aksi ini.')->danger()->send();
+
+            return;
+        }
+
         $code = trim($this->checkInQuery);
         if (empty($code)) {
             Notification::make()
@@ -224,6 +230,12 @@ class BookingSystem extends Page
 
     public function quickCheckInFromInspector(string $bookingId, PadelBookingService $service): void
     {
+        if (! auth()->user()?->can('checkin_padel_ticket')) {
+            Notification::make()->title('Akses Ditolak')->body('Anda tidak memiliki izin [checkin_padel_ticket] untuk aksi ini.')->danger()->send();
+
+            return;
+        }
+
         try {
             $staffUser = auth()->user() ?? \App\Models\User::role(['cashier', 'admin', 'super_admin'])->first();
             $result = $service->checkIn($bookingId, $staffUser);
@@ -246,6 +258,12 @@ class BookingSystem extends Page
 
     public function executeComplete(string $bookingId, PadelBookingService $service): void
     {
+        if (! auth()->user()?->can('checkin_padel_ticket')) {
+            Notification::make()->title('Akses Ditolak')->body('Anda tidak memiliki izin [checkin_padel_ticket] untuk aksi ini.')->danger()->send();
+
+            return;
+        }
+
         try {
             $staffUser = auth()->user() ?? \App\Models\User::role(['cashier', 'admin', 'super_admin'])->first();
             $booking = $service->completeBooking($bookingId, $staffUser);

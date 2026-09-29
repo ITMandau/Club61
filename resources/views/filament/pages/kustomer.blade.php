@@ -560,7 +560,7 @@
                     <span>Modul 05 &bull; Customer Directory &amp; Live Monitoring</span>
                 </div>
                 <div class="adm-banner-title">
-                    Data Kustomer &amp; Live Monitoring Membership
+                    Data Customer &amp; Live Monitoring Membership
                 </div>
                 <div class="adm-banner-sub">
                     Pantau seluruh pelanggan terdaftar, kepemilikan kartu keanggotaan aktif, dan stream mutasi kuota fasilitas secara real-time.

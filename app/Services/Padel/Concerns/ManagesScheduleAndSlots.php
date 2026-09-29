@@ -29,6 +29,12 @@ trait ManagesScheduleAndSlots
         $dateStr = $parsedDate->format('Y-m-d');
         $isWeekend = $parsedDate->isWeekend();
 
+        // Aturan "jam lewat" SAMA dengan POS Walk-In (BookOfflineCourt): jam sebelum jam berjalan
+        // hari ini = PAST, jam yang sedang berjalan masih boleh dipesan. Tanggal lampau = semua PAST.
+        $nowLocal = Carbon::now($timezone);
+        $todayStr = $nowLocal->format('Y-m-d');
+        $currentHour = (int) $nowLocal->format('H');
+
         $courts = PadelCourt::where('is_active', true)->orderBy('name')->get();
 
         $holdThreshold = now()->subSeconds(self::HOLD_DURATION_SECONDS);
@@ -112,6 +118,8 @@ trait ManagesScheduleAndSlots
 
                 if (! $isOpenForCourt) {
                     $status = 'CLOSED';
+                } elseif ($dateStr < $todayStr || ($dateStr === $todayStr && $hour < $currentHour)) {
+                    $status = 'PAST';
                 } elseif ($collidingBooking) {
                     $status = in_array($collidingBooking->status, ['LOCKED', 'PENDING_PAYMENT', 'PENDING']) ? 'LOCKED' : 'BOOKED';
                 } elseif ($isCacheLocked) {
@@ -200,6 +208,11 @@ trait ManagesScheduleAndSlots
             $end = Carbon::parse("{$bookingDate} {$slot['end_time']}");
             if ($end->lessThanOrEqualTo($start)) {
                 throw new HttpException(422, "Waktu selesai ({$slot['end_time']}) harus lebih besar dari waktu mulai ({$slot['start_time']}).");
+            }
+
+            // Sama dengan grid: jam yang sudah lewat hari ini tidak bisa dipesan (jam berjalan masih boleh).
+            if ($start->copy()->startOfHour()->lt(now()->startOfHour())) {
+                throw new HttpException(422, "Jam {$slot['start_time']} sudah lewat. Silakan pilih jam lain.");
             }
         }
 

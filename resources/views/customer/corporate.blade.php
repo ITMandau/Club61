@@ -1,15 +1,17 @@
-<x-app-layout>
+<x-dynamic-component :component="! empty($previewMode) ? 'embed-layout' : 'app-layout'">
     <div class="py-6 sm:py-8 text-[#1F170D]">
         <div class="w-full px-4 sm:px-8 lg:px-12 2xl:px-16 space-y-6">
 
             <!-- Top Header -->
             <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white/95 backdrop-blur-xl p-5 rounded-3xl border border-[#DFC387] shadow-sm">
                 <div class="flex items-center gap-3.5">
+                    @if(empty($previewMode))
                     <a href="{{ route('dashboard') }}" class="p-2.5 rounded-2xl bg-[#FAF2DE] hover:bg-[#F3DFAD] border border-[#DFC387] text-[#7A5818] transition-colors" title="Back to Home">
                         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M15 19l-7-7 7-7" />
                         </svg>
                     </a>
+                    @endif
                     <div>
                         <h1 class="font-serif font-black text-xl sm:text-2xl text-[#1F170D]">Manage Corporate Sponsor Team</h1>
                         <p class="text-xs text-[#7A643E] mt-0.5">Manage your team's employee roster &amp; play-hour vouchers at Club 61</p>
@@ -17,12 +19,19 @@
                 </div>
             </div>
 
+            @if(! empty($previewMode) && $organization)
+                <div class="p-4 rounded-2xl border-2 border-amber-300 bg-amber-50 text-amber-900 text-xs font-bold flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                    <span>MODE PRATINJAU STAF — Anda melihat dashboard PIC <strong>{{ $organization->sponsorAdmin?->name ?? '-' }}</strong> ({{ $organization->name }}). Semua aksi dinonaktifkan.</span>
+                </div>
+            @endif
+
             @if(! $organization)
                 <div class="p-8 rounded-3xl bg-white/95 border border-[#DFC387] shadow-sm text-center">
                     <p class="text-sm font-bold text-[#1F170D]">You are not registered as the PIC of any corporate account.</p>
                     <p class="text-xs text-[#7A643E] mt-1.5">Contact Club 61 Concierge if your company already subscribes to a corporate package but this menu hasn't appeared yet.</p>
                 </div>
             @else
+                <div @if(! empty($previewMode)) inert @endif class="space-y-6">
                 <div id="corporate-alert" class="hidden p-4 rounded-2xl text-xs font-bold"></div>
 
                 <!-- Contract Summary -->
@@ -511,11 +520,12 @@ Siti Rahma,081399887766,5</pre>
                         </div>
                     </div>
                 </div>
+                </div>
             @endif
         </div>
     </div>
 
-    @if($organization)
+    @if($organization && empty($previewMode))
         <script>
             const CSRF_TOKEN = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
             const API_BASE = '/api/v1/sponsor/organization';
@@ -794,4 +804,4 @@ Siti Rahma,081399887766,5</pre>
             }
         </script>
     @endif
-</x-app-layout>
+</x-dynamic-component>

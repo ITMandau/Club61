@@ -34,6 +34,8 @@ class PosCashierShift extends Model
         'total_transactions',
         'opening_notes',
         'closing_notes',
+        'settlement_reconciliation',
+        'settlement_difference',
     ];
 
     protected function casts(): array
@@ -52,7 +54,72 @@ class PosCashierShift extends Model
             'total_other_sales' => 'decimal:2',
             'total_sales' => 'decimal:2',
             'total_transactions' => 'integer',
+            'settlement_reconciliation' => 'array',
+            'settlement_difference' => 'decimal:2',
         ];
+    }
+
+    private const EDC_TERMINAL_LABELS = [
+        'EDC_BCA' => 'Mesin EDC BCA',
+        'EDC_MANDIRI' => 'Mesin EDC Mandiri',
+        'EDC_LAINNYA' => 'Mesin EDC Lainnya',
+    ];
+
+    private const QRIS_PROVIDER_LABELS = [
+        'BCA_QRIS' => 'QRIS BCA Frontdesk',
+        'MANDIRI_QRIS' => 'QRIS Bank Mandiri',
+        'GOPAY' => 'GoPay / Midtrans QRIS',
+        'GOPAY_QRIS' => 'GoPay / Midtrans QRIS',
+        'OVO' => 'OVO',
+        'SHOPEEPAY' => 'ShopeePay',
+        'DANA' => 'DANA',
+        'LIVIN' => 'Livin Mandiri',
+        'LAINNYA' => 'QRIS Lainnya / Bank Lain',
+    ];
+
+    /**
+     * Rincian penjualan sukses shift ini per kategori settlement — satu baris per
+     * kombinasi yang punya laporan settlement sendiri di dunia nyata: tiap mesin EDC
+     * dipisah debit/kredit (struk settlement EDC memang memisahkan keduanya), tiap
+     * penyedia QRIS dipisah (mutasi QRIS dicek per dashboard acquirer). Kunci baris
+     * hanya huruf/angka/underscore supaya aman dipakai sebagai path wire:model.
+     *
+     * @return array<int, array{key: string, label: string, source: string, count: int, system_amount: float}>
+     */
+    public function settlementBreakdown(): array
+    {
+        $rows = [];
+
+        foreach ($this->payments()->where('status', 'SUCCESS')->get() as $payment) {
+            $log = $payment->payload_log ?? [];
+            $method = strtoupper((string) $payment->payment_method);
+
+            if (in_array($method, ['QRIS', 'QRIS_STATIS'], true)) {
+                $provider = strtoupper((string) ($log['qris_details']['provider'] ?? $log['qris_provider'] ?? 'LAINNYA'));
+                $key = 'QRIS_'.$provider;
+                $label = 'QRIS — '.(self::QRIS_PROVIDER_LABELS[$provider] ?? $provider);
+                $source = 'Mutasi / dashboard QRIS';
+            } elseif (in_array($method, ['DEBIT_CARD', 'CREDIT_CARD', 'DEBIT', 'CREDIT', 'EDC_BCA', 'EDC_MANDIRI'], true)) {
+                $edc = $log['edc_details'] ?? $log;
+                $terminal = strtoupper((string) ($edc['terminal'] ?? (in_array($method, ['EDC_BCA', 'EDC_MANDIRI'], true) ? $method : 'EDC_LAINNYA')));
+                $cardType = strtoupper((string) ($edc['card_type'] ?? (str_contains($method, 'CREDIT') ? 'CREDIT' : 'DEBIT')));
+                $key = $terminal.'_'.$cardType;
+                $label = ($cardType === 'CREDIT' ? 'Kartu Kredit' : 'Kartu Debit').' — '.(self::EDC_TERMINAL_LABELS[$terminal] ?? $terminal);
+                $source = 'Struk settlement '.(self::EDC_TERMINAL_LABELS[$terminal] ?? $terminal);
+            } else {
+                $key = 'OTHER_'.preg_replace('/[^A-Z0-9_]/', '_', $method);
+                $label = 'Lainnya — '.$method;
+                $source = 'Bukti transaksi';
+            }
+
+            $rows[$key] ??= ['key' => $key, 'label' => $label, 'source' => $source, 'count' => 0, 'system_amount' => 0.0];
+            $rows[$key]['count']++;
+            $rows[$key]['system_amount'] += (float) $payment->amount;
+        }
+
+        ksort($rows);
+
+        return array_values($rows);
     }
 
     public function openedBy()

@@ -18,6 +18,8 @@ class Order extends Model
         'pos_shift_id',
         'order_type',
         'table_number',
+        'customer_name',
+        'queue_number',
         'delivery_address',
         'delivery_fee',
         'subtotal',

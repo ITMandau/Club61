@@ -20,7 +20,9 @@ class SecurityHeaders
         $response = $next($request);
 
         $response->headers->set('X-Content-Type-Options', 'nosniff');
-        $response->headers->set('X-Frame-Options', 'DENY');
+        // Pratinjau dashboard PIC ditampilkan via iframe di halaman panel "Dashboard Sponsor"
+        // (origin yang sama) — hanya route itu yang boleh di-frame, itupun cuma same-origin.
+        $response->headers->set('X-Frame-Options', $request->routeIs('corporate.preview') ? 'SAMEORIGIN' : 'DENY');
         $response->headers->set('Referrer-Policy', 'strict-origin-when-cross-origin');
 
         if ($request->secure() || app()->environment('production')) {

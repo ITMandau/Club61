@@ -103,15 +103,22 @@ class SponsorAndMembershipResourcePermissionTest extends TestCase
         $this->assertTrue(MembershipPlanResource::canViewAny());
     }
 
-    public function test_admin_role_can_now_access_user_and_role_resources(): void
+    public function test_admin_role_can_access_users_but_role_matrix_stays_super_admin_only_by_default(): void
     {
         // Regresi: UserPolicy/RolePolicy dulu mengecek slug "ViewAny:User"/"ViewAny:Role" gaya
         // Filament Shield yang tidak pernah ada di Club61PermissionMatrix, jadi tetap ke-deny
-        // walau role "admin" sudah diberi view_users/view_roles lewat DatabaseSeeder.
+        // walau role sudah diberi view_users/view_roles.
         $admin = User::factory()->admin()->create();
         $this->actingAs($admin);
 
         $this->assertTrue(UserResource::canViewAny());
+
+        // Matriks role = pintu belakang (admin yang bisa ubah matriks = bisa kasih dirinya akses penuh).
+        $this->assertFalse(RoleResource::canViewAny());
+
+        // Tapi policy-nya tetap membaca slug yang benar kalau super_admin sengaja memberikannya.
+        Role::findByName('admin', 'web')->givePermissionTo('view_roles');
+        app()[\Spatie\Permission\PermissionRegistrar::class]->forgetCachedPermissions();
         $this->assertTrue(RoleResource::canViewAny());
     }
 

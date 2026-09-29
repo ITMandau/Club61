@@ -611,7 +611,8 @@ class PadelAdminOverrideTest extends TestCase
             'qr_code_hash' => 'hash_lw',
         ]);
 
-        $this->actingAs($this->admin);
+        // Reschedule = izin pintu belakang (hanya super_admin), lihat Club61PermissionMatrix::BACKDOOR_PERMISSIONS.
+        $this->actingAs(User::factory()->superAdmin()->create());
 
         \Livewire\Livewire::test(\App\Filament\Pages\KelolaPemesanan::class)
             ->assertStatus(200)

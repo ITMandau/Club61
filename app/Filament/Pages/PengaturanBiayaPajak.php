@@ -83,7 +83,7 @@ class PengaturanBiayaPajak extends Page
     public function saveSettings(): void
     {
         abort_unless(
-            auth()->user() && (auth()->user()->hasAnyRole(['super_admin', 'admin']) || auth()->user()->can('manage_tax_and_fees')),
+            auth()->user() && auth()->user()->can('manage_tax_and_fees'),
             403,
             'Akses ditolak: Anda tidak memiliki izin [manage_tax_and_fees] untuk memperbarui pengaturan finansial.'
         );

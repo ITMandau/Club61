@@ -219,6 +219,11 @@
                                                 Tutup
                                             </div>
                                         </template>
+                                        <template x-if="row.c1 && row.c1.status === 'PAST'">
+                                            <div class="w-full py-2 sm:py-2.5 px-1.5 sm:px-3 rounded-xl bg-[#F3F4F6] text-[#D1D5DB] text-center font-bold text-[10px] sm:text-xs border border-[#E5E7EB] whitespace-nowrap cursor-not-allowed select-none" title="Jam sudah lewat">
+                                                Lewat
+                                            </div>
+                                        </template>
                                         <template x-if="row.c1 && row.c1.status === 'AVAILABLE'">
                                             <button type="button" 
                                                     @click="handleSlotClick(row.c1.court_id, row.c1.court_name, row.c1.local_start, row.c1.local_end, row.c1.price, rowIndex, 'c1')"
@@ -254,6 +259,11 @@
                                                 Tutup
                                             </div>
                                         </template>
+                                        <template x-if="row.c2 && row.c2.status === 'PAST'">
+                                            <div class="w-full py-2 sm:py-2.5 px-1.5 sm:px-3 rounded-xl bg-[#F3F4F6] text-[#D1D5DB] text-center font-bold text-[10px] sm:text-xs border border-[#E5E7EB] whitespace-nowrap cursor-not-allowed select-none" title="Jam sudah lewat">
+                                                Lewat
+                                            </div>
+                                        </template>
                                         <template x-if="row.c2 && row.c2.status === 'AVAILABLE'">
                                             <button type="button" 
                                                     @click="handleSlotClick(row.c2.court_id, row.c2.court_name, row.c2.local_start, row.c2.local_end, row.c2.price, rowIndex, 'c2')"
@@ -287,6 +297,11 @@
                                         <template x-if="row.c3 && row.c3.status === 'CLOSED'">
                                             <div class="w-full py-2 sm:py-2.5 px-1.5 sm:px-3 rounded-xl bg-[#F3F4F6] text-[#9CA3AF] text-center font-bold text-[10px] sm:text-xs border border-[#E5E7EB] whitespace-nowrap cursor-not-allowed">
                                                 Tutup
+                                            </div>
+                                        </template>
+                                        <template x-if="row.c3 && row.c3.status === 'PAST'">
+                                            <div class="w-full py-2 sm:py-2.5 px-1.5 sm:px-3 rounded-xl bg-[#F3F4F6] text-[#D1D5DB] text-center font-bold text-[10px] sm:text-xs border border-[#E5E7EB] whitespace-nowrap cursor-not-allowed select-none" title="Jam sudah lewat">
+                                                Lewat
                                             </div>
                                         </template>
                                         <template x-if="row.c3 && row.c3.status === 'AVAILABLE'">
@@ -358,6 +373,11 @@
                                         <template x-if="slot.status === 'CLOSED'">
                                             <div class="w-full py-2.5 px-2 sm:px-3 rounded-xl bg-[#F3F4F6] text-[#9CA3AF] text-center font-bold text-xs border border-[#E5E7EB] whitespace-nowrap cursor-not-allowed">
                                                 Tutup
+                                            </div>
+                                        </template>
+                                        <template x-if="slot.status === 'PAST'">
+                                            <div class="w-full py-2.5 px-2 sm:px-3 rounded-xl bg-[#F3F4F6] text-[#D1D5DB] text-center font-bold text-xs border border-[#E5E7EB] whitespace-nowrap cursor-not-allowed select-none" title="Jam sudah lewat">
+                                                Lewat
                                             </div>
                                         </template>
                                         <template x-if="slot.status === 'AVAILABLE'">

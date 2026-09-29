@@ -479,7 +479,7 @@ class BookOfflineCourt extends Page
     {
         $user = auth()->user();
         abort_unless(
-            $user && ($user->hasAnyRole(['super_admin', 'admin']) || $user->can('open_pos_shift')),
+            $user && $user->can('open_pos_shift'),
             403,
             'Akses ditolak: Anda tidak memiliki izin [open_pos_shift] untuk membuka sesi shift kasir.'
         );
@@ -558,7 +558,7 @@ class BookOfflineCourt extends Page
     {
         $user = auth()->user();
         abort_unless(
-            $user && ($user->hasAnyRole(['super_admin', 'admin']) || $user->can('close_pos_shift')),
+            $user && $user->can('close_pos_shift'),
             403,
             'Akses ditolak: Anda tidak memiliki izin [close_pos_shift] untuk menutup sesi shift kasir.'
         );
@@ -1061,6 +1061,17 @@ class BookOfflineCourt extends Page
                 'qris_rrn' => $rrn,
                 'qris_sender_name' => trim($this->qrisSenderName) ?: null,
             ];
+        } else {
+            // Metode pembayaran di luar daftar yang dikenali (misal permintaan hasil rekayasa
+            // langsung ke Livewire, bukan lewat UI <select>/tab) WAJIB ditolak — tanpa else ini,
+            // order bisa lolos ditandai LUNAS tanpa satu pun bukti bayar (approval code/RRN)
+            // tersimpan, membuka celah fraud pada kebijakan 100% Cashless.
+            Notification::make()
+                ->title('Metode Pembayaran Tidak Dikenali')
+                ->body('Pilih salah satu metode pembayaran yang tersedia: QRIS, Kartu Debit, atau Kartu Kredit.')
+                ->danger()
+                ->send();
+            return;
         }
 
         // 3. Susun array slots untuk service
