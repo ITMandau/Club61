@@ -96,19 +96,11 @@
 
                     <!-- Card Top Header -->
                     <div class="relative z-10 mb-4">
-                        <div class="flex items-center justify-between">
-                            <span class="text-[10px] font-bold uppercase tracking-widest text-[#7A5818] bg-[#FDF9ED] border border-[#D9BE84] px-3 py-1 rounded-full shadow-sm">
-                                SINGLE SMART GATEWAY
-                            </span>
-                            <span class="text-[10px] font-mono px-2.5 py-0.5 rounded-full bg-[#EDE0C4]/70 border border-[#D1B679]/60 text-[#6B4F1B] font-semibold">
-                                v2.4 &bull; ENTERPRISE
-                            </span>
-                        </div>
                         <h1 class="text-2xl sm:text-3xl font-extrabold text-[#1F170D] font-serif mt-2 tracking-tight">
-                            Masuk ke Club Portal
+                            Portal Club 61 Padel Court
                         </h1>
                         <p class="text-xs text-[#6B5738] mt-1 leading-relaxed">
-                            Akses terpusat untuk Member, Kasir POS, Barista Cafe, dan Manajemen Venue.
+                            
                         </p>
                     </div>
 

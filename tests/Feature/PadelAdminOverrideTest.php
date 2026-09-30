@@ -112,7 +112,8 @@ class PadelAdminOverrideTest extends TestCase
             newDate: $pastDate,
             newStartTimeStr: '08:00',
             reason: 'Test tanggal lampau',
-            adminUser: $this->admin
+            adminUser: $this->admin,
+            paymentProof: ['qris_rrn' => 'RRNTEST0001'],
         );
     }
 
@@ -170,7 +171,8 @@ class PadelAdminOverrideTest extends TestCase
                 newDate: $targetDate,
                 newStartTimeStr: '19:00',
                 reason: 'Reschedule tabrakan',
-                adminUser: $this->admin
+                adminUser: $this->admin,
+                paymentProof: ['qris_rrn' => 'RRNTEST0002'],
             );
             $this->fail('Harusnya melempar SlotConflictException karena ada slot di tengah 3 jam yang terisi.');
         } catch (\Throwable $e) {
@@ -184,7 +186,8 @@ class PadelAdminOverrideTest extends TestCase
             newDate: $targetDate,
             newStartTimeStr: '16:00',
             reason: 'Pindah ke Court 2',
-            adminUser: $this->admin
+            adminUser: $this->admin,
+            paymentProof: ['qris_rrn' => 'RRNTEST0003'],
         );
 
         $this->assertTrue($result['success']);
@@ -242,7 +245,8 @@ class PadelAdminOverrideTest extends TestCase
             newDate: $targetDate,
             newStartTimeStr: '11:00',
             reason: 'Ganti jam saja, raket tetap',
-            adminUser: $this->admin
+            adminUser: $this->admin,
+            paymentProof: ['qris_rrn' => 'RRNTEST0004'],
         );
 
         // Record sewa raket tetap ada di order dan subtotalnya tidak terganggu
@@ -444,7 +448,8 @@ class PadelAdminOverrideTest extends TestCase
         $res = $this->service->adminSettleSupplementalPayment(
             bookingId: $booking->id,
             paymentMethod: 'QRIS',
-            adminUser: $this->admin
+            adminUser: $this->admin,
+            paymentProof: ['qris_rrn' => 'RRNTEST0005'],
         );
 
         $this->assertTrue($res['success']);
@@ -461,7 +466,7 @@ class PadelAdminOverrideTest extends TestCase
     /**
      * Invarian 6: Eksekusi Price Delta Lebih Bayar (Prime ke Reguler) & Pencatatan Deposit ke Tabel Refunds.
      */
-    public function test_admin_reschedule_overpayment_creates_refund_deposit_record(): void
+    public function test_admin_reschedule_to_cheaper_slot_forfeits_difference_per_policy(): void
     {
         $weekday = now()->next(Carbon::WEDNESDAY)->format('Y-m-d');
 
@@ -503,24 +508,25 @@ class PadelAdminOverrideTest extends TestCase
             newDate: $weekday,
             newStartTimeStr: '09:00',
             reason: 'Member ingin main pagi',
-            adminUser: $this->admin
+            adminUser: $this->admin,
+            paymentProof: ['qris_rrn' => 'RRNTEST0006'],
         );
 
         $this->assertEquals(-100000.00, $res['delta']);
+        $this->assertEquals(100000.00, $res['forfeited']);
         $this->assertFalse($res['is_locked']);
 
-        // Data refund dicatat ke tabel refunds sebagai saldo deposit member
-        $this->assertDatabaseHas('refunds', [
-            'order_id' => $order->id,
-            'payment_id' => $initialPayment->id,
-            'refund_amount' => 100000.00,
-            'status' => 'PROCESSED',
-        ]);
+        // Kebijakan PM: selisih ke jam lebih murah HANGUS — tidak ada refund / "saldo deposit" fiktif,
+        // pembukuan order tetap sesuai uang yang benar-benar dibayar.
+        $this->assertSame(0, \App\Models\Pos\Refund::count());
 
         $updated = $booking->fresh();
         $this->assertEquals('PAID', $updated->status);
-        $this->assertEquals(200000.00, $updated->court_fee);
-        $this->assertEquals(200000.00, $order->fresh()->grand_total);
+        $this->assertEquals('09:00', $updated->start_time->format('H:i'));
+        $this->assertEquals(300000.00, $updated->court_fee, 'court_fee tetap nominal yang dibayar');
+        $this->assertEquals(100000.00, $updated->reschedule_forfeited_amount);
+        $this->assertEquals(300000.00, $order->fresh()->grand_total);
+        $this->assertNotNull($initialPayment->fresh());
     }
 
     /**
@@ -565,7 +571,7 @@ class PadelAdminOverrideTest extends TestCase
         $res = $this->service->adminCancelAndRefund(
             bookingId: $booking->id,
             refundAmount: 200000.00,
-            refundMethod: 'TUNAI_KASIR',
+            refundMethod: 'TRANSFER_MANUAL',
             reasonCategory: 'SALAH_BAYAR',
             notes: 'Customer salah jam, refund tunai kasir',
             adminUser: $this->admin

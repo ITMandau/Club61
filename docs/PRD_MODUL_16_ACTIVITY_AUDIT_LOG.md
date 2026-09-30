@@ -7,8 +7,8 @@
 | Metadata Dokumen | Spesifikasi |
 | :--- | :--- |
 | **Kode Dokumen** | `PRD-MODUL-16-ACTIVITY-AUDIT-LOG` |
-| **Versi** | `v1.0.0-DRAFT` |
-| **Status** | Draft — menunggu keputusan PM atas §9 (Pertanyaan Terbuka) sebelum implementasi |
+| **Versi** | `v1.1.0-IMPLEMENTED` |
+| **Status** | **Fase 1 + Fase 2 + sebagian Fase 3 sudah diimplementasikan (30 Sep 2026)** — lihat §10. Keputusan §9 memakai usulan default. |
 | **Sumber Requirement** | Permintaan pemilik produk: "1 panel log yang merekam semua aktivitas user — kasir, resepsionis, POS, semuanya — yang melakukan transaksi dan perubahan (tambah, edit, hapus), lengkap dengan jam, nama pengguna, dan perubahannya." |
 | **Dependensi Teknis** | `PRD_MODUL_09_DYNAMIC_RBAC_FILAMENT_SHIELD.md` (izin baru masuk `Club61PermissionMatrix`). Tidak ada package baru yang wajib. |
 | **Target Pengguna** | **Super Admin / Owner** (default), bisa diberikan ke role lain lewat menu Roles & Hak Akses. |
@@ -230,3 +230,29 @@ Alasan default super_admin saja: log berisi siapa melakukan refund, perubahan iz
 3. **Log akses data sensitif**: perlu mencatat siapa yang *membuka* halaman Customer & Member VIP / Analytics Keuangan? (Di luar prinsip "tidak log baca", tapi berguna untuk data pribadi pelanggan.)
 4. **Aktivitas customer**: booking & pembayaran customer ikut tampil di panel yang sama (usulan: ya, dengan `actor_type = CUSTOMER`), atau dipisah?
 5. **Alert fase 3**: ambang nominal refund yang memicu notifikasi ke super_admin?
+
+**Keputusan yang dipakai saat implementasi (usulan default, bisa diubah):** (1) retensi 24 bulan via `AUDIT_RETENTION_MONTHS`; (2) super_admin saja, bisa diberikan ke role lain lewat Roles & Hak Akses; (3) akses baca halaman **tidak** dicatat; (4) aktivitas customer ikut di panel yang sama (`actor_type = CUSTOMER`); (5) alert ditunda.
+
+---
+
+## 10. Status Implementasi (30 Sep 2026)
+
+| Komponen | File |
+| :--- | :--- |
+| Tabel `activity_logs` | `database/migrations/2026_09_30_100001_create_activity_logs_table.php` |
+| Model immutable (update/delete melempar exception) | `app/Models/Audit/ActivityLog.php` |
+| Satu pintu tulis + redaksi rahasia + deteksi channel/pelaku | `app/Services/Audit/ActivityLogger.php` |
+| Daftar model yang dicatat otomatis (FR-01) + shift kasir | `app/Services/Audit/AuditRegistry.php` |
+| Login / logout / gagal login / lockout / reset sandi, penanda command artisan | `app/Providers/AppServiceProvider.php` (`registerActivityLog`) |
+| Akses ditolak (setiap HTTP 403) | `bootstrap/app.php` (`$exceptions->respond`) |
+| Semua transaksi lunas di semua modul (satu titik) | `PaymentOrchestratorService::logPayment()` |
+| Refund, batal, reschedule, check-in, selesai, retur alat, hangus otomatis | trait `ManagesRescheduleAndCashier`, `ManagesCheckInAndTurnstile`, `ManagesScheduleAndSlots` |
+| Membership corporate gratis | `SponsorOrganizationService::grantCorporateMembership()` |
+| Perubahan izin role & role user | `EditRole`, `CreateRole`, `UserResource`, `ManageUsers` |
+| Panel read-only + filter + detail sebelum/sesudah + export CSV | `app/Filament/Pages/LogAktivitas.php` |
+| Retensi terjadwal | `audit:prune` (harian 02:30) |
+| Test | `tests/Feature/Audit/ActivityLogTest.php` (21 test) |
+
+Perbedaan dari rancangan: slug izin menu menjadi `View:LogAktivitas` (wajib sama dengan nama class page untuk HasPageShield), bukan `View:ActivityLog`.
+
+Belum dikerjakan: hash berantai anti-manipulasi langsung di database, alert otomatis, tombol "Riwayat" per data di halaman lain.

@@ -277,6 +277,10 @@
                                     <span class="adm-pill"
                                         style="background: #FEF3C7; color: #92400E; border: 1px solid #FCD34D; font-weight: 700;">Pending
                                         Payment</span>
+                                @elseif($b->status === 'LOCKED' && $b->reschedule_count > 0 && $pendingAmount > 0)
+                                    <span class="adm-pill"
+                                        style="background: #FEF3C7; color: #92400E; border: 1px solid #FCD34D; font-weight: 700;"
+                                        title="Jadwal sudah dipindah, QR ditahan sampai selisih lunas">Tagihan Selisih Rp {{ number_format($pendingAmount, 0, ',', '.') }}</span>
                                 @elseif($b->status === 'LOCKED')
                                     <span class="adm-pill adm-pill-gold">Locked / Waiting</span>
                                 @elseif($b->status === 'CHECKED_IN')
@@ -335,7 +339,7 @@
                             <td style="text-align: center; white-space: nowrap;">
                                 <div
                                     style="display: inline-flex; gap: 0.4rem; align-items: center; justify-content: center;">
-                                    @if ($this->canSettle && $b->status === 'PENDING_PAYMENT' && $b->order_id)
+                                    @if ($this->canSettle && $b->order_id && ($b->status === 'PENDING_PAYMENT' || ($b->status === 'LOCKED' && $pendingAmount > 0)))
                                         <button type="button" wire:click="checkMidtransPayment('{{ $b->id }}')"
                                             wire:loading.attr="disabled" title="Cek Status Pembayaran ke Midtrans"
                                             class="adm-btn-icon" style="color: #1D4ED8;">
@@ -727,76 +731,76 @@
                         @endif
                     </div>
 
-                    <!-- Perhitungan Selisih Tarif (Price Delta) -->
-                    @if (!empty($availableSlots) && $rescheduleStartTime)
-                        <div
-                            style="border-radius: 12px; padding: 1rem; margin-bottom: 1rem; border: 1px solid {{ $rescheduleDelta > 0 ? '#F87171' : ($rescheduleDelta < 0 ? '#86EFAC' : '#E5E7EB') }}; background: {{ $rescheduleDelta > 0 ? '#FEF2F2' : ($rescheduleDelta < 0 ? '#F0FDF4' : '#F9FAFB') }};">
-                            <div
-                                style="display: flex; justify-content: space-between; font-size: 0.75rem; color: #4B5563; margin-bottom: 0.25rem;">
-                                <span>Tarif Sesi Sebelumnya:</span>
-                                <span style="font-weight: 700;">Rp
-                                    {{ number_format($selectedBookingData['original_court_fee'], 0, ',', '.') }}</span>
-                            </div>
-                            <div
-                                style="display: flex; justify-content: space-between; font-size: 0.75rem; color: #4B5563; margin-bottom: 0.5rem;">
-                                <span>Tarif Sesi Jadwal Baru:</span>
-                                <span style="font-weight: 700;">Rp
-                                    {{ number_format($rescheduleEstimatedFee, 0, ',', '.') }}</span>
-                            </div>
+                    <!-- Perhitungan Selisih Tarif (rumus sama persis dengan yang ditagih: PadelBookingService::quoteReschedule) -->
+                    @if (!empty($availableSlots) && $rescheduleStartTime && !empty($rescheduleQuote))
+                        @php
+                            $q = $rescheduleQuote;
+                            $rp = fn ($v) => 'Rp ' . number_format((float) $v, 0, ',', '.');
+                            $totalDelta = (float) ($q['total_delta'] ?? 0);
+                            $forfeited = (float) ($q['forfeited'] ?? 0);
+                            $tone = $totalDelta > 0 ? ['#F87171', '#FEF2F2', '#991B1B'] : ($forfeited > 0 ? ['#FCD34D', '#FFFBEB', '#92400E'] : ['#E5E7EB', '#F9FAFB', '#374151']);
+                            $row = 'display:flex; justify-content:space-between; font-size:0.75rem; color:#4B5563; margin-bottom:0.25rem;';
+                        @endphp
+                        <div style="border-radius: 12px; padding: 1rem; margin-bottom: 1rem; border: 1px solid {{ $tone[0] }}; background: {{ $tone[1] }};">
+                            <div style="{{ $row }}"><span>Sudah dibayar (tarif sesi lama):</span><span style="font-weight:700;">{{ $rp($selectedBookingData['original_court_fee']) }}</span></div>
+                            <div style="{{ $row }}"><span>Tarif normal jadwal baru:</span><span style="font-weight:700;">{{ $rp($q['gross_fee'] ?? 0) }}</span></div>
+                            @if (($q['benefit_discount'] ?? 0) > 0)
+                                <div style="{{ $row }} color:#166534;"><span>Benefit member / voucher sponsor ikut pindah:</span><span style="font-weight:700;">- {{ $rp($q['benefit_discount']) }}</span></div>
+                            @endif
+                            <div style="{{ $row }}"><span>Tarif jadwal baru yang berlaku:</span><span style="font-weight:700;">{{ $rp($q['estimated_fee'] ?? 0) }}</span></div>
 
-                            <div
-                                style="border-top: 1px dashed {{ $rescheduleDelta > 0 ? '#F87171' : ($rescheduleDelta < 0 ? '#86EFAC' : '#D1D5DB') }}; padding-top: 0.5rem; display: flex; justify-content: space-between; align-items: center;">
-                                <span
-                                    style="font-size: 0.8125rem; font-weight: 800; color: {{ $rescheduleDelta > 0 ? '#991B1B' : ($rescheduleDelta < 0 ? '#166534' : '#374151') }};">
-                                    @if ($rescheduleDelta > 0)
-                                        Selisih Kurang Bayar (Wajib Ditagih):
-                                    @elseif($rescheduleDelta < 0)
-                                        Selisih Lebih Bayar (Saldo Member):
+                            @if ($totalDelta > 0)
+                                <div style="border-top:1px dashed {{ $tone[0] }}; margin-top:0.35rem; padding-top:0.35rem;">
+                                    <div style="{{ $row }}"><span>Selisih sewa lapangan:</span><span style="font-weight:700;">{{ $rp($q['delta']) }}</span></div>
+                                    @if (($q['tax_delta'] ?? 0) > 0)
+                                        <div style="{{ $row }}"><span>Pajak:</span><span style="font-weight:700;">{{ $rp($q['tax_delta']) }}</span></div>
+                                    @endif
+                                    @if (($q['admin_fee_delta'] ?? 0) > 0)
+                                        <div style="{{ $row }}"><span>Biaya layanan:</span><span style="font-weight:700;">{{ $rp($q['admin_fee_delta']) }}</span></div>
+                                    @endif
+                                </div>
+                            @endif
+
+                            <div style="border-top: 1px dashed {{ $tone[0] }}; padding-top: 0.5rem; margin-top:0.35rem; display: flex; justify-content: space-between; align-items: center;">
+                                <span style="font-size: 0.8125rem; font-weight: 800; color: {{ $tone[2] }};">
+                                    @if ($totalDelta > 0)
+                                        Total Kurang Bayar (Wajib Ditagih):
+                                    @elseif ($forfeited > 0)
+                                        Selisih Lebih Bayar (HANGUS, tidak dikembalikan):
                                     @else
-                                        Tidak Ada Selisih Tarif (Sama):
+                                        Tidak Ada Selisih Biaya:
                                     @endif
                                 </span>
-                                <span
-                                    style="font-family: var(--font-mono, monospace); font-size: 1rem; font-weight: 900; color: {{ $rescheduleDelta > 0 ? '#991B1B' : ($rescheduleDelta < 0 ? '#166534' : '#111827') }};">
-                                    Rp {{ number_format(abs($rescheduleDelta), 0, ',', '.') }}
+                                <span style="font-family: var(--font-mono, monospace); font-size: 1rem; font-weight: 900; color: {{ $tone[2] }};">
+                                    {{ $rp($totalDelta > 0 ? $totalDelta : $forfeited) }}
                                 </span>
                             </div>
 
-                            @if ($rescheduleDelta > 0)
+                            @if ($totalDelta > 0)
                                 <div style="margin-top: 0.75rem; padding-top: 0.75rem; border-top: 1px solid #FECACA;">
-                                    <label
-                                        style="display: block; font-size: 0.6875rem; font-weight: 700; color: #991B1B; margin-bottom: 0.25rem;">Opsi
-                                        Pelunasan Kasir:</label>
-                                    <div style="display: flex; gap: 1rem; font-size: 0.75rem; margin-bottom: 0.5rem;">
-                                        <label
-                                            style="display: flex; align-items: center; gap: 0.25rem; cursor: pointer;">
-                                            <input type="radio" wire:model.live="rescheduleIsDeltaPaidNow"
-                                                value="1">
-                                            <span>Lunasi Sekarang di Frontdesk</span>
+                                    <label style="display: block; font-size: 0.6875rem; font-weight: 700; color: #991B1B; margin-bottom: 0.25rem;">Cara Pelunasan Selisih:</label>
+                                    <div style="display: flex; flex-direction: column; gap: 0.35rem; font-size: 0.75rem; margin-bottom: 0.5rem;">
+                                        <label style="display: flex; align-items: center; gap: 0.35rem; cursor: pointer;">
+                                            <input type="radio" wire:model.live="rescheduleIsDeltaPaidNow" value="1">
+                                            <span><b>Bayar sekarang di Frontdesk</b> (QRIS / EDC / Transfer, wajib bukti bayar)</span>
                                         </label>
-                                        <label
-                                            style="display: flex; align-items: center; gap: 0.25rem; cursor: pointer;">
-                                            <input type="radio" wire:model.live="rescheduleIsDeltaPaidNow"
-                                                value="0">
-                                            <span>Tagihan Gantung (QR Ditahan)</span>
+                                        <label style="display: flex; align-items: center; gap: 0.35rem; cursor: pointer;">
+                                            <input type="radio" wire:model.live="rescheduleIsDeltaPaidNow" value="0">
+                                            <span><b>Kirim tagihan ke customer</b>: bayar via Midtrans di halaman invoice atau nanti di kasir. QR tiket ditahan sampai lunas.</span>
                                         </label>
                                     </div>
 
                                     @if ($rescheduleIsDeltaPaidNow)
-                                        <label
-                                            style="display: block; font-size: 0.6875rem; font-weight: 700; color: #991B1B; margin-bottom: 0.25rem;">Metode
-                                            Bayar Selisih:</label>
-                                        <select wire:model="reschedulePaymentMethod"
-                                            style="width: 100%; border: 1px solid #F87171; border-radius: 6px; padding: 0.4rem; font-size: 0.75rem;">
-                                            <option value="QRIS">QRIS Kasir Frontdesk</option>
-                                            <option value="EDC_BCA">Mesin EDC BCA / Mandiri</option>
-                                        </select>
+                                        @include('filament.pages.partials.pos-payment-proof', [
+                                            'methodModel' => 'reschedulePaymentMethod',
+                                            'method' => $reschedulePaymentMethod,
+                                            'proofModel' => 'rescheduleProof',
+                                        ])
                                     @endif
                                 </div>
-                            @elseif($rescheduleDelta < 0)
-                                <div style="margin-top: 0.5rem; font-size: 0.6875rem; color: #166534;">
-                                    Dana selisih otomatis dicatat ke tabel <code>refunds</code> sebagai saldo deposit
-                                    akun member.
+                            @elseif ($forfeited > 0)
+                                <div style="margin-top: 0.5rem; font-size: 0.6875rem; color: #92400E;">
+                                    Kebijakan venue: pindah ke jadwal yang lebih murah, selisih tidak dikembalikan. Nominal hangus tetap tercatat di invoice customer & log aktivitas.
                                 </div>
                             @endif
                         </div>
@@ -866,15 +870,11 @@
                     </div>
 
                     <div style="margin-bottom: 1rem;">
-                        <label
-                            style="display: block; font-size: 0.75rem; font-weight: 700; color: #1F170D; margin-bottom: 0.35rem;">Metode
-                            Pembayaran:</label>
-                        <select wire:model="settlePaymentMethod"
-                            style="width: 100%; border: 1px solid #D4AF37; border-radius: 8px; padding: 0.5rem; font-size: 0.8125rem;">
-                            <option value="QRIS">QRIS Kasir Frontdesk</option>
-                            <option value="EDC_BCA">Mesin EDC BCA / Mandiri</option>
-                            <option value="TRANSFER">Transfer Rekening Kasir</option>
-                        </select>
+                        @include('filament.pages.partials.pos-payment-proof', [
+                            'methodModel' => 'settlePaymentMethod',
+                            'method' => $settlePaymentMethod,
+                            'proofModel' => 'settleProof',
+                        ])
                     </div>
 
                     <div style="font-size: 0.6875rem; color: #6B7280; line-height: 1.4;">
@@ -959,7 +959,7 @@
                         <select wire:model="refundMethod"
                             style="width: 100%; border: 1px solid #D4AF37; border-radius: 8px; padding: 0.5rem; font-size: 0.8125rem;">
                             <option value="TRANSFER_MANUAL">Transfer Bank Manual</option>
-                            <option value="DEPOSIT_MEMBER">Saldo Deposit Member</option>
+                            <option value="VOID_EDC">Void / Refund di Mesin EDC</option>
                         </select>
                     </div>
 

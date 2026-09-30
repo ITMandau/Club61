@@ -236,7 +236,8 @@ class PaymentOrchestrationIntegrityTest extends TestCase
             bookingId: $booking->id,
             paymentMethod: 'QRIS',
             amountReceived: 150000,
-            cashierUser: $this->cashier
+            cashierUser: $this->cashier,
+            paymentProof: ['qris_rrn' => 'RRNTEST0001'],
         );
 
         $this->assertTrue($result['success']);
@@ -295,7 +296,8 @@ class PaymentOrchestrationIntegrityTest extends TestCase
             newDate: $targetDate,
             newStartTimeStr: '16:00',
             reason: 'Pindah jam',
-            adminUser: $this->cashier
+            adminUser: $this->cashier,
+            paymentProof: ['qris_rrn' => 'RRNTEST0002'],
         );
     }
 

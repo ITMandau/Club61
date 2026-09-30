@@ -118,7 +118,22 @@ trait ManagesTicketsAndRefunds
 
             if ($order) {
                 $booking->setAttribute('order_grand_total', (float) $order->grand_total);
-                $latestPayment = $order->payments->first();
+                // Label metode bayar dari pembayaran yang SUDAH lunas — tagihan selisih yang masih menunggu
+                // tidak boleh membuat invoice menampilkan "MENUNGGU_PEMBAYARAN" sebagai metode bayar.
+                $latestPayment = $order->payments->firstWhere('status', 'SUCCESS') ?? $order->payments->first();
+
+                // Rincian selisih reschedule untuk invoice (lunas / menunggu) + selisih yang hangus.
+                $booking->setAttribute('reschedule_charges', $order->payments
+                    ->filter(fn ($p) => (($p->payload_log['type'] ?? null) === 'RESCHEDULE_PRICE_DELTA') && in_array($p->status, ['SUCCESS', 'PENDING'], true))
+                    ->sortBy('created_at')
+                    ->map(fn ($p) => [
+                        'amount' => (float) $p->amount,
+                        'status' => $p->status,
+                        'method_label' => $p->status === 'SUCCESS' ? $this->formatPaymentMethodLabel($p->payment_method, $p->payload_log) : null,
+                        'schedule_before' => $p->payload_log['schedule_before'] ?? null,
+                        'date' => $p->created_at?->toIso8601String(),
+                    ])->values());
+                $booking->setAttribute('order_reschedule_forfeited', (float) $orderBookings->sum('reschedule_forfeited_amount'));
                 $rawMethod = $latestPayment?->payment_method;
                 $methodLabel = $this->formatPaymentMethodLabel($rawMethod, $latestPayment?->payload_log);
 

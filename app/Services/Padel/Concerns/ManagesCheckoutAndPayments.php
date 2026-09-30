@@ -501,6 +501,26 @@ trait ManagesCheckoutAndPayments
                 ->latest()
                 ->first();
 
+            // Order yang SUDAH pernah dibayar tapi tagihan PENDING-nya hilang (mis. ditutup rekonsiliasi)
+            // tidak boleh jatuh ke "retry pembayaran penuh" di bawah — itu menagih ulang seluruh order
+            // yang sudah lunas. Buat ulang tagihan sisa (grand_total - sudah dibayar), atau tolak kalau lunas.
+            if ($totalPaid > 0 && ! $pendingSupplementalPayment) {
+                $remaining = round((float) $order->grand_total - $totalPaid, 2);
+                if ($remaining <= 0) {
+                    throw new HttpException(422, 'Pesanan ini sudah lunas, tidak ada tagihan yang perlu dibayar.');
+                }
+
+                $pendingSupplementalPayment = Payment::create([
+                    'order_id' => $order->id,
+                    'payment_gateway' => 'CASHIER_POS',
+                    'transaction_id' => 'SUPP-'.strtoupper(Str::random(12)),
+                    'amount' => $remaining,
+                    'payment_method' => 'MENUNGGU_PEMBAYARAN',
+                    'status' => 'PENDING',
+                    'payload_log' => ['type' => 'RESCHEDULE_PRICE_DELTA', 'booking_id' => $booking->id, 'recreated_from_remaining_balance' => true],
+                ]);
+            }
+
             $isSupplementalDelta = ($totalPaid > 0 && $pendingSupplementalPayment);
 
             if ($isSupplementalDelta) {
@@ -743,6 +763,8 @@ trait ManagesCheckoutAndPayments
             'EDC_MANDIRI' => 'Debit/Kartu EDC Mandiri',
             'QRIS_STATIS' => 'QRIS Kasir Frontdesk',
             'BANK_TRANSFER' => 'Transfer Bank (VA)',
+            'TRANSFER_BANK' => 'Transfer Bank (Frontdesk)',
+            'MENUNGGU_PEMBAYARAN' => 'Menunggu Pembayaran',
             'MEMBERSHIP_QUOTA' => 'Kuota Jam Membership (Gratis)',
             'SPONSOR_VOUCHER' => 'Voucher Jam Corporate (Gratis)',
             'MEMBERSHIP_AND_SPONSOR_VOUCHER' => 'Kuota Membership + Voucher Corporate (Gratis)',

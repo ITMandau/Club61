@@ -58,15 +58,37 @@
             <span class="font-mono font-black text-base sm:text-lg text-[#1F170D] whitespace-nowrap sm:text-right" x-text="'Rp ' + formatNumber(displayGrandTotal)"></span>
         </div>
 
+        <!-- Reschedule: selisih ke jam lebih mahal (sudah termasuk total di atas) & selisih yang hangus -->
+        <template x-if="ticket.reschedule_charges && ticket.reschedule_charges.length > 0 && !ticket.has_pending_delta">
+            <div class="space-y-1.5 pt-2 border-t border-dashed border-[#DFC387]/60 text-xs">
+                <template x-for="(rc, idx) in ticket.reschedule_charges" :key="idx">
+                    <div class="flex justify-between items-center gap-3 text-[#5C410F]">
+                        <span x-text="'Selisih Reschedule (Lunas' + (rc.method_label ? ' • ' + rc.method_label : '') + '):'"></span>
+                        <span class="font-mono font-bold whitespace-nowrap text-right" x-text="'Rp ' + formatNumber(rc.amount)"></span>
+                    </div>
+                </template>
+                <div class="flex justify-between items-center gap-3 text-emerald-800 font-bold">
+                    <span>Total Dibayar:</span>
+                    <span class="font-mono whitespace-nowrap text-right" x-text="'Rp ' + formatNumber(ticket.total_paid)"></span>
+                </div>
+            </div>
+        </template>
+        <template x-if="ticket.order_reschedule_forfeited > 0">
+            <div class="flex justify-between items-center gap-3 pt-2 border-t border-dashed border-[#DFC387]/60 text-xs text-amber-900">
+                <span>Selisih Reschedule Hangus (tidak dikembalikan):</span>
+                <span class="font-mono font-bold whitespace-nowrap text-right" x-text="'Rp ' + formatNumber(ticket.order_reschedule_forfeited)"></span>
+            </div>
+        </template>
+
         <!-- Paid & Remaining Breakdown for Reschedule -->
         <template x-if="ticket.has_pending_delta">
             <div class="space-y-1.5 pt-2 border-t border-dashed border-[#DFC387]/60 text-xs">
                 <div class="flex justify-between items-center gap-3 text-emerald-800">
-                    <span>Initial Paid:</span>
+                    <span>Sudah Dibayar:</span>
                     <span class="font-mono font-bold whitespace-nowrap text-right" x-text="'Rp ' + formatNumber(ticket.total_paid)"></span>
                 </div>
                 <div class="flex justify-between items-center gap-3 text-amber-900 font-bold">
-                    <span>Remaining Balance:</span>
+                    <span>Sisa Tagihan Selisih Reschedule:</span>
                     <span class="font-mono text-red-700 font-black whitespace-nowrap text-right" x-text="'Rp ' + formatNumber(ticket.unpaid_delta)"></span>
                 </div>
             </div>

@@ -80,6 +80,7 @@ class AdminPanelProvider extends PanelProvider
                 \App\Filament\Pages\KelolaKontenWebsite::class,
                 \App\Filament\Pages\KelolaMenuFnb::class,
                 \App\Filament\Pages\SponsorDashboard::class,
+                \App\Filament\Pages\LogAktivitas::class,
             ])
             ->widgets([])
             ->middleware([

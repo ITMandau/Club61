@@ -93,6 +93,7 @@ class BookingSystem extends Page
     public function executeCheckIn(PadelBookingService $service): void
     {
         if (! auth()->user()?->can('checkin_padel_ticket')) {
+            \App\Services\Audit\ActivityLogger::accessDenied('mencoba aksi tanpa izin [checkin_padel_ticket] di Monitoring Lapangan');
             Notification::make()->title('Akses Ditolak')->body('Anda tidak memiliki izin [checkin_padel_ticket] untuk aksi ini.')->danger()->send();
 
             return;
@@ -231,6 +232,7 @@ class BookingSystem extends Page
     public function quickCheckInFromInspector(string $bookingId, PadelBookingService $service): void
     {
         if (! auth()->user()?->can('checkin_padel_ticket')) {
+            \App\Services\Audit\ActivityLogger::accessDenied('mencoba aksi tanpa izin [checkin_padel_ticket] di Monitoring Lapangan');
             Notification::make()->title('Akses Ditolak')->body('Anda tidak memiliki izin [checkin_padel_ticket] untuk aksi ini.')->danger()->send();
 
             return;
@@ -265,6 +267,7 @@ class BookingSystem extends Page
     public function executeComplete(string $bookingId, PadelBookingService $service): void
     {
         if (! auth()->user()?->can('checkin_padel_ticket')) {
+            \App\Services\Audit\ActivityLogger::accessDenied('mencoba aksi tanpa izin [checkin_padel_ticket] di Monitoring Lapangan');
             Notification::make()->title('Akses Ditolak')->body('Anda tidak memiliki izin [checkin_padel_ticket] untuk aksi ini.')->danger()->send();
 
             return;

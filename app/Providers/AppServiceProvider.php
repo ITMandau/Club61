@@ -26,6 +26,9 @@ class AppServiceProvider extends ServiceProvider
             return $registry;
         });
 
+        // State log aktivitas per request/command (batch id, command yang sedang jalan).
+        $this->app->scoped(\App\Services\Audit\AuditContext::class);
+
         // Filament tidak punya login page sendiri lagi (AdminPanelProvider), jadi begitu staf
         // logout dari /admin, arahkan langsung ke satu-satunya pintu login (/login) — bukan ke
         // dashboard panel /admin (yang defaultnya dituju Filament\Auth\Http\Responses\LogoutResponse
@@ -53,6 +56,8 @@ class AppServiceProvider extends ServiceProvider
 
         Gate::policy(\Spatie\Permission\Models\Role::class, \App\Policies\RolePolicy::class);
         Gate::policy(\App\Models\Sponsor\SponsorOrganization::class, \App\Policies\Sponsor\SponsorOrganizationPolicy::class);
+
+        $this->registerActivityLog();
 
         // Satu sumber data company profile dipakai ulang di halaman depan publik (welcome)
         // DAN panel kiri halaman login — supaya fakta venue (jumlah lapangan, daftar
@@ -123,6 +128,97 @@ class AppServiceProvider extends ServiceProvider
                     'errors' => null,
                 ], 429);
             });
+        });
+    }
+
+    /**
+     * Modul 16 — Log Aktivitas: pencatatan otomatis perubahan data master, login/logout, dan
+     * penanda command artisan (supaya aksi scheduler tercatat sebagai SISTEM, dan seeder/migrasi
+     * tidak membanjiri log dengan ribuan baris "menambah data").
+     */
+    private function registerActivityLog(): void
+    {
+        \App\Services\Audit\AuditRegistry::register();
+
+        \Illuminate\Support\Facades\Event::listen(\Illuminate\Console\Events\CommandStarting::class, function ($event) {
+            $context = app(\App\Services\Audit\AuditContext::class);
+            if ($context->consoleCommand === null) {
+                $context->consoleCommand = (string) $event->command;
+                $context->newBatch();
+            }
+            if (str_starts_with((string) $event->command, 'migrate') || in_array($event->command, ['db:seed', 'db:wipe'], true)) {
+                $context->suppressed++;
+            }
+        });
+
+        \Illuminate\Support\Facades\Event::listen(\Illuminate\Console\Events\CommandFinished::class, function ($event) {
+            $context = app(\App\Services\Audit\AuditContext::class);
+            if (str_starts_with((string) $event->command, 'migrate') || in_array($event->command, ['db:seed', 'db:wipe'], true)) {
+                $context->suppressed = max(0, $context->suppressed - 1);
+            }
+            if ($context->consoleCommand === $event->command) {
+                $context->consoleCommand = null;
+                $context->batchId = null;
+            }
+        });
+
+        \Illuminate\Support\Facades\Event::listen(\Illuminate\Auth\Events\Login::class, function ($event) {
+            \App\Services\Audit\ActivityLogger::record(
+                module: 'AUTH',
+                event: 'auth.login',
+                description: 'Login ke sistem',
+                subject: $event->user instanceof \Illuminate\Database\Eloquent\Model ? $event->user : null,
+                causer: $event->user,
+            );
+        });
+
+        \Illuminate\Support\Facades\Event::listen(\Illuminate\Auth\Events\Logout::class, function ($event) {
+            if (! $event->user) {
+                return;
+            }
+            \App\Services\Audit\ActivityLogger::record(
+                module: 'AUTH',
+                event: 'auth.logout',
+                description: 'Logout dari sistem',
+                subject: $event->user instanceof \Illuminate\Database\Eloquent\Model ? $event->user : null,
+                causer: $event->user,
+            );
+        });
+
+        \Illuminate\Support\Facades\Event::listen(\Illuminate\Auth\Events\Failed::class, function ($event) {
+            // Hanya identitas yang dicoba — password TIDAK PERNAH ikut dicatat.
+            $credentials = (array) $event->credentials;
+            $identifier = $credentials['email'] ?? $credentials['phone'] ?? $credentials['login'] ?? '-';
+            \App\Services\Audit\ActivityLogger::record(
+                module: 'AUTH',
+                event: 'auth.login_failed',
+                description: 'Login gagal untuk "'.\Illuminate\Support\Str::limit((string) $identifier, 80).'"',
+                meta: ['identitas_dicoba' => \Illuminate\Support\Str::limit((string) $identifier, 80), 'akun_ditemukan' => $event->user !== null],
+                severity: \App\Services\Audit\ActivityLogger::WARNING,
+                causer: $event->user,
+            );
+        });
+
+        \Illuminate\Support\Facades\Event::listen(\Illuminate\Auth\Events\Lockout::class, function ($event) {
+            $identifier = (string) ($event->request->input('login') ?? $event->request->input('email') ?? '-');
+            \App\Services\Audit\ActivityLogger::record(
+                module: 'AUTH',
+                event: 'auth.lockout',
+                description: 'Login dikunci sementara karena terlalu banyak percobaan untuk "'.\Illuminate\Support\Str::limit($identifier, 80).'"',
+                meta: ['identitas_dicoba' => \Illuminate\Support\Str::limit($identifier, 80)],
+                severity: \App\Services\Audit\ActivityLogger::CRITICAL,
+            );
+        });
+
+        \Illuminate\Support\Facades\Event::listen(\Illuminate\Auth\Events\PasswordReset::class, function ($event) {
+            \App\Services\Audit\ActivityLogger::record(
+                module: 'AUTH',
+                event: 'auth.password_reset',
+                description: 'Mereset kata sandi lewat link "Lupa Sandi"',
+                subject: $event->user instanceof \Illuminate\Database\Eloquent\Model ? $event->user : null,
+                severity: \App\Services\Audit\ActivityLogger::WARNING,
+                causer: $event->user,
+            );
         });
     }
 }

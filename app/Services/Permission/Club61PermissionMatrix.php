@@ -28,6 +28,9 @@ class Club61PermissionMatrix
         'delete_roles',
         'delete_users',
         'delete_staff',
+        // Log aktivitas berisi siapa melakukan refund, perubahan izin, dan data pelanggan.
+        'View:LogAktivitas',
+        'export_activity_logs',
     ];
 
     /**
@@ -319,6 +322,13 @@ class Club61PermissionMatrix
                             'create_roles' => 'Tambah Peran Pengguna Baru',
                             'update_roles' => 'Ubah Konfigurasi Matriks Izin Peran',
                             'delete_roles' => 'Hapus Peran Pengguna',
+                        ],
+                    ],
+                    'activity_log' => [
+                        'label' => 'Log Aktivitas & Jejak Audit',
+                        'actions' => [
+                            'View:LogAktivitas' => 'Akses Menu Log Aktivitas (Read-only)',
+                            'export_activity_logs' => 'Export Log Aktivitas ke CSV',
                         ],
                     ],
                     'pricing_equipment' => [

@@ -253,9 +253,12 @@ class PadelBookingController extends Controller
 
         // Polling halaman invoice: kalau masih menunggu bayar, tanya langsung ke Midtrans juga —
         // jadi status tetap berubah jadi lunas walau webhook-nya tidak pernah sampai.
-        if ($request->boolean('verify_payment')
-            && in_array($booking->status, ['PENDING_PAYMENT', 'PENDING'], true)
-            && $booking->order_id) {
+        // Termasuk booking LOCKED hasil reschedule yang menunggu pelunasan selisih — dulu dilewati, jadi
+        // customer yang sudah bayar selisih via Midtrans tetap melihat "belum lunas" kalau webhook tidak sampai.
+        $awaitingPayment = in_array($booking->status, ['PENDING_PAYMENT', 'PENDING'], true)
+            || ($booking->status === 'LOCKED' && (int) $booking->reschedule_count > 0);
+
+        if ($request->boolean('verify_payment') && $awaitingPayment && $booking->order_id) {
             $order = \App\Models\Pos\Order::find($booking->order_id);
 
             if ($order && app(\App\Services\Payment\MidtransReconciliationService::class)->reconcileOrder($order, cacheSeconds: 10) === \App\Services\Payment\MidtransReconciliationService::PAID) {

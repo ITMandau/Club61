@@ -25,6 +25,9 @@ class ManageUsers extends ManageRecords
                         }
                     }
                     return $data;
+                })
+                ->after(function (\App\Models\User $record) {
+                    \App\Services\Audit\ActivityLogger::userRolesChanged($record, [], $record->roles()->pluck('name')->all());
                 }),
         ];
     }

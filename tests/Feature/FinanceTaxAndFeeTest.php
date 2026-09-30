@@ -265,7 +265,8 @@ class FinanceTaxAndFeeTest extends TestCase
             reason: 'Permintaan pindah ke malam',
             adminUser: $this->adminUser,
             paymentMethod: 'QRIS',
-            isDeltaPaid: true
+            isDeltaPaid: true,
+            paymentProof: ['qris_rrn' => 'RRNTEST0001'],
         );
 
         $this->assertTrue($res['success']);
@@ -349,23 +350,21 @@ class FinanceTaxAndFeeTest extends TestCase
             reason: 'Pindah ke jam pagi reguler',
             adminUser: $this->adminUser,
             paymentMethod: 'QRIS',
-            isDeltaPaid: true
+            isDeltaPaid: true,
+            paymentProof: ['qris_rrn' => 'RRNTEST0002'],
         );
 
         $this->assertTrue($res['success']);
+        $this->assertEquals(100000.00, $res['forfeited']);
 
-        // Saldo deposit member di tabel refunds mencatat 100.000 + 10.000 = 110.000
-        $this->assertDatabaseHas('refunds', [
-            'order_id' => $order->id,
-            'refund_amount' => 110000.00,
-            'status' => 'PROCESSED',
-        ]);
-
-        // Order disesuaikan
+        // Kebijakan PM (30 Sep 2026): pindah ke jam lebih murah -> selisih HANGUS. Tidak ada refund,
+        // pajak yang sudah dibayar tidak dikoreksi, dan pembukuan order tetap sesuai uang yang masuk.
+        $this->assertDatabaseCount('refunds', 0);
         $order->refresh();
-        $this->assertSame(200000.00, (float) $order->subtotal);
-        $this->assertSame(20000.00, (float) $order->tax_amount);
-        $this->assertSame(220000.00, (float) $order->grand_total);
+        $this->assertSame(300000.00, (float) $order->subtotal);
+        $this->assertSame(30000.00, (float) $order->tax_amount);
+        $this->assertSame(330000.00, (float) $order->grand_total);
+        $this->assertSame(100000.00, (float) $booking->fresh()->reschedule_forfeited_amount);
     }
 
     /**
@@ -399,12 +398,13 @@ class FinanceTaxAndFeeTest extends TestCase
         $booking->update(['order_id' => $order->id]);
 
         $this->expectException(\Symfony\Component\HttpKernel\Exception\HttpException::class);
+        $this->expectExceptionMessage('tidak boleh melebihi total pembayaran');
 
         // Mencoba me-refund 250.000 (melebihi grand_total 220.000)
         $this->bookingService->adminCancelAndRefund(
             bookingId: $booking->id,
             refundAmount: 250000.00,
-            refundMethod: 'TUNAI',
+            refundMethod: 'TRANSFER_MANUAL',
             reasonCategory: 'SALAH_BAYAR',
             notes: 'Test kelebihan refund',
             adminUser: $this->adminUser

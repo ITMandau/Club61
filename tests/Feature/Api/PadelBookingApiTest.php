@@ -734,9 +734,12 @@ class PadelBookingApiTest extends TestCase
         $orderId = $checkout->json('data.order_id');
         $this->assertEquals(200000, $checkout->json('data.grand_total'));
 
-        // Simulasikan status PENDING_PAYMENT saat menunggu pembayaran customer
+        // Simulasikan status PENDING_PAYMENT saat menunggu pembayaran customer (di environment test
+        // checkout langsung lunas lewat mock, jadi pembayarannya juga dikembalikan ke PENDING — kondisi
+        // nyata saat customer belum membayar di Midtrans).
         PadelBooking::where('id', $bookingId)->update(['status' => 'PENDING_PAYMENT']);
         \App\Models\Pos\Order::where('order_number', $orderId)->update(['payment_status' => 'PENDING']);
+        \App\Models\Pos\Payment::whereHas('order', fn ($q) => $q->where('order_number', $orderId))->update(['status' => 'PENDING', 'payment_gateway' => 'MIDTRANS']);
 
         // Customer menutup Snap dan ganti metode ke QRIS
         $retry = $this->withHeader('Authorization', "Bearer {$this->customerToken}")
@@ -796,9 +799,12 @@ class PadelBookingApiTest extends TestCase
 
         $orderId = $checkout->json('data.order_id');
 
-        // Simulasikan status PENDING_PAYMENT saat menunggu pembayaran customer
+        // Simulasikan status PENDING_PAYMENT saat menunggu pembayaran customer (di environment test
+        // checkout langsung lunas lewat mock, jadi pembayarannya juga dikembalikan ke PENDING — kondisi
+        // nyata saat customer belum membayar di Midtrans).
         PadelBooking::where('id', $bookingId)->update(['status' => 'PENDING_PAYMENT']);
         \App\Models\Pos\Order::where('order_number', $orderId)->update(['payment_status' => 'PENDING']);
+        \App\Models\Pos\Payment::whereHas('order', fn ($q) => $q->where('order_number', $orderId))->update(['status' => 'PENDING', 'payment_gateway' => 'MIDTRANS']);
 
         // Venue 100% Cashless: retry-payment ke CASH wajib ditolak validasi.
         $this->withHeader('Authorization', "Bearer {$this->customerToken}")
@@ -916,7 +922,8 @@ class PadelBookingApiTest extends TestCase
             bookingId: $booking->id,
             paymentMethod: 'QRIS',
             amountReceived: 300000,
-            cashierUser: $this->cashier
+            cashierUser: $this->cashier,
+            paymentProof: ['qris_rrn' => 'RRNTEST0001'],
         );
 
         $this->assertTrue($result['success']);

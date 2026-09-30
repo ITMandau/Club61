@@ -77,7 +77,7 @@ class CompanyProfileSetting extends Model
                     'court_count' => 3,
                     'facility_cards' => [
                         ['icon_key' => 'arena', 'title' => 'Padel Arena', 'subtitle' => '+ Panoramic Courts'],
-                        ['icon_key' => 'wellness', 'title' => 'Wellness Suite', 'subtitle' => 'Sauna & Ice Plunge'],
+                        ['icon_key' => 'wellness', 'title' => 'Wellness Suite', 'subtitle' => 'Sauna'],
                         ['icon_key' => 'lounge', 'title' => 'Social Lounge', 'subtitle' => 'Artisan Cafe & Bar'],
                     ],
                     'address_line' => 'Gedung Indosat, Jl. Perintis Kemerdekaan No. 39, Medan, Sumatera Utara.',

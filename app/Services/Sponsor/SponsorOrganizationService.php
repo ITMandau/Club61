@@ -79,6 +79,22 @@ class SponsorOrganizationService
             $organization = $this->ensureOrganizationForMembership($membership);
             $organization->update(['name' => trim($companyName)]);
 
+            \App\Services\Audit\ActivityLogger::record(
+                module: 'MEMBERSHIP',
+                event: 'membership.granted_free',
+                description: "Memberikan paket corporate \"{$plan->name}\" GRATIS (tanpa pembelian) ke {$pic->name} untuk ".trim($companyName),
+                subject: $organization,
+                meta: [
+                    'paket' => $plan->name,
+                    'harga_normal' => (float) $plan->price,
+                    'pic' => $pic->name,
+                    'perusahaan' => trim($companyName),
+                    'alasan' => trim($reason),
+                ],
+                severity: \App\Services\Audit\ActivityLogger::CRITICAL,
+                causer: $grantedBy,
+            );
+
             return $organization;
         });
     }

@@ -13,6 +13,14 @@ class EditRole extends EditRecord
 
     protected array $matrixPermissions = [];
 
+    /** Snapshot izin sebelum simpan — untuk log aktivitas (izin apa yang ditambah / dicabut). */
+    protected array $permissionsBefore = [];
+
+    protected function beforeSave(): void
+    {
+        $this->permissionsBefore = $this->record->permissions()->pluck('name')->all();
+    }
+
     protected function getHeaderActions(): array
     {
         return [
@@ -55,6 +63,8 @@ class EditRole extends EditRecord
         }
 
         $this->record->syncPermissions($this->matrixPermissions);
+
+        \App\Services\Audit\ActivityLogger::rolePermissionsChanged($this->record, $this->permissionsBefore, $this->matrixPermissions);
 
         app(\Spatie\Permission\PermissionRegistrar::class)->forgetCachedPermissions();
 

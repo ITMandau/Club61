@@ -183,7 +183,8 @@ class CashierShiftTest extends TestCase
             bookingId: $booking->id,
             paymentMethod: 'QRIS',
             amountReceived: 200000.00,
-            cashierUser: $this->cashier
+            cashierUser: $this->cashier,
+            paymentProof: ['qris_rrn' => 'RRNTEST0001'],
         );
     }
 
@@ -380,7 +381,8 @@ class CashierShiftTest extends TestCase
             bookingId: $booking->id,
             paymentMethod: 'QRIS',
             amountReceived: 50000.00,
-            cashierUser: $this->cashier2
+            cashierUser: $this->cashier2,
+            paymentProof: ['qris_rrn' => 'RRNTEST0002'],
         );
 
         $this->assertTrue($settleResult['success']);

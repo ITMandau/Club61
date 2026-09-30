@@ -34,13 +34,13 @@ Dokumen pelacak progres (Single Source of Truth). Status di bawah ini hasil audi
 | 13 | Multi-Branch Tenancy | PRD saja | 0% |
 | 14 | Company Profile / Konten Website | Selesai | 100% |
 | 15 | Manajemen Menu F&B | Selesai | 100% |
-| 16 | Activity / Audit Log | PRD draft, belum dikerjakan (URGENT) | 0% |
+| 16 | Activity / Audit Log | Jalan (panel superadmin, transaksi, perubahan data, login) | 85% |
 | 17 | Laporan Keuangan & Riwayat Transaksi Terpadu | Belum ada (URGENT) | 10% |
 | 18 | Pengaturan Invoice / Struk Terpusat | Belum ada | 0% |
 | 19 | Realtime (Laravel Reverb) | Belum terpasang, masih polling | 0% |
 | 20 | Halaman Admin Pendukung (Dashboard, Club, Karyawan, Turnamen, Marketing) | DUMMY semua | 0% |
 
-**Automated test suite:** 408 passed (1582 assertions).
+**Automated test suite:** 450 passed (1783 assertions).
 
 ---
 
@@ -54,7 +54,7 @@ Dokumen pelacak progres (Single Source of Truth). Status di bawah ini hasil audi
 - [ ] Client key cadangan `'SB-Mid-client-demo-61'` masih dipakai kalau config kosong (`checkout.blade.php:1528`, `invoice-scripts.blade.php:1012`).
 
 ### URGENT (permintaan PM)
-- [ ] Modul 16: Activity / Audit Log untuk superadmin.
+- [x] Modul 16: Activity / Audit Log untuk superadmin.
 - [ ] Modul 17: Laporan keuangan per modul + tiap transaksi bisa dilacak detail & invoice-nya.
 - [ ] Modul 18: Panel pengaturan invoice untuk semua modul.
 - [ ] Rapikan pembayaran membership online di portal customer.
@@ -94,6 +94,15 @@ Dokumen pelacak progres (Single Source of Truth). Status di bawah ini hasil audi
 - [x] Consolidated invoice multi-jam (1 order, 1 boarding pass).
 - [x] Pelunasan selisih reschedule (delta) via Midtrans maupun kasir.
 - [x] Admin: pindah jadwal, quick settle, batalkan & refund, cek status bayar ke Midtrans.
+- [x] Reschedule & selisih bayar (diperbaiki 30 Sep 2026, `tests/Feature/Padel/ReschedulePaymentTest.php`):
+  - [x] Benefit membership (kuota / diskon %) & voucher sponsor ikut pindah ke jadwal baru — tidak ada lagi tagih ganda.
+  - [x] Modal menampilkan rincian lengkap (tarif, benefit, selisih, pajak, biaya layanan, total) dengan rumus yang sama persis dengan yang ditagih.
+  - [x] Bayar di frontdesk wajib shift aktif + bukti bayar (RRN QRIS / slip EDC / referensi transfer), 1 bukti hanya untuk 1 transaksi, uang masuk rekap shift.
+  - [x] "Kirim tagihan ke customer": bayar via Midtrans di invoice atau di kasir; rekonsiliasi Midtrans ikut mengecek tagihan selisih.
+  - [x] Pindah ke jam lebih murah: selisih HANGUS (kebijakan PM), tercatat di invoice & log, tanpa refund fiktif.
+  - [x] Invoice customer menampilkan selisih reschedule (lunas / belum) dan selisih yang hangus.
+  - [x] Slot hasil reschedule tidak bisa di-double-book walau cache kunci hilang.
+  - [x] Refund dibatasi uang yang benar-benar masuk; opsi "Saldo Deposit Member" (fitur tidak ada) dihapus.
 - [x] Check-in via scan QR / ketik kode booking (single-use, toleransi double scan, tolak kalau ada delta belum lunas).
 - [x] Invoice customer: pajak, biaya layanan, diskon membership & voucher corporate tampil benar (kartu tiket + PNG e-ticket).
 - [x] Arsitektur service modular (5 traits).
@@ -278,12 +287,23 @@ Dokumen pelacak progres (Single Source of Truth). Status di bawah ini hasil audi
 
 ## MODUL 16: ACTIVITY / AUDIT LOG (URGENT)
 
-### Status: 0%
-- [x] PRD draft `docs/PRD_MODUL_16_ACTIVITY_AUDIT_LOG.md`.
-- [ ] Menunggu keputusan PM atas 5 pertanyaan terbuka (§9): masa simpan log, siapa yang boleh melihat, perlu catat akses halaman sensitif atau tidak, perlu catat aktivitas customer atau tidak, ambang notifikasi refund.
-- [ ] Tabel log, pencatat otomatis (create / update / delete) semua model penting, pencatat aksi transaksi (checkout, refund, reschedule, settle, check-in, buka / tutup shift, login).
-- [ ] Halaman superadmin: filter per user, role, modul, aksi, tanggal; detail perubahan sebelum / sesudah.
-- Kondisi sekarang: tidak ada `spatie/activitylog`, tidak ada observer, tidak ada tabel audit. Satu-satunya jejak audit adalah `membership_usage_logs` dan tabel `refunds`.
+### Status: 85% (dibangun sendiri, tanpa package)
+- [x] PRD `docs/PRD_MODUL_16_ACTIVITY_AUDIT_LOG.md` (keputusan §9 pakai usulan default: simpan 24 bulan, super_admin saja, customer ikut dicatat, akses baca halaman tidak dicatat).
+- [x] Tabel `activity_logs` + model **immutable** (tidak bisa diedit / dihapus dari aplikasi, termasuk super_admin).
+- [x] Satu pintu tulis `ActivityLogger`: snapshot nama & role pelaku, IP, perangkat, halaman asal, batch per request.
+- [x] Rahasia tidak pernah disimpan (password, token, key, hash QR, payload gateway) — diganti `[disembunyikan]`.
+- [x] Otomatis: perubahan lapangan, alat sewa, menu F&B, pajak & biaya (KRITIS), voucher, paket membership, sponsor, user, role, konten website.
+- [x] Transaksi: setiap pembayaran lunas di semua modul (walk-in, booking online, F&B, membership, pelunasan kasir, webhook, rekonsiliasi Midtrans) lengkap dengan item, metode bayar, meja, antrian, kasir.
+- [x] Aksi sensitif: refund / batal (KRITIS), reschedule, check-in, selesai, retur alat, membership corporate gratis (KRITIS), perubahan izin role (KRITIS kalau izin backdoor), ganti role user.
+- [x] Shift kasir buka / tutup, ditandai kalau ada selisih setoran.
+- [x] Keamanan: login, logout, gagal login (tanpa password), lockout, reset sandi, **setiap percobaan akses tanpa izin (403)**.
+- [x] Aksi sistem (scheduler, webhook) tercatat sebagai SISTEM / WEBHOOK, bukan dibebankan ke user yang kebetulan membuka halaman.
+- [x] Panel **Log Aktivitas** (super_admin): filter tanggal, pengguna, modul, tingkat, channel, jenis aksi, pencarian; detail sebelum → sesudah; export CSV (izin terpisah, aman dari formula injection).
+- [x] Retensi otomatis `audit:prune` harian (menolak konfigurasi 0 bulan).
+- [x] Test: `tests/Feature/Audit/ActivityLogTest.php` (21 test).
+- [ ] Hash berantai (deteksi manipulasi langsung di database).
+- [ ] Alert otomatis ke super_admin (refund besar, perubahan pajak).
+- [ ] Tombol "Riwayat" per booking / menu / sponsor di halaman masing-masing.
 
 ---
 

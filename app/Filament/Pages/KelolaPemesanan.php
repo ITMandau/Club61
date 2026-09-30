@@ -56,6 +56,10 @@ class KelolaPemesanan extends Page
     public bool $rescheduleIsDeltaPaidNow = true;
     public string $reschedulePaymentMethod = 'QRIS';
     public string $rescheduleReason = '';
+    /** Rincian selisih slot terpilih (hasil PadelBookingService::quoteReschedule, sama persis dengan yang ditagih). */
+    public array $rescheduleQuote = [];
+    /** Bukti bayar selisih di frontdesk (RRN QRIS / slip EDC / referensi transfer) — divalidasi ulang di server. */
+    public array $rescheduleProof = [];
 
     // Settle Modal State
     public ?string $settleBookingId = null;
@@ -63,6 +67,23 @@ class KelolaPemesanan extends Page
     public ?string $settleCustomerName = null;
     public float $settleAmount = 0.0;
     public string $settlePaymentMethod = 'QRIS';
+    public array $settleProof = [];
+
+    public static function emptyPaymentProof(): array
+    {
+        return [
+            'qris_provider' => 'BCA_QRIS',
+            'qris_rrn' => '',
+            'qris_sender_name' => '',
+            'card_type' => 'DEBIT',
+            'card_last_4' => '',
+            'approval_code' => '',
+            'trace_number' => '',
+            'transfer_bank' => '',
+            'transfer_reference' => '',
+            'transfer_sender_name' => '',
+        ];
+    }
 
     // Cancel & Refund Form State
     public ?string $cancelBookingId = null;
@@ -127,6 +148,8 @@ class KelolaPemesanan extends Page
             return false;
         }
 
+        \App\Services\Audit\ActivityLogger::accessDenied("mencoba aksi tanpa izin [{$permission}] di Kelola Pemesanan");
+
         Notification::make()
             ->title('Akses Ditolak')
             ->body("Anda tidak memiliki izin [{$permission}] untuk aksi ini.")
@@ -143,6 +166,18 @@ class KelolaPemesanan extends Page
         }
 
         $booking = PadelBooking::with(['court', 'user', 'order'])->findOrFail($bookingId);
+
+        if ($booking->status !== 'PAID') {
+            Notification::make()
+                ->title('Tidak Bisa Dipindah')
+                ->body($booking->status === 'LOCKED' && $booking->reschedule_count > 0
+                    ? 'Booking ini masih punya tagihan selisih reschedule yang belum lunas. Lunasi dulu lewat tombol Settle.'
+                    : "Hanya booking yang sudah lunas yang bisa dipindah jadwalnya (status saat ini: {$booking->status}).")
+                ->warning()
+                ->send();
+
+            return;
+        }
 
         $this->selectedBookingId = $booking->id;
         $this->rescheduleCourtId = $booking->court_id;
@@ -163,12 +198,15 @@ class KelolaPemesanan extends Page
             'original_date' => $booking->booking_date->format('d M Y'),
             'original_time' => $booking->start_time->format('H:i') . ' - ' . $booking->end_time->format('H:i') . ' WIB',
             'original_court_fee' => (float) $booking->court_fee,
+            'original_benefit' => (float) $booking->member_discount_court + (float) $booking->sponsor_discount_court,
             'duration_hours' => $this->rescheduleDurationHours,
         ];
 
         $this->rescheduleReason = '';
         $this->rescheduleIsDeltaPaidNow = true;
         $this->reschedulePaymentMethod = 'QRIS';
+        $this->rescheduleProof = self::emptyPaymentProof();
+        $this->rescheduleQuote = [];
 
         $this->loadAvailableSlots($service);
         $this->showRescheduleModal = true;
@@ -242,6 +280,7 @@ class KelolaPemesanan extends Page
         if (empty($this->availableSlots) || ! $this->rescheduleStartTime) {
             $this->rescheduleEstimatedFee = 0.0;
             $this->rescheduleDelta = 0.0;
+            $this->rescheduleQuote = [];
             return;
         }
 
@@ -249,6 +288,7 @@ class KelolaPemesanan extends Page
         if ($chosenSlot) {
             $this->rescheduleEstimatedFee = (float) $chosenSlot['estimated_fee'];
             $this->rescheduleDelta = (float) $chosenSlot['delta'];
+            $this->rescheduleQuote = $chosenSlot;
         }
     }
 
@@ -270,7 +310,7 @@ class KelolaPemesanan extends Page
         try {
             $adminUser = auth()->user() ?? \App\Models\User::role(['admin', 'super_admin'])->first();
 
-            $service->adminRescheduleBooking(
+            $result = $service->adminRescheduleBooking(
                 bookingId: $this->selectedBookingId,
                 newCourtId: $this->rescheduleCourtId,
                 newDate: $this->rescheduleDate,
@@ -278,14 +318,21 @@ class KelolaPemesanan extends Page
                 reason: $this->rescheduleReason ?: 'Permintaan Reschedule via Admin',
                 adminUser: $adminUser,
                 paymentMethod: $this->reschedulePaymentMethod,
-                isDeltaPaid: $this->rescheduleIsDeltaPaidNow
+                isDeltaPaid: $this->rescheduleIsDeltaPaidNow,
+                paymentProof: $this->rescheduleProof,
             );
 
             Cache::forget('kelola_pemesanan_tab_counts');
 
+            $rupiah = fn (float $v) => 'Rp '.number_format($v, 0, ',', '.');
             Notification::make()
                 ->title('Reschedule Berhasil')
-                ->body('Jadwal reservasi berhasil dipindahkan dan dicatat dalam pembukuan.')
+                ->body(match (true) {
+                    ($result['total_charge'] ?? 0) > 0 && ($result['is_locked'] ?? false) => 'Jadwal dipindahkan. Tagihan selisih '.$rupiah($result['total_charge']).' dikirim ke customer — QR tiket aktif setelah lunas (via Midtrans di invoice atau di kasir).',
+                    ($result['total_charge'] ?? 0) > 0 => 'Jadwal dipindahkan dan selisih '.$rupiah($result['total_charge']).' sudah lunas di frontdesk. QR tiket baru aktif.',
+                    ($result['forfeited'] ?? 0) > 0 => 'Jadwal dipindahkan ke jam lebih murah. Selisih '.$rupiah($result['forfeited']).' hangus sesuai kebijakan (tidak dikembalikan).',
+                    default => 'Jadwal reservasi berhasil dipindahkan tanpa selisih biaya.',
+                })
                 ->success()
                 ->send();
 
@@ -307,6 +354,38 @@ class KelolaPemesanan extends Page
 
         $booking = PadelBooking::with(['user', 'order.payments'])->findOrFail($bookingId);
 
+        if (! in_array($booking->status, ['PENDING_PAYMENT', 'LOCKED', 'PENDING'], true)) {
+            Notification::make()->title('Tidak Ada Tagihan')
+                ->body("Booking {$booking->booking_code} berstatus {$booking->status} — tidak ada yang perlu dilunasi.")
+                ->info()->send();
+
+            return;
+        }
+
+        // Cek dulu apakah customer sudah / sedang membayar online — kasir tidak boleh menagih dua kali.
+        $order = $booking->order_id ? \App\Models\Pos\Order::find($booking->order_id) : null;
+        $reconciler = app(\App\Services\Payment\MidtransReconciliationService::class);
+        if ($order && $reconciler->hasOnlinePaymentAttempt($order)) {
+            $online = $reconciler->reconcileOrder($order);
+            Cache::forget('kelola_pemesanan_tab_counts');
+
+            if ($online === \App\Services\Payment\MidtransReconciliationService::PAID) {
+                Notification::make()->title('Sudah Dibayar Online')
+                    ->body("Customer sudah membayar tagihan {$booking->booking_code} via Midtrans. Tiket otomatis aktif — jangan terima pembayaran lagi di kasir.")
+                    ->success()->persistent()->send();
+
+                return;
+            }
+
+            if ($online === \App\Services\Payment\MidtransReconciliationService::PENDING) {
+                Notification::make()->title('Customer Sedang Bayar Online')
+                    ->body('Midtrans masih menunggu pembayaran customer. Minta customer menyelesaikan atau membatalkan pembayaran online-nya dulu supaya tidak ditagih dua kali.')
+                    ->warning()->persistent()->send();
+
+                return;
+            }
+        }
+
         $pendingPayment = Payment::where('order_id', $booking->order_id)
             ->where('status', 'PENDING')
             ->latest()
@@ -315,10 +394,13 @@ class KelolaPemesanan extends Page
         $this->settleBookingId = $booking->id;
         $this->settleBookingCode = $booking->booking_code;
         $this->settleCustomerName = $booking->user?->name ?? 'Guest';
-        $this->settleAmount = $pendingPayment 
-            ? (float) $pendingPayment->amount 
-            : (float) ($booking->order?->grand_total ?: $booking->total_amount);
+        // Sama dengan rumus di service: tagihan PENDING, atau sisa (grand_total - yang sudah dibayar).
+        $totalPaid = (float) Payment::where('order_id', $booking->order_id)->where('status', 'SUCCESS')->sum('amount');
+        $this->settleAmount = $pendingPayment
+            ? (float) $pendingPayment->amount
+            : max(0.0, (float) ($booking->order?->grand_total ?: $booking->total_amount) - $totalPaid);
         $this->settlePaymentMethod = 'QRIS';
+        $this->settleProof = self::emptyPaymentProof();
 
         $this->showSettleModal = true;
     }
@@ -332,20 +414,30 @@ class KelolaPemesanan extends Page
         try {
             $adminUser = auth()->user() ?? \App\Models\User::role(['admin', 'super_admin'])->first();
 
-            $service->adminSettleCashierPayment(
+            $result = $service->adminSettleCashierPayment(
                 bookingId: $this->settleBookingId,
                 paymentMethod: $this->settlePaymentMethod,
                 amountReceived: (float) $this->settleAmount,
-                cashierUser: $adminUser
+                cashierUser: $adminUser,
+                paymentProof: $this->settleProof,
             );
 
             Cache::forget('kelola_pemesanan_tab_counts');
 
-            Notification::make()
-                ->title('Pelunasan Berhasil')
-                ->body('Pelunasan kasir berhasil diverifikasi dan QR Tiket aktif.')
-                ->success()
-                ->send();
+            if (($result['settled_via'] ?? null) === 'MIDTRANS') {
+                Notification::make()
+                    ->title('Sudah Dibayar Online')
+                    ->body($result['message'])
+                    ->warning()
+                    ->persistent()
+                    ->send();
+            } else {
+                Notification::make()
+                    ->title('Pelunasan Berhasil')
+                    ->body('Pelunasan kasir berhasil diverifikasi dan QR Tiket aktif.')
+                    ->success()
+                    ->send();
+            }
 
             $this->showSettleModal = false;
         } catch (\Throwable $e) {

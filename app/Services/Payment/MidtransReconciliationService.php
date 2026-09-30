@@ -39,7 +39,11 @@ class MidtransReconciliationService
      */
     public function reconcileOrder(Order $order, int $cacheSeconds = 0): string
     {
-        if ($order->payment_status === 'PAID') {
+        // Order PAID yang masih punya pembayaran Midtrans PENDING = tagihan selisih reschedule yang
+        // sedang dibayar customer — tetap harus dicek, jangan dianggap selesai.
+        $hasPendingGatewayPayment = $this->hasOnlinePaymentAttempt($order);
+
+        if ($order->payment_status === 'PAID' && ! $hasPendingGatewayPayment) {
             return self::PAID;
         }
 
@@ -63,17 +67,36 @@ class MidtransReconciliationService
         return $result;
     }
 
+    /**
+     * Ada tagihan PENDING yang pernah dicoba dibayar lewat Midtrans (gateway MIDTRANS, atau sudah punya
+     * order_id Midtrans walau gateway-nya dikembalikan ke kasir setelah sesi Snap ditinggal)?
+     * Dipakai juga oleh pelunasan kasir: WAJIB cek Midtrans dulu supaya customer tidak ditagih dua kali.
+     */
+    public function hasOnlinePaymentAttempt(Order $order): bool
+    {
+        return Payment::where('order_id', $order->id)
+            ->where('status', 'PENDING')
+            ->get()
+            ->contains(fn (Payment $p) => $p->payment_gateway === 'MIDTRANS'
+                || ! empty((is_array($p->payload_log) ? $p->payload_log : [])['midtrans_order_ids'] ?? null));
+    }
+
     /** Semua order_id yang pernah dikirim ke Midtrans untuk order ini (checkout awal + bayar ulang). */
     public function gatewayOrderIds(Order $order): array
     {
         $ids = [$order->order_number];
 
-        $payments = Payment::where('order_id', $order->id)
-            ->where('payment_gateway', 'MIDTRANS')
-            ->get();
+        $payments = Payment::where('order_id', $order->id)->get();
 
-        foreach ($payments as $payment) {
-            $ids[] = $payment->transaction_id;
+        // order_id Midtrans yang SUDAH tercatat lunas tidak perlu ditanyakan lagi. Tanpa ini, order yang
+        // punya tagihan selisih reschedule akan "menemukan" pembayaran awalnya (settlement) dan
+        // melaporkan PAID, padahal tagihan selisihnya belum dibayar.
+        $alreadySettled = $payments->where('status', 'SUCCESS')->pluck('transaction_id')->filter()->all();
+
+        foreach ($payments->where('status', '!=', 'SUCCESS') as $payment) {
+            if ($payment->payment_gateway === 'MIDTRANS') {
+                $ids[] = $payment->transaction_id;
+            }
             $log = is_array($payment->payload_log) ? $payment->payload_log : [];
             $ids[] = $log['midtrans_order_id'] ?? null;
             foreach ((array) ($log['midtrans_order_ids'] ?? []) as $id) {
@@ -81,7 +104,10 @@ class MidtransReconciliationService
             }
         }
 
-        return array_values(array_unique(array_filter($ids, fn ($id) => is_string($id) && $id !== '')));
+        return array_values(array_diff(
+            array_unique(array_filter($ids, fn ($id) => is_string($id) && $id !== '')),
+            $alreadySettled
+        ));
     }
 
     private function check(Order $order): string
@@ -173,6 +199,20 @@ class MidtransReconciliationService
 
         foreach ($query->get() as $payment) {
             $log = is_array($payment->payload_log) ? $payment->payload_log : [];
+
+            // Tagihan selisih reschedule BUKAN keranjang yang boleh ditutup: customer tetap berutang dan
+            // booking-nya sudah dibayar sebagian. Sesi Snap yang tidak dibayar cukup dikembalikan jadi
+            // tagihan terbuka (bisa dibayar ulang via invoice / di kasir), rekonsiliasi berhenti menanyakannya.
+            if (($log['type'] ?? null) === 'RESCHEDULE_PRICE_DELTA') {
+                if (! $gatewaySaysFinal && $payment->updated_at?->gt(now()->subMinutes(30))) {
+                    continue; // customer mungkin masih di halaman Snap
+                }
+                $log['snap_session_closed_by'] = $gatewaySaysFinal ? 'MIDTRANS_STATUS_FINAL' : 'MIDTRANS_NOT_FOUND_AFTER_30_MIN';
+                $payment->update(['payment_gateway' => 'CASHIER_POS', 'payload_log' => $log]);
+
+                continue;
+            }
+
             $log['closed_by'] = $gatewaySaysFinal ? 'MIDTRANS_STATUS_FINAL' : 'MIDTRANS_NOT_FOUND_AFTER_30_MIN';
             $payment->update(['status' => 'FAILED', 'payload_log' => $log]);
         }
@@ -182,7 +222,11 @@ class MidtransReconciliationService
     {
         $grossAmount = (float) ($status['gross_amount'] ?? 0);
 
-        if ($order->grand_total !== null && abs($grossAmount - (float) $order->grand_total) > 1) {
+        // Tagihan selisih reschedule dibandingkan dengan nominal tagihannya, bukan grand_total order.
+        $pendingAmount = Payment::where('order_id', $order->id)->where('status', 'PENDING')->latest()->value('amount');
+        $expected = $pendingAmount !== null ? (float) $pendingAmount : (float) $order->grand_total;
+
+        if ($order->grand_total !== null && abs($grossAmount - $expected) > 1) {
             Log::warning("[ALERT] Midtrans status check: gross_amount tidak cocok dengan grand_total order [{$order->order_number}]", [
                 'gross_amount_from_midtrans' => $grossAmount,
                 'grand_total_in_db' => (float) $order->grand_total,

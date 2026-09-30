@@ -20,12 +20,16 @@ class ReconcileMidtransPayments extends Command
 
     public function handle(MidtransReconciliationService $reconciler): int
     {
+        $since = now()->subHours((int) $this->option('hours'));
+
+        // Order berstatus PAID TETAP ikut dicek kalau masih punya pembayaran Midtrans PENDING — itu
+        // tagihan selisih reschedule yang sedang dibayar customer lewat invoice. Jendela waktu memakai
+        // updated_at juga: tagihan selisih bisa dibuat lama sebelum customer akhirnya membayar.
         $orders = Order::query()
-            ->where('payment_status', '!=', 'PAID')
             ->whereHas('payments', fn ($q) => $q
                 ->where('payment_gateway', 'MIDTRANS')
                 ->where('status', 'PENDING')
-                ->where('created_at', '>=', now()->subHours((int) $this->option('hours')))
+                ->where(fn ($w) => $w->where('created_at', '>=', $since)->orWhere('updated_at', '>=', $since))
                 // Beri webhook asli kesempatan datang duluan.
                 ->where('created_at', '<=', now()->subMinutes(2)))
             ->get();

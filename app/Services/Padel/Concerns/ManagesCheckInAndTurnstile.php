@@ -48,6 +48,16 @@ trait ManagesCheckInAndTurnstile
             throw new HttpException(400, "Tiket belum lunas. Silakan selesaikan pembayaran terlebih dahulu.");
         }
 
+        // LOCKED = keranjang yang belum dibayar, atau jadwal hasil reschedule yang tagihan selisihnya belum
+        // lunas (QR sengaja ditahan). Dulu tetap bisa check-in lewat input kode booking — pemain main tanpa
+        // melunasi selisih.
+        if ($booking->status === 'LOCKED') {
+            $unpaid = (float) \App\Models\Pos\Payment::where('order_id', $booking->order_id)->where('status', 'PENDING')->sum('amount');
+            throw new HttpException(400, (int) $booking->reschedule_count > 0
+                ? 'Masih ada tagihan selisih reschedule'.($unpaid > 0 ? ' Rp '.number_format($unpaid, 0, ',', '.') : '').' yang belum lunas. Lunasi dulu (tombol Settle di Kelola Pemesanan) sebelum check-in.'
+                : 'Tiket belum dibayar. Silakan selesaikan pembayaran terlebih dahulu.');
+        }
+
         // Ambil daftar peralatan sewa (flat per order atau per booking)
         $equipmentList = [];
         if ($booking->order_id) {
@@ -96,13 +106,28 @@ trait ManagesCheckInAndTurnstile
         // Scan Pertama: Ubah status menjadi CHECKED_IN + potong stock alat SEWA (RACKET/TOWEL) pada
         // momen serah-terima fisik. Dibungkus 1 transaksi biar atomik — kalau potong stock gagal di
         // tengah jalan, perubahan status booking ikut ter-rollback juga.
-        DB::transaction(function () use ($booking, $now) {
+        DB::transaction(function () use ($booking, $now, $staffUser, $equipmentList) {
             $booking->update([
                 'status' => 'CHECKED_IN',
                 'checked_in_at' => $now,
             ]);
 
             $this->deductRentalEquipmentStock($booking);
+
+            \App\Services\Audit\ActivityLogger::record(
+                module: 'PADEL',
+                event: 'booking.checked_in',
+                description: "Check-in booking {$booking->booking_code} atas nama ".($booking->user?->name ?? '-').' di '.($booking->court?->name ?? '-'),
+                subject: $booking,
+                meta: array_filter([
+                    'kode_booking' => $booking->booking_code,
+                    'pemain' => $booking->user?->name,
+                    'lapangan' => $booking->court?->name,
+                    'jadwal' => $booking->start_time->format('d M Y H:i').'-'.$booking->end_time->format('H:i'),
+                    'alat_diserahkan' => array_map(fn ($e) => $e['name'].' x'.$e['quantity'], $equipmentList) ?: null,
+                ]),
+                causer: $staffUser,
+            );
         });
 
         Cache::forget('kelola_pemesanan_tab_counts');
@@ -171,7 +196,7 @@ trait ManagesCheckInAndTurnstile
     {
         $booking = PadelBooking::findOrFail($bookingId);
 
-        return DB::transaction(function () use ($booking) {
+        return DB::transaction(function () use ($booking, $staffUser) {
             $query = PadelBookingEquipment::with('equipment')
                 ->whereNotNull('stock_deducted_at')
                 ->whereNull('returned_at');
@@ -205,6 +230,16 @@ trait ManagesCheckInAndTurnstile
                 throw new HttpException(422, 'Tidak ada alat sewa (raket/handuk) yang tertunda untuk dikembalikan pada tiket ini.');
             }
 
+            \App\Services\Audit\ActivityLogger::record(
+                module: 'PADEL',
+                event: 'equipment.returned',
+                description: "Menerima pengembalian alat sewa booking {$booking->booking_code}: "
+                    .collect($restoredItems)->map(fn ($i) => $i['name'].' x'.$i['quantity'])->implode(', '),
+                subject: $booking,
+                meta: ['kode_booking' => $booking->booking_code, 'alat_kembali' => $restoredItems],
+                causer: $staffUser,
+            );
+
             return [
                 'restored_count' => count($restoredItems),
                 'items' => $restoredItems,
@@ -219,8 +254,19 @@ trait ManagesCheckInAndTurnstile
     public function completeBooking(string $bookingId, User $staffUser): PadelBooking
     {
         $booking = PadelBooking::findOrFail($bookingId);
+        $previousStatus = $booking->status;
         $booking->update(['status' => 'COMPLETED']);
         Cache::forget('kelola_pemesanan_tab_counts');
+
+        \App\Services\Audit\ActivityLogger::record(
+            module: 'PADEL',
+            event: 'booking.completed',
+            description: "Menandai booking {$booking->booking_code} selesai bermain",
+            subject: $booking,
+            changes: ['status' => ['old' => $previousStatus, 'new' => 'COMPLETED']],
+            causer: $staffUser,
+        );
+
         return $booking;
     }
 
@@ -235,7 +281,8 @@ trait ManagesCheckInAndTurnstile
         $now = now();
 
         // 1. Booking yang lunas atau reschedule berbayar tapi tidak datang sampai sesi berakhir -> EXPIRED (No-Show)
-        $expiredCount = PadelBooking::whereIn('status', ['PAID', 'LOCKED'])
+        // id diambil dulu (bukan langsung mass update) supaya kode booking-nya bisa dicatat di log aktivitas.
+        $noShows = PadelBooking::whereIn('status', ['PAID', 'LOCKED'])
             ->where('end_time', '<', $now)
             ->whereNull('checked_in_at')
             ->where(function ($q) {
@@ -245,12 +292,39 @@ trait ManagesCheckInAndTurnstile
                         $pq->where('status', 'SUCCESS');
                     });
             })
+            ->pluck('booking_code', 'id');
+        $expiredCount = $noShows->isEmpty() ? 0 : PadelBooking::whereIn('id', $noShows->keys())
+            ->whereIn('status', ['PAID', 'LOCKED'])
+            ->whereNull('checked_in_at')
             ->update(['status' => 'EXPIRED']);
 
         // 2. Pemain yang sudah check-in dan sesinya telah lewat -> COMPLETED
-        $completedCount = PadelBooking::where('status', 'CHECKED_IN')
+        $finished = PadelBooking::where('status', 'CHECKED_IN')
             ->where('end_time', '<', $now)
+            ->pluck('booking_code', 'id');
+        $completedCount = $finished->isEmpty() ? 0 : PadelBooking::whereIn('id', $finished->keys())
+            ->where('status', 'CHECKED_IN')
             ->update(['status' => 'COMPLETED']);
+
+        if ($expiredCount > 0) {
+            \App\Services\Audit\ActivityLogger::record(
+                module: 'PADEL',
+                event: 'booking.no_show_expired',
+                description: "Sistem menandai {$expiredCount} booking lunas sebagai hangus (tidak datang sampai sesi berakhir)",
+                meta: ['kode_booking' => $noShows->values()->take(100)->all()],
+                asSystem: true,
+            );
+        }
+
+        if ($completedCount > 0) {
+            \App\Services\Audit\ActivityLogger::record(
+                module: 'PADEL',
+                event: 'booking.auto_completed',
+                description: "Sistem menandai {$completedCount} booking yang sudah check-in sebagai selesai bermain",
+                meta: ['kode_booking' => $finished->values()->take(100)->all()],
+                asSystem: true,
+            );
+        }
 
         // 3. Rilis slot LOCKED yang kedaluwarsa
         $releasedLocks = $this->releaseExpiredLocks();

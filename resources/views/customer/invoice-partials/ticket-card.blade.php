@@ -375,6 +375,39 @@
                 </div>
             </template>
 
+            {{-- Reschedule: selisih ke jam lebih mahal sudah termasuk di Session Fee / pajak / biaya layanan
+                 di atas (tarif jadwal baru) — baris ini menjelaskan asal tambahannya & status bayarnya. --}}
+            <template x-if="ticket && ticket.reschedule_charges && ticket.reschedule_charges.length > 0">
+                <div class="rounded-lg border border-[#DFC387]/60 bg-[#FFFDF7] px-3 py-2 space-y-1">
+                    <template x-for="(rc, idx) in ticket.reschedule_charges" :key="idx">
+                        <div class="flex justify-between items-start gap-3 text-[#5C410F]">
+                            <span class="text-[11px] sm:text-xs font-semibold uppercase tracking-wider">
+                                Selisih Reschedule
+                                <span class="normal-case font-bold"
+                                    :class="rc.status === 'SUCCESS' ? 'text-[#8C6418]' : 'text-red-700'"
+                                    x-text="rc.status === 'SUCCESS' ? '(Lunas • ' + (rc.method_label || '-') + ')' : '(Belum dibayar)'"></span>
+                            </span>
+                            <span class="font-mono font-bold text-xs sm:text-sm text-[#1F170D] whitespace-nowrap" x-text="'Rp ' + formatNumber(rc.amount)"></span>
+                        </div>
+                    </template>
+                    <p class="text-[10px] sm:text-[11px] text-[#7A643E] leading-snug">
+                        <span x-show="ticket.reschedule_charges[0].schedule_before">Dipindah dari <span class="font-semibold" x-text="ticket.reschedule_charges[0].schedule_before"></span>. </span>
+                        Sudah termasuk dalam sewa lapangan, pajak &amp; biaya layanan jadwal baru di atas.
+                    </p>
+                </div>
+            </template>
+            <template x-if="ticket && ticket.order_reschedule_forfeited > 0">
+                <div class="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2">
+                    <div class="flex justify-between items-center gap-3 text-amber-900">
+                        <span class="text-[11px] sm:text-xs font-semibold uppercase tracking-wider">Selisih Reschedule Hangus</span>
+                        <span class="font-mono font-bold text-xs sm:text-sm whitespace-nowrap" x-text="'Rp ' + formatNumber(ticket.order_reschedule_forfeited)"></span>
+                    </div>
+                    <p class="text-[10px] sm:text-[11px] text-amber-800 leading-snug">
+                        Jadwal dipindah ke jam yang lebih murah. Sesuai kebijakan venue, selisihnya tidak dikembalikan.
+                    </p>
+                </div>
+            </template>
+
             <!-- Total Payment -->
             <div
                 class="pt-2.5 sm:pt-3 border-t border-[#DFC387]/60 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-1.5 sm:gap-4">
