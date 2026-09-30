@@ -929,15 +929,24 @@
                     ctx.stroke();
                 }
 
-                drawSumRow(summaryY + 60, 'Padel Court Rental', 'Rp ' + this.formatNumber(cFee), false);
+                // Rincian harus menjumlah ke TOTAL AMOUNT: diskon mengurangi sewa lapangan,
+                // pajak & biaya layanan (per order, dari Pengaturan Biaya & Pajak) ditampilkan terpisah.
+                const discount = this.totalMemberDiscount + this.totalSponsorDiscount;
+                const order = this.ticket ? this.ticket.order : null;
+                const taxAndService = order ? (parseFloat(order.tax_amount) || 0) + (parseFloat(order.service_charge) || 0) : 0;
+
+                drawSumRow(summaryY + 60, discount > 0 ? 'Padel Court Rental (after discount)' : 'Padel Court Rental', 'Rp ' + this.formatNumber(Math.max(0, cFee - discount)), false);
                 drawSumRow(summaryY + 98, 'Equipment Rental (Rackets & Balls)', 'Rp ' + this.formatNumber(eFee), false);
-                drawSumRow(summaryY + 136, 'Payment Method', payMethod, true);
+                drawSumRow(summaryY + 136, 'Tax & Service Fee', 'Rp ' + this.formatNumber(taxAndService), false);
 
                 // Grand Total Highlight Banner
                 drawRoundRect(60, summaryY + 160, width - 120, 68, 12, true, true, '#FAF4E6', '#DFC387', 1.5);
                 ctx.fillStyle = '#1F170D';
                 ctx.font = 'bold 14px sans-serif';
-                ctx.fillText('TOTAL AMOUNT', 80, summaryY + 200);
+                ctx.fillText('TOTAL AMOUNT', 80, summaryY + 192);
+                ctx.fillStyle = '#7A643E';
+                ctx.font = '11px sans-serif';
+                ctx.fillText('Paid via ' + payMethod, 80, summaryY + 212);
 
                 ctx.fillStyle = '#8C6418';
                 ctx.font = 'bold 22px monospace';
