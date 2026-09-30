@@ -2,6 +2,7 @@
 
 namespace App\Services\Payment;
 
+use App\Exceptions\PaymentGatewayUnavailableException;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
@@ -62,14 +63,21 @@ class MidtransService
             );
         }
 
-        // Jika Server Key tidak tersedia atau mode testing tanpa koneksi gateway, sediakan Mock Snap Token
-        if (empty($this->serverKey) || app()->environment('testing')) {
+        // Token mock (= pemanggil langsung menganggap order LUNAS) HANYA boleh di mesin developer /
+        // automated test. Di server mana pun (sandbox, staging, production) key kosong berarti salah
+        // konfigurasi — tolak checkout, jangan kasih booking/membership gratis.
+        if (app()->environment('testing') || (empty($this->serverKey) && app()->environment('local'))) {
             Log::info("Midtrans Sandbox Mock Token generated for order: {$orderId}");
             return [
                 'snap_token' => 'DEMO-SNAP-' . Str::uuid(),
                 'redirect_url' => 'https://app.sandbox.midtrans.com/snap/v2/vtweb/' . Str::uuid(),
                 'is_mock' => true,
             ];
+        }
+
+        if (empty($this->serverKey)) {
+            Log::critical("[ALERT] MIDTRANS_SERVER_KEY kosong di environment '" . app()->environment() . "' — checkout ditolak [{$orderId}].");
+            throw new PaymentGatewayUnavailableException();
         }
 
         $payload = [
@@ -105,6 +113,9 @@ class MidtransService
             }
         }
 
+        // Fail-closed: dulu SEMUA error di sini (jaringan putus, key salah, request ditolak) dibalas
+        // token mock → pemanggil menandai order LUNAS tanpa uang masuk. Sekarang error dilempar,
+        // transaksi checkout di-rollback, dan customer diminta mencoba lagi.
         try {
             $response = Http::withBasicAuth($this->serverKey, '')
                 ->withHeaders([
@@ -112,26 +123,23 @@ class MidtransService
                     'Accept' => 'application/json',
                 ])
                 ->post($this->snapApiUrl, $payload);
-
-            if ($response->successful()) {
-                $data = $response->json();
-                return [
-                    'snap_token' => $data['token'] ?? null,
-                    'redirect_url' => $data['redirect_url'] ?? null,
-                    'is_mock' => false,
-                ];
-            }
-
-            Log::error('Midtrans Snap API Error: ' . $response->body());
-            throw new \RuntimeException('Gagal mendapatkan token pembayaran dari Midtrans: ' . $response->body());
         } catch (\Throwable $e) {
-            Log::warning('Midtrans connection failed, falling back to mock: ' . $e->getMessage());
-            return [
-                'snap_token' => 'DEMO-SNAP-' . Str::uuid(),
-                'redirect_url' => 'https://app.sandbox.midtrans.com/snap/v2/vtweb/' . Str::uuid(),
-                'is_mock' => true,
-            ];
+            Log::error("[ALERT] Midtrans Snap tidak bisa dihubungi [{$orderId}]: " . $e->getMessage());
+            throw new PaymentGatewayUnavailableException(previous: $e);
         }
+
+        $data = $response->json();
+
+        if (! $response->successful() || empty($data['token'])) {
+            Log::error("[ALERT] Midtrans Snap menolak transaksi [{$orderId}] HTTP {$response->status()}: " . $response->body());
+            throw new PaymentGatewayUnavailableException();
+        }
+
+        return [
+            'snap_token' => $data['token'],
+            'redirect_url' => $data['redirect_url'] ?? null,
+            'is_mock' => false,
+        ];
     }
 
     /**
