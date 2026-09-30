@@ -38,6 +38,9 @@ class AdminPanelProvider extends PanelProvider
             ->brandLogoHeight('2.25rem')
             ->favicon(asset('images/club61-logo.png'))
             ->maxContentWidth('full')
+            // Sidebar bisa diciutkan ke samping jadi strip ikon (tombol di header sidebar);
+            // status buka/ciut diingat browser per user.
+            ->sidebarCollapsibleOnDesktop()
             ->colors([
                 'primary' => Color::Amber,
             ])
@@ -55,6 +58,10 @@ class AdminPanelProvider extends PanelProvider
             ->renderHook(
                 'panels::head.end',
                 fn () => view('filament.custom-styles')
+            )
+            ->renderHook(
+                'panels::body.end',
+                fn () => view('filament.sidebar-auto-collapse')
             )
             ->pages([
                 \App\Filament\Pages\Dashboard::class,
