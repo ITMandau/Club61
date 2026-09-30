@@ -9,4 +9,6 @@ Artisan::command('inspire', function () {
 
 \Illuminate\Support\Facades\Schedule::command('padel:release-expired-slots')->everyMinute();
 \Illuminate\Support\Facades\Schedule::command('membership:sync-expired')->dailyAt('00:01');
+// Cadangan webhook Midtrans: order yang sudah dibayar tapi notifikasinya tidak sampai tetap lunas otomatis.
+\Illuminate\Support\Facades\Schedule::command('payment:reconcile-midtrans')->everyFiveMinutes()->withoutOverlapping();
 

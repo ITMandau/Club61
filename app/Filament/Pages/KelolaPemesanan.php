@@ -357,6 +357,35 @@ class KelolaPemesanan extends Page
         }
     }
 
+    /** Customer bilang "sudah bayar tapi masih pending": tanya langsung ke Midtrans. */
+    public function checkMidtransPayment(string $bookingId): void
+    {
+        if ($this->deniedWithout('settle_unpaid_booking')) {
+            return;
+        }
+
+        $booking = PadelBooking::findOrFail($bookingId);
+        $order = $booking->order_id ? \App\Models\Pos\Order::find($booking->order_id) : null;
+
+        if (! $order) {
+            Notification::make()->title('Tidak Ada Transaksi Online')->body("Tiket {$booking->booking_code} tidak punya order pembayaran Midtrans.")->warning()->send();
+
+            return;
+        }
+
+        $result = app(\App\Services\Payment\MidtransReconciliationService::class)->reconcileOrder($order);
+        Cache::forget('kelola_pemesanan_tab_counts');
+
+        [$title, $body, $color] = match ($result) {
+            \App\Services\Payment\MidtransReconciliationService::PAID => ['Pembayaran Terkonfirmasi', "Midtrans mencatat order {$order->order_number} LUNAS. Tiket {$booking->booking_code} sudah diaktifkan.", 'success'],
+            \App\Services\Payment\MidtransReconciliationService::PENDING => ['Belum Dibayar', "Midtrans masih menunggu pembayaran order {$order->order_number}.", 'warning'],
+            \App\Services\Payment\MidtransReconciliationService::NOT_PAID => ['Tidak Ada Pembayaran', "Midtrans tidak mencatat pembayaran lunas untuk order {$order->order_number} (kedaluwarsa / dibatalkan / tidak ditemukan).", 'danger'],
+            default => ['Gagal Menghubungi Midtrans', 'Coba lagi beberapa saat, atau cek langsung di dashboard Midtrans.', 'danger'],
+        };
+
+        Notification::make()->title($title)->body($body)->color($color)->send();
+    }
+
     public function openCancelRefundModal(string $bookingId): void
     {
         // Hanya cancel_refund_padel — cancel_padel_booking itu izin customer membatalkan

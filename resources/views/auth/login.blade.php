@@ -154,7 +154,7 @@
                                 <div class="text-[9px] text-[#6B4E15] font-medium truncate">Display KDS</div>
                             </button>
 
-                            <button type="button" onclick="selectRole('admin@club61.com', 'password123', 'Admin Panel Filament (/admin)')" 
+                            <button type="button" onclick="selectRole('admin@club61.id', 'password123', 'Admin Panel Filament (/admin)')" 
                                     class="role-btn text-left p-2 transition-all duration-200 text-xs active:scale-95 group shadow-sm hover:shadow-md cursor-pointer"
                                     style="background: linear-gradient(145deg, #FDF9EE 0%, #EEDBB0 55%, #CF9E46 100%); border: 1.5px solid #BD923E; border-radius: 12px;">
                                 <div class="mb-0.5">

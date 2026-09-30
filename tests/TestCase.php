@@ -19,5 +19,8 @@ abstract class TestCase extends BaseTestCase
         parent::setUp();
 
         app()->setLocale('id');
+
+        // Test tidak boleh menembak API luar (Midtrans dsb.) — yang butuh wajib Http::fake().
+        \Illuminate\Support\Facades\Http::preventStrayRequests();
     }
 }

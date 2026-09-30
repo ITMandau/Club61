@@ -54,13 +54,7 @@ class MidtransDriver implements PaymentGatewayInterface
             ];
         }
 
-        $normalizedStatus = match ($transactionStatus) {
-            'capture' => ($fraudStatus === 'challenge') ? 'CHALLENGE' : 'PAID',
-            'settlement' => 'PAID',
-            'pending' => 'PENDING',
-            'deny', 'expire', 'cancel' => 'CANCELLED',
-            default => 'UNKNOWN',
-        };
+        $normalizedStatus = MidtransService::normalizeStatus($transactionStatus, $fraudStatus);
 
         return [
             'is_valid' => true,

@@ -238,7 +238,13 @@ class BookingSystem extends Page
 
         try {
             $staffUser = auth()->user() ?? \App\Models\User::role(['cashier', 'admin', 'super_admin'])->first();
-            $result = $service->checkIn($bookingId, $staffUser);
+            // checkIn() mencari berdasarkan booking_code / qr_code_hash, BUKAN id database —
+            // mengoper $bookingId langsung selalu berakhir "Tiket tidak ditemukan".
+            $bookingCode = \App\Models\Padel\PadelBooking::whereKey($bookingId)->value('booking_code');
+            if (! $bookingCode) {
+                throw new \RuntimeException('Tiket tidak ditemukan.');
+            }
+            $result = $service->checkIn($bookingCode, $staffUser);
 
             Notification::make()
                 ->title('Check-In Berhasil!')

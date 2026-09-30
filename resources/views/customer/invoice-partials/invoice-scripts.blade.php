@@ -556,7 +556,9 @@
                 this.pollingInterval = setInterval(async () => {
                     this.pollCount++;
                     try {
-                        const res = await fetch(`/api/v1/padel/bookings/${id}/ticket`);
+                        // verify_payment=1: server ikut menanyakan status ke Midtrans, jadi tetap
+                        // berubah lunas walau webhook Midtrans tidak sampai.
+                        const res = await fetch(`/api/v1/padel/bookings/${id}/ticket?verify_payment=1`);
                         const json = await res.json();
                         if (json.success && json.data) {
                             this.ticket = json.data;

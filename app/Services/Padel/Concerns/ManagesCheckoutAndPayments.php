@@ -552,6 +552,10 @@ trait ManagesCheckoutAndPayments
                     'payment_method' => $paymentMethod,
                     'payload_log' => array_merge($pendingSupplementalPayment->payload_log ?? [], [
                         'midtrans_order_id' => $suffixedOrderId,
+                        'midtrans_order_ids' => array_values(array_unique(array_merge(
+                            (array) ($pendingSupplementalPayment->payload_log['midtrans_order_ids'] ?? []),
+                            [$suffixedOrderId]
+                        ))),
                         'snap_token' => $paymentResult['snap_token'] ?? null,
                         'gateway_fee' => $newGatewayFee,
                     ]),
@@ -677,6 +681,17 @@ trait ManagesCheckoutAndPayments
 
             // Petakan suffixed order id ke bookings di Cache selama 24 jam
             Cache::put("order_bookings:{$suffixedOrderId}", $bookings->pluck('id')->toArray(), 86400);
+
+            // Simpan PERMANEN order_id yang dikirim ke Midtrans — cache di atas hilang dalam 24 jam,
+            // padahal rekonsiliasi (MidtransReconciliationService) butuh id persis ini untuk
+            // menanyakan status pembayaran kalau webhook-nya tidak pernah sampai.
+            $pendingPayment = Payment::where('order_id', $order->id)->where('status', 'PENDING')->latest()->first();
+            if ($pendingPayment) {
+                $log = is_array($pendingPayment->payload_log) ? $pendingPayment->payload_log : [];
+                $log['midtrans_order_id'] = $suffixedOrderId;
+                $log['midtrans_order_ids'] = array_values(array_unique(array_merge((array) ($log['midtrans_order_ids'] ?? []), [$suffixedOrderId])));
+                $pendingPayment->update(['payload_log' => $log]);
+            }
 
             return [
                 'success' => true,

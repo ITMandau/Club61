@@ -335,6 +335,25 @@
                             <td style="text-align: center; white-space: nowrap;">
                                 <div
                                     style="display: inline-flex; gap: 0.4rem; align-items: center; justify-content: center;">
+                                    @if ($this->canSettle && $b->status === 'PENDING_PAYMENT' && $b->order_id)
+                                        <button type="button" wire:click="checkMidtransPayment('{{ $b->id }}')"
+                                            wire:loading.attr="disabled" title="Cek Status Pembayaran ke Midtrans"
+                                            class="adm-btn-icon" style="color: #1D4ED8;">
+                                            <span wire:loading.remove wire:target="checkMidtransPayment('{{ $b->id }}')">
+                                                <svg style="width: 15px; height: 15px;" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                                        d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                                </svg>
+                                            </span>
+                                            <span wire:loading wire:target="checkMidtransPayment('{{ $b->id }}')">
+                                                <svg style="width: 13px; height: 13px; animation: spin 1s linear infinite;" fill="none" viewBox="0 0 24 24">
+                                                    <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" style="opacity: 0.25;"></circle>
+                                                    <path fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" style="opacity: 0.75;"></path>
+                                                </svg>
+                                            </span>
+                                        </button>
+                                    @endif
+
                                     @if ($this->canSettle && (($b->status === 'LOCKED' && $pendingAmount > 0) || $b->status === 'PENDING_PAYMENT'))
                                         <button type="button" wire:click="openSettleModal('{{ $b->id }}')"
                                             wire:loading.attr="disabled"
@@ -1003,7 +1022,8 @@
                         </label>
                         <div style="display: flex; gap: 0.5rem;">
                             <input type="text" wire:model="checkInQuery" wire:keydown.enter="executeCheckIn"
-                                placeholder="Scan QR atau ketik BK-PAD-XXXX..." autofocus
+                                placeholder="Scan QR atau ketik BK-PAD-XXXX..." autocomplete="off"
+                                x-init="$nextTick(() => $el.focus())"
                                 style="flex: 1; border: 1.5px solid #D4AF37; border-radius: 12px; padding: 0.65rem 0.85rem; font-size: 0.875rem; font-family: var(--font-mono, monospace); font-weight: 700; background: #FFFDF5; outline: none;">
                             <button type="button" wire:click="executeCheckIn" wire:loading.attr="disabled"
                                 class="adm-btn-sec"

@@ -162,6 +162,76 @@ class MidtransService
     }
 
     /**
+     * Tanya status transaksi langsung ke Midtrans (Core API GET /v2/{order_id}/status) — jalur
+     * cadangan kalau webhook tidak pernah sampai (URL notifikasi belum didaftarkan, server down,
+     * timeout). Mengembalikan:
+     *   - array respons Midtrans kalau transaksinya ada,
+     *   - ['status_code' => '404'] kalau Midtrans tidak kenal order_id tersebut,
+     *   - null kalau gagal menghubungi Midtrans (jangan diartikan "belum bayar").
+     */
+    /** Tanpa server key = mode mock/lokal; tidak ada transaksi Midtrans sungguhan yang bisa dicek. */
+    public function isConfigured(): bool
+    {
+        return ! empty($this->serverKey);
+    }
+
+    public function getTransactionStatus(string $orderId): ?array
+    {
+        if (empty($this->serverKey)) {
+            return null;
+        }
+
+        $url = ($this->isProduction ? 'https://api.midtrans.com/v2/' : 'https://api.sandbox.midtrans.com/v2/')
+            .rawurlencode($orderId).'/status';
+
+        try {
+            $response = Http::withBasicAuth($this->serverKey, '')
+                ->acceptJson()
+                ->timeout(5)
+                ->get($url);
+        } catch (\Throwable $e) {
+            Log::warning("Midtrans status check gagal ({$orderId}): ".$e->getMessage());
+
+            return null;
+        }
+
+        $data = $response->json();
+
+        if (! is_array($data)) {
+            Log::warning("Midtrans status check: respons tidak valid ({$orderId}) HTTP {$response->status()}");
+
+            return null;
+        }
+
+        if ((string) ($data['status_code'] ?? '') === '404' || $response->status() === 404) {
+            return ['status_code' => '404'];
+        }
+
+        if (! $response->successful() || empty($data['transaction_status'])) {
+            Log::warning("Midtrans status check: HTTP {$response->status()} ({$orderId})", ['body' => $data]);
+
+            return null;
+        }
+
+        return $data;
+    }
+
+    /**
+     * Normalisasi status Midtrans → status internal. Dipakai webhook DAN status check supaya
+     * aturan "kapan dianggap lunas" hanya ada di satu tempat.
+     */
+    public static function normalizeStatus(string $transactionStatus, ?string $fraudStatus = null): string
+    {
+        return match ($transactionStatus) {
+            'capture' => ($fraudStatus === 'challenge') ? 'CHALLENGE' : 'PAID',
+            'settlement' => 'PAID',
+            'pending' => 'PENDING',
+            'deny', 'expire', 'cancel' => 'CANCELLED',
+            default => 'UNKNOWN',
+        };
+    }
+
+    /**
      * Verifikasi Signature Anti-Spoofing (SHA512 + hash_equals).
      *
      * Rumus: SHA512(order_id + status_code + gross_amount + server_key)

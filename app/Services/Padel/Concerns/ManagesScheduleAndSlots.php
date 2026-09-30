@@ -452,6 +452,47 @@ trait ManagesScheduleAndSlots
      * Garbage Collection: Merilis semua slot LOCKED yang ditinggal > 10 menit
      * atau PENDING_PAYMENT / PENDING yang tidak diselesaikan dalam 15 menit.
      */
+    /**
+     * Sebelum booking PENDING_PAYMENT dihanguskan, tanya dulu ke Midtrans. Tanpa ini, customer
+     * yang sudah bayar tapi webhook-nya tidak sampai akan kehilangan booking (slot dilepas ke
+     * orang lain) padahal uangnya sudah masuk.
+     *   - Lunas di Midtrans      → dilunasi sekarang, TIDAK dihanguskan.
+     *   - Masih pending / Midtrans tidak bisa dihubungi → tunda dulu, maksimal 60 menit
+     *     (setelah itu transaksi Snap 15 menit pasti sudah kedaluwarsa di Midtrans).
+     *   - Expire / cancel / tidak dikenal Midtrans → dihanguskan seperti biasa.
+     */
+    private function withoutBookingsPaidAtGateway(\Illuminate\Support\Collection $bookings): \Illuminate\Support\Collection
+    {
+        $reconciler = app(\App\Services\Payment\MidtransReconciliationService::class);
+        $hardDeadline = now()->subMinutes(60);
+        $decisions = [];
+
+        return $bookings->filter(function (PadelBooking $booking) use ($reconciler, $hardDeadline, &$decisions) {
+            if (! $booking->order_id) {
+                return true;
+            }
+
+            if (! array_key_exists($booking->order_id, $decisions)) {
+                $order = \App\Models\Pos\Order::find($booking->order_id);
+                $hasGatewayPayment = $order && \App\Models\Pos\Payment::where('order_id', $order->id)
+                    ->where('payment_gateway', 'MIDTRANS')
+                    ->exists();
+
+                // Cache 60 detik: fungsi ini ikut terpanggil dari endpoint publik (jadwal/hold slot).
+                $decisions[$booking->order_id] = $hasGatewayPayment
+                    ? $reconciler->reconcileOrder($order, cacheSeconds: 60)
+                    : \App\Services\Payment\MidtransReconciliationService::NOT_PAID;
+            }
+
+            return match ($decisions[$booking->order_id]) {
+                \App\Services\Payment\MidtransReconciliationService::PAID => false,
+                \App\Services\Payment\MidtransReconciliationService::PENDING,
+                \App\Services\Payment\MidtransReconciliationService::ERROR => $booking->created_at->lt($hardDeadline),
+                default => true,
+            };
+        })->values();
+    }
+
     public function releaseExpiredLocks(): int
     {
         $holdThreshold = now()->subSeconds(self::HOLD_DURATION_SECONDS); // 10 menit
@@ -482,6 +523,8 @@ trait ManagesScheduleAndSlots
                     });
             })
             ->get();
+
+        $expiredPendingPayments = $this->withoutBookingsPaidAtGateway($expiredPendingPayments);
 
         $expiredBookings = $expiredHolds->merge($expiredPendingPayments);
 

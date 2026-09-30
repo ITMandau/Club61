@@ -248,7 +248,20 @@ class PadelBookingController extends Controller
      */
     public function ticket(string $id, Request $request): JsonResponse
     {
+        // getTicket() sekaligus memastikan tiket ini milik user yang login.
         $booking = $this->bookingService->getTicket($id, $request->user());
+
+        // Polling halaman invoice: kalau masih menunggu bayar, tanya langsung ke Midtrans juga —
+        // jadi status tetap berubah jadi lunas walau webhook-nya tidak pernah sampai.
+        if ($request->boolean('verify_payment')
+            && in_array($booking->status, ['PENDING_PAYMENT', 'PENDING'], true)
+            && $booking->order_id) {
+            $order = \App\Models\Pos\Order::find($booking->order_id);
+
+            if ($order && app(\App\Services\Payment\MidtransReconciliationService::class)->reconcileOrder($order, cacheSeconds: 10) === \App\Services\Payment\MidtransReconciliationService::PAID) {
+                $booking = $this->bookingService->getTicket($id, $request->user());
+            }
+        }
 
         return response()->json([
             'success' => true,
