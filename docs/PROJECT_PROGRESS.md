@@ -40,7 +40,7 @@ Dokumen pelacak progres (Single Source of Truth). Status di bawah ini hasil audi
 | 19 | Realtime (Laravel Reverb) | Belum terpasang, masih polling | 0% |
 | 20 | Halaman Admin Pendukung (Dashboard, Club, Karyawan, Turnamen, Marketing) | DUMMY semua | 0% |
 
-**Automated test suite:** 450 passed (1783 assertions).
+**Automated test suite:** 506 passed (2052 assertions) — termasuk regresi audit "bom waktu" 1 Okt 2026 (`tests/Feature/Padel/PaymentTimeBombRegressionTest.php`).
 
 ---
 

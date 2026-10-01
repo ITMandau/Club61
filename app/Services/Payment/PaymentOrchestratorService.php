@@ -39,31 +39,64 @@ class PaymentOrchestratorService
             if ($isPosGateway) {
                 $counter = $paymentDetails['counter'] ?? 'PADEL_FRONTDESK';
                 $activeShift = PosCashierShift::getActiveShift($counter);
-                $userCandidate = auth()->user() ?? ($paymentDetails['user'] ?? ($paymentDetails['cashier_user'] ?? ($paymentDetails['admin_user'] ?? null)));
-                $isSuperAdmin = $userCandidate && method_exists($userCandidate, 'hasRole') && $userCandidate->hasRole('super_admin');
 
-                if (! $activeShift && ! $isSuperAdmin) {
-                    throw new \Exception("Tidak ada shift kasir yang aktif untuk loket [{$counter}]. Silakan buka shift terlebih dahulu.");
+                // Berlaku untuk SEMUA user termasuk super_admin: uang yang masuk tanpa shift tidak pernah
+                // ikut rekap setoran tutup shift, jadi tidak ada yang bisa mencocokkan apakah uangnya ada.
+                if (! $activeShift) {
+                    throw new \Symfony\Component\HttpKernel\Exception\HttpException(422, "Tidak ada shift kasir yang aktif untuk loket [{$counter}]. Silakan buka shift terlebih dahulu.");
                 }
 
-                $posShiftId = $activeShift?->id;
+                $posShiftId = $activeShift->id;
             }
 
             // 1. Transaction-Level Idempotency Guard
+            // lockForUpdate = locking read: selalu membaca versi TERBARU yang sudah commit. Tanpa ini, di MySQL
+            // REPEATABLE READ pembacaan biasa memakai snapshot awal transaksi pemanggil — webhook Midtrans yang
+            // commit di sela-sela tidak terlihat dan pembayarannya bisa tertimpa pelunasan kasir.
             $payment = null;
             if ($transactionId) {
-                $payment = Payment::where('transaction_id', $transactionId)->first();
+                $payment = Payment::where('transaction_id', $transactionId)->lockForUpdate()->first();
+            }
+
+            // Notifikasi Midtrans membawa order_id sesi Snap ("ORD-x_DELTA_<ts>"), bukan transaction_id tagihan.
+            // Cocokkan ke tagihan PEMILIK sesi itu — dulu jatuh ke "PENDING terbaru" sehingga pembayaran tagihan
+            // booking A bisa tercatat sebagai pelunasan tagihan booking B dalam order yang sama.
+            if (! $payment && $transactionId) {
+                $payment = Payment::where('order_id', $order->id)
+                    ->lockForUpdate()
+                    ->get()
+                    ->first(fn (Payment $p) => self::ownsGatewayId($p, $transactionId));
+            }
+
+            if (! $payment && ! empty($paymentDetails['require_pending_payment'])) {
+                throw new \Symfony\Component\HttpKernel\Exception\HttpException(409, 'Tagihan yang akan dilunasi tidak ditemukan. Muat ulang halaman.');
             }
 
             if (! $payment) {
                 $payment = Payment::where('order_id', $order->id)
                     ->where('status', 'PENDING')
+                    ->lockForUpdate()
                     ->latest()
                     ->first();
             }
 
             // Jika transaksi spesifik ini sudah berstatus SUCCESS, berarti notifikasi/request ini duplikat
             if ($payment && $payment->status === 'SUCCESS') {
+                if (! empty($paymentDetails['require_pending_payment'])) {
+                    // Pelunasan kasir: JANGAN diam-diam "berhasil" — kasir akan menggesek EDC padahal tagihannya
+                    // barusan dilunasi jalur lain (biasanya customer bayar online).
+                    throw new \Symfony\Component\HttpKernel\Exception\HttpException(409, 'Tagihan ini SUDAH LUNAS (kemungkinan baru saja dibayar customer via Midtrans). JANGAN terima pembayaran lagi.');
+                }
+
+                return;
+            }
+
+            // Uang masuk untuk tagihan yang SUDAH DITUTUP (booking dibatalkan / hangus no-show) atau untuk booking
+            // yang sudah tidak aktif: catat uangnya + refund PENDING, jangan aktifkan apa pun. Dulu uang ini diam-diam
+            // jadi omzet karena grand_total order masih menghitung tagihan selisihnya.
+            if ($payment && $this->isPaymentForInactiveTarget($order, $payment)) {
+                $this->recordPaymentForClosedBill($order, $payment, $paymentDetails, $posShiftId);
+
                 return;
             }
 
@@ -215,8 +248,9 @@ class PaymentOrchestratorService
                 $order->update(['payment_status' => 'PARTIALLY_PAID']);
             }
 
-            // 4. Atomic decrement kuota voucher jika terpasang
-            if ($order->voucher_code) {
+            // 4. Atomic decrement kuota voucher jika terpasang — HANYA pada pembayaran pertama order. Pelunasan
+            // selisih reschedule / pembayaran tambahan dulu ikut memotong kuota voucher lagi.
+            if ($order->voucher_code && $paidBefore <= 0) {
                 Voucher::where('code', $order->voucher_code)
                     ->where(function ($q) {
                         $q->whereNull('quota')->orWhere('quota', '>', 0);
@@ -257,6 +291,78 @@ class PaymentOrchestratorService
         });
     }
 
+    /** Tagihan ini pemilik order_id gateway tersebut (transaction_id-nya, atau salah satu sesi Snap-nya)? */
+    public static function ownsGatewayId(Payment $payment, string $gatewayId): bool
+    {
+        if ($payment->transaction_id === $gatewayId) {
+            return true;
+        }
+
+        $log = is_array($payment->payload_log) ? $payment->payload_log : [];
+
+        return ($log['midtrans_order_id'] ?? null) === $gatewayId
+            || in_array($gatewayId, (array) ($log['midtrans_order_ids'] ?? []), true);
+    }
+
+    /**
+     * Tagihan sudah ditutup (FAILED: booking dibatalkan/hangus), atau tagihan selisih reschedule yang booking-nya
+     * sudah tidak aktif lagi.
+     */
+    private function isPaymentForInactiveTarget(Order $order, Payment $payment): bool
+    {
+        $inactive = ['CANCELLED', 'REFUNDED', 'REFUND_PENDING', 'EXPIRED'];
+        $log = is_array($payment->payload_log) ? $payment->payload_log : [];
+
+        if ($payment->status === 'FAILED' && in_array($log['closed_by'] ?? null, ['BOOKING_CANCELLED_BY_ADMIN', 'BOOKING_EXPIRED_NO_SHOW'], true)) {
+            return true;
+        }
+
+        if (($log['type'] ?? null) === 'RESCHEDULE_PRICE_DELTA' && ! empty($log['booking_id'])) {
+            return in_array(\App\Models\Padel\PadelBooking::whereKey($log['booking_id'])->value('status'), $inactive, true);
+        }
+
+        // Tagihan level order (checkout awal): hanya kalau SEMUA booking padel order ini sudah tidak aktif.
+        $statuses = \App\Models\Padel\PadelBooking::where('order_id', $order->id)->pluck('status');
+
+        return $statuses->isNotEmpty() && $statuses->every(fn ($s) => in_array($s, $inactive, true));
+    }
+
+    private function recordPaymentForClosedBill(Order $order, Payment $payment, array $details, ?string $posShiftId): void
+    {
+        $amount = isset($details['amount']) ? (float) $details['amount'] : (float) $payment->amount;
+        $payloadLog = $details['payload_log'] ?? null;
+        $log = is_array($payment->payload_log) ? $payment->payload_log : [];
+
+        $payment->update(array_filter([
+            'payment_gateway' => strtoupper($details['payment_gateway'] ?? $payment->payment_gateway),
+            'transaction_id' => $details['transaction_id'] ?? $payment->transaction_id,
+            'payment_method' => strtoupper($details['payment_method'] ?? $payment->payment_method),
+            'amount' => $amount,
+            'status' => 'SUCCESS',
+            'pos_shift_id' => $posShiftId,
+            'payload_log' => array_merge($log, is_array($payloadLog) ? $payloadLog : [], ['received_after_bill_closed' => true]),
+        ], fn ($v) => $v !== null));
+
+        if ($posShiftId && ! $order->pos_shift_id) {
+            $order->update(['pos_shift_id' => $posShiftId]);
+        }
+
+        // Status finansial mengikuti fakta uang masuk (refund dicatat terpisah).
+        $totalPaid = (float) $order->payments()->where('status', 'SUCCESS')->sum('amount');
+        $order->update(['payment_status' => $order->payment_status === 'CANCELLED' || $totalPaid >= (float) $order->grand_total - 1 ? 'PAID' : 'PARTIALLY_PAID']);
+
+        Refund::create([
+            'order_id' => $order->id,
+            'payment_id' => $payment->id,
+            'refund_amount' => $amount,
+            'reason' => 'Uang masuk untuk tagihan yang sudah ditutup (booking dibatalkan / hangus) — kembalikan ke customer.',
+            'status' => 'PENDING',
+        ]);
+
+        Log::warning("Pembayaran masuk untuk tagihan tertutup [{$payment->transaction_id}] order [{$order->order_number}] — refund PENDING dibuat.");
+        $this->logPayment($order, $payment, $details, lateOnCancelledOrder: true);
+    }
+
     private const ITEM_TYPE_LABELS = [
         'FNB' => 'F&B',
         'PADEL' => 'Padel',
@@ -270,11 +376,23 @@ class PaymentOrchestratorService
     private const COUNTER_LABELS = [
         'PADEL_FRONTDESK' => 'Frontdesk Padel',
         'FNB_COUNTER' => 'Kasir F&B',
-        'MEMBERSHIP_DESK' => 'Meja Membership',
         'ONLINE_PORTAL' => 'Portal Online',
     ];
 
     private function logPayment(Order $order, Payment $payment, array $details, bool $lateOnCancelledOrder = false): void
+    {
+        // Menyusun isi log (query tambahan, format string) tidak boleh menggagalkan pelunasan — error di sini
+        // akan me-rollback pembayaran/webhook. Error database tetap dilempar (transaksinya memang sudah rusak).
+        try {
+            $this->writePaymentLog($order, $payment, $details, $lateOnCancelledOrder);
+        } catch (\Illuminate\Database\QueryException $e) {
+            throw $e;
+        } catch (\Throwable $e) {
+            report($e);
+        }
+    }
+
+    private function writePaymentLog(Order $order, Payment $payment, array $details, bool $lateOnCancelledOrder): void
     {
         $order->loadMissing(['items', 'user']);
         $payload = is_array($details['payload_log'] ?? null) ? $details['payload_log'] : [];

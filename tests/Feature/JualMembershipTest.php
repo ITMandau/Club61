@@ -32,7 +32,7 @@ class JualMembershipTest extends TestCase
         \App\Services\Permission\Club61PermissionMatrix::syncAllPermissions('web');
 
         $this->cashier = User::factory()->cashier()->create(['is_active' => true]);
-        $this->cashier->givePermissionTo(['View:JualMembership']);
+        $this->cashier->givePermissionTo(['View:JualMembership', 'sell_membership']);
 
         $this->plan = MembershipPlan::create([
             'code' => 'MBR-TEST-SILVER',
@@ -50,10 +50,10 @@ class JualMembershipTest extends TestCase
             'discount_percent' => 20,
         ]);
 
-        // Loket MEMBERSHIP_DESK butuh shift aktif juga (dicek PaymentOrchestratorService::markOrderAsPaid).
+        // Penjualan membership masuk shift meja frontdesk (PADEL_FRONTDESK) — wajib terbuka untuk semua user.
         PosCashierShift::create([
-            'shift_number' => 'SFT-MBR-' . now()->format('Ymd') . '-0001',
-            'counter' => 'MEMBERSHIP_DESK',
+            'shift_number' => 'SFT-PADEL-' . now()->format('Ymd') . '-0001',
+            'counter' => 'PADEL_FRONTDESK',
             'status' => 'OPEN',
             'opened_by_id' => $this->cashier->id,
             'opened_at' => now(),
@@ -151,7 +151,7 @@ class JualMembershipTest extends TestCase
             ->set('walkInName', 'Pembeli QRIS Lunas')
             ->set('walkInPhone', '081211114444')
             ->set('paymentMethod', 'QRIS')
-            ->set('qrisProvider', 'GOPAY')
+            ->set('qrisProvider', 'GOPAY_QRIS')
             ->set('qrisRrn', '998877665544')
             ->set('qrisSenderName', 'Budi Santoso')
             ->call('submitSale');
@@ -161,8 +161,8 @@ class JualMembershipTest extends TestCase
         $this->assertEquals('PAID', $order->payment_status);
 
         $payment = Payment::where('order_id', $order->id)->first();
-        $this->assertEquals('GOPAY', $payment->payload_log['qris_details']['qris_provider']);
-        $this->assertEquals('998877665544', $payment->payload_log['qris_details']['qris_rrn']);
+        $this->assertEquals('GOPAY_QRIS', $payment->payload_log['qris_details']['provider']);
+        $this->assertEquals('998877665544', $payment->payload_log['qris_details']['rrn']);
 
         // Regresi: penjualan membership TIDAK boleh nyasar ke order_type 'WALK_IN' — kalau ikut,
         // omzet & daftar "Transaksi Walk-In Terakhir" di halaman Walk-In Booking (BookOfflineCourt)

@@ -40,6 +40,9 @@ trait ManagesRescheduleAndCashier
         }
 
         $court = PadelCourt::findOrFail($targetCourtId);
+        if (! $court->is_active) {
+            throw new HttpException(422, "Lapangan {$court->name} sedang tidak aktif.");
+        }
         $dateStr = $parsedDate->format('Y-m-d');
         $isWeekend = $parsedDate->isWeekend();
 
@@ -61,7 +64,7 @@ trait ManagesRescheduleAndCashier
         $bulkSlotLocks = Cache::many($allSlotCacheKeys);
 
         $availableSlots = [];
-        $timeWindow = $this->rescheduleMembershipTimeWindow($booking);
+        $benefitContext = $this->rescheduleBenefitContext($booking);
         $nowLocal = Carbon::now($timezone);
         $isToday = $dateStr === $nowLocal->format('Y-m-d');
 
@@ -107,10 +110,7 @@ trait ManagesRescheduleAndCashier
             }
 
             if ($isAvailable) {
-                $quote = $this->quoteReschedule($booking, $court, $slotStart, $slotEnd, $timeWindow);
-                if ($quote['blocked_reason']) {
-                    continue; // di luar jam berlaku paket membership — benefit tidak bisa ikut pindah
-                }
+                $quote = $this->quoteReschedule($booking, $court, $slotStart, $slotEnd, $benefitContext);
 
                 $startStr = sprintf('%02d:00', $startHour);
                 $endStr = sprintf('%02d:00', $startHour + $durationHours);
@@ -128,6 +128,7 @@ trait ManagesRescheduleAndCashier
                     'admin_fee_delta' => $quote['admin_fee'],
                     'total_delta' => $quote['total_charge'],
                     'forfeited' => $quote['forfeited'],
+                    'benefit_dropped_reason' => $quote['benefit_dropped_reason'],
                     'is_prime' => $hasPrime,
                 ];
             }
@@ -139,7 +140,7 @@ trait ManagesRescheduleAndCashier
             'original_court_fee' => (float) $booking->court_fee,
             'target_court_name' => $court->name,
             'target_date' => $dateStr,
-            'membership_time_window' => $timeWindow,
+            'membership_time_window' => $benefitContext['time_window'],
             'slots' => $availableSlots,
         ];
     }
@@ -161,8 +162,10 @@ trait ManagesRescheduleAndCashier
      *
      * @param  array{start: string, end: string}|null  $timeWindow  jendela jam paket member (null = bebas)
      */
-    public function quoteReschedule(PadelBooking $booking, PadelCourt $court, Carbon $start, Carbon $end, ?array $timeWindow = null): array
+    public function quoteReschedule(PadelBooking $booking, PadelCourt $court, Carbon $start, Carbon $end, ?array $benefitContext = null): array
     {
+        $benefitContext ??= $this->rescheduleBenefitContext($booking);
+
         $isWeekend = $start->isWeekend();
         $grossNew = 0.0;
         for ($cursor = $start->copy(); $cursor->lt($end); $cursor->addHour()) {
@@ -178,17 +181,24 @@ trait ManagesRescheduleAndCashier
         $memberShare = $grossOld > 0 ? min(1.0, $memberDiscount / $grossOld) : 0.0;
         $sponsorShare = $grossOld > 0 ? min(1.0 - $memberShare, $sponsorDiscount / $grossOld) : 0.0;
 
+        // Benefit hanya ikut pindah kalau MASIH BERLAKU di jadwal baru. Kalau tidak (membership/voucher sudah
+        // habis di tanggal itu, atau di luar jam paket), benefitnya gugur: jadwal baru dihitung harga normal dan
+        // admin melihat peringatannya dulu (keputusan PM, 1 Okt 2026). Pindah ke tanggal yang masih berlaku =
+        // benefit tetap penuh.
+        $dropReasons = [];
+        if ($memberShare > 0 && ($reason = $this->memberBenefitInvalidReason($benefitContext, $start, $end))) {
+            $memberShare = 0.0;
+            $dropReasons[] = $reason;
+        }
+        if ($sponsorShare > 0 && ($reason = $this->sponsorBenefitInvalidReason($benefitContext, $start))) {
+            $sponsorShare = 0.0;
+            $dropReasons[] = $reason;
+        }
+
         $memberDiscountNew = round($grossNew * $memberShare, 2);
         $sponsorDiscountNew = round($grossNew * $sponsorShare, 2);
         $netNew = max(0.0, round($grossNew - $memberDiscountNew - $sponsorDiscountNew, 2));
         $courtDelta = round($netNew - $paidCourt, 2);
-
-        $blockedReason = null;
-        if ($memberDiscount > 0 && $timeWindow !== null) {
-            if ($start->format('H:i:s') < $timeWindow['start'] || $end->format('H:i:s') > $timeWindow['end']) {
-                $blockedReason = "Jadwal baru di luar jam berlaku paket membership ({$timeWindow['start']} - {$timeWindow['end']}), benefit member tidak bisa ikut dipindah ke jam ini.";
-            }
-        }
 
         $tax = 0.0;
         $adminFee = 0.0;
@@ -216,7 +226,9 @@ trait ManagesRescheduleAndCashier
             'admin_fee' => $adminFee,
             'total_charge' => $totalCharge,
             'forfeited' => $courtDelta < 0 ? abs($courtDelta) : 0.0,
-            'blocked_reason' => $blockedReason,
+            'member_benefit_dropped' => $memberDiscount > 0 && $memberShare <= 0,
+            'sponsor_benefit_dropped' => $sponsorDiscount > 0 && $sponsorShare <= 0,
+            'benefit_dropped_reason' => $dropReasons ? implode(' ', $dropReasons) : null,
         ];
     }
 
@@ -226,18 +238,67 @@ trait ManagesRescheduleAndCashier
         return $booking->order?->order_type === 'WALK_IN' ? 'POS_WALKIN' : 'ONLINE';
     }
 
-    /** @return array{start: string, end: string}|null */
-    protected function rescheduleMembershipTimeWindow(PadelBooking $booking): ?array
+    /**
+     * Data masa berlaku benefit booking ini (diambil sekali, dipakai untuk semua slot yang dihitung).
+     *
+     * @return array{time_window: array{start: string, end: string}|null, member_end_date: ?string, member_active: bool, sponsor_expires_at: ?Carbon}
+     */
+    protected function rescheduleBenefitContext(PadelBooking $booking): array
     {
-        if (! $booking->membership_balance_id || (float) $booking->member_discount_court <= 0) {
-            return null;
+        $context = ['time_window' => null, 'member_end_date' => null, 'member_active' => true, 'sponsor_expires_at' => null];
+
+        if ($booking->membership_balance_id && (float) $booking->member_discount_court > 0) {
+            $balance = \App\Models\Membership\UserMembershipBalance::with('membership')->find($booking->membership_balance_id);
+            if ($balance?->time_window_start && $balance->time_window_end) {
+                $context['time_window'] = ['start' => (string) $balance->time_window_start, 'end' => (string) $balance->time_window_end];
+            }
+            $membership = $balance?->membership;
+            $context['member_active'] = $membership !== null && $membership->status === 'ACTIVE';
+            $context['member_end_date'] = $membership?->end_date?->format('Y-m-d');
         }
 
-        $balance = \App\Models\Membership\UserMembershipBalance::find($booking->membership_balance_id);
+        if ($booking->sponsor_member_voucher_id && (float) $booking->sponsor_discount_court > 0) {
+            $context['sponsor_expires_at'] = \App\Models\Sponsor\SponsorMemberVoucher::whereKey($booking->sponsor_member_voucher_id)->first()?->expires_at;
+        }
 
-        return $balance && $balance->time_window_start && $balance->time_window_end
-            ? ['start' => (string) $balance->time_window_start, 'end' => (string) $balance->time_window_end]
-            : null;
+        return $context;
+    }
+
+    protected function memberBenefitInvalidReason(array $context, Carbon $start, Carbon $end): ?string
+    {
+        if (! $context['member_active']) {
+            return 'Membership customer sudah tidak aktif, benefit member gugur — jadwal baru dihitung harga normal.';
+        }
+
+        if ($context['member_end_date'] && $start->format('Y-m-d') > $context['member_end_date']) {
+            return 'Membership customer berakhir '.Carbon::parse($context['member_end_date'])->translatedFormat('d M Y')
+                .', benefit member gugur di tanggal ini — jadwal baru dihitung harga normal.';
+        }
+
+        if ($window = $context['time_window']) {
+            // Menit-dalam-hari; jam selesai 00:00 hari berikutnya = 24:00 (dulu 23:00-24:00 lolos dari cek jam paket).
+            $toMinutes = fn (string $hms) => ((int) substr($hms, 0, 2)) * 60 + (int) substr($hms, 3, 2);
+            $startMin = $start->hour * 60 + $start->minute;
+            $endMin = $end->isSameDay($start) ? $end->hour * 60 + $end->minute : 1440 + $end->hour * 60 + $end->minute;
+            $windowEnd = $toMinutes($window['end']) === 0 ? 1440 : $toMinutes($window['end']);
+
+            if ($startMin < $toMinutes($window['start']) || $endMin > $windowEnd) {
+                return 'Jadwal baru di luar jam berlaku paket membership ('.substr($window['start'], 0, 5).' - '.substr($window['end'], 0, 5)
+                    .'), benefit member gugur — jadwal baru dihitung harga normal.';
+            }
+        }
+
+        return null;
+    }
+
+    protected function sponsorBenefitInvalidReason(array $context, Carbon $start): ?string
+    {
+        $expiresAt = $context['sponsor_expires_at'];
+        if ($expiresAt && $start->gte($expiresAt)) {
+            return 'Voucher sponsor berakhir '.$expiresAt->translatedFormat('d M Y').', benefit sponsor gugur di tanggal ini — jadwal baru dihitung harga normal.';
+        }
+
+        return null;
     }
 
     /**
@@ -254,13 +315,22 @@ trait ManagesRescheduleAndCashier
         string $reason,
         User $adminUser,
         ?string $paymentMethod = 'QRIS',
-        bool $isDeltaPaid = true,
+        // Default false: uang hanya diterima di POS kasir. Pemanggil yang lupa mengisi flag ini tidak boleh
+        // diam-diam menagih selisih di luar layar kasir.
+        bool $isDeltaPaid = false,
         string $timezone = 'Asia/Jakarta',
         array $paymentProof = [],
+        string $deltaPaymentChannel = 'CASHIER',
     ): array {
         // 100% Cashless: pembayaran tunai tidak diperbolehkan sama sekali untuk pelunasan selisih reschedule.
         if ($paymentMethod && in_array(strtoupper($paymentMethod), ['CASH', 'TUNAI'])) {
             throw new HttpException(422, 'Pembayaran tunai (CASH) tidak diperbolehkan. Venue Club 61 beroperasi 100% Cashless.');
+        }
+
+        // Jam mulai datang dari Livewire (bisa direkayasa): hanya jam bulat "HH:00". Dulu "14:30" atau
+        // "10:00 +1 day" diterima → booking keluar grid / tanggal berbeda dari booking_date (lolos cek bentrok).
+        if (! preg_match('/^([01]\d|2[0-3]):00$/', $newStartTimeStr) || ! preg_match('/^\d{4}-\d{2}-\d{2}$/', $newDate)) {
+            throw new HttpException(422, 'Format tanggal/jam reschedule tidak valid. Pilih slot dari daftar.');
         }
 
         $parsedDate = Carbon::parse($newDate, $timezone)->startOfDay();
@@ -270,7 +340,7 @@ trait ManagesRescheduleAndCashier
 
         return DB::transaction(function () use (
             $bookingId, $newCourtId, $newStartTimeStr, $reason,
-            $adminUser, $paymentMethod, $isDeltaPaid, $timezone, $parsedDate, $paymentProof
+            $adminUser, $paymentMethod, $isDeltaPaid, $timezone, $parsedDate, $paymentProof, $deltaPaymentChannel
         ) {
             $booking = PadelBooking::with(['order', 'court'])->where('id', $bookingId)->lockForUpdate()->firstOrFail();
 
@@ -280,7 +350,7 @@ trait ManagesRescheduleAndCashier
             if ($booking->status !== 'PAID') {
                 $hasPendingDelta = $booking->status === 'LOCKED' && (int) $booking->reschedule_count > 0;
                 throw new HttpException(400, $hasPendingDelta
-                    ? 'Booking ini masih punya tagihan selisih reschedule yang belum lunas. Lunasi dulu (tombol Settle / customer bayar via invoice) sebelum dipindah lagi.'
+                    ? 'Booking ini masih punya tagihan selisih reschedule yang belum lunas. Lunasi dulu (POS Walk-In / customer bayar via invoice) sebelum dipindah lagi.'
                     : "Hanya booking yang sudah lunas yang bisa dipindah jadwalnya. Status saat ini: {$booking->status}.");
             }
 
@@ -296,11 +366,32 @@ trait ManagesRescheduleAndCashier
             $oldStart = $booking->start_time->copy();
             $oldEnd = $booking->end_time->copy();
 
+            // Booking beberapa jam berurutan TIDAK boleh dipecah ke jam berbeda. Data lama walk-in menyimpan tiap
+            // jam sebagai booking terpisah dalam satu order — booking yang bersambung langsung (lapangan sama,
+            // jam menempel) dengan booking lain di order yang sama tidak boleh dipindah sendirian.
+            if ($booking->order_id) {
+                $adjacent = PadelBooking::where('order_id', $booking->order_id)
+                    ->where('id', '!=', $booking->id)
+                    ->where('court_id', $booking->court_id)
+                    ->whereIn('status', ['PAID', 'LOCKED', 'CHECKED_IN'])
+                    ->where(fn ($q) => $q->where('end_time', $booking->start_time)->orWhere('start_time', $booking->end_time))
+                    ->first();
+                if ($adjacent) {
+                    throw new HttpException(422, "Booking ini satu rangkaian jam berurutan dengan {$adjacent->booking_code} ({$adjacent->start_time->format('H:i')}-{$adjacent->end_time->format('H:i')}). Jadwal yang dipesan berurutan tidak bisa dipecah ke jam berbeda.");
+                }
+            }
+
             $newCourt = PadelCourt::where('id', $newCourtId)->lockForUpdate()->firstOrFail();
+            if (! $newCourt->is_active) {
+                throw new HttpException(422, "Lapangan {$newCourt->name} sedang tidak aktif.");
+            }
             $dateStr = $parsedDate->format('Y-m-d');
 
             $newStartDt = Carbon::parse("{$dateStr} {$newStartTimeStr}", $timezone);
             $newEndDt = $newStartDt->copy()->addHours($durationHours);
+            if ($newStartDt->format('Y-m-d') !== $dateStr) {
+                throw new HttpException(422, 'Jam mulai harus berada di tanggal yang dipilih.');
+            }
 
             // Aturan jam lewat sama dengan grid booking (jam berjalan masih boleh).
             if ($newStartDt->copy()->startOfHour()->lt(Carbon::now($timezone)->startOfHour())) {
@@ -335,11 +426,7 @@ trait ManagesRescheduleAndCashier
 
             // Hitung selisih dengan rumus yang SAMA dengan preview di modal (benefit member/sponsor ikut pindah).
             $order = $this->ensureBookingOrder($booking);
-            $quote = $this->quoteReschedule($booking, $newCourt, $newStartDt, $newEndDt, $this->rescheduleMembershipTimeWindow($booking));
-
-            if ($quote['blocked_reason']) {
-                throw new HttpException(422, $quote['blocked_reason']);
-            }
+            $quote = $this->quoteReschedule($booking, $newCourt, $newStartDt, $newEndDt);
 
             // Cek kunci slot di cache dulu (hanya membaca) — bentrok slot dilaporkan sebelum validasi
             // pembayaran. Kunci milik jadwal lama booking ini sendiri tidak dihitung sebagai bentrok.
@@ -408,7 +495,33 @@ trait ManagesRescheduleAndCashier
                     'total_delta' => $quote['total_charge'],
                 ];
 
+                $dropBenefits = function () use ($booking, $quote, $adminUser) {
+                    // Benefit gugur di jadwal baru (customer bayar harga normal) → jam kuota / jam voucher yang dulu
+                    // terpakai booking ini dikembalikan. Tanpa ini customer bayar penuh DAN kehilangan kuotanya.
+                    if ($quote['member_benefit_dropped'] && $booking->membership_balance_id && (float) $booking->member_hours_consumed > 0) {
+                        app(\App\Services\Membership\MembershipBalanceService::class)->adjustQuota(
+                            balanceId: $booking->membership_balance_id,
+                            changeType: 'REVERSAL',
+                            quantity: (float) $booking->member_hours_consumed,
+                            notes: "Benefit gugur saat reschedule booking {$booking->booking_code} (jadwal baru di luar masa/jam berlaku) — dihitung harga normal",
+                            relatedType: PadelBooking::class,
+                            relatedId: $booking->id,
+                            performedBy: $adminUser->id
+                        );
+                        $booking->member_hours_consumed = 0.00;
+                    }
+                    if ($quote['sponsor_benefit_dropped'] && $booking->sponsor_member_voucher_id && (float) $booking->sponsor_hours_consumed > 0) {
+                        $voucher = \App\Models\Sponsor\SponsorMemberVoucher::whereKey($booking->sponsor_member_voucher_id)->lockForUpdate()->first();
+                        if ($voucher) {
+                            $voucher->hours_used = max(0, (float) $voucher->hours_used - (float) $booking->sponsor_hours_consumed);
+                            $voucher->save();
+                        }
+                        $booking->sponsor_hours_consumed = 0.00;
+                    }
+                };
+
                 if ($mustPay) {
+                    $dropBenefits();
                     // Kurang bayar: tarif & benefit mengikuti jadwal baru, tagihan selisih masuk ke order yang sama.
                     $booking->court_fee = $quote['net_new'];
                     $booking->member_discount_court = $quote['member_discount_new'];
@@ -448,8 +561,12 @@ trait ManagesRescheduleAndCashier
                             'amount' => $quote['total_charge'],
                             'payment_method' => 'MENUNGGU_PEMBAYARAN',
                             'status' => 'PENDING',
-                            'payload_log' => $deltaPayload,
+                            // Pilihan customer: ONLINE (bayar via Midtrans di invoice) / CASHIER (bayar di POS Walk-in saat datang).
+                            'payload_log' => $deltaPayload + ['preferred_channel' => strtoupper($deltaPaymentChannel) === 'ONLINE' ? 'ONLINE' : 'CASHIER'],
                         ]);
+
+                        // Order belum lunas lagi. Dulu tetap PAID → "Cek Midtrans" & laporan menganggapnya lunas.
+                        $this->recomputeOrderPaymentStatus($order);
                     }
                 } elseif ($quote['forfeited'] > 0) {
                     // Lebih bayar (jadwal baru lebih murah): kebijakan PM — selisih HANGUS, tidak dikembalikan.
@@ -457,6 +574,7 @@ trait ManagesRescheduleAndCashier
                     // nominal hangusnya dicatat terpisah agar transparan di invoice & laporan.
                     $booking->reschedule_forfeited_amount = $quote['forfeited'];
                 } else {
+                    $dropBenefits();
                     $booking->court_fee = $quote['net_new'];
                     $booking->member_discount_court = $quote['member_discount_new'];
                     if ($booking->sponsor_discount_court !== null || $quote['sponsor_discount_new'] > 0) {
@@ -486,7 +604,9 @@ trait ManagesRescheduleAndCashier
             $rupiah = fn (float $v) => \App\Services\Audit\ActivityLogger::rupiah($v);
             $outcome = match (true) {
                 $payNow => 'selisih '.$rupiah($quote['total_charge']).' dibayar di frontdesk ('.strtoupper((string) $paymentMethod).')',
-                $mustPay => 'tagihan selisih '.$rupiah($quote['total_charge']).' dikirim ke customer (QR ditahan)',
+                $mustPay => 'tagihan selisih '.$rupiah($quote['total_charge']).(strtoupper($deltaPaymentChannel) === 'ONLINE'
+                    ? ' dibayar customer via Midtrans (link di invoice)'
+                    : ' dibayar di kasir POS Walk-in saat datang').' — QR ditahan sampai lunas',
                 $quote['forfeited'] > 0 => 'jadwal lebih murah, selisih '.$rupiah($quote['forfeited']).' HANGUS',
                 default => 'tanpa selisih',
             };
@@ -505,6 +625,7 @@ trait ManagesRescheduleAndCashier
                     'selisih_tarif_lapangan' => $quote['court_delta'],
                     'total_tagihan_selisih' => $quote['total_charge'] ?: null,
                     'selisih_hangus' => $quote['forfeited'] ?: null,
+                    'benefit_gugur' => $quote['benefit_dropped_reason'],
                     'status_setelahnya' => $targetStatus,
                     'alasan' => $reason,
                 ], fn ($v) => $v !== null && $v !== ''),
@@ -523,6 +644,7 @@ trait ManagesRescheduleAndCashier
                 'delta' => $quote['court_delta'],
                 'total_charge' => $quote['total_charge'],
                 'forfeited' => $quote['forfeited'],
+                'benefit_dropped_reason' => $quote['benefit_dropped_reason'],
                 'is_locked' => $targetStatus === 'LOCKED',
             ];
         });
@@ -572,6 +694,9 @@ trait ManagesRescheduleAndCashier
             }
 
             $order = $this->ensureBookingOrder($booking);
+            // Kunci order SEBELUM membaca pembayaran apa pun — webhook Midtrans juga mengunci baris order ini,
+            // jadi pelunasan kasir dan webhook untuk order yang sama tidak bisa saling menimpa.
+            $order = \App\Models\Pos\Order::whereKey($order->id)->lockForUpdate()->firstOrFail();
 
             // Customer pernah membuka pembayaran Midtrans untuk tagihan ini? Tanya Midtrans DULU. Tanpa ini,
             // kasir bisa menerima uang lagi padahal customer sudah membayar online (terjadi: tagihan selisih
@@ -600,8 +725,10 @@ trait ManagesRescheduleAndCashier
                 }
             }
 
-            $pendingPayment = Payment::where('order_id', $order->id)->where('status', 'PENDING')->latest()->first();
-            $totalPaid = (float) Payment::where('order_id', $order->id)->where('status', 'SUCCESS')->sum('amount');
+            // Tagihan MILIK booking ini (bukan "PENDING terbaru" order), dibaca dengan locking read = versi terbaru.
+            $booking->setRelation('order', $order);
+            $pendingPayment = $this->pendingBillForBooking($booking, lock: true);
+            $totalPaid = (float) Payment::where('order_id', $order->id)->where('status', 'SUCCESS')->lockForUpdate()->sum('amount');
             $amountDue = $pendingPayment
                 ? (float) $pendingPayment->amount
                 : max(0.0, (float) ($order->grand_total ?: $booking->total_amount) - $totalPaid);
@@ -622,6 +749,10 @@ trait ManagesRescheduleAndCashier
                 'counter' => 'PADEL_FRONTDESK',
                 'payment_method' => strtoupper($paymentMethod),
                 'amount' => $amountDue,
+                // Lunasi tagihan yang PERSIS ini; kalau ternyata sudah lunas / hilang, gagal keras (409) supaya
+                // kasir tidak menggesek EDC untuk tagihan yang sudah dibayar.
+                'transaction_id' => $pendingPayment?->transaction_id,
+                'require_pending_payment' => $pendingPayment !== null,
                 'payload_log' => [
                     'settled_by' => $cashierUser->id,
                     'settled_by_name' => $cashierUser->name,
@@ -681,17 +812,25 @@ trait ManagesRescheduleAndCashier
             $newStatus = $refundAmount > 0 ? 'REFUNDED' : 'CANCELLED';
 
             if ($refundAmount > 0) {
+                $hadOrder = (bool) $booking->order_id;
                 $order = $this->ensureBookingOrder($booking);
+                $order = \App\Models\Pos\Order::whereKey($order->id)->lockForUpdate()->firstOrFail();
+                $booking->setRelation('order', $order);
 
-                // Batas refund = uang yang BENAR-BENAR sudah masuk dikurangi refund sebelumnya — bukan
-                // grand_total (yang ikut menghitung tagihan selisih reschedule yang belum dibayar).
-                $totalPaid = (float) Payment::where('order_id', $order->id)->where('status', 'SUCCESS')->sum('amount');
-                $alreadyRefunded = (float) Refund::where('order_id', $order->id)->whereIn('status', ['PENDING', 'APPROVED', 'PROCESSED'])->sum('refund_amount');
-                $maxRefund = $totalPaid > 0
-                    ? max(0.0, $totalPaid - $alreadyRefunded)
-                    : (float) ($order->grand_total ?: $booking->total_amount); // data lama tanpa catatan pembayaran
-                if ($refundAmount > $maxRefund) {
-                    throw new HttpException(422, 'Nominal refund (Rp ' . number_format($refundAmount, 0, ',', '.') . ') tidak boleh melebihi total pembayaran pesanan (Rp ' . number_format($maxRefund, 0, ',', '.') . ').');
+                $hasAnyPaymentRecord = Payment::where('order_id', $order->id)->exists();
+                // Data legacy: booking PAID dari sebelum ada tabel payments (tanpa order / tanpa satu pun catatan
+                // pembayaran). Hanya untuk kasus ini batas refund memakai nilai booking.
+                $isLegacyPaid = $booking->status === 'PAID' && (! $hadOrder || ! $hasAnyPaymentRecord);
+
+                // Batas refund = bagian BOOKING INI dari uang yang benar-benar masuk (dikurangi refund sebelumnya).
+                // Dulu per order: membatalkan 1 dari 2 lapangan bisa di-refund senilai 2 lapangan, dan keranjang
+                // LOCKED yang belum dibayar sama sekali bisa di-refund penuh (cap jatuh ke grand_total).
+                $maxRefund = $isLegacyPaid ? (float) $booking->total_amount : $this->refundableAmountForBooking($booking);
+                if ($maxRefund <= 0) {
+                    throw new HttpException(422, 'Belum ada pembayaran yang masuk untuk booking ini, jadi tidak ada yang bisa di-refund. Batalkan tanpa refund (nominal 0).');
+                }
+                if ($refundAmount > $maxRefund + 0.5) {
+                    throw new HttpException(422, 'Nominal refund (Rp ' . number_format($refundAmount, 0, ',', '.') . ') tidak boleh melebihi pembayaran booking ini (Rp ' . number_format($maxRefund, 0, ',', '.') . ').');
                 }
 
                 $origPayment = Payment::where('order_id', $order->id)
@@ -700,8 +839,8 @@ trait ManagesRescheduleAndCashier
                     ->first();
 
                 if (! $origPayment) {
-                    // Fallback pembukuan: booking ini sudah berstatus PAID tapi tidak ada payment record
-                    // asli (data legacy). Dicatat sebagai TRANSFER_MANUAL, bukan CASH — venue 100% Cashless.
+                    // Fallback pembukuan KHUSUS data legacy (lihat $isLegacyPaid): tabel refunds wajib menunjuk ke
+                    // satu payment. Ditandai legacy_backfill supaya tidak terbaca sebagai omzet baru.
                     $origPayment = Payment::create([
                         'order_id' => $order->id,
                         'payment_gateway' => 'TRANSFER_MANUAL',
@@ -709,6 +848,7 @@ trait ManagesRescheduleAndCashier
                         'amount' => (float) $booking->total_amount,
                         'payment_method' => 'TRANSFER_MANUAL',
                         'status' => 'SUCCESS',
+                        'payload_log' => ['legacy_backfill' => true, 'note' => 'Booking PAID tanpa catatan pembayaran (data sebelum modul pembayaran).'],
                     ]);
                 }
 
@@ -752,14 +892,16 @@ trait ManagesRescheduleAndCashier
                 'cancel_reason' => "[{$reasonCategory}] {$notes} (Diproses oleh: {$adminUser->name})",
             ]);
 
-            // Tagihan selisih reschedule yang belum dibayar ikut ditutup — kalau tidak, customer masih bisa
-            // membayarnya lewat invoice untuk booking yang sudah dibatalkan.
-            if ($booking->order_id) {
+            // Tagihan selisih reschedule yang belum dibayar ikut ditutup (nominalnya keluar dari total order, sesi
+            // Snap-nya dibatalkan) — kalau tidak, customer masih bisa membayarnya untuk booking yang sudah batal dan
+            // uangnya diam-diam jadi omzet.
+            $this->closeRescheduleBills($booking, 'BOOKING_CANCELLED_BY_ADMIN');
+
+            // Keranjang yang belum dibayar sama sekali (tagihan checkout level order) & semua booking-nya batal:
+            // tutup juga tagihannya supaya pembayaran telat terdeteksi sebagai refund.
+            if ($booking->order_id && PadelBooking::where('order_id', $booking->order_id)->whereIn('status', ['PAID', 'LOCKED', 'CHECKED_IN', 'PENDING_PAYMENT', 'PENDING'])->doesntExist()) {
                 foreach (Payment::where('order_id', $booking->order_id)->where('status', 'PENDING')->get() as $pending) {
-                    $log = is_array($pending->payload_log) ? $pending->payload_log : [];
-                    if (($log['booking_id'] ?? $booking->id) !== $booking->id) {
-                        continue; // tagihan milik booking lain dalam order yang sama
-                    }
+                    $log = $this->billPayload($pending);
                     $log['closed_by'] = 'BOOKING_CANCELLED_BY_ADMIN';
                     $pending->update(['status' => 'FAILED', 'payload_log' => $log]);
                 }
@@ -792,5 +934,170 @@ trait ManagesRescheduleAndCashier
                 'booking' => $booking->fresh(['court', 'order']),
             ];
         });
+    }
+
+    /**
+     * Tagihan terbuka (PENDING) milik booking ini: tagihan selisih reschedule yang payload booking_id-nya
+     * booking ini, atau — kalau tidak ada — tagihan level order (checkout awal, tanpa booking_id).
+     * SATU-SATUNYA cara memilih tagihan untuk booking; dulu dipilih "PENDING terbaru" per order sehingga
+     * order dengan 2 booking yang sama-sama di-reschedule saling melunasi tagihan yang salah.
+     */
+    public function pendingBillForBooking(PadelBooking $booking, bool $lock = false): ?Payment
+    {
+        if (! $booking->order_id) {
+            return null;
+        }
+
+        $query = Payment::where('order_id', $booking->order_id)->where('status', 'PENDING')->latest()->orderByDesc('id');
+        if ($lock) {
+            $query->lockForUpdate();
+        }
+        $pending = $query->get();
+
+        return $pending->first(fn (Payment $p) => ($this->billPayload($p)['booking_id'] ?? null) === $booking->id)
+            ?? $pending->first(fn (Payment $p) => empty($this->billPayload($p)['booking_id']));
+    }
+
+    /** Nominal yang masih harus dibayar untuk booking ini (0 kalau tidak ada tagihan terbuka). */
+    public function amountDueForBooking(PadelBooking $booking): float
+    {
+        $bill = $this->pendingBillForBooking($booking);
+        if ($bill) {
+            return (float) $bill->amount;
+        }
+
+        $order = $booking->order;
+        if (! $order) {
+            return 0.0;
+        }
+        $paid = (float) Payment::where('order_id', $order->id)->where('status', 'SUCCESS')->sum('amount');
+
+        return max(0.0, round((float) $order->grand_total - $paid, 2));
+    }
+
+    /**
+     * Tutup semua tagihan selisih reschedule yang belum dibayar milik booking ini (booking dibatalkan / hangus):
+     * tagihan → FAILED, nominalnya dikeluarkan dari total order (supaya uang yang telat masuk terdeteksi sebagai
+     * kelebihan bayar, bukan omzet), dan sesi Snap Midtrans-nya dibatalkan setelah commit.
+     *
+     * @return float total nominal tagihan yang ditutup
+     */
+    protected function closeRescheduleBills(PadelBooking $booking, string $closedBy): float
+    {
+        if (! $booking->order_id) {
+            return 0.0;
+        }
+
+        $order = \App\Models\Pos\Order::whereKey($booking->order_id)->lockForUpdate()->first();
+        if (! $order) {
+            return 0.0;
+        }
+
+        $closed = 0.0;
+        $gatewayIds = [];
+        foreach (Payment::where('order_id', $order->id)->where('status', 'PENDING')->lockForUpdate()->get() as $bill) {
+            $log = $this->billPayload($bill);
+            if (($log['booking_id'] ?? null) !== $booking->id) {
+                continue; // tagihan booking lain / tagihan checkout awal
+            }
+
+            $gatewayIds = array_merge($gatewayIds, (array) ($log['midtrans_order_ids'] ?? []));
+            $log['closed_by'] = $closedBy;
+            $log['closed_at'] = now()->toIso8601String();
+            $bill->update(['status' => 'FAILED', 'payload_log' => $log]);
+            $closed += (float) $bill->amount;
+
+            if (($log['type'] ?? null) === 'RESCHEDULE_PRICE_DELTA' && empty($log['recreated_from_remaining_balance'])) {
+                $order->subtotal = max(0, (float) $order->subtotal - (float) ($log['court_delta'] ?? 0));
+                $order->tax_amount = max(0, (float) $order->tax_amount - (float) ($log['tax_delta'] ?? 0));
+                $order->service_charge = max(0, (float) $order->service_charge - (float) ($log['admin_fee_delta'] ?? 0));
+            }
+            $order->grand_total = max(0, (float) $order->grand_total - (float) $bill->amount);
+        }
+
+        if ($closed > 0) {
+            $order->save();
+            $this->recomputeOrderPaymentStatus($order);
+        }
+
+        $gatewayIds = array_values(array_unique(array_filter($gatewayIds, 'is_string')));
+        if ($gatewayIds !== []) {
+            // Setelah commit & di luar lock: panggilan HTTP tidak boleh menahan transaksi. Kalau gagal pun aman —
+            // pembayaran yang telat masuk ke tagihan FAILED otomatis dibuatkan refund (PaymentOrchestratorService).
+            DB::afterCommit(function () use ($gatewayIds) {
+                $midtrans = app(\App\Services\Payment\MidtransService::class);
+                foreach ($gatewayIds as $id) {
+                    $midtrans->cancelTransaction($id);
+                }
+            });
+        }
+
+        return $closed;
+    }
+
+    /** PAID kalau uang yang masuk sudah menutup grand_total, PARTIALLY_PAID kalau masih ada sisa. */
+    protected function recomputeOrderPaymentStatus(\App\Models\Pos\Order $order): void
+    {
+        if (in_array($order->payment_status, ['CANCELLED', 'UNPAID'], true)) {
+            return;
+        }
+
+        $paid = (float) Payment::where('order_id', $order->id)->where('status', 'SUCCESS')->sum('amount');
+        $status = $paid >= (float) $order->grand_total - 1 ? 'PAID' : ($paid > 0 ? 'PARTIALLY_PAID' : $order->payment_status);
+        if ($status !== $order->payment_status) {
+            $order->update(['payment_status' => $status]);
+        }
+    }
+
+    /**
+     * Batas refund untuk SATU booking = bagian booking ini dari uang yang benar-benar masuk (dikurangi refund
+     * sebelumnya). Order berisi beberapa booking dibagi proporsional nilai lapangan yang sudah dibayar; booking
+     * terakhir yang masih aktif mendapat seluruh sisanya (termasuk sewa alat level order).
+     */
+    public function refundableAmountForBooking(PadelBooking $booking): float
+    {
+        $order = $booking->order;
+        if (! $order) {
+            return 0.0;
+        }
+
+        $paid = (float) Payment::where('order_id', $order->id)->where('status', 'SUCCESS')->sum('amount');
+        $refunded = (float) Refund::where('order_id', $order->id)->whereIn('status', ['PENDING', 'APPROVED', 'PROCESSED'])->sum('refund_amount');
+        $remaining = max(0.0, round($paid - $refunded, 2));
+        if ($remaining <= 0) {
+            return 0.0;
+        }
+
+        $active = PadelBooking::where('order_id', $order->id)
+            ->whereIn('status', ['PAID', 'LOCKED', 'REFUND_PENDING', 'CHECKED_IN'])
+            ->get();
+        if ($active->count() <= 1) {
+            return $remaining;
+        }
+
+        $value = fn (PadelBooking $b) => max(0.0, (float) $b->court_fee - $this->unpaidCourtDeltaFor($b));
+        $total = $active->sum($value);
+        if ($total <= 0) {
+            return round($remaining / $active->count(), 2);
+        }
+
+        return round($remaining * $value($booking) / $total, 2);
+    }
+
+    /** Bagian tarif lapangan dari tagihan selisih booking ini yang BELUM dibayar (court_fee sudah menghitungnya). */
+    protected function unpaidCourtDeltaFor(PadelBooking $booking): float
+    {
+        if (! $booking->order_id) {
+            return 0.0;
+        }
+
+        return (float) Payment::where('order_id', $booking->order_id)->where('status', 'PENDING')->get()
+            ->filter(fn (Payment $p) => ($this->billPayload($p)['booking_id'] ?? null) === $booking->id)
+            ->sum(fn (Payment $p) => (float) ($this->billPayload($p)['court_delta'] ?? 0));
+    }
+
+    protected function billPayload(Payment $payment): array
+    {
+        return is_array($payment->payload_log) ? $payment->payload_log : [];
     }
 }

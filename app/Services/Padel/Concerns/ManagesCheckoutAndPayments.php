@@ -465,6 +465,8 @@ trait ManagesCheckoutAndPayments
                         $q->orWhere('order_id', $orderId);
                     }
                 })
+                // Dicari per order: utamakan booking yang memang masih punya tagihan (bukan booking lunas pertama).
+                ->orderByRaw("CASE WHEN status IN ('LOCKED', 'PENDING_PAYMENT', 'PENDING') THEN 0 ELSE 1 END")
                 ->lockForUpdate()
                 ->firstOrFail();
 
@@ -496,10 +498,9 @@ trait ManagesCheckoutAndPayments
                 ->get();
             $totalPaid = (float) $successfulPayments->sum('amount');
 
-            $pendingSupplementalPayment = Payment::where('order_id', $order->id)
-                ->where('status', 'PENDING')
-                ->latest()
-                ->first();
+            // Tagihan MILIK booking ini (order bisa punya beberapa tagihan selisih untuk booking berbeda).
+            $booking->setRelation('order', $order);
+            $pendingSupplementalPayment = $this->pendingBillForBooking($booking, lock: true);
 
             // Order yang SUDAH pernah dibayar tapi tagihan PENDING-nya hilang (mis. ditutup rekonsiliasi)
             // tidak boleh jatuh ke "retry pembayaran penuh" di bawah — itu menagih ulang seluruh order
@@ -533,7 +534,9 @@ trait ManagesCheckoutAndPayments
 
                 // Midtrans Snap untuk Pelunasan Delta
                 $orderNumber = $order->order_number ?: ('ORD-PAD-' . strtoupper(Str::random(8)));
-                $suffixedOrderId = $orderNumber . '_DELTA_' . time();
+                // + komponen acak: dua permintaan di detik yang sama dulu menghasilkan order_id kembar → Midtrans
+                // menolak dan customer melihat pesan "gateway down" yang menyesatkan.
+                $suffixedOrderId = $orderNumber . '_DELTA_' . time() . strtoupper(Str::random(4));
 
                 $midtransItems = [
                     [
@@ -620,7 +623,7 @@ trait ManagesCheckoutAndPayments
 
             // On-the-Fly Suffix Logic untuk Midtrans Snap
             $orderNumber = $order->order_number ?: ('ORD-PAD-' . strtoupper(Str::random(8)));
-            $suffixedOrderId = $orderNumber . '_' . time();
+            $suffixedOrderId = $orderNumber . '_' . time() . strtoupper(Str::random(4));
 
             // Susun item details Midtrans yang presisi
             $midtransItems = [];
@@ -1010,6 +1013,9 @@ trait ManagesCheckoutAndPayments
                     'sender_name' => $paymentMeta['qris_sender_name'] ?? null,
                 ];
             }
+
+            // Satu RRN / approval code hanya boleh melunasi satu transaksi (dulu walk-in tidak pernah dicek).
+            \App\Services\Pos\PosPaymentProof::assertProofNotReused($payloadLog);
 
             // Eksekusi pelunasan langsung via PaymentOrchestratorService sebagai single writer
             $orchestrator = app(\App\Services\Payment\PaymentOrchestratorService::class);

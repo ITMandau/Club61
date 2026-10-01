@@ -161,7 +161,8 @@ class FinanceTaxAndFeeTest extends TestCase
         ]);
         Cache::forget(ClubFinanceSetting::CACHE_KEY);
 
-        $targetDate = now()->addDays(2)->format('Y-m-d');
+        // Hari kerja (bukan "+2 hari") — kalau jatuh di akhir pekan, tarif prime berlaku & test jadi rapuh.
+        $targetDate = now()->next(Carbon::WEDNESDAY)->format('Y-m-d');
         $hold = $this->bookingService->holdBatchSlots([
             [
                 'court_id' => $this->court1->id,
@@ -398,7 +399,7 @@ class FinanceTaxAndFeeTest extends TestCase
         $booking->update(['order_id' => $order->id]);
 
         $this->expectException(\Symfony\Component\HttpKernel\Exception\HttpException::class);
-        $this->expectExceptionMessage('tidak boleh melebihi total pembayaran');
+        $this->expectExceptionMessage('tidak boleh melebihi pembayaran booking ini');
 
         // Mencoba me-refund 250.000 (melebihi grand_total 220.000)
         $this->bookingService->adminCancelAndRefund(

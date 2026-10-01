@@ -3,7 +3,6 @@
 namespace App\Filament\Pages;
 
 use App\Models\Audit\ActivityLog;
-use App\Services\Audit\ActivityLogger;
 use BackedEnum;
 use BezhanSalleh\FilamentShield\Traits\HasPageShield;
 use Carbon\Carbon;
@@ -17,8 +16,10 @@ use Filament\Tables\Filters\Filter;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Str;
-use Symfony\Component\HttpFoundation\StreamedResponse;
+use Illuminate\Validation\Rule;
+use Throwable;
 use UnitEnum;
 
 /**
@@ -87,11 +88,15 @@ class LogAktivitas extends Page implements HasTable
         'CRITICAL' => 'Kritis',
     ];
 
+    public const CSV_HEADER = ['Waktu (WIB)', 'Pengguna', 'Role', 'Jenis Pelaku', 'Modul', 'Aksi', 'Aktivitas', 'Data', 'Dari', 'Tingkat', 'IP', 'Perubahan', 'Detail'];
+
     public function table(Table $table): Table
     {
         return $table
             ->query(ActivityLog::query())
             ->defaultSort(fn (Builder $query) => $query->orderByDesc('created_at')->orderByDesc('id'))
+            // Pencarian lewat satu fungsi yang sama dengan route export, supaya hasil CSV = isi tabel.
+            ->searchUsing(fn (Builder $query, string $search) => self::applySearch($query, $search))
             ->paginated([25, 50, 100])
             ->defaultPaginationPageOption(25)
             ->striped()
@@ -153,11 +158,7 @@ class LogAktivitas extends Page implements HasTable
                         DatePicker::make('dari')->label('Dari tanggal')->native(false)->displayFormat('d M Y')->default(now(self::TIMEZONE)->toDateString()),
                         DatePicker::make('sampai')->label('Sampai tanggal')->native(false)->displayFormat('d M Y'),
                     ])
-                    ->query(function (Builder $query, array $data): Builder {
-                        return $query
-                            ->when($data['dari'] ?? null, fn (Builder $q, $date) => $q->where('created_at', '>=', Carbon::parse($date, self::TIMEZONE)->startOfDay()->utc()))
-                            ->when($data['sampai'] ?? null, fn (Builder $q, $date) => $q->where('created_at', '<=', Carbon::parse($date, self::TIMEZONE)->endOfDay()->utc()));
-                    })
+                    ->query(fn (Builder $query, array $data): Builder => self::applyDateRange($query, $data['dari'] ?? null, $data['sampai'] ?? null))
                     ->indicateUsing(function (array $data): array {
                         $indicators = [];
                         if ($data['dari'] ?? null) {
@@ -179,7 +180,7 @@ class LogAktivitas extends Page implements HasTable
                 SelectFilter::make('actor_type')->label('Jenis Pelaku')->options(self::ACTOR_TYPES),
                 SelectFilter::make('event')
                     ->label('Jenis Aksi')
-                    ->options(fn () => ActivityLog::query()->distinct()->orderBy('event')->limit(300)->pluck('event', 'event')->all())
+                    ->options(fn () => self::eventOptions())
                     ->searchable()
                     ->multiple(),
             ])
@@ -209,57 +210,135 @@ class LogAktivitas extends Page implements HasTable
                     ->icon('heroicon-o-arrow-down-tray')
                     ->color('gray')
                     ->visible(fn () => auth()->user()?->can('export_activity_logs') ?? false)
-                    ->action(fn () => $this->exportCsv()),
+                    // Download lewat route GET biasa (ActivityLogExportController), BUKAN dari aksi Livewire:
+                    // respons aksi Livewire di-buffer penuh di memori + base64 dalam JSON → crash di puluhan ribu baris.
+                    ->url(fn () => $this->exportUrl()),
             ]);
     }
 
-    /**
-     * Export sesuai filter & pencarian yang sedang aktif di tabel. Protected (bukan public) supaya
-     * tidak bisa dipanggil langsung dari browser — hanya lewat header action yang sudah dicek izinnya.
-     */
-    protected function exportCsv(): StreamedResponse
+    /** URL export berisi filter, pencarian & arah urut yang sedang aktif di tabel (sebagai query string). */
+    public function exportUrl(): string
     {
-        abort_unless(auth()->user()?->can('export_activity_logs'), 403, 'Akses ditolak: Anda tidak memiliki izin [export_activity_logs] untuk export log aktivitas.');
+        $filters = $this->tableFilters ?? [];
+        $direction = $this->getTableSortColumn() === 'created_at' ? $this->getTableSortDirection() : null;
+        // State DatePicker bisa berupa "Y-m-d H:i:s" — route export hanya menerima "Y-m-d".
+        $date = fn ($value) => filled($value) ? Carbon::parse($value)->toDateString() : null;
 
-        $limit = max(1, (int) config('audit.export_max_rows', 50000));
-        $query = $this->getFilteredSortedTableQuery()->limit($limit);
-        $total = (clone $query)->count();
+        return route('admin.log-aktivitas.export', array_filter([
+            'dari' => $date($filters['tanggal']['dari'] ?? null),
+            'sampai' => $date($filters['tanggal']['sampai'] ?? null),
+            'causer_id' => $filters['causer_id']['value'] ?? null,
+            'module' => $filters['module']['values'] ?? null,
+            'severity' => $filters['severity']['values'] ?? null,
+            'channel' => $filters['channel']['values'] ?? null,
+            'actor_type' => $filters['actor_type']['value'] ?? null,
+            'event' => $filters['event']['values'] ?? null,
+            'search' => $this->tableSearch ?: null,
+            'arah' => $direction === 'asc' ? 'asc' : null,
+        ], fn ($value) => filled($value)));
+    }
 
-        ActivityLogger::record(
-            module: 'AUTH',
-            event: 'activity_log.exported',
-            description: "Export {$total} baris log aktivitas ke CSV",
-            meta: ['jumlah_baris' => $total, 'filter' => $this->tableFilters, 'pencarian' => $this->tableSearch ?: null],
-            severity: ActivityLogger::WARNING,
-        );
+    /**
+     * Rentang tanggal (hari kalender WIB). created_at disimpan dalam zona waktu aplikasi (bukan UTC),
+     * jadi batas hari WIB dikonversi ke zona aplikasi — BUKAN ke UTC (dulu ->utc() menggeser rentang
+     * 7 jam: aktivitas 17:00-24:00 WIB jatuh ke hari berikutnya).
+     */
+    public static function applyDateRange(Builder $query, ?string $from, ?string $until): Builder
+    {
+        $appTimezone = config('app.timezone');
 
-        $filename = 'log-aktivitas-'.now(self::TIMEZONE)->format('Ymd-His').'.csv';
+        return $query
+            ->when($from, fn (Builder $q, $date) => $q->where('created_at', '>=', Carbon::parse($date, self::TIMEZONE)->startOfDay()->setTimezone($appTimezone)))
+            ->when($until, fn (Builder $q, $date) => $q->where('created_at', '<=', Carbon::parse($date, self::TIMEZONE)->endOfDay()->setTimezone($appTimezone)));
+    }
 
-        return response()->streamDownload(function () use ($query) {
-            $out = fopen('php://output', 'w');
-            fwrite($out, "\xEF\xBB\xBF"); // BOM supaya Excel membaca UTF-8 dengan benar
-            fputcsv($out, ['Waktu (WIB)', 'Pengguna', 'Role', 'Jenis Pelaku', 'Modul', 'Aksi', 'Aktivitas', 'Data', 'Dari', 'Tingkat', 'IP', 'Perubahan', 'Detail']);
+    public static function applySearch(Builder $query, string $search): Builder
+    {
+        $search = trim($search);
+        if ($search === '') {
+            return $query;
+        }
 
-            foreach ($query->cursor() as $log) {
-                fputcsv($out, array_map([self::class, 'csvSafe'], [
-                    $log->created_at?->timezone(self::TIMEZONE)->format('Y-m-d H:i:s'),
-                    $log->causer_name,
-                    $log->causer_role,
-                    self::ACTOR_TYPES[$log->actor_type] ?? $log->actor_type,
-                    self::MODULES[$log->module] ?? $log->module,
-                    $log->event,
-                    $log->description,
-                    $log->subject_label,
-                    self::CHANNELS[$log->channel] ?? $log->channel,
-                    self::SEVERITIES[$log->severity] ?? $log->severity,
-                    $log->ip_address,
-                    $log->changes ? json_encode($log->changes, JSON_UNESCAPED_UNICODE) : '',
-                    $log->meta ? json_encode($log->meta, JSON_UNESCAPED_UNICODE) : '',
-                ]));
+        return $query->where(function (Builder $q) use ($search) {
+            foreach (['causer_name', 'description', 'subject_label', 'event'] as $column) {
+                $q->orWhere($column, 'like', '%'.$search.'%');
             }
+        });
+    }
 
-            fclose($out);
-        }, $filename, ['Content-Type' => 'text/csv; charset=UTF-8']);
+    /**
+     * Opsi filter "Jenis Aksi". SELECT DISTINCT event di tabel besar = scan index penuh, jadi
+     * di-cache 10 menit (bukan dihitung ulang tiap render tabel).
+     */
+    public static function eventOptions(): array
+    {
+        $query = fn () => ActivityLog::query()->distinct()->orderBy('event')->limit(300)->pluck('event', 'event')->all();
+
+        try {
+            return Cache::remember('audit:event_options', 600, $query);
+        } catch (Throwable) {
+            return $query();
+        }
+    }
+
+    /**
+     * Whitelist parameter route export. Semua nilai enum dicek terhadap daftar yang dikenal, sisanya
+     * dibatasi format & panjang — parameter lain diabaikan.
+     */
+    public static function exportFilterRules(): array
+    {
+        return [
+            'dari' => ['nullable', 'date_format:Y-m-d'],
+            'sampai' => ['nullable', 'date_format:Y-m-d'],
+            'causer_id' => ['nullable', 'string', 'ulid'],
+            'module' => ['nullable', 'array', 'max:'.count(self::MODULES)],
+            'module.*' => ['string', Rule::in(array_keys(self::MODULES))],
+            'severity' => ['nullable', 'array', 'max:'.count(self::SEVERITIES)],
+            'severity.*' => ['string', Rule::in(array_keys(self::SEVERITIES))],
+            'channel' => ['nullable', 'array', 'max:'.count(self::CHANNELS)],
+            'channel.*' => ['string', Rule::in(array_keys(self::CHANNELS))],
+            'actor_type' => ['nullable', 'string', Rule::in(array_keys(self::ACTOR_TYPES))],
+            'event' => ['nullable', 'array', 'max:50'],
+            'event.*' => ['string', 'max:60', 'regex:/^[A-Za-z0-9_.\-]+$/'],
+            'search' => ['nullable', 'string', 'max:200'],
+            'arah' => ['nullable', Rule::in(['asc', 'desc'])],
+        ];
+    }
+
+    /** Terapkan filter (yang sudah lolos exportFilterRules) — logika sama dengan filter tabel. */
+    public static function applyExportFilters(Builder $query, array $filters): Builder
+    {
+        self::applyDateRange($query, $filters['dari'] ?? null, $filters['sampai'] ?? null);
+
+        $query
+            ->when($filters['causer_id'] ?? null, fn (Builder $q, $value) => $q->where('causer_id', $value))
+            ->when($filters['module'] ?? null, fn (Builder $q, $values) => $q->whereIn('module', $values))
+            ->when($filters['severity'] ?? null, fn (Builder $q, $values) => $q->whereIn('severity', $values))
+            ->when($filters['channel'] ?? null, fn (Builder $q, $values) => $q->whereIn('channel', $values))
+            ->when($filters['actor_type'] ?? null, fn (Builder $q, $value) => $q->where('actor_type', $value))
+            ->when($filters['event'] ?? null, fn (Builder $q, $values) => $q->whereIn('event', $values));
+
+        return self::applySearch($query, (string) ($filters['search'] ?? ''));
+    }
+
+    /** @return array<int, string> satu baris CSV, sudah dinetralkan dari formula injection */
+    public static function csvRow(ActivityLog $log): array
+    {
+        return array_map([self::class, 'csvSafe'], [
+            $log->created_at?->timezone(self::TIMEZONE)->format('Y-m-d H:i:s'),
+            $log->causer_name,
+            $log->causer_role,
+            self::ACTOR_TYPES[$log->actor_type] ?? $log->actor_type,
+            self::MODULES[$log->module] ?? $log->module,
+            $log->event,
+            $log->description,
+            $log->subject_label,
+            self::CHANNELS[$log->channel] ?? $log->channel,
+            self::SEVERITIES[$log->severity] ?? $log->severity,
+            $log->ip_address,
+            $log->changes ? json_encode($log->changes, JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) : '',
+            $log->meta ? json_encode($log->meta, JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) : '',
+        ]);
     }
 
     /**

@@ -193,6 +193,21 @@ trait ManagesScheduleAndSlots
             return strcmp($a['start_time'], $b['start_time']);
         });
 
+        // Gabungkan jam berurutan di lapangan yang sama jadi SATU booking (web customer sudah begini, POS walk-in
+        // dan API belum). Booking 2 jam yang tersimpan sebagai 2 baris bisa di-reschedule terpisah = jadwal yang
+        // dipesan berurutan terpecah ke jam berbeda — itu tidak boleh.
+        $merged = [];
+        foreach ($slots as $slot) {
+            $last = array_key_last($merged);
+            if ($last !== null && $merged[$last]['court_id'] === $slot['court_id'] && $merged[$last]['end_time'] === $slot['start_time']) {
+                $merged[$last]['end_time'] = $slot['end_time'];
+
+                continue;
+            }
+            $merged[] = $slot;
+        }
+        $slots = $merged;
+
         // Validasi waktu masing-masing slot
         foreach ($slots as $slot) {
             $start = Carbon::parse("{$bookingDate} {$slot['start_time']}");

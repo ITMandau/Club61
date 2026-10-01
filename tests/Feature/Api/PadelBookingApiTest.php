@@ -137,13 +137,14 @@ class PadelBookingApiTest extends TestCase
         $response->assertStatus(201)
             ->assertJson(['success' => true])
             ->assertJsonPath('data.hold_seconds_remaining', 600)
-            ->assertJsonCount(2, 'data.bookings');
+            // Jam berurutan di lapangan yang sama digabung jadi SATU booking 08:00-10:00 (tidak bisa dipecah saat reschedule).
+            ->assertJsonCount(1, 'data.bookings');
 
-        $this->assertDatabaseCount('padel_bookings', 2);
-        $this->assertDatabaseHas('padel_bookings', [
-            'court_id' => $this->court1->id,
-            'status' => 'LOCKED',
-        ]);
+        $this->assertDatabaseCount('padel_bookings', 1);
+        $booking = PadelBooking::first();
+        $this->assertSame('LOCKED', $booking->status);
+        $this->assertSame('08:00', $booking->start_time->format('H:i'));
+        $this->assertSame('10:00', $booking->end_time->format('H:i'));
     }
 
     /**

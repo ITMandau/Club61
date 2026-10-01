@@ -358,32 +358,16 @@
                                         </button>
                                     @endif
 
-                                    @if ($this->canSettle && (($b->status === 'LOCKED' && $pendingAmount > 0) || $b->status === 'PENDING_PAYMENT'))
-                                        <button type="button" wire:click="openSettleModal('{{ $b->id }}')"
-                                            wire:loading.attr="disabled"
-                                            title="Pelunasan Kasir / Settle Tunai (Rp {{ number_format($pendingAmount ?: $b->total_amount, 0, ',', '.') }})"
+                                    @if ($this->canSettle && $this->canOpenPos && (($b->status === 'LOCKED' && $pendingAmount > 0) || $b->status === 'PENDING_PAYMENT'))
+                                        {{-- Pembayaran tidak dieksekusi di sini: buka POS Walk-In langsung di tagihan ini. --}}
+                                        <a href="{{ \App\Filament\Pages\BookOfflineCourt::getUrl(['tagihan' => $b->id]) }}"
+                                            title="Bayar di POS Walk-In (Rp {{ number_format($pendingAmount ?: $b->total_amount, 0, ',', '.') }})"
                                             class="adm-btn-icon adm-btn-icon-settle">
-                                            <span wire:loading.remove
-                                                wire:target="openSettleModal('{{ $b->id }}')">
-                                                <svg style="width: 15px; height: 15px;" fill="none"
-                                                    stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path stroke-linecap="round" stroke-linejoin="round"
-                                                        stroke-width="2"
-                                                        d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
-                                                </svg>
-                                            </span>
-                                            <span wire:loading wire:target="openSettleModal('{{ $b->id }}')">
-                                                <svg style="width: 13px; height: 13px; animation: spin 1s linear infinite;"
-                                                    fill="none" viewBox="0 0 24 24">
-                                                    <circle cx="12" cy="12" r="10"
-                                                        stroke="currentColor" stroke-width="4"
-                                                        style="opacity: 0.25;"></circle>
-                                                    <path fill="currentColor"
-                                                        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
-                                                        style="opacity: 0.75;"></path>
-                                                </svg>
-                                            </span>
-                                        </button>
+                                            <svg style="width: 15px; height: 15px;" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                                    d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
+                                            </svg>
+                                        </a>
                                     @endif
 
                                     @if ($this->canCheckIn && $b->status === 'PAID')
@@ -725,7 +709,7 @@
                                 wire:target="rescheduleDate, rescheduleCourtId"
                                 style="width: 100%; border: 1px solid #D4AF37; border-radius: 8px; padding: 0.5rem; font-size: 0.8125rem;">
                                 @foreach ($availableSlots as $slot)
-                                    <option value="{{ $slot['start_time'] }}">{{ $slot['label'] }}</option>
+                                    <option value="{{ $slot['start_time'] }}">{{ $slot['label'] }}{{ ! empty($slot['benefit_dropped_reason']) ? ' ⚠ benefit gugur, harga normal' : '' }}</option>
                                 @endforeach
                             </select>
                         @endif
@@ -741,6 +725,15 @@
                             $tone = $totalDelta > 0 ? ['#F87171', '#FEF2F2', '#991B1B'] : ($forfeited > 0 ? ['#FCD34D', '#FFFBEB', '#92400E'] : ['#E5E7EB', '#F9FAFB', '#374151']);
                             $row = 'display:flex; justify-content:space-between; font-size:0.75rem; color:#4B5563; margin-bottom:0.25rem;';
                         @endphp
+                        @if (! empty($q['benefit_dropped_reason']))
+                            {{-- Benefit member / voucher sponsor tidak berlaku di jadwal ini → harga normal. Admin wajib menjelaskan ke customer
+                                 sebelum menyimpan; pilih tanggal yang masih berlaku kalau customer tidak mau bayar harga normal. --}}
+                            <div style="border-radius: 12px; padding: 0.75rem 1rem; margin-bottom: 0.75rem; border: 1px solid #F59E0B; background: #FFFBEB; color: #92400E; font-size: 0.75rem; line-height: 1.4;">
+                                <strong>⚠ Benefit tidak berlaku di jadwal ini.</strong> {{ $q['benefit_dropped_reason'] }}
+                                Kalau customer tetap mau pindah ke jadwal ini, ia membayar selisih harga normal (jam kuota/voucher yang terpakai dikembalikan).
+                                Pilih tanggal yang masih dalam masa berlaku kalau ingin benefitnya tetap dipakai.
+                            </div>
+                        @endif
                         <div style="border-radius: 12px; padding: 1rem; margin-bottom: 1rem; border: 1px solid {{ $tone[0] }}; background: {{ $tone[1] }};">
                             <div style="{{ $row }}"><span>Sudah dibayar (tarif sesi lama):</span><span style="font-weight:700;">{{ $rp($selectedBookingData['original_court_fee']) }}</span></div>
                             <div style="{{ $row }}"><span>Tarif normal jadwal baru:</span><span style="font-weight:700;">{{ $rp($q['gross_fee'] ?? 0) }}</span></div>
@@ -778,25 +771,20 @@
 
                             @if ($totalDelta > 0)
                                 <div style="margin-top: 0.75rem; padding-top: 0.75rem; border-top: 1px solid #FECACA;">
-                                    <label style="display: block; font-size: 0.6875rem; font-weight: 700; color: #991B1B; margin-bottom: 0.25rem;">Cara Pelunasan Selisih:</label>
+                                    <label style="display: block; font-size: 0.6875rem; font-weight: 700; color: #991B1B; margin-bottom: 0.25rem;">Customer mau bayar selisihnya lewat:</label>
                                     <div style="display: flex; flex-direction: column; gap: 0.35rem; font-size: 0.75rem; margin-bottom: 0.5rem;">
-                                        <label style="display: flex; align-items: center; gap: 0.35rem; cursor: pointer;">
-                                            <input type="radio" wire:model.live="rescheduleIsDeltaPaidNow" value="1">
-                                            <span><b>Bayar sekarang di Frontdesk</b> (QRIS / EDC / Transfer, wajib bukti bayar)</span>
+                                        <label style="display: flex; align-items: flex-start; gap: 0.35rem; cursor: pointer;">
+                                            <input type="radio" wire:model.live="rescheduleDeltaChannel" value="CASHIER" style="margin-top: 0.15rem;">
+                                            <span><b>Bayar di Kasir</b>: dilunasi di <b>POS Walk-In</b> (kasir klik slot &quot;Bayar&quot; di grid jadwal), misalnya saat customer datang.</span>
                                         </label>
-                                        <label style="display: flex; align-items: center; gap: 0.35rem; cursor: pointer;">
-                                            <input type="radio" wire:model.live="rescheduleIsDeltaPaidNow" value="0">
-                                            <span><b>Kirim tagihan ke customer</b>: bayar via Midtrans di halaman invoice atau nanti di kasir. QR tiket ditahan sampai lunas.</span>
+                                        <label style="display: flex; align-items: flex-start; gap: 0.35rem; cursor: pointer;">
+                                            <input type="radio" wire:model.live="rescheduleDeltaChannel" value="ONLINE" style="margin-top: 0.15rem;">
+                                            <span><b>Bayar Online (Midtrans)</b>: customer membayar dari halaman invoice-nya.</span>
                                         </label>
                                     </div>
-
-                                    @if ($rescheduleIsDeltaPaidNow)
-                                        @include('filament.pages.partials.pos-payment-proof', [
-                                            'methodModel' => 'reschedulePaymentMethod',
-                                            'method' => $reschedulePaymentMethod,
-                                            'proofModel' => 'rescheduleProof',
-                                        ])
-                                    @endif
+                                    <div style="font-size: 0.65rem; color: #7F1D1D; line-height: 1.4;">
+                                        Halaman ini tidak menerima pembayaran. Jadwal langsung dipindah &amp; slot ditahan atas nama customer; QR tiket dan check-in terkunci sampai selisih lunas.
+                                    </div>
                                 </div>
                             @elseif ($forfeited > 0)
                                 <div style="margin-top: 0.5rem; font-size: 0.6875rem; color: #92400E;">
@@ -833,73 +821,6 @@
         </div>
     @endif
 
-    <!-- MODAL 2: PELUNASAN TAGIHAN GANTUNG (QUICK SETTLE) -->
-    @if ($showSettleModal)
-        <div
-            style="position: fixed; inset: 0; z-index: 99999; background: rgba(15, 10, 5, 0.7); backdrop-filter: blur(4px); display: flex; align-items: center; justify-content: center; padding: 1rem;">
-            <div
-                style="background: #FFFFFF; border-radius: 16px; width: 100%; max-width: 480px; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.25); border: 1px solid #DC2626; overflow: hidden;">
-                <!-- Header -->
-                <div
-                    style="background: #991B1B; padding: 1.25rem 1.5rem; display: flex; justify-content: space-between; align-items: center;">
-                    <div>
-                        <div
-                            style="color: #FECACA; font-size: 0.6875rem; font-weight: 700; text-transform: uppercase;">
-                            Frontdesk Cashier &bull; Settlement</div>
-                        <div style="color: #FFFFFF; font-size: 1.125rem; font-weight: 800; margin-top: 0.25rem;">
-                            Pelunasan Kasir Frontdesk (Cashier Settle)</div>
-                    </div>
-                    <button type="button" wire:click="$set('showSettleModal', false)"
-                        style="background: none; border: none; color: #FFFFFF; font-size: 1.5rem; cursor: pointer;">&times;</button>
-                </div>
-
-                <!-- Body -->
-                <div style="padding: 1.5rem;">
-                    <div
-                        style="background: #FEF2F2; border: 1px solid #FECACA; border-radius: 12px; padding: 1rem; margin-bottom: 1.25rem;">
-                        <div style="font-size: 0.75rem; color: #991B1B; font-weight: 600;">Customer &amp; Tiket:</div>
-                        <div style="font-size: 0.9375rem; font-weight: 800; color: #1F170D;">{{ $settleCustomerName }}
-                            (#{{ $settleBookingCode }})</div>
-                        <div style="margin-top: 0.5rem; font-size: 0.75rem; color: #4B5563;">
-                            Nominal yang Harus Dilunasi:
-                        </div>
-                        <div
-                            style="font-family: var(--font-mono, monospace); font-size: 1.5rem; font-weight: 900; color: #991B1B;">
-                            Rp {{ number_format($settleAmount, 0, ',', '.') }}
-                        </div>
-                    </div>
-
-                    <div style="margin-bottom: 1rem;">
-                        @include('filament.pages.partials.pos-payment-proof', [
-                            'methodModel' => 'settlePaymentMethod',
-                            'method' => $settlePaymentMethod,
-                            'proofModel' => 'settleProof',
-                        ])
-                    </div>
-
-                    <div style="font-size: 0.6875rem; color: #6B7280; line-height: 1.4;">
-                        Setelah pembayaran diterima, sistem otomatis mengubah status menjadi <strong>PAID</strong> dan
-                        <strong>merilis QR Code</strong> booking customer.
-                    </div>
-                </div>
-
-                <!-- Footer -->
-                <div
-                    style="background: #FAF5E8; border-top: 1px solid #F0DB9D; padding: 1rem 1.5rem; display: flex; justify-content: flex-end; gap: 0.5rem;">
-                    <button type="button" wire:click="$set('showSettleModal', false)" class="adm-btn-sec"
-                        style="background: #FFFFFF;">Batal</button>
-                    <button type="button" wire:click="executeSettleSupplemental" wire:loading.attr="disabled"
-                        class="adm-btn-sec"
-                        style="background: #DC2626; color: #FFFFFF; border-color: #B91C1C; font-weight: 800;">
-                        <span wire:loading.remove wire:target="executeSettleSupplemental">Terima Pembayaran &amp; Buka
-                            Tiket</span>
-                        <span wire:loading wire:target="executeSettleSupplemental">Memproses...</span>
-                    </button>
-                </div>
-            </div>
-        </div>
-    @endif
-
     <!-- MODAL 3: CANCEL & REFUND -->
     @if ($showCancelRefundModal)
         <div
@@ -928,7 +849,7 @@
                         <div style="font-size: 0.9375rem; font-weight: 800; color: #1F170D;">{{ $cancelCustomerName }}
                             (#{{ $cancelBookingCode }})</div>
                         <div style="margin-top: 0.25rem; font-size: 0.75rem; color: #4B5563;">
-                            Total Bayar: <strong>Rp {{ number_format($originalTotalAmount, 0, ',', '.') }}</strong>
+                            Maks. refund (uang yang sudah masuk untuk booking ini): <strong>Rp {{ number_format($originalTotalAmount, 0, ',', '.') }}</strong>
                         </div>
                     </div>
 

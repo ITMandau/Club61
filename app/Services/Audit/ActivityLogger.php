@@ -7,10 +7,13 @@ use App\Models\User;
 use BackedEnum;
 use DateTimeInterface;
 use Illuminate\Contracts\Auth\Authenticatable;
+use Illuminate\Database\DetectsConcurrencyErrors;
+use Illuminate\Database\DetectsLostConnections;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Livewire\Livewire;
@@ -24,11 +27,16 @@ use Throwable;
  *     nilainya diganti "[disembunyikan]", nama kolomnya tetap tampil supaya owner tahu "sandi diganti".
  *   - Nama & role pelaku disimpan sebagai snapshot saat kejadian.
  *   - Gagal menulis log tidak boleh menggagalkan transaksi bisnis: error cukup masuk laravel.log.
+ *     Kecuali deadlock / koneksi DB putus di dalam transaksi — itu dilempar ulang supaya transaksinya
+ *     gagal bersih (bukan lanjut diam-diam dalam mode autocommit setelah transaksinya hilang).
  *   - Log ditulis di transaksi DB yang sama dengan aksinya — kalau aksinya di-rollback, log-nya
  *     ikut hilang, jadi log tidak pernah mengklaim sesuatu terjadi padahal tidak.
  */
 class ActivityLogger
 {
+    use DetectsConcurrencyErrors;
+    use DetectsLostConnections;
+
     public const INFO = 'INFO';
 
     public const WARNING = 'WARNING';
@@ -60,6 +68,9 @@ class ActivityLogger
 
     private const MAX_JSON_BYTES = 20000;
 
+    /** Jendela dedup login gagal per IP + identitas (detik). */
+    public const LOGIN_FAILED_WINDOW = 60;
+
     public static function record(
         string $module,
         string $event,
@@ -88,32 +99,55 @@ class ActivityLogger
                 $causer ??= self::currentUser();
             }
 
+            // Semua teks di-scrub ke UTF-8 valid DULU (sebelum dipotong): byte rusak (mis. User-Agent
+            // berisi \xFF) membuat insert MySQL utf8mb4 gagal (error 1366) dan log request itu hilang.
             return ActivityLog::create([
-                'module' => Str::limit($module, 30, ''),
-                'event' => Str::limit($event, 60, ''),
+                'module' => Str::limit(self::utf8($module), 30, ''),
+                'event' => Str::limit(self::utf8($event), 60, ''),
                 'severity' => in_array($severity, [self::INFO, self::WARNING, self::CRITICAL], true) ? $severity : self::INFO,
-                'description' => Str::limit($description, 252),
+                'description' => Str::limit(self::utf8($description), 252),
                 'subject_type' => $subject ? class_basename($subject) : null,
-                'subject_id' => $subject?->getKey() !== null ? (string) $subject->getKey() : null,
-                'subject_label' => Str::limit($subjectLabel ?? ($subject ? AuditRegistry::labelFor($subject) : ''), 117) ?: null,
+                'subject_id' => $subject?->getKey() !== null ? self::utf8((string) $subject->getKey()) : null,
+                'subject_label' => Str::limit(self::utf8($subjectLabel ?? ($subject ? AuditRegistry::labelFor($subject) : '')), 117) ?: null,
                 'causer_id' => $causer?->getAuthIdentifier(),
-                'causer_name' => $causer ? Str::limit((string) ($causer->name ?? ''), 97) : null,
-                'causer_role' => $causer instanceof User ? Str::limit(self::roleLabel($causer), 97) : null,
+                'causer_name' => $causer ? Str::limit(self::utf8((string) ($causer->name ?? '')), 97) : null,
+                'causer_role' => $causer instanceof User ? Str::limit(self::utf8(self::roleLabel($causer)), 97) : null,
                 'actor_type' => self::resolveActorType($causer, $channel, $asSystem),
                 'channel' => $channel,
-                'ip_address' => $request?->ip(),
-                'user_agent' => $request ? Str::limit((string) $request->userAgent(), 252) ?: null : null,
-                'url' => $request && ! $context->consoleCommand ? Str::limit(self::safeUrl($request), 252) : null,
+                'ip_address' => $request?->ip() !== null ? Str::limit(self::utf8((string) $request->ip()), 45, '') : null,
+                'user_agent' => $request ? Str::limit(self::utf8((string) $request->userAgent()), 252) ?: null : null,
+                'url' => $request && ! $context->consoleCommand ? Str::limit(self::utf8(self::safeUrl($request)), 252) : null,
                 'http_method' => $request && ! $context->consoleCommand ? self::originalMethod($request) : null,
                 'changes' => $changes ? self::capSize(self::sanitize($changes)) : null,
                 'meta' => $meta ? self::capSize(self::sanitize($meta)) : null,
                 'batch_id' => $context->batchId(),
             ]);
         } catch (Throwable $e) {
-            Log::error('[AUDIT] Gagal menulis log aktivitas: '.$e->getMessage(), ['event' => $event]);
+            // Deadlock / koneksi putus di tengah transaksi bisnis: transaksinya sudah batal di sisi DB.
+            // Menelan error di sini membuat sisa aksi jalan dalam autocommit — lempar ulang supaya gagal bersih.
+            if (self::mustPropagate($e)) {
+                throw $e;
+            }
+
+            Log::error('[AUDIT] Gagal menulis log aktivitas: '.self::utf8($e->getMessage()), ['event' => self::utf8($event), 'exception' => $e::class]);
 
             return null;
         }
+    }
+
+    private static function mustPropagate(Throwable $e): bool
+    {
+        try {
+            if (DB::transactionLevel() === 0) {
+                return false;
+            }
+        } catch (Throwable) {
+            return false;
+        }
+
+        $detector = new self;
+
+        return $detector->causedByConcurrencyError($e) || $detector->causedByLostConnection($e);
     }
 
     /**
@@ -122,24 +156,84 @@ class ActivityLogger
      */
     public static function accessDenied(string $reason, array $meta = []): void
     {
-        $reason = trim((string) preg_replace('/^akses ditolak\s*:?\s*/i', '', $reason)) ?: 'tidak memiliki izin';
+        // Dipanggil dari hook $exceptions->respond (bootstrap/app.php): apa pun yang gagal di sini
+        // TIDAK BOLEH dilempar — kalau lolos, respons 403 berubah jadi 500.
+        try {
+            $reason = trim((string) preg_replace('/^akses ditolak\s*:?\s*/i', '', self::utf8($reason))) ?: 'tidak memiliki izin';
 
-        $user = self::currentUser();
-        $request = app()->bound('request') ? request() : null;
-        $path = $request ? self::originalPath($request) : '';
+            $user = self::currentUser();
+            $request = app()->bound('request') ? request() : null;
+            $path = $request ? self::originalPath($request) : '';
 
-        $dedupKey = 'audit:denied:'.sha1(($user?->getAuthIdentifier() ?? $request?->ip() ?? '-').'|'.$path.'|'.$reason);
-        if (! Cache::add($dedupKey, 1, 60)) {
-            return;
+            $dedupKey = 'audit:denied:'.sha1(($user?->getAuthIdentifier() ?? $request?->ip() ?? '-').'|'.$path.'|'.$reason);
+            try {
+                if (! Cache::add($dedupKey, 1, 60)) {
+                    return;
+                }
+            } catch (Throwable $e) {
+                // Cache store bermasalah: lewati dedup, tetap catat.
+                Log::warning('[AUDIT] Dedup akses ditolak tidak jalan: '.self::utf8($e->getMessage()));
+            }
+
+            self::record(
+                module: 'AUTH',
+                event: 'auth.access_denied',
+                description: 'Akses ditolak: '.$reason,
+                meta: $meta + ['halaman' => '/'.ltrim($path, '/')],
+                severity: self::WARNING,
+            );
+        } catch (Throwable $e) {
+            Log::error('[AUDIT] Gagal mencatat akses ditolak: '.self::utf8($e->getMessage()));
         }
+    }
 
-        self::record(
-            module: 'AUTH',
-            event: 'auth.access_denied',
-            description: 'Akses ditolak: '.$reason,
-            meta: $meta + ['halaman' => '/'.ltrim($path, '/')],
-            severity: self::WARNING,
-        );
+    /**
+     * Login gagal (web & API). Dedup per IP + identitas yang dicoba: maksimal SATU baris per
+     * LOGIN_FAILED_WINDOW detik — percobaan berikutnya di jendela yang sama cukup dihitung, lalu
+     * jumlahnya ikut dicatat di baris berikutnya ("percobaan_tidak_dicatat"). Brute-force tetap
+     * terlihat tanpa membanjiri tabel. Event lockout dicatat terpisah dan TIDAK di-dedup.
+     *
+     * Akun yang dicoba dicatat sebagai subject, BUKAN pelaku — pelakunya tamu yang belum login,
+     * bukan pemilik akun (korban) yang kebetulan email/HP-nya diketik.
+     */
+    public static function loginFailed(string $identifier, ?Authenticatable $targetUser = null, bool $viaApi = false): void
+    {
+        try {
+            $identifier = Str::limit(self::utf8(trim($identifier)), 80);
+            $request = app()->bound('request') ? request() : null;
+            $key = 'audit:login_failed:'.sha1(($request?->ip() ?? '-').'|'.mb_strtolower($identifier));
+            $suppressed = 0;
+
+            try {
+                if (! Cache::add($key, 1, self::LOGIN_FAILED_WINDOW)) {
+                    // Sudah dicatat di jendela ini — cukup dihitung (counter disimpan 1 hari, dibaca baris berikutnya).
+                    Cache::add($key.':ditahan', 0, 86400);
+                    Cache::increment($key.':ditahan');
+
+                    return;
+                }
+                $suppressed = (int) Cache::pull($key.':ditahan', 0);
+            } catch (Throwable $e) {
+                // Cache bermasalah: tetap catat (tanpa dedup) daripada kehilangan jejak login gagal.
+                Log::warning('[AUDIT] Dedup login gagal tidak jalan: '.self::utf8($e->getMessage()));
+            }
+
+            self::record(
+                module: 'AUTH',
+                event: 'auth.login_failed',
+                description: ($viaApi ? 'Login API gagal' : 'Login gagal').' untuk "'.$identifier.'"'
+                    .($suppressed > 0 ? " (+{$suppressed} percobaan sebelumnya tidak dicatat terpisah)" : ''),
+                subject: $targetUser instanceof Model ? $targetUser : null,
+                meta: array_filter([
+                    'identitas_dicoba' => $identifier,
+                    'akun_ditemukan' => $targetUser !== null,
+                    'percobaan_tidak_dicatat' => $suppressed ?: null,
+                ], fn ($v) => $v !== null),
+                severity: self::WARNING,
+            );
+        } catch (Throwable $e) {
+            Log::error('[AUDIT] Gagal mencatat login gagal: '.self::utf8($e->getMessage()));
+        }
     }
 
     /**
@@ -269,7 +363,7 @@ class ActivityLogger
             $clean = [];
             foreach ($value as $k => $v) {
                 // Kunci 'old'/'new' adalah struktur diff, bukan nama kolom — pakai key induk untuk redaksi.
-                $clean[$k] = self::sanitize($v, is_string($k) && ! in_array($k, ['old', 'new'], true) ? $k : null, $depth + 1);
+                $clean[is_string($k) ? self::utf8($k) : $k] = self::sanitize($v, is_string($k) && ! in_array($k, ['old', 'new'], true) ? $k : null, $depth + 1);
             }
 
             return $clean;
@@ -327,11 +421,17 @@ class ActivityLogger
             $value === null, is_bool($value), is_int($value), is_float($value) => $value,
             $value instanceof DateTimeInterface => $value->format('Y-m-d H:i:s'),
             $value instanceof BackedEnum => $value->value,
-            is_string($value) => Str::limit($value, self::MAX_STRING),
-            $value instanceof \Stringable => Str::limit((string) $value, self::MAX_STRING),
+            is_string($value) => Str::limit(self::utf8($value), self::MAX_STRING),
+            $value instanceof \Stringable => Str::limit(self::utf8((string) $value), self::MAX_STRING),
             is_object($value) && method_exists($value, 'toArray') => self::sanitize($value->toArray()),
             default => '['.get_debug_type($value).']',
         };
+    }
+
+    /** Ganti byte yang bukan UTF-8 valid dengan "?" — kolom & JSON utf8mb4 menolak byte rusak. */
+    private static function utf8(string $value): string
+    {
+        return mb_check_encoding($value, 'UTF-8') ? $value : mb_scrub($value, 'UTF-8');
     }
 
     private static function capSize(array $data): array
@@ -392,7 +492,7 @@ class ActivityLogger
     private static function originalPath(Request $request): string
     {
         try {
-            if (Livewire::isLivewireRequest()) {
+            if (self::isLivewireUpdate($request)) {
                 $path = Livewire::originalPath();
                 if (is_string($path) && $path !== 'POST') {
                     return $path;
@@ -407,14 +507,23 @@ class ActivityLogger
 
     private static function originalMethod(Request $request): string
     {
-        try {
-            if (Livewire::isLivewireRequest()) {
-                return 'LIVEWIRE';
-            }
-        } catch (Throwable) {
-        }
+        return self::isLivewireUpdate($request) ? 'LIVEWIRE' : $request->method();
+    }
 
-        return $request->method();
+    /**
+     * Header X-Livewire & components.0.snapshot dikirim CLIENT. Livewire::isLivewireRequest() cuma
+     * mengecek header itu, jadi di route lain (API login, webhook) siapa pun bisa memalsukan path asal
+     * -> channel/pelaku/url di log ikut palsu (mis. login API tercatat sebagai WEBHOOK). Path dari
+     * snapshot hanya dipercaya di endpoint update Livewire sendiri (route bernama *livewire.update,
+     * yang snapshot-nya diverifikasi checksum oleh Livewire sebelum komponen dijalankan).
+     */
+    private static function isLivewireUpdate(Request $request): bool
+    {
+        try {
+            return $request->hasHeader('X-Livewire') && (bool) $request->route()?->named('*livewire.update');
+        } catch (Throwable) {
+            return false;
+        }
     }
 
     /**

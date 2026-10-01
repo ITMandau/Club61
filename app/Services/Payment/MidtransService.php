@@ -117,11 +117,14 @@ class MidtransService
         // token mock → pemanggil menandai order LUNAS tanpa uang masuk. Sekarang error dilempar,
         // transaksi checkout di-rollback, dan customer diminta mencoba lagi.
         try {
+            // Timeout eksplisit: panggilan ini berjalan di dalam transaksi DB yang mengunci baris booking/court —
+            // Midtrans yang lambat (default 30 detik) membuat antrean lock menumpuk.
             $response = Http::withBasicAuth($this->serverKey, '')
                 ->withHeaders([
                     'Content-Type' => 'application/json',
                     'Accept' => 'application/json',
                 ])
+                ->timeout(10)
                 ->post($this->snapApiUrl, $payload);
         } catch (\Throwable $e) {
             Log::error("[ALERT] Midtrans Snap tidak bisa dihubungi [{$orderId}]: " . $e->getMessage());
@@ -160,6 +163,7 @@ class MidtransService
                     'Content-Type' => 'application/json',
                     'Accept' => 'application/json',
                 ])
+                ->timeout(5)
                 ->post($url);
 
             return $response->successful();

@@ -189,6 +189,7 @@ class ActivityLogTest extends TestCase
         $this->assertSame('WARNING', $log->severity);
         $this->assertSame('Admin Nakal', $log->causer_name);
         $this->assertStringContainsString('cancel_refund_padel', $log->description);
+        $this->assertSame('LIVEWIRE', $log->http_method, 'Endpoint update Livewire asli tetap dikenali');
         $this->assertSame(0, ActivityLog::where('event', 'booking.refunded')->count());
     }
 
@@ -471,5 +472,204 @@ class ActivityLogTest extends TestCase
         $log = ActivityLog::where('event', 'shift.closed')->sole();
         $this->assertSame('WARNING', $log->severity);
         $this->assertStringContainsString('SELISIH SETORAN -Rp 25.000', $log->description);
+    }
+
+    public function test_date_filter_uses_the_wib_calendar_day(): void
+    {
+        $this->actingAs(User::factory()->superAdmin()->create());
+
+        Carbon::setTestNow(Carbon::parse('2026-10-01 18:30:00', 'Asia/Jakarta'));
+        $evening = ActivityLogger::record('SYSTEM', 'test.evening', 'kejadian 18:30 WIB');
+        Carbon::setTestNow(Carbon::parse('2026-09-30 20:00:00', 'Asia/Jakarta'));
+        $yesterday = ActivityLogger::record('SYSTEM', 'test.yesterday', 'kejadian kemarin 20:00 WIB');
+        Carbon::setTestNow(Carbon::parse('2026-10-01 19:00:00', 'Asia/Jakarta'));
+
+        try {
+            Livewire::test(LogAktivitas::class)
+                ->filterTable('tanggal', ['dari' => '2026-10-01', 'sampai' => '2026-10-01'])
+                ->assertCanSeeTableRecords([$evening])
+                ->assertCanNotSeeTableRecords([$yesterday]);
+        } finally {
+            Carbon::setTestNow();
+        }
+    }
+
+    /** @return array<int, array<int, string>> baris CSV tanpa BOM & header */
+    private function csvRows(string $csv): array
+    {
+        $this->assertStringStartsWith("\xEF\xBB\xBF", $csv);
+        $handle = fopen('php://memory', 'r+');
+        fwrite($handle, substr($csv, 3));
+        rewind($handle);
+        $rows = [];
+        while (($row = fgetcsv($handle, null, ',', '"', '')) !== false) {
+            $rows[] = $row;
+        }
+        fclose($handle);
+
+        $this->assertSame(LogAktivitas::CSV_HEADER, array_shift($rows));
+
+        return $rows;
+    }
+
+    public function test_export_route_checks_permission_streams_filtered_csv_and_logs_the_count(): void
+    {
+        $viewer = User::factory()->admin()->create();
+        Role::findByName('admin', 'web')->givePermissionTo('View:LogAktivitas');
+        app(\Spatie\Permission\PermissionRegistrar::class)->forgetCachedPermissions();
+        $this->actingAs($viewer)->get(route('admin.log-aktivitas.export'))->assertForbidden();
+        $this->assertSame(0, ActivityLog::where('event', 'activity_log.exported')->count());
+
+        $this->actingAs(User::factory()->superAdmin()->create());
+        ActivityLogger::record('FINANCE', 'test.export', '=HYPERLINK("http://evil")', meta: ['catatan' => 'kutip "ganda" \\ miring']);
+        ActivityLogger::record('FINANCE', 'test.export', 'baris kedua');
+        ActivityLogger::record('FINANCE', 'test.export', 'baris ketiga');
+        ActivityLogger::record('FNB', 'test.other', 'bukan keuangan');
+
+        $response = $this->get(route('admin.log-aktivitas.export', ['module' => ['FINANCE']]));
+        $response->assertOk();
+        $this->assertStringContainsString('text/csv', $response->headers->get('Content-Type'));
+        $rows = $this->csvRows($response->streamedContent());
+
+        $this->assertCount(3, $rows);
+        $this->assertSame(['test.export'], array_values(array_unique(array_column($rows, 5))));
+        $evil = collect($rows)->firstWhere(6, "'=HYPERLINK(\"http://evil\")");
+        $this->assertNotNull($evil, 'Formula harus dinetralkan');
+        $this->assertSame('kutip "ganda" \\ miring', json_decode($evil[12], true)['catatan'], 'JSON dengan \\" tidak boleh rusak');
+
+        // Batas baris: yang di-stream & yang dicatat sama-sama dipotong ke export_max_rows.
+        config(['audit.export_max_rows' => 2]);
+        $rows = $this->csvRows($this->get(route('admin.log-aktivitas.export', ['module' => ['FINANCE']]))->streamedContent());
+        $this->assertCount(2, $rows);
+
+        $counts = ActivityLog::where('event', 'activity_log.exported')->get()->map(fn ($log) => $log->meta['jumlah_baris'])->sort()->values()->all();
+        $this->assertSame([2, 3], $counts);
+        $this->assertSame(['module' => ['FINANCE']], ActivityLog::where('event', 'activity_log.exported')->first()->meta['filter']);
+
+        // Parameter di luar whitelist ditolak.
+        $this->get(route('admin.log-aktivitas.export', ['module' => ['HACK']]))->assertSessionHasErrors('module.0');
+    }
+
+    public function test_export_button_links_to_the_route_with_active_filters(): void
+    {
+        $this->actingAs(User::factory()->superAdmin()->create());
+
+        $url = Livewire::test(LogAktivitas::class)
+            ->filterTable('module', ['FINANCE'])
+            ->searchTable('refund')
+            ->instance()
+            ->exportUrl();
+
+        $this->assertStringStartsWith(route('admin.log-aktivitas.export'), $url);
+        parse_str((string) parse_url($url, PHP_URL_QUERY), $query);
+        $this->assertSame(['FINANCE'], $query['module']);
+        $this->assertSame('refund', $query['search']);
+        $this->assertSame(now('Asia/Jakarta')->toDateString(), $query['dari']);
+    }
+
+    public function test_spoofed_livewire_header_on_api_route_cannot_fake_the_channel(): void
+    {
+        $this->withHeaders(['X-Livewire' => 'true'])->postJson('/api/v1/auth/login', [
+            'login' => 'tidakada@club61.com',
+            'password' => 'salah',
+            'components' => [['snapshot' => json_encode(['memo' => ['path' => 'api/v1/padel/webhook/midtrans']])]],
+        ])->assertStatus(401);
+
+        $log = ActivityLog::where('event', 'auth.login_failed')->sole();
+        $this->assertSame('CUSTOMER_WEB', $log->channel);
+        $this->assertSame('GUEST', $log->actor_type);
+        $this->assertSame('/api/v1/auth/login', $log->url);
+        $this->assertSame('POST', $log->http_method);
+    }
+
+    public function test_invalid_utf8_input_still_writes_the_log(): void
+    {
+        $this->withHeaders(['User-Agent' => "Mozilla/5.0 \xFF\xFE rusak"])->postJson('/api/v1/auth/login', [
+            'login' => 'tidakada@club61.com',
+            'password' => 'salah',
+        ])->assertStatus(401);
+
+        $log = ActivityLog::where('event', 'auth.login_failed')->sole();
+        $this->assertTrue(mb_check_encoding($log->user_agent, 'UTF-8'));
+        $this->assertStringStartsWith('Mozilla/5.0', $log->user_agent);
+
+        $direct = ActivityLogger::record('SYSTEM', 'test.utf8', "deskripsi \xC3\x28 rusak", meta: ["kunci\xFF" => ['nilai' => "abc\xFF"]]);
+        $this->assertNotNull($direct, 'Byte rusak di meta tidak boleh membuat log hilang');
+        $fresh = $direct->fresh();
+        $this->assertTrue(mb_check_encoding($fresh->description, 'UTF-8'));
+        $this->assertTrue(mb_check_encoding(json_encode($fresh->meta), 'UTF-8'));
+    }
+
+    public function test_repeated_failed_logins_write_at_most_one_row_per_minute(): void
+    {
+        User::factory()->create(['email' => 'budi@club61.com']);
+
+        foreach (range(1, 3) as $attempt) {
+            $this->post('/login', ['email' => 'budi@club61.com', 'password' => 'Salah'.$attempt]);
+        }
+        $this->assertSame(1, ActivityLog::where('event', 'auth.login_failed')->count());
+
+        $this->travel(ActivityLogger::LOGIN_FAILED_WINDOW + 1)->seconds();
+        $this->post('/login', ['email' => 'budi@club61.com', 'password' => 'Salah4']);
+
+        $logs = ActivityLog::where('event', 'auth.login_failed')->orderBy('created_at')->get();
+        $this->assertCount(2, $logs);
+        $this->assertSame(2, $logs->last()->meta['percobaan_tidak_dicatat']);
+        $this->assertArrayNotHasKey('percobaan_tidak_dicatat', $logs->first()->meta);
+        $this->assertNull($logs->first()->causer_id, 'Pemilik akun bukan pelaku login gagal');
+
+        // API: identitas lain = kunci dedup lain, tetap maksimal satu baris per menit.
+        foreach (range(1, 3) as $attempt) {
+            $this->postJson('/api/v1/auth/login', ['login' => 'lain@club61.com', 'password' => 'salah'])->assertStatus(401);
+        }
+        $this->assertSame(3, ActivityLog::where('event', 'auth.login_failed')->count());
+    }
+
+    public function test_lockout_is_always_logged(): void
+    {
+        User::factory()->create(['email' => 'budi@club61.com']);
+
+        foreach (range(1, 7) as $attempt) {
+            $this->post('/login', ['email' => 'budi@club61.com', 'password' => 'Salah'.$attempt]);
+        }
+
+        $this->assertSame(1, ActivityLog::where('event', 'auth.login_failed')->count());
+        $this->assertSame(2, ActivityLog::where('event', 'auth.lockout')->count());
+    }
+
+    public function test_failed_api_login_does_not_blame_the_targeted_account(): void
+    {
+        $victim = User::factory()->create(['email' => 'korban@club61.com', 'name' => 'Korban']);
+
+        $this->postJson('/api/v1/auth/login', ['login' => 'korban@club61.com', 'password' => 'salah'])->assertStatus(401);
+
+        $log = ActivityLog::where('event', 'auth.login_failed')->sole();
+        $this->assertNull($log->causer_id);
+        $this->assertNull($log->causer_name);
+        $this->assertSame('GUEST', $log->actor_type);
+        $this->assertSame((string) $victim->id, $log->subject_id);
+        $this->assertTrue($log->meta['akun_ditemukan']);
+    }
+
+    public function test_access_denied_never_throws_when_cache_fails(): void
+    {
+        \Illuminate\Support\Facades\Cache::shouldReceive('add')->andThrow(new \RuntimeException('cache mati'));
+
+        ActivityLogger::accessDenied('Akses ditolak: uji cache mati');
+
+        $this->assertSame(1, ActivityLog::where('event', 'auth.access_denied')->count());
+    }
+
+    public function test_deadlock_inside_transaction_is_rethrown_but_other_errors_are_swallowed(): void
+    {
+        $error = new \RuntimeException('kolom tidak dikenal');
+        ActivityLog::creating(function () use (&$error) {
+            throw $error;
+        });
+        $this->assertNull(ActivityLogger::record('SYSTEM', 'test.error', 'error biasa ditelan'));
+
+        $error = new \PDOException('SQLSTATE[40001]: Serialization failure: 1213 Deadlock found when trying to get lock');
+        $this->expectException(\PDOException::class);
+        DB::transaction(fn () => ActivityLogger::record('SYSTEM', 'test.deadlock', 'deadlock dilempar ulang'));
     }
 }

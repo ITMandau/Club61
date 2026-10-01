@@ -91,6 +91,10 @@
                     <span>Sisa Tagihan Selisih Reschedule:</span>
                     <span class="font-mono text-red-700 font-black whitespace-nowrap text-right" x-text="'Rp ' + formatNumber(ticket.unpaid_delta)"></span>
                 </div>
+                <p class="text-[11px] leading-snug text-amber-900"
+                    x-text="ticket.pending_delta_channel === 'CASHIER'
+                        ? 'Sesuai permintaan Anda, selisih dibayar di kasir saat datang. Anda juga bisa melunasinya sekarang secara online.'
+                        : 'Silakan lunasi selisih secara online di bawah ini. QR tiket aktif otomatis setelah lunas.'"></p>
             </div>
         </template>
     </div>

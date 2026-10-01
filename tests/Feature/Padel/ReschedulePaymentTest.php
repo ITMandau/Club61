@@ -500,41 +500,156 @@ class ReschedulePaymentTest extends TestCase
         $this->reschedule($booking, '10:00');
     }
 
-    public function test_admin_modal_shows_full_breakdown_and_collects_payment_proof(): void
+    /** Modal reschedule HANYA mencatat pilihan cara bayar — tidak pernah menerima uang. */
+    public function test_reschedule_modal_only_records_payment_choice_and_never_takes_money(): void
     {
         $booking = $this->paidBooking('16:00', 3, 800000);
         $this->openShift();
         $this->actingAs($this->admin);
 
-        $page = Livewire::test(KelolaPemesanan::class)
+        Livewire::test(KelolaPemesanan::class)
             ->call('openRescheduleModal', $booking->id)
             ->set('rescheduleStartTime', '17:00')
             ->assertSet('rescheduleQuote.delta', 100000.0)
             ->assertSee('Total Kurang Bayar')
             ->assertSee('Biaya layanan')
-            ->assertSee('Kirim tagihan ke customer')
-            ->assertSee('Nomor RRN')
-            ->set('rescheduleProof.qris_rrn', 'RRNMODAL01')
-            ->set('reschedulePaymentMethod', 'QRIS')
+            ->assertSee('Bayar di Kasir')
+            ->assertSee('Bayar Online (Midtrans)')
+            ->assertDontSee('Nomor RRN')
+            ->assertDontSee('Approval Code')
+            ->set('rescheduleDeltaChannel', 'CASHIER')
+            ->call('executeReschedule')
+            ->assertSet('showRescheduleModal', false);
+
+        $booking->refresh();
+        $this->assertSame('17:00', $booking->start_time->format('H:i'));
+        $this->assertSame('LOCKED', $booking->status, 'QR ditahan sampai selisih lunas');
+        $bill = Payment::where('transaction_id', 'like', 'SUPP-%')->sole();
+        $this->assertSame('PENDING', $bill->status);
+        $this->assertEquals(103000, $bill->amount);
+        $this->assertSame('CASHIER', $bill->payload_log['preferred_channel']);
+    }
+
+    public function test_choosing_online_payment_is_shown_on_customer_invoice(): void
+    {
+        $booking = $this->paidBooking('10:00');
+        $this->actingAs($this->admin);
+
+        Livewire::test(KelolaPemesanan::class)
+            ->call('openRescheduleModal', $booking->id)
+            ->set('rescheduleStartTime', '18:00')
+            ->set('rescheduleDeltaChannel', 'ONLINE')
             ->call('executeReschedule');
 
-        $page->assertSet('showRescheduleModal', false);
-        $this->assertSame('17:00', $booking->fresh()->start_time->format('H:i'));
-        $this->assertSame('RRNMODAL01', Payment::where('transaction_id', 'like', 'SUPP-%')->sole()->payload_log['qris_details']['rrn']);
+        $this->actingAs($this->customer, 'sanctum')
+            ->getJson("/api/v1/padel/bookings/{$booking->id}/ticket")
+            ->assertJsonPath('data.has_pending_delta', true)
+            ->assertJsonPath('data.pending_delta_channel', 'ONLINE');
+    }
 
-        // Settle modal: EDC wajib 4 digit + approval + trace.
-        $second = $this->paidBooking('09:00', 1, 200000, 0, 'BK-RS-SETTLE');
-        $this->reschedule($second, '21:00');
+    /** Pelunasan dieksekusi di POS Walk-In, memakai layar bayar POS yang sama (bukti EDC/QRIS + shift). */
+    public function test_cashier_settles_outstanding_bill_from_pos_walk_in(): void
+    {
+        $booking = $this->paidBooking('09:00', 1, 200000, 0, 'BK-RS-POS');
+        $this->reschedule($booking, '21:00');
+        $shift = $this->openShift();
+        $this->actingAs($this->admin);
+
+        // Alur sama dengan walk-in biasa: klik slot "Bayar" di grid -> customer & nominal otomatis terisi
+        // di panel kanan -> Lanjut ke Pembayaran -> layar bayar yang sama -> tombol bayar yang sama.
+        $pos = Livewire::test(\App\Filament\Pages\BookOfflineCourt::class)
+            ->set('bookingDate', $this->date)
+            ->assertSee('Bayar Selisih')
+            ->assertSeeHtml("startSettlement('{$booking->id}')")
+            ->call('startSettlement', $booking->id)
+            ->assertSet('posStep', 'selection')
+            ->assertSet('selectedCustomerId', $this->customer->id)
+            ->assertSet('selectedCustomerName', 'Andi')
+            ->assertSet('settleBill.amount', 103000.0)
+            ->assertSee('Selisih yang harus dibayar')
+            ->call('proceedToPayment')
+            ->assertSet('posStep', 'payment')
+            ->call('setPaymentMethod', 'DEBIT_CARD')
+            ->set('edcTerminal', 'EDC_MANDIRI')
+            ->set('edcLast4', '9876')
+            ->set('edcApprovalCode', 'AP9988')
+            ->set('edcTraceNumber', 'TR7766')
+            ->call('submitWalkInBooking')
+            ->assertSet('posStep', 'selection')
+            ->assertSet('settleBill', null)
+            ->assertSet('selectedCustomerId', null);
+
+        $this->assertSame('PAID', $booking->fresh()->status);
+        $this->assertNotNull($booking->fresh()->qr_code_hash);
+        $paid = Payment::where('order_id', $booking->order_id)->where('transaction_id', 'like', 'SUPP-%')->sole();
+        $this->assertSame('SUCCESS', $paid->status);
+        $this->assertSame('EDC_MANDIRI', $paid->payment_method);
+        $this->assertSame($shift->id, $paid->pos_shift_id);
+        $this->assertSame('9876', $paid->payload_log['edc_details']['card_last_4']);
+        $pos->assertDontSeeHtml("startSettlement('{$booking->id}')"); // slot sekarang tampil terisi biasa
+    }
+
+    public function test_pos_settlement_rejects_missing_proof_and_requires_shift(): void
+    {
+        $booking = $this->paidBooking('09:00', 1, 200000, 0, 'BK-RS-NOPROOF');
+        $this->reschedule($booking, '21:00');
+        $this->actingAs($this->admin); // super_admin pun wajib buka shift untuk menerima pelunasan
+
+        $pos = Livewire::test(\App\Filament\Pages\BookOfflineCourt::class)
+            ->call('startSettlement', $booking->id)
+            ->call('proceedToPayment')
+            ->assertSet('posStep', 'selection');
+
+        $this->openShift();
+        $pos->call('proceedToPayment')
+            ->assertSet('posStep', 'payment')
+            ->call('submitWalkInBooking') // QRIS tanpa RRN
+            ->assertSet('posStep', 'payment');
+
+        $this->assertSame('LOCKED', $booking->fresh()->status);
+    }
+
+    public function test_clicking_another_slot_cancels_the_selected_bill(): void
+    {
+        $booking = $this->paidBooking('09:00', 1, 200000, 0, 'BK-RS-SWITCH');
+        $this->reschedule($booking, '21:00');
+        $this->actingAs($this->admin);
+
+        Livewire::test(\App\Filament\Pages\BookOfflineCourt::class)
+            ->call('startSettlement', $booking->id)
+            ->call('toggleSlot', $this->court->id, $this->court->name, '10:00:00', '11:00:00', 200000)
+            ->assertSet('settleBill', null)
+            ->assertSet('selectedCustomerId', null);
+    }
+
+    public function test_pay_at_pos_link_from_kelola_pemesanan_opens_the_bill_directly(): void
+    {
+        $booking = $this->paidBooking('09:00', 1, 200000, 0, 'BK-RS-LINK');
+        $this->reschedule($booking, '21:00');
+        $this->actingAs($this->admin);
+
         Livewire::test(KelolaPemesanan::class)
-            ->call('openSettleModal', $second->id)
-            ->set('settlePaymentMethod', 'EDC_MANDIRI')
-            ->assertSee('Approval Code')
-            ->set('settleProof.card_last_4', '9876')
-            ->set('settleProof.approval_code', 'AP9988')
-            ->set('settleProof.trace_number', 'TR7766')
-            ->call('executeSettleSupplemental')
-            ->assertSet('showSettleModal', false);
-        $this->assertSame('PAID', $second->fresh()->status);
+            ->assertSeeHtml('tagihan='.$booking->id);
+
+        Livewire::withQueryParams(['tagihan' => $booking->id])
+            ->test(\App\Filament\Pages\BookOfflineCourt::class)
+            ->assertSet('settleBill.code', 'BK-RS-LINK')
+            ->assertSet('bookingDate', $this->date) // grid langsung ke tanggal jadwalnya
+            ->assertSet('selectedCustomerName', 'Andi');
+    }
+
+    public function test_settling_requires_permission(): void
+    {
+        $booking = $this->paidBooking('09:00', 1, 200000, 0, 'BK-RS-PERM');
+        $this->reschedule($booking, '21:00');
+        $kitchen = User::factory()->kitchen()->create();
+        \App\Models\Role::findByName('kitchen', 'web')->givePermissionTo('View:BookOfflineCourt');
+        app(\Spatie\Permission\PermissionRegistrar::class)->forgetCachedPermissions();
+        $this->actingAs($kitchen);
+
+        Livewire::test(\App\Filament\Pages\BookOfflineCourt::class)
+            ->call('startSettlement', $booking->id)
+            ->assertSet('settleBill', null);
     }
 
     public function test_reschedule_modal_refuses_unpaid_booking(): void
@@ -583,9 +698,9 @@ class ReschedulePaymentTest extends TestCase
         $order = Order::find($booking->order_id);
         $this->assertEquals((float) $order->grand_total, (float) Payment::where('order_id', $order->id)->where('status', 'SUCCESS')->sum('amount'));
 
-        // Modal Settle juga tidak terbuka untuk tagihan yang sudah lunas online.
+        // Layar pelunasan di POS juga tidak terbuka untuk tagihan yang sudah lunas online.
         $this->actingAs($this->admin);
-        Livewire::test(KelolaPemesanan::class)->call('openSettleModal', $booking->id)->assertSet('showSettleModal', false);
+        Livewire::test(\App\Filament\Pages\BookOfflineCourt::class)->call('startSettlement', $booking->id)->assertSet('settleBill', null);
     }
 
     public function test_cashier_settle_is_blocked_while_customer_is_still_paying_online(): void

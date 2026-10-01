@@ -283,7 +283,7 @@
                                         style="background:#FFFFFF; font-weight:700;">
                                         <option value="BCA_QRIS">QRIS BCA Frontdesk</option>
                                         <option value="MANDIRI_QRIS">QRIS Bank Mandiri</option>
-                                        <option value="GOPAY">GoPay / Midtrans QRIS</option>
+                                        <option value="GOPAY_QRIS">GoPay / Midtrans QRIS</option>
                                         <option value="OVO">OVO</option>
                                         <option value="SHOPEEPAY">ShopeePay</option>
                                         <option value="DANA">DANA</option>

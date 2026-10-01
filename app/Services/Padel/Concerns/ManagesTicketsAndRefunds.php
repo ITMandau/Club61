@@ -138,8 +138,12 @@ trait ManagesTicketsAndRefunds
                 $methodLabel = $this->formatPaymentMethodLabel($rawMethod, $latestPayment?->payload_log);
 
                 $totalPaid = (float) $order->payments->where('status', 'SUCCESS')->sum('amount');
-                $pendingSupplementalPayment = $order->payments->where('status', 'PENDING')->first();
-                $unpaidDelta = $pendingSupplementalPayment ? (float) $pendingSupplementalPayment->amount : max(0, (float) $order->grand_total - $totalPaid);
+                // Tagihan milik booking INI (order bisa berisi beberapa booking dengan tagihan selisih masing-masing).
+                $booking->setRelation('order', $order);
+                $pendingSupplementalPayment = $this->pendingBillForBooking($booking);
+                $unpaidDelta = $pendingSupplementalPayment
+                    ? (float) $pendingSupplementalPayment->amount
+                    : (in_array($booking->status, ['LOCKED', 'PENDING_PAYMENT', 'PENDING'], true) ? max(0, (float) $order->grand_total - $totalPaid) : 0.0);
 
                 $booking->setAttribute('order', $order);
                 $booking->setAttribute('payment_method', $rawMethod);
@@ -148,6 +152,8 @@ trait ManagesTicketsAndRefunds
                 $booking->setAttribute('unpaid_delta', $unpaidDelta);
                 $booking->setAttribute('has_pending_delta', $unpaidDelta > 0 && $totalPaid > 0);
                 $booking->setAttribute('pending_supplemental_id', $pendingSupplementalPayment?->id);
+                // Pilihan bayar selisih yang dicatat resepsionis: CASHIER (di kasir saat datang) / ONLINE (Midtrans).
+                $booking->setAttribute('pending_delta_channel', $pendingSupplementalPayment?->payload_log['preferred_channel'] ?? null);
             }
         }
 

@@ -198,7 +198,10 @@
                 this.isSubmittingPayment = true;
 
                 try {
-                    const targetId = this.currentTicket.order_id || this.currentTicket.id;
+                    // Tagihan selisih reschedule melekat ke booking-nya → kirim id booking, bukan id order.
+                    const targetId = this.currentTicket.has_pending_delta
+                        ? this.currentTicket.id
+                        : (this.currentTicket.order_id || this.currentTicket.id);
                     const res = await fetch(`/api/v1/padel/bookings/${targetId}/retry-payment`, {
                         method: 'POST',
                         headers: {

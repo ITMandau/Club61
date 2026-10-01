@@ -186,17 +186,11 @@ class AppServiceProvider extends ServiceProvider
         });
 
         \Illuminate\Support\Facades\Event::listen(\Illuminate\Auth\Events\Failed::class, function ($event) {
-            // Hanya identitas yang dicoba — password TIDAK PERNAH ikut dicatat.
+            // Hanya identitas yang dicoba — password TIDAK PERNAH ikut dicatat. Akun yang dicoba jadi
+            // subject (bukan pelaku), dan percobaan berulang di-dedup per IP + identitas (lihat loginFailed).
             $credentials = (array) $event->credentials;
             $identifier = $credentials['email'] ?? $credentials['phone'] ?? $credentials['login'] ?? '-';
-            \App\Services\Audit\ActivityLogger::record(
-                module: 'AUTH',
-                event: 'auth.login_failed',
-                description: 'Login gagal untuk "'.\Illuminate\Support\Str::limit((string) $identifier, 80).'"',
-                meta: ['identitas_dicoba' => \Illuminate\Support\Str::limit((string) $identifier, 80), 'akun_ditemukan' => $event->user !== null],
-                severity: \App\Services\Audit\ActivityLogger::WARNING,
-                causer: $event->user,
-            );
+            \App\Services\Audit\ActivityLogger::loginFailed((string) $identifier, $event->user);
         });
 
         \Illuminate\Support\Facades\Event::listen(\Illuminate\Auth\Events\Lockout::class, function ($event) {

@@ -122,8 +122,14 @@ Route::get('/corporate/preview/{organization}', [\App\Http\Controllers\Corporate
     ->middleware('auth')
     ->name('corporate.preview');
 
+// Export CSV Log Aktivitas (Modul 16) — route GET biasa (bukan aksi Livewire) supaya bisa di-stream.
+// Izin View:LogAktivitas + export_activity_logs dicek di controller.
+Route::get('/admin/log-aktivitas/export', \App\Http\Controllers\Admin\ActivityLogExportController::class)
+    ->middleware('auth')
+    ->name('admin.log-aktivitas.export');
+
 Route::middleware('auth')->group(function () {
-    Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
+    Route::get('/profile',[ProfileController::class, 'edit'])->name('profile.edit');
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
 });

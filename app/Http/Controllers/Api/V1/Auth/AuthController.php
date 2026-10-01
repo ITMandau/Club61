@@ -83,14 +83,8 @@ class AuthController extends Controller
 
         if (! $user || ! Hash::check($validated['password'], $user->password)) {
             // Login API tidak lewat Auth::attempt(), jadi event Failed bawaan tidak terpicu — catat manual.
-            \App\Services\Audit\ActivityLogger::record(
-                module: 'AUTH',
-                event: 'auth.login_failed',
-                description: 'Login API gagal untuk "'.\Illuminate\Support\Str::limit($identifier, 80).'"',
-                meta: ['identitas_dicoba' => \Illuminate\Support\Str::limit($identifier, 80), 'akun_ditemukan' => $user !== null],
-                severity: \App\Services\Audit\ActivityLogger::WARNING,
-                causer: $user,
-            );
+            // Akun yang dicoba dicatat sebagai subject, bukan pelaku (pemilik akun bukan yang mencoba).
+            \App\Services\Audit\ActivityLogger::loginFailed($identifier, $user, viaApi: true);
 
             return response()->json([
                 'success' => false,

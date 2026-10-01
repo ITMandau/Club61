@@ -7,9 +7,11 @@ use App\Models\Padel\PadelBooking;
 use App\Models\Pos\Order;
 use App\Models\Pos\Payment;
 use App\Services\Payment\PaymentManager;
+use App\Services\Payment\PaymentOrchestratorService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
 class PaymentWebhookController extends Controller
@@ -126,10 +128,16 @@ class PaymentWebhookController extends Controller
                 // masuk log supaya kelihatan di monitoring, walau proses pelunasan tetap lanjut
                 // (grand_total milik kita sendiri yang tetap jadi acuan `payment_status`, bukan
                 // klaim gross_amount dari webhook — lihat markOrderAsPaid()).
-                if ($order->grand_total !== null && abs((float) $grossAmount - (float) $order->grand_total) > 1) {
-                    Log::warning("[ALERT] Webhook gross_amount tidak cocok dengan grand_total order [{$order->order_number}]", [
+                // Dibandingkan dengan tagihan PEMILIK sesi ini — pembayaran selisih reschedule dulu selalu memicu
+                // ALERT palsu karena dibandingkan dengan grand_total order (alert fatigue menutupi selisih asli).
+                $bill = Payment::where('order_id', $order->id)->get()
+                    ->first(fn (Payment $p) => PaymentOrchestratorService::ownsGatewayId($p, $incomingOrderId));
+                $expectedAmount = $bill ? (float) $bill->amount : (float) $order->grand_total;
+                if ($order->grand_total !== null && abs((float) $grossAmount - $expectedAmount) > 1) {
+                    Log::warning("[ALERT] Webhook gross_amount tidak cocok dengan tagihan order [{$order->order_number}]", [
                         'order_id' => $order->id,
                         'gross_amount_from_webhook' => $grossAmount,
+                        'expected_amount' => $expectedAmount,
                         'grand_total_in_db' => (float) $order->grand_total,
                         'driver' => $driver,
                     ]);
@@ -143,23 +151,84 @@ class PaymentWebhookController extends Controller
                     'payload_log' => $request->all(),
                 ]);
             } elseif ($status === 'CANCELLED') {
-                $order->update(['payment_status' => 'CANCELLED']);
-
-                Payment::where('order_id', $order->id)
-                    ->where('status', 'PENDING')
-                    ->update([
-                        'status' => 'FAILED',
-                        'payload_log' => $request->all(),
-                    ]);
-
-                foreach ($order->padelBookings as $booking) {
-                    if (in_array($booking->status, ['PENDING_PAYMENT', 'LOCKED', 'PENDING'], true)) {
-                        $booking->update(['status' => 'CANCELLED']);
-                    }
-                }
+                $this->handleGatewayCancellation($order, $incomingOrderId, (string) $request->input('transaction_status', ''), $request->all());
             }
         }
 
+        return $this->acknowledged($driver, $incomingOrderId, $status);
+    }
+
+    /**
+     * Notifikasi expire/cancel/deny untuk SATU sesi pembayaran. Dulu notifikasi ini membatalkan SELURUH order:
+     * order PAID jadi CANCELLED, semua tagihan PENDING (termasuk tagihan kasir) jadi FAILED, dan booking LOCKED
+     * hasil reschedule ikut CANCELLED — cukup dengan customer membuka link bayar selisih lalu membiarkannya
+     * kedaluwarsa, booking yang sudah dibayar lunas hilang dan slotnya lepas.
+     *
+     * Sekarang hanya tagihan PEMILIK sesi itu yang disentuh, dan hanya kalau sesi itu adalah sesi terakhirnya.
+     */
+    private function handleGatewayCancellation(Order $order, string $gatewayOrderId, string $rawStatus, array $payload): void
+    {
+        // deny bukan status akhir: Midtrans mengizinkan customer mencoba kartu lagi dengan order_id yang sama.
+        if (strtolower($rawStatus) === 'deny') {
+            Log::info("Webhook deny untuk [{$gatewayOrderId}] diabaikan (bukan status akhir, customer bisa mencoba lagi).");
+
+            return;
+        }
+
+        DB::transaction(function () use ($order, $gatewayOrderId, $rawStatus, $payload) {
+            $order = Order::whereKey($order->id)->lockForUpdate()->firstOrFail();
+
+            $bill = Payment::where('order_id', $order->id)->lockForUpdate()->get()
+                ->first(fn (Payment $p) => PaymentOrchestratorService::ownsGatewayId($p, $gatewayOrderId)
+                    || ($p->payment_gateway === 'MIDTRANS' && $gatewayOrderId === $order->order_number && $p->transaction_id === $order->order_number));
+
+            if (! $bill || $bill->status !== 'PENDING') {
+                Log::info("Webhook {$rawStatus} untuk [{$gatewayOrderId}] diabaikan: tidak ada tagihan PENDING pemilik sesi ini.");
+
+                return;
+            }
+
+            $log = is_array($bill->payload_log) ? $bill->payload_log : [];
+
+            // Sesi lama yang kedaluwarsa padahal customer sudah membuka sesi baru untuk tagihan yang sama → abaikan.
+            $latestSession = $log['midtrans_order_id'] ?? $bill->transaction_id;
+            if ($latestSession !== $gatewayOrderId) {
+                Log::info("Webhook {$rawStatus} untuk sesi lama [{$gatewayOrderId}] diabaikan; sesi terbaru tagihan ini [{$latestSession}].");
+
+                return;
+            }
+
+            // Tagihan selisih reschedule: customer tetap berutang & booking-nya sudah dibayar sebagian. Kembalikan
+            // jadi tagihan terbuka (bisa dibayar ulang via invoice / di kasir) — booking & order tidak disentuh.
+            if (($log['type'] ?? null) === 'RESCHEDULE_PRICE_DELTA') {
+                $log['snap_session_closed_by'] = 'MIDTRANS_WEBHOOK_'.strtoupper($rawStatus);
+                $bill->update(['payment_gateway' => 'CASHIER_POS', 'payload_log' => $log]);
+
+                return;
+            }
+
+            $log['closed_by'] = 'MIDTRANS_WEBHOOK_'.strtoupper($rawStatus);
+            $log['gateway_notification'] = $payload;
+            $bill->update(['status' => 'FAILED', 'payload_log' => $log]);
+
+            // Order yang SUDAH menerima uang tidak pernah dibatalkan oleh notifikasi gateway.
+            if (Payment::where('order_id', $order->id)->where('status', 'SUCCESS')->exists()) {
+                return;
+            }
+
+            $order->update(['payment_status' => 'CANCELLED']);
+
+            foreach ($order->padelBookings as $booking) {
+                // Booking hasil reschedule tidak pernah ikut dibatalkan di sini (selalu sudah dibayar sebagian).
+                if (in_array($booking->status, ['PENDING_PAYMENT', 'LOCKED', 'PENDING'], true) && (int) $booking->reschedule_count === 0) {
+                    $booking->update(['status' => 'CANCELLED']);
+                }
+            }
+        });
+    }
+
+    private function acknowledged(string $driver, string $incomingOrderId, string $status): JsonResponse
+    {
         return response()->json([
             'success' => true,
             'message' => "Webhook {$driver} diproses dengan sukses.",

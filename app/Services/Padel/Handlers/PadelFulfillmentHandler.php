@@ -22,9 +22,21 @@ class PadelFulfillmentHandler implements DomainFulfillmentHandlerInterface
                 ->get();
         }
 
+        // Tagihan yang masih terbuka: milik booking tertentu (selisih reschedule, payload booking_id) atau
+        // tagihan level order (checkout awal). Booking hanya boleh aktif kalau tagihannya SENDIRI sudah lunas —
+        // dulu melunasi selisih booking A ikut membuka booking B (satu order) yang selisihnya belum dibayar.
+        $pendingBills = \App\Models\Pos\Payment::where('order_id', $order->id)->where('status', 'PENDING')->get();
+        $billedBookingIds = $pendingBills->map(fn ($p) => (is_array($p->payload_log) ? $p->payload_log : [])['booking_id'] ?? null)->filter()->all();
+        $hasOrderLevelBill = $pendingBills->contains(fn ($p) => empty((is_array($p->payload_log) ? $p->payload_log : [])['booking_id']));
+        $orderSettled = $order->fresh()?->payment_status === 'PAID';
+
         foreach ($bookings as $booking) {
             // Guard: Dilarang menimpa status yang sudah lebih maju (CHECKED_IN, COMPLETED, CANCELLED)
             if (in_array($booking->status, ['CHECKED_IN', 'COMPLETED', 'CANCELLED'], true)) {
+                continue;
+            }
+
+            if (in_array($booking->id, $billedBookingIds, true) || ($hasOrderLevelBill && ! $orderSettled)) {
                 continue;
             }
 

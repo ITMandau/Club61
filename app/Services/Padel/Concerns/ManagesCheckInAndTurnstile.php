@@ -33,15 +33,19 @@ trait ManagesCheckInAndTurnstile
 
         $now = now();
 
-        // Validasi jika sesi sudah lewat dan pemain belum pernah check-in -> Otomatis EXPIRED
-        if ($now->gt($booking->end_time) && $booking->checked_in_at === null) {
-            $booking->update(['status' => 'EXPIRED']);
-            Cache::forget('kelola_pemesanan_tab_counts');
-            throw new HttpException(400, "Tiket kedaluwarsa (Expired). Sesi bermain pada pukul {$booking->start_time->format('H:i')} - {$booking->end_time->format('H:i')} WIB telah selesai.");
+        // Status tidak aktif dicek DULUAN: dulu scan tiket REFUNDED/CANCELLED setelah jam main ikut mengubahnya
+        // jadi EXPIRED (riwayat refund/batal hilang dari laporan).
+        if (in_array($booking->status, ['CANCELLED', 'EXPIRED', 'REFUNDED', 'REFUND_PENDING', 'COMPLETED'])) {
+            throw new HttpException(400, "Tiket tidak aktif atau telah dibatalkan. Status saat ini: {$booking->status}.");
         }
 
-        if (in_array($booking->status, ['CANCELLED', 'EXPIRED', 'REFUNDED', 'REFUND_PENDING'])) {
-            throw new HttpException(400, "Tiket tidak aktif atau telah dibatalkan. Status saat ini: {$booking->status}.");
+        // Validasi jika sesi sudah lewat dan pemain belum pernah check-in -> Otomatis EXPIRED (hanya tiket lunas)
+        if ($now->gt($booking->end_time) && $booking->checked_in_at === null) {
+            if ($booking->status === 'PAID') {
+                PadelBooking::whereKey($booking->id)->where('status', 'PAID')->whereNull('checked_in_at')->update(['status' => 'EXPIRED']);
+                Cache::forget('kelola_pemesanan_tab_counts');
+            }
+            throw new HttpException(400, "Tiket kedaluwarsa (Expired). Sesi bermain pada pukul {$booking->start_time->format('H:i')} - {$booking->end_time->format('H:i')} WIB telah selesai.");
         }
 
         if ($booking->status === 'PENDING' || $booking->status === 'PENDING_PAYMENT') {
@@ -52,9 +56,9 @@ trait ManagesCheckInAndTurnstile
         // lunas (QR sengaja ditahan). Dulu tetap bisa check-in lewat input kode booking — pemain main tanpa
         // melunasi selisih.
         if ($booking->status === 'LOCKED') {
-            $unpaid = (float) \App\Models\Pos\Payment::where('order_id', $booking->order_id)->where('status', 'PENDING')->sum('amount');
+            $unpaid = (float) ($this->pendingBillForBooking($booking)?->amount ?? 0);
             throw new HttpException(400, (int) $booking->reschedule_count > 0
-                ? 'Masih ada tagihan selisih reschedule'.($unpaid > 0 ? ' Rp '.number_format($unpaid, 0, ',', '.') : '').' yang belum lunas. Lunasi dulu (tombol Settle di Kelola Pemesanan) sebelum check-in.'
+                ? 'Masih ada tagihan selisih reschedule'.($unpaid > 0 ? ' Rp '.number_format($unpaid, 0, ',', '.') : '').' yang belum lunas. Lunasi dulu di POS Walk-In (klik slot "Bayar" di grid jadwal) sebelum check-in.'
                 : 'Tiket belum dibayar. Silakan selesaikan pembayaran terlebih dahulu.');
         }
 
@@ -107,10 +111,16 @@ trait ManagesCheckInAndTurnstile
         // momen serah-terima fisik. Dibungkus 1 transaksi biar atomik — kalau potong stock gagal di
         // tengah jalan, perubahan status booking ikut ter-rollback juga.
         DB::transaction(function () use ($booking, $now, $staffUser, $equipmentList) {
-            $booking->update([
-                'status' => 'CHECKED_IN',
-                'checked_in_at' => $now,
-            ]);
+            // Update bersyarat: kalau di sela-sela booking ini baru saja di-reschedule (jadi LOCKED, tagihan
+            // selisih belum lunas) atau dibatalkan, check-in gagal — bukan menimpa statusnya jadi CHECKED_IN.
+            $updated = PadelBooking::whereKey($booking->id)
+                ->where('status', 'PAID')
+                ->whereNull('checked_in_at')
+                ->update(['status' => 'CHECKED_IN', 'checked_in_at' => $now]);
+            if ($updated === 0) {
+                throw new HttpException(409, 'Status tiket baru saja berubah (dipindah jadwal / dibatalkan). Scan ulang tiketnya.');
+            }
+            $booking->forceFill(['status' => 'CHECKED_IN', 'checked_in_at' => $now])->syncOriginal();
 
             $this->deductRentalEquipmentStock($booking);
 
@@ -255,7 +265,14 @@ trait ManagesCheckInAndTurnstile
     {
         $booking = PadelBooking::findOrFail($bookingId);
         $previousStatus = $booking->status;
-        $booking->update(['status' => 'COMPLETED']);
+
+        // Hanya pemain yang sudah check-in yang bisa "selesai". Dulu booking LOCKED (tagihan selisih belum lunas)
+        // atau yang sudah batal/refund bisa ditandai COMPLETED — tagihannya yatim & laporan salah.
+        $updated = PadelBooking::whereKey($booking->id)->where('status', 'CHECKED_IN')->update(['status' => 'COMPLETED']);
+        if ($updated === 0) {
+            throw new HttpException(422, "Booking {$booking->booking_code} belum check-in (status: {$previousStatus}), tidak bisa ditandai selesai.");
+        }
+        $booking->refresh();
         Cache::forget('kelola_pemesanan_tab_counts');
 
         \App\Services\Audit\ActivityLogger::record(
@@ -297,6 +314,14 @@ trait ManagesCheckInAndTurnstile
             ->whereIn('status', ['PAID', 'LOCKED'])
             ->whereNull('checked_in_at')
             ->update(['status' => 'EXPIRED']);
+
+        // Tagihan selisih reschedule milik booking yang hangus ditutup (+ sesi Snap dibatalkan). Kalau customer
+        // tetap membayar setelahnya, uangnya otomatis dibuatkan refund — bukan diam-diam jadi omzet.
+        if ($expiredCount > 0) {
+            foreach (PadelBooking::whereIn('id', $noShows->keys())->where('status', 'EXPIRED')->where('reschedule_count', '>', 0)->get() as $expired) {
+                DB::transaction(fn () => $this->closeRescheduleBills($expired, 'BOOKING_EXPIRED_NO_SHOW'));
+            }
+        }
 
         // 2. Pemain yang sudah check-in dan sesinya telah lewat -> COMPLETED
         $finished = PadelBooking::where('status', 'CHECKED_IN')
