@@ -27,7 +27,7 @@ trait ManagesScheduleAndSlots
 
         $parsedDate = Carbon::parse($date, $timezone);
         $dateStr = $parsedDate->format('Y-m-d');
-        $isWeekend = $parsedDate->isWeekend();
+        $peakHours = app(\App\Services\Padel\PeakHourService::class);
 
         // Aturan "jam lewat" SAMA dengan POS Walk-In (BookOfflineCourt): jam sebelum jam berjalan
         // hari ini = PAST, jam yang sedang berjalan masih boleh dipesan. Tanggal lampau = semua PAST.
@@ -119,7 +119,7 @@ trait ManagesScheduleAndSlots
                     $status = 'AVAILABLE';
                 }
 
-                $isPrime = $isWeekend || $hour >= 17; // Prime time 17:00 ke atas atau akhir pekan
+                $isPrime = $peakHours->isPeak($slotStart); // jam peak diatur di Master Data
                 $price = $isPrime ? (float)$court->hourly_rate_prime : (float)$court->hourly_rate_regular;
                 $originalPrice = $isPrime ? (float)$court->hourly_rate_prime * 1.25 : (float)$court->hourly_rate_regular * 1.5;
 
@@ -296,17 +296,8 @@ trait ManagesScheduleAndSlots
                         );
                     }
 
-                    // Hitung tarif akumulasi per jam (menjaga transisi reguler vs prime time)
-                    $isWeekend = Carbon::parse($bookingDate)->isWeekend();
-                    $courtFee = 0;
-                    $currFee = $startDt->copy();
-                    while ($currFee->lt($endDt)) {
-                        $hour = (int)$currFee->format('H');
-                        $isPrime = $isWeekend || $hour >= 17;
-                        $rate = $isPrime ? (float)$court->hourly_rate_prime : (float)$court->hourly_rate_regular;
-                        $courtFee += $rate;
-                        $currFee->addHour();
-                    }
+                    // Tarif akumulasi per jam (transisi reguler vs peak) — jam peak diatur di Master Data.
+                    $courtFee = app(\App\Services\Padel\PeakHourService::class)->courtFee($court, $startDt, $endDt)['fee'];
                     $totalCourtFee += $courtFee;
 
                     $bookingCode = 'BK-PAD-' . strtoupper(Str::random(8));

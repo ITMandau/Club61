@@ -202,8 +202,7 @@ class BookingSystem extends Page
         $startFormatted = sprintf('%02d:00', $h);
         $endFormatted = sprintf('%02d:00', $h + 1);
 
-        $isWeekend = Carbon::parse($this->selectedDate)->isWeekend();
-        $isPrime = $isWeekend || $h >= 17;
+        $isPrime = app(\App\Services\Padel\PeakHourService::class)->isPeak(Carbon::parse("{$this->selectedDate} {$startFormatted}"));
         $rate = $isPrime ? (float) $court->hourly_rate_prime : (float) $court->hourly_rate_regular;
 
         $this->inspectData = [
@@ -410,8 +409,7 @@ class BookingSystem extends Page
                         'price' => 0,
                     ];
                 } else {
-                    $isWeekend = $targetDate->isWeekend();
-                    $isPrime = $isWeekend || (int) $h >= 17;
+                    $isPrime = app(\App\Services\Padel\PeakHourService::class)->isPeak($targetDate->copy()->setTime((int) $h, 0));
                     $slotPrice = $isPrime ? (float) $court->hourly_rate_prime : (float) $court->hourly_rate_regular;
 
                     $courtRow['slots'][$h] = [

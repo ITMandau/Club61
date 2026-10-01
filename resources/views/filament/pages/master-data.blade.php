@@ -1,10 +1,12 @@
-<div class="adm-wrap">
+<div class="adm-wrap md-page">
     <style>
+        /* Jarak antar blok cukup dari gap .adm-wrap — margin tambahan di tab & kartu bikin jaraknya dobel. */
+        .md-page { gap: 1rem; }
         .md-tabs {
             display: flex;
             align-items: center;
             gap: 0.75rem;
-            margin-bottom: 1.5rem;
+            margin-bottom: 0;
             border-bottom: 2px solid #E5E7EB;
             padding-bottom: 0.5rem;
         }
@@ -42,7 +44,7 @@
             display: flex;
             flex-direction: column;
             gap: 1.25rem;
-            margin-bottom: 1.5rem;
+            margin-bottom: 0;
         }
         .md-card-head {
             display: flex;
@@ -297,7 +299,7 @@
                         <span>+ Tambah Lapangan Baru</span>
                     </button>
                 @endif
-            @elseif($this->canManageEquipment)
+            @elseif($activeTab === 'equipments' && $this->canManageEquipment)
                 <button type="button" wire:click="openCreateEquipmentModal" class="md-btn-gold">
                     <span>+ Tambah Add-on Baru</span>
                 </button>
@@ -309,6 +311,9 @@
     <div class="md-tabs">
         <button type="button" wire:click="setActiveTab('courts')" class="md-tab-btn {{ $activeTab === 'courts' ? 'active' : '' }}">
             <span>Tarif Lapangan &amp; Jam Ramai</span>
+        </button>
+        <button type="button" wire:click="setActiveTab('peak_hours')" class="md-tab-btn {{ $activeTab === 'peak_hours' ? 'active' : '' }}">
+            <span>Jam Peak &amp; Tanggal Merah</span>
         </button>
         <button type="button" wire:click="setActiveTab('equipments')" class="md-tab-btn {{ $activeTab === 'equipments' ? 'active' : '' }}">
             <span>Add-ons &amp; Peralatan Sewa</span>
@@ -324,7 +329,11 @@
                         Daftar Lapangan Padel &amp; Matriks Tarif
                     </div>
                     <div style="font-size:0.75rem; color:#7A643E; margin-top:0.2rem;">
-                        Jam Reguler: Senin - Jumat 06:00 - 16:00 WIB &bull; Jam Ramai (Prime Time): Senin - Jumat 17:00 - 23:00 WIB &amp; Seharian Akhir Pekan (Sabtu - Minggu).
+                        Jam Peak (Prime Time):
+                        @foreach ($this->peakSummary as $dayLabel => $ranges)
+                            <span style="white-space:nowrap;">{{ $dayLabel }} {{ $ranges }}</span>@if (! $loop->last) &bull; @endif
+                        @endforeach
+                        &mdash; di luar itu tarif reguler. <a href="#" wire:click.prevent="setActiveTab('peak_hours')" style="color:#8C6418; font-weight:800;">Ubah jam peak</a>
                     </div>
                 </div>
                 <div style="display:inline-flex; align-items:center; gap:0.5rem;">
@@ -338,8 +347,8 @@
                         <tr>
                             <th>Nama Lapangan</th>
                             <th>Tipe Venue</th>
-                            <th>Tarif Reguler (06:00 - 16:00)</th>
-                            <th>Tarif Prime Time (17:00 - 23:00 &amp; Wknd)</th>
+                            <th>Tarif Reguler</th>
+                            <th>Tarif Prime Time (Jam Peak)</th>
                             <th style="text-align:center;">Status Aktif</th>
                             <th style="text-align:right;">Aksi</th>
                         </tr>
@@ -406,6 +415,225 @@
                         @endforelse
                     </tbody>
                 </table>
+            </div>
+        </div>
+    @endif
+
+    {{-- ================= TAB 3: JAM PEAK & TANGGAL MERAH ================= --}}
+    @if($activeTab === 'peak_hours')
+        @php
+            $canEdit = $this->canManageCourts;
+            $editorHours = $this->peakEditorHours;
+            $rateExample = $this->peakRateExample;
+            $dayOrder = array_keys(\App\Filament\Pages\MasterData::DAY_LABELS);
+        @endphp
+
+        <style>
+            .pk-legend { display:flex; gap:1.25rem; flex-wrap:wrap; align-items:center; font-size:0.8rem; color:#3F2E12; }
+            .pk-legend-item { display:inline-flex; align-items:center; gap:0.45rem; }
+            .pk-swatch { width:22px; height:16px; border-radius:5px; display:inline-block; }
+            .pk-reg { background:#F3F4F6; border:1px solid #E5E7EB; }
+            .pk-peak { background:linear-gradient(180deg, #F6D77A 0%, #E0A72A 100%); border:1px solid #C98E12; }
+            .pk-grid-wrap { overflow-x:auto; border:1.5px solid #F0E6CC; border-radius:14px; }
+            .pk-grid { width:100%; border-collapse:separate; border-spacing:0; user-select:none; }
+            .pk-grid th, .pk-grid td { padding:0; }
+            .pk-grid thead th { position:sticky; top:0; background:#FAF5E8; font-size:0.68rem; font-weight:800; color:#8C6418; padding:0.45rem 0; text-align:center; border-bottom:1.5px solid #E9D9AE; }
+            .pk-grid .pk-day { text-align:left; padding:0.5rem 0.75rem; font-weight:900; font-size:0.85rem; color:#1F170D; white-space:nowrap; background:#FFFDF8; border-right:1.5px solid #F0E6CC; min-width:92px; }
+            .pk-grid .pk-sum { padding:0.35rem 0.75rem; font-size:0.72rem; color:#5C410F; white-space:nowrap; background:#FFFDF8; border-left:1.5px solid #F0E6CC; min-width:170px; }
+            .pk-grid tbody tr + tr td { border-top:1px solid #F5EEDB; }
+            .pk-cell { display:block; width:100%; min-width:34px; height:38px; border:none; border-right:1px solid #fff; cursor:pointer; transition:filter .1s; }
+            .pk-cell:hover { filter:brightness(0.94); }
+            .pk-cell[disabled] { cursor:default; }
+            .pk-cell.is-reg { background:#F3F4F6; }
+            .pk-cell.is-peak { background:linear-gradient(180deg, #F6D77A 0%, #E0A72A 100%); }
+            .pk-row-btn { background:none; border:none; padding:0 0.15rem; font-size:0.68rem; font-weight:800; color:#8C6418; cursor:pointer; text-decoration:underline; }
+            .pk-savebar { position:sticky; bottom:12px; z-index:20; display:flex; align-items:center; justify-content:space-between; gap:0.75rem; flex-wrap:wrap; background:#1F170D; color:#FBF0CE; border-radius:14px; padding:0.75rem 1rem; box-shadow:0 12px 30px rgba(0,0,0,0.25); }
+            .pk-chip { display:inline-flex; align-items:center; gap:0.5rem; background:#FFF7E6; border:1px solid #F3D9A0; border-radius:12px; padding:0.55rem 0.8rem; }
+        </style>
+
+        <div class="md-card"
+            wire:ignore
+            x-data="{
+                grid: @js($this->peakGrid),
+                saved: null,
+                painting: false,
+                paintValue: true,
+                saving: false,
+                canEdit: @js($canEdit),
+                init() {
+                    this.saved = JSON.stringify(this.grid);
+                    window.addEventListener('mouseup', () => this.painting = false);
+                },
+                get dirty() { return JSON.stringify(this.grid) !== this.saved; },
+                start(day, hour) {
+                    if (! this.canEdit) return;
+                    this.painting = true;
+                    this.paintValue = ! this.grid[day][hour];
+                    this.grid[day][hour] = this.paintValue;
+                },
+                over(day, hour) {
+                    if (this.painting) this.grid[day][hour] = this.paintValue;
+                },
+                fillDay(day, value) { for (let h = 0; h < 24; h++) this.grid[day][h] = value; },
+                copyDay(from, targets) { targets.forEach(d => this.grid[d] = [...this.grid[from]]); },
+                preset() {
+                    [1, 2, 3, 4, 5].forEach(d => { for (let h = 0; h < 24; h++) this.grid[d][h] = h >= 17; });
+                    [6, 0].forEach(d => this.fillDay(d, true));
+                },
+                summary(day) {
+                    const out = []; let s = null;
+                    for (let h = 0; h <= 24; h++) {
+                        const on = h < 24 && this.grid[day][h];
+                        if (on && s === null) s = h;
+                        if (! on && s !== null) { out.push(String(s).padStart(2, '0') + ':00–' + String(h).padStart(2, '0') + ':00'); s = null; }
+                    }
+                    return out.length ? out.join(', ') : 'Reguler seharian';
+                },
+                reset() { this.grid = JSON.parse(this.saved); },
+                async save() {
+                    this.saving = true;
+                    const ok = await $wire.savePeakGrid(this.grid);
+                    this.saving = false;
+                    if (ok) this.saved = JSON.stringify(this.grid);
+                },
+            }">
+
+            <div class="md-card-head" style="align-items:flex-start;">
+                <div style="max-width:760px;">
+                    <div style="font-family:var(--font-serif); font-size:1.15rem; font-weight:800; color:#1F170D;">Atur Jam Ramai (Peak)</div>
+                    <div style="font-size:0.8rem; color:#7A643E; margin-top:0.25rem;">
+                        Klik atau geser kotak jam untuk menandai jam <b>peak</b>. Berlaku untuk semua lapangan; booking yang sudah dibayar tidak ikut berubah.
+                    </div>
+                </div>
+                <div class="pk-legend">
+                    <span class="pk-legend-item"><span class="pk-swatch pk-reg"></span> <span><b>Reguler</b>@if($rateExample['regular']) <span style="color:#7A643E;">({{ $rateExample['regular'] }}/jam)</span>@endif</span></span>
+                    <span class="pk-legend-item"><span class="pk-swatch pk-peak"></span> <span><b>Peak / Prime</b>@if($rateExample['prime']) <span style="color:#7A643E;">({{ $rateExample['prime'] }}/jam)</span>@endif</span></span>
+                </div>
+            </div>
+
+            @if($canEdit)
+                <div style="display:flex; gap:0.5rem; flex-wrap:wrap; align-items:center;">
+                    <span style="font-size:0.75rem; font-weight:800; color:#5C410F;">Tombol cepat:</span>
+                    <button type="button" class="md-btn-action md-btn-edit" x-on:click="copyDay(1, [2, 3, 4, 5])">Samakan Selasa&ndash;Jumat dengan Senin</button>
+                    <button type="button" class="md-btn-action md-btn-edit" x-on:click="copyDay(6, [0])">Samakan Minggu dengan Sabtu</button>
+                    <button type="button" class="md-btn-action" style="border:1px solid #DFC387;" x-on:click="preset()">Pakai default (hari kerja 17:00&ndash;24:00, weekend seharian)</button>
+                </div>
+            @endif
+
+            <div class="pk-grid-wrap">
+                <table class="pk-grid">
+                    <thead>
+                        <tr>
+                            <th style="text-align:left; padding-left:0.75rem;">Hari</th>
+                            @foreach ($editorHours as $h)
+                                <th title="{{ sprintf('%02d:00–%02d:00', $h, $h + 1) }}">{{ sprintf('%02d', $h) }}</th>
+                            @endforeach
+                            <th style="text-align:left; padding-left:0.75rem;">Jam peak</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach ($dayOrder as $day)
+                            <tr>
+                                <td class="pk-day">{{ \App\Filament\Pages\MasterData::DAY_LABELS[$day] }}</td>
+                                @foreach ($editorHours as $h)
+                                    <td>
+                                        <button type="button" class="pk-cell"
+                                            :class="grid[{{ $day }}][{{ $h }}] ? 'is-peak' : 'is-reg'"
+                                            :title="'{{ \App\Filament\Pages\MasterData::DAY_LABELS[$day] }} {{ sprintf('%02d:00–%02d:00', $h, $h + 1) }}: ' + (grid[{{ $day }}][{{ $h }}] ? 'Peak' : 'Reguler')"
+                                            x-on:mousedown.prevent="start({{ $day }}, {{ $h }})"
+                                            x-on:mouseenter="over({{ $day }}, {{ $h }})"
+                                            @disabled(! $canEdit)></button>
+                                    </td>
+                                @endforeach
+                                <td class="pk-sum">
+                                    <div style="font-weight:800;" :style="summary({{ $day }}) === 'Reguler seharian' ? 'color:#9CA3AF' : 'color:#92400E'" x-text="summary({{ $day }})"></div>
+                                    @if($canEdit)
+                                        <div style="margin-top:0.15rem;">
+                                            <button type="button" class="pk-row-btn" x-on:click="fillDay({{ $day }}, true)">Semua peak</button>
+                                            &middot;
+                                            <button type="button" class="pk-row-btn" x-on:click="fillDay({{ $day }}, false)">Kosongkan</button>
+                                        </div>
+                                    @endif
+                                </td>
+                            </tr>
+                        @endforeach
+                    </tbody>
+                </table>
+            </div>
+            <div style="font-size:0.72rem; color:#7A643E;">
+                Kolom jam = jam mulai main (contoh kolom <b>23</b> = slot 23:00&ndash;24:00). Hanya jam operasional lapangan yang ditampilkan.
+            </div>
+
+            @if($canEdit)
+                <div class="pk-savebar" x-show="dirty" x-transition x-cloak>
+                    <span style="font-size:0.85rem; font-weight:700;">Ada perubahan jam peak yang belum disimpan.</span>
+                    <div style="display:flex; gap:0.5rem;">
+                        <button type="button" class="md-btn-action" style="background:transparent; border:1px solid #6B5A3A; color:#FBF0CE;" x-on:click="reset()">Batalkan</button>
+                        <button type="button" class="md-btn-gold" x-on:click="save()" :disabled="saving">
+                            <span x-text="saving ? 'Menyimpan…' : 'Simpan Jam Peak'"></span>
+                        </button>
+                    </div>
+                </div>
+            @endif
+        </div>
+
+        {{-- Tanggal merah --}}
+        <div class="md-card">
+            <div class="md-card-head">
+                <div>
+                    <div style="font-family:var(--font-serif); font-size:1.15rem; font-weight:800; color:#1F170D;">Tanggal Merah / Libur Nasional</div>
+                    <div style="font-size:0.8rem; color:#7A643E; margin-top:0.25rem;">Di tanggal ini harga lapangan mengikuti jam peak <b>hari Minggu</b> &mdash; walaupun jatuh di hari kerja.</div>
+                </div>
+            </div>
+
+            @if($canEdit)
+                {{-- align-items:start: pesan error di bawah satu input tidak boleh menggeser input & tombol lain --}}
+                <div style="display:grid; grid-template-columns:minmax(160px, 200px) 1fr auto; gap:0.75rem; align-items:start;">
+                    <div class="md-form-group">
+                        <label class="md-form-label">Tanggal</label>
+                        <input type="date" wire:model="holidayDate" class="md-form-input" min="{{ now('Asia/Jakarta')->toDateString() }}">
+                        @error('holidayDate') <span style="font-size:0.75rem; color:#DC2626;">{{ $message }}</span> @enderror
+                    </div>
+                    <div class="md-form-group">
+                        <label class="md-form-label">Nama libur</label>
+                        <input type="text" wire:model="holidayName" class="md-form-input" maxlength="100" placeholder="Contoh: Hari Raya Natal">
+                        @error('holidayName') <span style="font-size:0.75rem; color:#DC2626;">{{ $message }}</span> @enderror
+                    </div>
+                    <div class="md-form-group">
+                        <label class="md-form-label" style="visibility:hidden;" aria-hidden="true">Aksi</label>
+                        <button type="button" wire:click="addHoliday" wire:loading.attr="disabled" class="md-btn-gold" style="justify-content:center; white-space:nowrap; min-height:44px;"><span>+ Tambah Tanggal</span></button>
+                    </div>
+                </div>
+            @endif
+
+            <div style="display:flex; flex-wrap:wrap; gap:0.6rem;">
+                @forelse ($this->holidays as $holiday)
+                    <div class="pk-chip" wire:key="holiday-{{ $holiday->id }}">
+                        <div style="text-align:center; min-width:42px; border-right:1px solid #F3D9A0; padding-right:0.55rem;">
+                            <div style="font-size:1.05rem; font-weight:900; color:#B91C1C; line-height:1;">{{ $holiday->date->format('d') }}</div>
+                            <div style="font-size:0.62rem; font-weight:800; color:#7A643E; text-transform:uppercase;">{{ $holiday->date->translatedFormat('M Y') }}</div>
+                        </div>
+                        <div>
+                            <div style="font-size:0.82rem; font-weight:800; color:#1F170D;">{{ $holiday->name }}</div>
+                            <div style="font-size:0.7rem; color:#7A643E;">{{ $holiday->date->translatedFormat('l') }} &middot; ikut jam peak Minggu</div>
+                        </div>
+                        @if($canEdit)
+                            <button type="button"
+                                x-on:click="$dispatch('club61-confirm', {
+                                    title: 'Hapus Tanggal Merah?',
+                                    message: @js($holiday->name.' ('.$holiday->date->translatedFormat('d M Y').') akan dihapus. Tarif di tanggal itu kembali mengikuti jam peak hari biasa.'),
+                                    confirmLabel: 'Ya, Hapus',
+                                    tone: 'danger',
+                                    onConfirm: () => $wire.deleteHoliday(@js($holiday->id)),
+                                })"
+                                title="Hapus" style="margin-left:0.25rem; background:none; border:none; color:#B91C1C; font-size:1.1rem; font-weight:900; cursor:pointer;">&times;</button>
+                        @endif
+                    </div>
+                @empty
+                    <div style="width:100%; text-align:center; color:#7A643E; font-size:0.82rem; padding:1rem; border:1.5px dashed #F0E6CC; border-radius:12px;">
+                        Belum ada tanggal merah yang akan datang.
+                    </div>
+                @endforelse
             </div>
         </div>
     @endif
@@ -519,16 +747,25 @@
 
                                         @if($eq->historical_rentals_count > 0)
                                             <button type="button"
-                                                wire:click="deleteEquipment('{{ $eq->id }}')"
-                                                wire:confirm="Item ini memiliki riwayat penyewaan pada invoice pelanggan. Menghapus item ini akan mengalihkannya ke status NONAKTIF agar tidak dapat disewa lagi, dengan tetap menjaga keutuhan struk/invoice masa lalu. Lanjutkan?"
+                                                x-on:click="$dispatch('club61-confirm', {
+                                                    title: @js('Nonaktifkan '.$eq->name.'?'),
+                                                    message: 'Item ini sudah pernah disewa, jadi tidak dihapus — hanya dinonaktifkan supaya tidak bisa disewa lagi. Struk & invoice lama tetap utuh.',
+                                                    confirmLabel: 'Ya, Nonaktifkan',
+                                                    onConfirm: () => $wire.deleteEquipment(@js($eq->id)),
+                                                })"
                                                 class="md-btn-action md-btn-warning"
                                                 title="Nonaktifkan item dengan menjaga invoice historis tetap utuh">
                                                 <span>Nonaktifkan</span>
                                             </button>
                                         @else
                                             <button type="button"
-                                                wire:click="deleteEquipment('{{ $eq->id }}')"
-                                                wire:confirm="Item ini belum pernah disewa sama sekali. Yakin ingin menghapusnya secara permanen dari sistem?"
+                                                x-on:click="$dispatch('club61-confirm', {
+                                                    title: @js('Hapus '.$eq->name.'?'),
+                                                    message: 'Item ini belum pernah disewa, jadi akan dihapus permanen dari sistem. Tindakan ini tidak bisa dibatalkan.',
+                                                    confirmLabel: 'Ya, Hapus Permanen',
+                                                    tone: 'danger',
+                                                    onConfirm: () => $wire.deleteEquipment(@js($eq->id)),
+                                                })"
                                                 class="md-btn-action md-btn-danger"
                                                 title="Hapus permanen dari database">
                                                 <span>Hapus</span>
@@ -591,14 +828,14 @@
                         <div class="md-form-group">
                             <label class="md-form-label">Tarif Reguler (Rp/Jam)</label>
                             <input type="number" step="10000" wire:model="hourlyRateRegular" class="md-form-input" placeholder="300000">
-                            <span style="font-size:0.7rem; color:#6B7280;">Senin - Jumat (06:00 - 16:00)</span>
+                            <span style="font-size:0.7rem; color:#6B7280;">Di luar jam peak (atur di tab Jam Peak)</span>
                             @error('hourlyRateRegular') <span style="font-size:0.75rem; color:#DC2626;">{{ $message }}</span> @enderror
                         </div>
 
                         <div class="md-form-group">
                             <label class="md-form-label">Tarif Prime Time (Rp/Jam)</label>
                             <input type="number" step="10000" wire:model="hourlyRatePrime" class="md-form-input" placeholder="450000">
-                            <span style="font-size:0.7rem; color:#6B7280;">Malam (17:00 - 23:00) &amp; Weekend</span>
+                            <span style="font-size:0.7rem; color:#6B7280;">Berlaku di jam peak (atur di tab Jam Peak)</span>
                             @error('hourlyRatePrime') <span style="font-size:0.75rem; color:#DC2626;">{{ $message }}</span> @enderror
                         </div>
                     </div>

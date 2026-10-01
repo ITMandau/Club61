@@ -1666,7 +1666,7 @@ class BookOfflineCourt extends Page
         }
 
         $courts = PadelCourt::where('is_active', true)->orderBy('name')->get();
-        $isWeekend = Carbon::parse($this->bookingDate)->isWeekend();
+        $peakHours = app(\App\Services\Padel\PeakHourService::class); // jam peak diatur di Master Data
         $isToday = $this->bookingDate === now()->format('Y-m-d');
         $currentHour = (int) now()->format('H');
 
@@ -1733,7 +1733,7 @@ class BookOfflineCourt extends Page
                 $endTimeStr = $oh['end_time'];
                 $slotKey = "{$court->id}_{$startTimeStr}";
 
-                $isPrime = $isWeekend || $h >= 17;
+                $isPrime = $peakHours->isPeak(Carbon::parse("{$this->bookingDate} {$startTimeStr}"));
                 $rate = $isPrime ? (float) $court->hourly_rate_prime : (float) $court->hourly_rate_regular;
 
                 // Tentukan status slot

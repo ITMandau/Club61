@@ -101,7 +101,7 @@
                                         @if($category->menus_count > 0)
                                             <button type="button" class="fnb-btn-action" style="background:#F3F4F6; color:#9CA3AF; cursor:not-allowed;" title="Masih dipakai {{ $category->menus_count }} menu" disabled>Hapus</button>
                                         @else
-                                            <button type="button" wire:click="deleteCategory('{{ $category->id }}')" wire:confirm="Yakin ingin menghapus kategori ini?" class="fnb-btn-action fnb-btn-danger">Hapus</button>
+                                            <button type="button" x-on:click="$dispatch('club61-confirm', { title: @js('Hapus kategori '.$category->name.'?'), message: 'Kategori akan dihapus dari daftar menu F&B.', confirmLabel: 'Ya, Hapus', tone: 'danger', onConfirm: () => $wire.deleteCategory(@js($category->id)) })" class="fnb-btn-action fnb-btn-danger">Hapus</button>
                                         @endif
                                     </div>
                                 </td>
@@ -171,7 +171,7 @@
                                 <td style="text-align:right;">
                                     <div style="display:inline-flex; gap:0.35rem;">
                                         <button type="button" wire:click="openEditMenuModal('{{ $menu->id }}')" class="fnb-btn-action fnb-btn-edit">Edit</button>
-                                        <button type="button" wire:click="deleteMenu('{{ $menu->id }}')" wire:confirm="Yakin ingin menghapus menu ini?" class="fnb-btn-action fnb-btn-danger">Hapus</button>
+                                        <button type="button" x-on:click="$dispatch('club61-confirm', { title: @js('Hapus menu '.$menu->name.'?'), message: 'Menu akan dihapus dari daftar menu F&B.', confirmLabel: 'Ya, Hapus', tone: 'danger', onConfirm: () => $wire.deleteMenu(@js($menu->id)) })" class="fnb-btn-action fnb-btn-danger">Hapus</button>
                                     </div>
                                 </td>
                             </tr>
@@ -218,7 +218,7 @@
                                 <td style="text-align:right;">
                                     <div style="display:inline-flex; gap:0.35rem;">
                                         <button type="button" wire:click="openEditModifierGroupModal('{{ $group->id }}')" class="fnb-btn-action fnb-btn-edit">Edit</button>
-                                        <button type="button" wire:click="deleteModifierGroup('{{ $group->id }}')" wire:confirm="Menghapus grup ini akan melepas keterkaitannya dari semua menu yang memakainya. Lanjutkan?" class="fnb-btn-action fnb-btn-danger">Hapus</button>
+                                        <button type="button" x-on:click="$dispatch('club61-confirm', { title: @js('Hapus grup '.$group->name.'?'), message: 'Grup modifier ini akan dilepas dari semua menu yang memakainya.', confirmLabel: 'Ya, Hapus', tone: 'danger', onConfirm: () => $wire.deleteModifierGroup(@js($group->id)) })" class="fnb-btn-action fnb-btn-danger">Hapus</button>
                                     </div>
                                 </td>
                             </tr>

@@ -44,7 +44,7 @@ trait ManagesRescheduleAndCashier
             throw new HttpException(422, "Lapangan {$court->name} sedang tidak aktif.");
         }
         $dateStr = $parsedDate->format('Y-m-d');
-        $isWeekend = $parsedDate->isWeekend();
+        $peakHours = app(\App\Services\Padel\PeakHourService::class);
 
         $activeBookings = PadelBooking::where('court_id', $court->id)
             ->where('booking_date', $dateStr)
@@ -86,7 +86,6 @@ trait ManagesRescheduleAndCashier
             while ($currCheck->lt($slotEnd)) {
                 $subStart = $currCheck->copy();
                 $subEnd = $subStart->copy()->addHour();
-                $hour = (int) $subStart->format('H');
 
                 // Cek tabrakan booking aktif
                 $hasCollision = $activeBookings->first(function ($b) use ($subStart, $subEnd) {
@@ -102,7 +101,7 @@ trait ManagesRescheduleAndCashier
                     break;
                 }
 
-                if ($isWeekend || $hour >= 17) {
+                if ($peakHours->isPeak($subStart)) {
                     $hasPrime = true;
                 }
 
@@ -166,12 +165,8 @@ trait ManagesRescheduleAndCashier
     {
         $benefitContext ??= $this->rescheduleBenefitContext($booking);
 
-        $isWeekend = $start->isWeekend();
-        $grossNew = 0.0;
-        for ($cursor = $start->copy(); $cursor->lt($end); $cursor->addHour()) {
-            $isPrime = $isWeekend || (int) $cursor->format('H') >= 17;
-            $grossNew += $isPrime ? (float) $court->hourly_rate_prime : (float) $court->hourly_rate_regular;
-        }
+        // Tarif normal jadwal baru — jam peak/reguler dari pengaturan Master Data (sama dengan grid & checkout).
+        $grossNew = app(\App\Services\Padel\PeakHourService::class)->courtFee($court, $start, $end)['fee'];
 
         $paidCourt = (float) $booking->court_fee;
         $memberDiscount = (float) ($booking->member_discount_court ?? 0);

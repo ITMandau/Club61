@@ -63,6 +63,11 @@ class AdminPanelProvider extends PanelProvider
                 'panels::body.end',
                 fn () => view('filament.sidebar-auto-collapse')
             )
+            // Dialog konfirmasi Club61 (pengganti popup bawaan browser / wire:confirm).
+            ->renderHook(
+                'panels::body.end',
+                fn () => view('filament.confirm-dialog')
+            )
             ->pages([
                 \App\Filament\Pages\Dashboard::class,
                 \App\Filament\Pages\Analytics::class,

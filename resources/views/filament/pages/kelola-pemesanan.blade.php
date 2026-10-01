@@ -401,8 +401,7 @@
                                     @endif
 
                                     @if ($this->canCheckIn && $b->status === 'CHECKED_IN')
-                                        <button type="button" wire:click="executeComplete('{{ $b->id }}')"
-                                            wire:confirm="Tandai sesi bermain tiket {{ $b->booking_code }} telah selesai (COMPLETED)?"
+                                        <button type="button" x-on:click="$dispatch('club61-confirm', { title: 'Tandai Sesi Selesai?', message: @js('Sesi bermain tiket '.$b->booking_code.' akan ditandai selesai (COMPLETED).'), confirmLabel: 'Ya, Selesai', onConfirm: () => $wire.executeComplete(@js($b->id)) })"
                                             wire:loading.attr="disabled" title="Tandai Selesai (Complete)"
                                             class="adm-btn-icon"
                                             style="background: #FEF3C7; border-color: #FDE68A; color: #92400E;">
@@ -438,8 +437,7 @@
                                         });
                                     @endphp
                                     @if ($this->canCheckIn && in_array($b->status, ['CHECKED_IN', 'COMPLETED']) && $hasPendingEquipmentReturn)
-                                        <button type="button" wire:click="executeReturnEquipment('{{ $b->id }}')"
-                                            wire:confirm="Tandai alat sewa (raket/handuk) tiket {{ $b->booking_code }} sudah dikembalikan ke frontdesk?"
+                                        <button type="button" x-on:click="$dispatch('club61-confirm', { title: 'Alat Sewa Sudah Kembali?', message: @js('Raket/handuk tiket '.$b->booking_code.' akan ditandai sudah dikembalikan ke frontdesk dan stoknya bertambah lagi.'), confirmLabel: 'Ya, Sudah Kembali', onConfirm: () => $wire.executeReturnEquipment(@js($b->id)) })"
                                             wire:loading.attr="disabled" title="Retur Alat Sewa (Restock)"
                                             class="adm-btn-icon"
                                             style="background: #EFF6FF; border-color: #BFDBFE; color: #1D4ED8;">

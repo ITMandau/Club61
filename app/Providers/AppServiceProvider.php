@@ -18,6 +18,9 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
+        // Singleton per request: jadwal jam peak dibaca sekali, bukan sekali per slot grid (lapangan x jam).
+        $this->app->singleton(\App\Services\Padel\PeakHourService::class);
+
         $this->app->singleton(\App\Services\Payment\PaymentFulfillmentRegistry::class, function () {
             $registry = new \App\Services\Payment\PaymentFulfillmentRegistry();
             $registry->register('PADEL', \App\Services\Padel\Handlers\PadelFulfillmentHandler::class);
