@@ -43,12 +43,8 @@ class MembershipPlanBenefit extends Model
      */
     public function describe(): string
     {
-        $facilityLabel = match ($this->facility) {
-            'PADEL' => 'Padel Court',
-            'GYM' => 'Fitness & Gym',
-            'SAUNA' => 'Sauna & Ice Bath',
-            default => (string) $this->facility,
-        };
+        // Nama dari Master Fasilitas (bisa diubah admin), bukan lagi daftar tetap PADEL/GYM/SAUNA.
+        $facilityLabel = app(\App\Services\Membership\MembershipFacilityService::class)->name($this->facility);
 
         if ($this->quota_type === 'HOURS' && $this->quota_value !== null) {
             return __('site.benefit_hours', ['value' => (int) $this->quota_value, 'facility' => $facilityLabel]);

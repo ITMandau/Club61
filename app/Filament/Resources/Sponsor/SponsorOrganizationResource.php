@@ -33,6 +33,8 @@ use UnitEnum;
  */
 class SponsorOrganizationResource extends Resource
 {
+    use \App\Filament\Resources\Concerns\AuthorizesWithCanMethods;
+
     protected static ?string $model = SponsorOrganization::class;
 
     protected static string|BackedEnum|null $navigationIcon = 'heroicon-o-building-office-2';

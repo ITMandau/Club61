@@ -31,6 +31,8 @@ use UnitEnum;
  */
 class SponsorAccessScheduleResource extends Resource
 {
+    use \App\Filament\Resources\Concerns\AuthorizesWithCanMethods;
+
     protected static ?string $model = SponsorAccessSchedule::class;
 
     protected static string|BackedEnum|null $navigationIcon = 'heroicon-o-calendar-days';

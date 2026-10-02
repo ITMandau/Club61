@@ -475,7 +475,7 @@
                                     'Accept': 'application/json',
                                     'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
                                 },
-                                body: JSON.stringify({ booking_ids: bookingIds })
+                                body: JSON.stringify({ booking_ids: bookingIds, only_locked: true })
                             });
                         } catch(e) {
                             console.error('Error auto-releasing expired cart slots:', e);
@@ -518,7 +518,7 @@
                                          'Accept': 'application/json',
                                          'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
                                     },
-                                    body: JSON.stringify({ booking_ids: [bookingMatch.id] })
+                                    body: JSON.stringify({ booking_ids: [bookingMatch.id], only_locked: true })
                                 });
                             } catch(e) {}
                         }
@@ -552,7 +552,7 @@
                                      'Accept': 'application/json',
                                      'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
                                 },
-                                body: JSON.stringify({ booking_ids: bookingIds })
+                                body: JSON.stringify({ booking_ids: bookingIds, only_locked: true })
                             });
                         } catch(e) {}
                     }

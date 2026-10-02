@@ -49,6 +49,7 @@ class AdminPanelProvider extends PanelProvider
                 \App\Filament\Resources\Users\UserResource::class,
                 \App\Filament\Resources\Roles\RoleResource::class,
                 \App\Filament\Resources\Membership\MembershipPlanResource::class,
+                \App\Filament\Resources\Membership\Facilities\MembershipFacilityResource::class,
                 \App\Filament\Resources\Sponsor\SponsorOrganizationResource::class,
                 \App\Filament\Resources\Sponsor\SponsorAccessScheduleResource::class,
             ])

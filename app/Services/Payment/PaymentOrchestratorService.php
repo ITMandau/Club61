@@ -88,7 +88,19 @@ class PaymentOrchestratorService
                     throw new \Symfony\Component\HttpKernel\Exception\HttpException(409, 'Tagihan ini SUDAH LUNAS (kemungkinan baru saja dibayar customer via Midtrans). JANGAN terima pembayaran lagi.');
                 }
 
-                return;
+                // Notifikasi duplikat untuk sesi yang SAMA → abaikan. Tapi sesi LAIN dari tagihan yang sama (customer
+                // ganti metode di invoice, lalu VA lama tetap ditransfer) = uang kedua yang sungguhan masuk. Dulu
+                // diabaikan diam-diam: uang masuk Midtrans tanpa catatan & tanpa refund. Sekarang dicatat sebagai
+                // pembayaran baru → terdeteksi kelebihan bayar + refund PENDING di bawah.
+                $sameSession = ! $transactionId
+                    || $payment->transaction_id === $transactionId
+                    || Payment::where('transaction_id', $transactionId)->exists();
+                if ($sameSession) {
+                    return;
+                }
+
+                Log::warning("[ALERT] Pembayaran kedua untuk tagihan yang sudah lunas [{$order->order_number}] lewat sesi lain ({$transactionId}) — dicatat sebagai kelebihan bayar.");
+                $payment = null;
             }
 
             // Uang masuk untuk tagihan yang SUDAH DITUTUP (booking dibatalkan / hangus no-show) atau untuk booking

@@ -101,3 +101,8 @@ All protected endpoints require the HTTP Authorization Header:
   - Item: `code`, `name`, `note`, `badge`, `group` (`QRIS` / `VA` / `CARD`), `min_amount`, `max_amount` (null = tanpa batas).
   - **Aplikasi mobile WAJIB memakai endpoint ini** — jangan menulis daftar metode sendiri. Nilai `code` dikirim sebagai `payment_method` ke `POST /padel/checkout`, `POST /padel/bookings/{id}/retry-payment`, dan `POST /membership/checkout`.
   - Server menolak (422) metode yang tidak dikenal, sedang nonaktif, atau di luar batas nominal.
+
+### 10. Membership: Paket, Benefit & Check-in Fasilitas (`/api/v1/membership`)
+- `GET /plans` : Paket aktif + `benefits` (data mentah) + **`benefit_cards`** (siap tampil: `code`, `badge`, `title`, `details[]`, `description`). Nama & deskripsi fasilitas diatur admin di menu **Fasilitas Membership** — aplikasi mobile **wajib** menampilkan `benefit_cards`, jangan menulis teks benefit sendiri. Field paket baru: `description`, `perks[]` (daftar privilege).
+- `POST /checkin` `{ "facility": "GYM" | <kode fasilitas mode check-in>, "balance_id"?: string }` : Check-in fasilitas bermode check-in (Gym + fasilitas baru), memotong 1 kunjungan. `422` kalau kuota habis, paket hanya diskon (tanpa akses masuk), fasilitas bukan mode check-in, atau `balance_id` bukan untuk fasilitas itu.
+- `POST /checkin-gym` : Alias lama untuk `POST /checkin` dengan `facility=GYM`.

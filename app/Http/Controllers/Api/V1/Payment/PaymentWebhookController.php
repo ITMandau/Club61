@@ -84,6 +84,35 @@ class PaymentWebhookController extends Controller
         $status = $result['status'];
         $grossAmount = $result['gross_amount'] ?? 0;
         $paymentType = $request->input('payment_type', strtoupper($driver));
+        // signature_key tidak pernah disimpan: kalau bocor, bisa dipakai ulang untuk memalsukan notifikasi.
+        $safePayload = \Illuminate\Support\Arr::except($request->all(), ['signature_key']);
+
+        // Signature Midtrans = SHA512(order_id + status_code + gross_amount + server key) — TIDAK mencakup
+        // transaction_status. Signature notifikasi lain (expire / cancel) untuk order yang sama bisa dipakai ulang
+        // dengan transaction_status=settlement. Karena itu "lunas" WAJIB dikonfirmasi ke Status API Midtrans
+        // (rekomendasi Midtrans) sebelum order dilunasi, dan data dari Status API yang dipakai.
+        if ($status === 'PAID' && strtolower($driver) === 'midtrans' && config('services.midtrans.verify_webhook_with_status_api', true)) {
+            $confirmed = app(\App\Services\Payment\MidtransService::class)->getTransactionStatus($incomingOrderId);
+            if ($confirmed === null) {
+                // Midtrans tidak bisa dihubungi → 503 (Midtrans kirim ulang; rekonsiliasi berkala juga menangkapnya).
+                throw new \RuntimeException("Status API Midtrans tidak bisa dihubungi untuk konfirmasi pelunasan [{$incomingOrderId}].");
+            }
+
+            $confirmedStatus = \App\Services\Payment\MidtransService::normalizeStatus((string) ($confirmed['transaction_status'] ?? ''), $confirmed['fraud_status'] ?? null);
+            if (($confirmed['order_id'] ?? null) !== $incomingOrderId || $confirmedStatus !== 'PAID') {
+                Log::warning("[ALERT] Notifikasi 'lunas' DITOLAK: Status API Midtrans menyatakan {$confirmedStatus} untuk [{$incomingOrderId}] — kemungkinan notifikasi dipalsukan / diputar ulang.", [
+                    'ip' => $request->ip(),
+                    'claimed_transaction_status' => $request->input('transaction_status'),
+                    'status_api_transaction_status' => $confirmed['transaction_status'] ?? null,
+                ]);
+
+                return $this->acknowledged($driver, $incomingOrderId, 'IGNORED');
+            }
+
+            $grossAmount = (float) ($confirmed['gross_amount'] ?? $grossAmount);
+            $paymentType = $confirmed['payment_type'] ?? $paymentType;
+            $safePayload['confirmed_via'] = 'MIDTRANS_STATUS_API';
+        }
 
         Log::info("Payment Webhook verified for Driver [{$driver}], Order {$incomingOrderId} (Real: {$realOrderId}): Status = {$status}");
 
@@ -169,10 +198,10 @@ class PaymentWebhookController extends Controller
                     'transaction_id' => $incomingOrderId,
                     'payment_method' => strtoupper((string) $paymentType),
                     'amount' => (float) ($grossAmount ?: $order->grand_total),
-                    'payload_log' => $request->all(),
+                    'payload_log' => $safePayload,
                 ]);
             } elseif ($status === 'CANCELLED') {
-                $this->handleGatewayCancellation($order, $incomingOrderId, (string) $request->input('transaction_status', ''), $request->all());
+                $this->handleGatewayCancellation($order, $incomingOrderId, (string) $request->input('transaction_status', ''), $safePayload);
             } elseif (in_array($rawStatus = (string) $request->input('transaction_status', ''), ['refund', 'partial_refund', 'chargeback', 'partial_chargeback'], true)) {
                 // Uang ditarik kembali di sisi Midtrans/bank (refund dari dashboard atau chargeback kartu) — sistem
                 // TIDAK otomatis membatalkan booking/membership, tapi wajib terlihat supaya ditindaklanjuti manual.
@@ -233,6 +262,17 @@ class PaymentWebhookController extends Controller
             if (($log['type'] ?? null) === 'RESCHEDULE_PRICE_DELTA') {
                 $log['snap_session_closed_by'] = 'MIDTRANS_WEBHOOK_'.strtoupper($rawStatus);
                 $bill->update(['payment_gateway' => 'CASHIER_POS', 'payload_log' => $log]);
+
+                return;
+            }
+
+            // Batas bayar booking belum lewat → jangan tutup dulu. Sesi bayar ulang dibuat berakhir sedikit SEBELUM
+            // batas bayar, sementara VA dari sesi sebelumnya bisa masih berlaku sampai batas itu. Pembersih slot
+            // menanyakan semua sesi ke Midtrans saat batas bayar + jeda lewat, lalu menutupnya dengan benar.
+            $deadlineNotPassed = $order->padelBookings
+                ->contains(fn ($b) => in_array($b->status, ['PENDING_PAYMENT', 'PENDING'], true) && $b->expires_at?->isFuture());
+            if ($deadlineNotPassed) {
+                Log::info("Webhook {$rawStatus} untuk [{$gatewayOrderId}] ditunda: batas bayar booking belum lewat, sesi lain bisa masih dibayar.");
 
                 return;
             }

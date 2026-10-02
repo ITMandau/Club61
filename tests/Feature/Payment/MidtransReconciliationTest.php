@@ -88,7 +88,7 @@ class MidtransReconciliationTest extends TestCase
     {
         $at = now()->subMinutes($minutes);
         PadelBooking::whereKey($this->booking->id)->update(['created_at' => $at]);
-        Payment::where('order_id', $this->order->id)->update(['created_at' => $at]);
+        Payment::where('order_id', $this->order->id)->update(['created_at' => $at, 'updated_at' => $at]);
     }
 
     private function midtransStatus(string $orderId, string $transactionStatus, string $gross = '200000.00'): array

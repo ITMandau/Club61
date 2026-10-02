@@ -34,9 +34,13 @@ class MembershipController extends Controller
      */
     public function plans(): JsonResponse
     {
+        $facilities = app(\App\Services\Membership\MembershipFacilityService::class);
         $plans = MembershipPlan::with('benefits')
             ->where('is_active', true)
-            ->get();
+            ->get()
+            // Kartu benefit siap tampil (nama & deskripsi dari Master Fasilitas) — aplikasi mobile tidak perlu
+            // menulis teks benefit sendiri.
+            ->each(fn (MembershipPlan $p) => $p->setAttribute('benefit_cards', $facilities->presentPlan($p)));
 
         return response()->json([
             'success' => true,
@@ -331,9 +335,24 @@ class MembershipController extends Controller
     }
 
     /**
-     * Check-in fasilitas Gym menggunakan kuota / akses membership aktif.
+     * Check-in fasilitas Gym (endpoint lama, dipertahankan untuk aplikasi yang sudah ada).
      */
     public function checkinGym(Request $request): JsonResponse
+    {
+        return $this->checkinFacility($request, 'GYM');
+    }
+
+    /**
+     * Check-in fasilitas bermode CHECK_IN (Gym atau fasilitas baru dari Master Fasilitas).
+     */
+    public function checkin(Request $request): JsonResponse
+    {
+        $validated = $request->validate(['facility' => 'required|string|max:10']);
+
+        return $this->checkinFacility($request, strtoupper($validated['facility']));
+    }
+
+    private function checkinFacility(Request $request, string $facility): JsonResponse
     {
         $validated = $request->validate([
             'balance_id' => 'nullable|string|exists:user_membership_balances,id',
@@ -341,6 +360,11 @@ class MembershipController extends Controller
 
         $user = $request->user();
         $balanceId = $validated['balance_id'] ?? null;
+        $facilityName = app(\App\Services\Membership\MembershipFacilityService::class)->name($facility);
+
+        if ($balanceId && \App\Models\Membership\UserMembershipBalance::whereKey($balanceId)->value('facility') !== $facility) {
+            return response()->json(['success' => false, 'message' => "Kuota yang dipilih bukan untuk {$facilityName}."], 422);
+        }
 
         if (! $balanceId) {
             $membership = UserMembership::where('user_id', $user->id)
@@ -348,20 +372,19 @@ class MembershipController extends Controller
                 ->where(function ($q) {
                     $q->whereNull('end_date')->orWhere('end_date', '>=', now()->toDateString());
                 })
-                ->whereHas('balances', function ($q) {
-                    $q->where('facility', 'GYM');
+                ->whereHas('balances', function ($q) use ($facility) {
+                    $q->where('facility', $facility);
                 })
                 ->first();
 
             if (! $membership) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'Tidak ditemukan keanggotaan aktif untuk akses Gym.',
+                    'message' => "Tidak ditemukan keanggotaan aktif untuk akses {$facilityName}.",
                 ], 422);
             }
 
-            $gymBalance = $membership->balanceFor('GYM');
-            $balanceId = $gymBalance?->id;
+            $balanceId = $membership->balanceFor($facility)?->id;
         }
 
         try {
@@ -373,7 +396,7 @@ class MembershipController extends Controller
 
             return response()->json([
                 'success' => true,
-                'message' => 'Check-in Gym berhasil. Selamat berlatih di Club 61.',
+                'message' => "Check-in {$facilityName} berhasil. Selamat menikmati fasilitas Club 61.",
                 'data' => $checkin->load('balance.membership'),
             ]);
         } catch (DomainException $e) {

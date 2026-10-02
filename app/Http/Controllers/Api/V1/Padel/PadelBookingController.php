@@ -117,13 +117,16 @@ class PadelBookingController extends Controller
         $validated = $request->validate([
             'booking_ids' => ['required', 'array', 'min:1'],
             'booking_ids.*' => ['required', 'string'],
+            // true = hanya lepas slot yang masih DITAHAN (LOCKED). Dipakai keranjang & checkout (countdown habis,
+            // hapus item) supaya tidak pernah membatalkan booking yang sudah klik bayar & sedang dibayar di Midtrans.
+            'only_locked' => ['sometimes', 'boolean'],
         ]);
 
         $user = $request->user();
         $canCancel = $user->canCancelBooking();
 
         // Jika user tidak memiliki izin batal, cegah pembatalan tiket yang sudah berstatus PENDING/PENDING_PAYMENT
-        if (! $canCancel) {
+        if (! $canCancel && empty($validated['only_locked'])) {
             $hasPendingBooking = \App\Models\Padel\PadelBooking::whereIn('id', $validated['booking_ids'])
                 ->where('user_id', $user->id)
                 ->whereIn('status', ['PENDING', 'PENDING_PAYMENT'])
@@ -134,7 +137,7 @@ class PadelBookingController extends Controller
             }
         }
 
-        $releasedCount = $this->bookingService->releaseSlots($validated['booking_ids'], $user);
+        $releasedCount = $this->bookingService->releaseSlots($validated['booking_ids'], $user, onlyLocked: (bool) ($validated['only_locked'] ?? false));
 
         return response()->json([
             'success' => true,

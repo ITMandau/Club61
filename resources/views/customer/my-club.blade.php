@@ -72,38 +72,7 @@
                     ->first();
                 $allPlans = \App\Models\Membership\MembershipPlan::with('benefits')->where('is_active', true)->get();
 
-                $plansData = $allPlans->map(function($p) {
-                    $padel = $p->benefits->firstWhere('facility', 'PADEL');
-                    $gym = $p->benefits->firstWhere('facility', 'GYM');
-                    $sauna = $p->benefits->firstWhere('facility', 'SAUNA');
-
-                    return [
-                        'id' => $p->id,
-                        'code' => $p->code,
-                        'name' => $p->name,
-                        'ownership_type' => $p->ownership_type,
-                        'duration_days' => $p->duration_days,
-                        'price' => (float) $p->price,
-                        'price_formatted' => 'Rp ' . number_format($p->price, 0, ',', '.'),
-                        'padel' => [
-                            'quota_type' => $padel->quota_type ?? 'NONE',
-                            'quota_value' => (float) ($padel->quota_value ?? 0),
-                            'discount_percent' => (float) ($padel->discount_percent ?? 0),
-                            'booking_priority_days' => (int) ($padel->booking_priority_days ?? 0),
-                        ],
-                        'gym' => [
-                            'quota_type' => $gym->quota_type ?? 'NONE',
-                            'quota_value' => $gym && $gym->quota_value ? (float) $gym->quota_value : null,
-                            'is_unlimited' => $gym && $gym->quota_type === 'VISITS' && is_null($gym->quota_value),
-                        ],
-                        'sauna' => [
-                            'quota_type' => $sauna->quota_type ?? 'NONE',
-                            'quota_value' => $sauna && $sauna->quota_value ? (float) $sauna->quota_value : null,
-                            'is_unlimited' => $sauna && $sauna->quota_type === 'VISITS' && is_null($sauna->quota_value),
-                            'discount_percent' => (float) ($sauna->discount_percent ?? 0),
-                        ],
-                    ];
-                })->keyBy('id');
+                $facilityService = app(\App\Services\Membership\MembershipFacilityService::class);
             @endphp
 
             @if($activeMbr)
@@ -130,14 +99,16 @@
                         <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 min-w-[320px] lg:min-w-[480px]">
                             @foreach($activeMbr->balances as $bal)
                                 <div class="p-4 rounded-2xl bg-white border border-[#DFC387] shadow-sm text-center">
-                                    <div class="text-[10px] font-extrabold uppercase tracking-wider text-[#8C6418]">{{ $bal->facility }}</div>
+                                    <div class="text-[10px] font-extrabold uppercase tracking-wider text-[#8C6418]">{{ $facilityService->name($bal->facility) }}</div>
                                     <div class="font-serif font-black text-xl text-[#1F170D] mt-1">
                                         @if($bal->quota_type === 'HOURS')
                                             {{ (float)$bal->remaining_quota }} Jam
                                         @elseif($bal->quota_type === 'VISITS')
                                             {{ $bal->initial_quota ? ((float)$bal->remaining_quota . ' Sesi') : 'Unlimited' }}
+                                        @elseif((float) $bal->discount_percent > 0)
+                                            Diskon {{ (float) $bal->discount_percent }}%
                                         @else
-                                            Diskon {{ $bal->discount_percent }}%
+                                            Termasuk
                                         @endif
                                     </div>
                                     <div class="text-[10px] text-[#7A643E] mt-0.5">
@@ -236,9 +207,8 @@
                 <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                     @foreach($allPlans as $p)
                         @php
-                            $padel = $p->benefits->firstWhere('facility', 'PADEL');
-                            $gym = $p->benefits->firstWhere('facility', 'GYM');
-                            $sauna = $p->benefits->firstWhere('facility', 'SAUNA');
+                            $cards = $facilityService->presentPlan($p);
+                            $perks = array_values(array_filter((array) ($p->perks ?? []), fn ($perk) => is_string($perk) && trim($perk) !== ''));
                         @endphp
                         <div onclick="window.location.href='{{ route('customer.membership', ['plan' => $p->id]) }}'"
                              class="p-5 rounded-3xl bg-white/95 border border-[#DFC387] shadow-sm hover:border-[#D4AF37] hover:shadow-xl hover:-translate-y-1 transition-all flex flex-col justify-between group cursor-pointer">
@@ -251,63 +221,18 @@
                                 <div class="font-black text-base text-[#8C6418] mt-1">Rp {{ number_format($p->price, 0, ',', '.') }}</div>
 
                                 <div class="mt-4 border-t border-[#FAF2DE] pt-3 space-y-2 text-xs text-[#665033]">
-                                    <!-- Padel Highlight -->
-                                    <div class="flex items-start gap-1.5">
-                                        <span class="w-1.5 h-1.5 rounded-full bg-[#D4AF37] mt-1 shrink-0"></span>
-                                        <span>
-                                            <strong>Padel:</strong>
-                                            @if($padel && $padel->quota_type === 'HOURS')
-                                                {{ (float)$padel->quota_value }} Jam Main (H-{{ $padel->booking_priority_days }})
-                                            @elseif($padel && $padel->discount_percent > 0)
-                                                Diskon {{ $padel->discount_percent }}% Semua Court
-                                            @else
-                                                Akses Reservasi Reguler
-                                            @endif
-                                        </span>
-                                    </div>
-
-                                    <!-- Gym Highlight -->
-                                    <div class="flex items-start gap-1.5">
-                                        <span class="w-1.5 h-1.5 rounded-full bg-[#D4AF37] mt-1 shrink-0"></span>
-                                        <span>
-                                            <strong>Gym:</strong>
-                                            @if($gym && $gym->quota_type === 'VISITS' && is_null($gym->quota_value))
-                                                Akses Unlimited Gym &amp; Fitness
-                                            @elseif($gym && $gym->quota_value)
-                                                {{ (float)$gym->quota_value }} Sesi Kunjungan
-                                            @else
-                                                Akses Reguler
-                                            @endif
-                                        </span>
-                                    </div>
-
-                                    <!-- Sauna Highlight -->
-                                    <div class="flex items-start gap-1.5">
-                                        <span class="w-1.5 h-1.5 rounded-full bg-[#D4AF37] mt-1 shrink-0"></span>
-                                        <span>
-                                            <strong>Sauna:</strong>
-                                            @if($sauna && $sauna->quota_type === 'VISITS' && is_null($sauna->quota_value))
-                                                Akses Unlimited Sauna &amp; Ice Bath
-                                            @elseif($sauna && $sauna->quota_value)
-                                                {{ (float)$sauna->quota_value }} Sesi Sauna &amp; Ice Bath
-                                            @else
-                                                Akses Reguler
-                                            @endif
-                                        </span>
-                                    </div>
-
-                                    <!-- Club Privileges Highlight -->
-                                    <div class="flex items-start gap-1.5">
-                                        <span class="w-1.5 h-1.5 rounded-full bg-[#D4AF37] mt-1 shrink-0"></span>
-                                        <span>
-                                            <strong>Privilese:</strong>
-                                            @if($p->ownership_type === 'ORGANIZATIONAL')
-                                                Roster 10 Karyawan &amp; Free Valet
-                                            @else
-                                                Digital Pass, Free Valet &amp; Lounge
-                                            @endif
-                                        </span>
-                                    </div>
+                                    @foreach ($cards as $card)
+                                        <div class="flex items-start gap-1.5">
+                                            <span class="w-1.5 h-1.5 rounded-full bg-[#D4AF37] mt-1 shrink-0"></span>
+                                            <span>{{ $card['title'] }}@if ($card['details']) <span class="text-[#8C7A58]">({{ implode(', ', $card['details']) }})</span>@endif</span>
+                                        </div>
+                                    @endforeach
+                                    @foreach ($perks as $perk)
+                                        <div class="flex items-start gap-1.5">
+                                            <span class="w-1.5 h-1.5 rounded-full bg-[#D4AF37] mt-1 shrink-0"></span>
+                                            <span>{{ $perk }}</span>
+                                        </div>
+                                    @endforeach
                                 </div>
                             </div>
 

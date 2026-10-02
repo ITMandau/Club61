@@ -41,6 +41,10 @@ return [
         'is_production' => env('MIDTRANS_IS_PRODUCTION', false),
         'is_sanitized' => true,
         'is_3ds' => true,
+        // Notifikasi "lunas" dikonfirmasi ulang ke Status API Midtrans sebelum order dilunasi (signature Midtrans
+        // tidak mencakup transaction_status, jadi signature notifikasi lain bisa dipakai ulang). Jangan dimatikan
+        // di server; hanya dimatikan di test otomatis (phpunit.xml).
+        'verify_webhook_with_status_api' => env('MIDTRANS_VERIFY_WEBHOOK_STATUS', true),
     ],
 
 ];

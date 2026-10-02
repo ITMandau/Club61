@@ -187,9 +187,11 @@ class MidtransReconciliationService
     /**
      * Tandai FAILED supaya rekonsiliasi berkala tidak terus menanyakan order yang sudah pasti
      * tidak dibayar (keranjang ditinggal) tiap 5 menit selama 24 jam.
-     *   - Midtrans bilang expire/cancel untuk sesi TERAKHIR tagihan itu → final, tutup sekarang.
-     *   - Midtrans tidak kenal transaksinya (404) → customer belum memilih metode bayar; belum
-     *     tentu final, tutup setelah 30 menit (sesi Snap 15 menit pasti sudah habis).
+     *   - Midtrans bilang expire/cancel untuk SEMUA sesi tagihan itu → final, tutup sekarang. (Dulu cukup sesi
+     *     terakhir — padahal VA dari sesi sebelumnya bisa masih berlaku & dibayar setelah customer ganti metode.)
+     *   - Selain itu (404 = customer belum memilih metode, atau masih ada sesi yang belum final) → tutup setelah
+     *     batas bayar dari pengaturan + jeda (minimal 30 menit) sejak tagihan terakhir diperbarui. Dulu tetap
+     *     30 menit walau batas bayar bisa diatur sampai 60 menit.
      * Finalitas dinilai PER TAGIHAN dari sesi terakhirnya — dulu satu sesi lama yang expire membuat semua
      * tagihan order ditutup, termasuk yang sesi barunya masih dibuka customer.
      */
@@ -199,12 +201,18 @@ class MidtransReconciliationService
             ->where('payment_gateway', 'MIDTRANS')
             ->where('status', 'PENDING');
 
+        $openMinutes = max(30, app(\App\Services\Padel\BookingTimeService::class)->paymentWindowMinutes() + \App\Services\Padel\BookingTimeService::GRACE_MINUTES);
+
         foreach ($query->get() as $payment) {
             $log = is_array($payment->payload_log) ? $payment->payload_log : [];
-            $latestSession = $log['midtrans_order_id'] ?? $payment->transaction_id;
-            $gatewaySaysFinal = in_array($latestSession, $finalIds, true);
+            $sessions = array_values(array_unique(array_filter(array_merge(
+                [$payment->transaction_id, $log['midtrans_order_id'] ?? null],
+                (array) ($log['midtrans_order_ids'] ?? [])
+            ))));
+            $gatewaySaysFinal = $sessions !== [] && array_diff($sessions, $finalIds) === [];
+            $lastTouched = $payment->updated_at ?? $payment->created_at;
 
-            if (! $gatewaySaysFinal && $payment->created_at?->gte(now()->subMinutes(30))) {
+            if (! $gatewaySaysFinal && $lastTouched?->gte(now()->subMinutes($openMinutes))) {
                 continue;
             }
 
@@ -212,16 +220,13 @@ class MidtransReconciliationService
             // booking-nya sudah dibayar sebagian. Sesi Snap yang tidak dibayar cukup dikembalikan jadi
             // tagihan terbuka (bisa dibayar ulang via invoice / di kasir), rekonsiliasi berhenti menanyakannya.
             if (($log['type'] ?? null) === 'RESCHEDULE_PRICE_DELTA') {
-                if (! $gatewaySaysFinal && $payment->updated_at?->gt(now()->subMinutes(30))) {
-                    continue; // customer mungkin masih di halaman Snap
-                }
-                $log['snap_session_closed_by'] = $gatewaySaysFinal ? 'MIDTRANS_STATUS_FINAL' : 'MIDTRANS_NOT_FOUND_AFTER_30_MIN';
+                $log['snap_session_closed_by'] = $gatewaySaysFinal ? 'MIDTRANS_STATUS_FINAL' : 'MIDTRANS_NOT_PAID_AFTER_PAYMENT_WINDOW';
                 $payment->update(['payment_gateway' => 'CASHIER_POS', 'payload_log' => $log]);
 
                 continue;
             }
 
-            $log['closed_by'] = $gatewaySaysFinal ? 'MIDTRANS_STATUS_FINAL' : 'MIDTRANS_NOT_FOUND_AFTER_30_MIN';
+            $log['closed_by'] = $gatewaySaysFinal ? 'MIDTRANS_STATUS_FINAL' : 'MIDTRANS_NOT_PAID_AFTER_PAYMENT_WINDOW';
             $payment->update(['status' => 'FAILED', 'payload_log' => $log]);
         }
     }
@@ -249,7 +254,7 @@ class MidtransReconciliationService
             'transaction_id' => $gatewayOrderId,
             'payment_method' => strtoupper((string) ($status['payment_type'] ?? 'MIDTRANS')),
             'amount' => $grossAmount ?: (float) $order->grand_total,
-            'payload_log' => array_merge($status, ['reconciled_via' => 'MIDTRANS_STATUS_API']),
+            'payload_log' => array_merge(\Illuminate\Support\Arr::except($status, ['signature_key']), ['reconciled_via' => 'MIDTRANS_STATUS_API']),
         ]);
 
         Cache::forget($this->cacheKey($order));

@@ -1059,7 +1059,8 @@
                 },
 
                 async checkExpiry() {
-                    if (!this.expiresAtTime || this.paymentStarted) return;
+                    // Jangan melepas slot saat checkout sedang dikirim (termasuk panggilan Midtrans) atau sudah klik bayar.
+                    if (!this.expiresAtTime || this.paymentStarted || this.isSubmitting) return;
 
                     const now = Date.now();
                     const diffMs = this.expiresAtTime - now;
@@ -1096,7 +1097,7 @@
                                     'Accept': 'application/json',
                                     'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
                                 },
-                                body: JSON.stringify({ booking_ids: bookingIds })
+                                body: JSON.stringify({ booking_ids: bookingIds, only_locked: true })
                             });
                         } catch(e) {
                             console.error('Error auto-releasing expired slots:', e);
@@ -1369,6 +1370,13 @@
                             // customer sedang membayar di popup Midtrans.
                             this.paymentStarted = true;
                             if (this.timerInterval) clearInterval(this.timerInterval);
+                            // Hapus data hold dari browser SEKARANG (bukan baru saat redirect): kalau halaman ter-reload
+                            // (pindah ke aplikasi e-wallet, tab dibuang browser), keranjang/checkout tidak lagi membaca
+                            // countdown lama lalu memanggil "lepas slot" untuk booking yang sedang dibayar.
+                            ['club61_cart', 'club61_hold_data', 'vantage_cart', 'vantage_hold_data'].forEach(k => {
+                                try { localStorage.removeItem(k); sessionStorage.removeItem(k); } catch (e) {}
+                            });
+                            window.dispatchEvent(new CustomEvent('cart-updated'));
 
                             if (data.driver === 'midtrans' && window.snap && typeof window.snap.pay === 'function' && !
                                 data.is_mock && data.snap_token) {
@@ -1471,7 +1479,8 @@
                                         .getAttribute('content'),
                                 },
                                 body: JSON.stringify({
-                                    booking_ids: bookingIds
+                                    booking_ids: bookingIds,
+                                    only_locked: true
                                 })
                             });
                         } catch (e) {

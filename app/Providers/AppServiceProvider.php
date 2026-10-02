@@ -22,6 +22,7 @@ class AppServiceProvider extends ServiceProvider
         $this->app->singleton(\App\Services\Padel\PeakHourService::class);
         $this->app->singleton(\App\Services\Payment\OnlinePaymentMethodService::class);
         $this->app->singleton(\App\Services\Padel\BookingTimeService::class);
+        $this->app->singleton(\App\Services\Membership\MembershipFacilityService::class);
 
         $this->app->singleton(\App\Services\Payment\PaymentFulfillmentRegistry::class, function () {
             $registry = new \App\Services\Payment\PaymentFulfillmentRegistry();

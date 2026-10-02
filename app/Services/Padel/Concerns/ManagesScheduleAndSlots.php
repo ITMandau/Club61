@@ -347,14 +347,14 @@ trait ManagesScheduleAndSlots
     /**
      * Melepaskan kunci slot sukarela saat user membatalkan dari keranjang atau membatalkan pesanan pending.
      */
-    public function releaseSlots(array $bookingIds, User $user): int
+    public function releaseSlots(array $bookingIds, User $user, bool $onlyLocked = false): int
     {
         $orderNumbersToCancel = [];
 
-        $count = DB::transaction(function () use ($bookingIds, $user, &$orderNumbersToCancel) {
+        $count = DB::transaction(function () use ($bookingIds, $user, $onlyLocked, &$orderNumbersToCancel) {
             $bookings = PadelBooking::whereIn('id', $bookingIds)
                 ->where('user_id', $user->id)
-                ->whereIn('status', ['LOCKED', 'PENDING_PAYMENT', 'PENDING'])
+                ->whereIn('status', $onlyLocked ? ['LOCKED'] : ['LOCKED', 'PENDING_PAYMENT', 'PENDING'])
                 ->lockForUpdate()
                 ->get();
 
@@ -538,6 +538,13 @@ trait ManagesScheduleAndSlots
 
         $count = 0;
         foreach ($expiredBookings as $b) {
+            // Update BERSYARAT: di sela pengecekan di atas (yang bisa memanggil Midtrans beberapa detik) booking ini bisa
+            // saja baru di-checkout / dibayar. Dulu langsung ditimpa EXPIRED → order dibatalkan & sesi Midtrans di-cancel
+            // padahal customer sedang membayar.
+            if (! PadelBooking::whereKey($b->id)->where('status', $b->status)->update(['status' => 'EXPIRED'])) {
+                continue;
+            }
+
             $currLock = $b->start_time->copy();
             $endLock = $b->end_time->copy();
             while ($currLock->lt($endLock)) {
@@ -549,7 +556,6 @@ trait ManagesScheduleAndSlots
                 $currLock->addHour();
             }
 
-            $b->update(['status' => 'EXPIRED']);
             $count++;
 
             if ($b->order_id) {

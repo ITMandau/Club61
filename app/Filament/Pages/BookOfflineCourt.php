@@ -1346,7 +1346,8 @@ class BookOfflineCourt extends Page
                 'customer_phone' => $customer->phone,
                 'cashier_name' => $cashier->name,
                 'booking_date' => Carbon::parse($this->bookingDate)->translatedFormat('d F Y'),
-                'payment_method' => $service->formatPaymentMethodLabel($this->paymentMethod),
+                // Pembayaran di kasir: label EDC/QRIS frontdesk, bukan label metode online.
+                'payment_method' => $service->formatPaymentMethodLabel($this->paymentMethod, ['cashier_id' => auth()->id()]),
                 'subtotal' => $result['order']->subtotal,
                 'tax_amount' => $result['order']->tax_amount,
                 'tax_name' => $this->taxName,

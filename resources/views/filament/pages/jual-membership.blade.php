@@ -175,16 +175,10 @@
 
                             <div
                                 style="border-top: 1px dashed #DFC387; padding-top: 0.5rem; display: flex; flex-direction: column; gap: 0.25rem; font-size: 0.6875rem; color: #665033;">
-                                @foreach ($plan->benefits as $b)
+                                {{-- Teks benefit dari Master Fasilitas (sama dengan yang dilihat customer). --}}
+                                @foreach (app(\App\Services\Membership\MembershipFacilityService::class)->presentPlan($plan) as $card)
                                     <div>
-                                        <strong>{{ $b->facility }}:</strong>
-                                        @if ($b->quota_type === 'HOURS')
-                                            {{ (float) $b->quota_value }} Jam Bermain
-                                        @elseif($b->quota_type === 'VISITS')
-                                            {{ $b->quota_value ? (float) $b->quota_value . ' Sesi' : 'Unlimited' }}
-                                        @else
-                                            Diskon {{ $b->discount_percent }}%
-                                        @endif
+                                        <strong>{{ $card['badge'] }}:</strong> {{ $card['title'] }}
                                     </div>
                                 @endforeach
                             </div>

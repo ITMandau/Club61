@@ -150,7 +150,10 @@ trait ManagesTicketsAndRefunds
                 $booking->setAttribute('payment_method_label', $methodLabel);
                 $booking->setAttribute('total_paid', $totalPaid);
                 $booking->setAttribute('unpaid_delta', $unpaidDelta);
-                $booking->setAttribute('has_pending_delta', $unpaidDelta > 0 && $totalPaid > 0);
+                // Selisih reschedule juga untuk booking yang dulu 100% ditanggung kuota member / voucher (dibayar Rp0).
+                $isRescheduleBill = $pendingSupplementalPayment
+                    && (($pendingSupplementalPayment->payload_log['type'] ?? null) === 'RESCHEDULE_PRICE_DELTA' || (int) $booking->reschedule_count > 0);
+                $booking->setAttribute('has_pending_delta', $unpaidDelta > 0 && ($totalPaid > 0 || $isRescheduleBill));
                 $booking->setAttribute('pending_supplemental_id', $pendingSupplementalPayment?->id);
                 // Pilihan bayar selisih yang dicatat resepsionis: CASHIER (di kasir saat datang) / ONLINE (Midtrans).
                 $booking->setAttribute('pending_delta_channel', $pendingSupplementalPayment?->payload_log['preferred_channel'] ?? null);

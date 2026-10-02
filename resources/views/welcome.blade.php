@@ -318,10 +318,13 @@
         </div>
 
         <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-            @php $facilityOrder = ['PADEL' => 0, 'GYM' => 1, 'SAUNA' => 2]; @endphp
+            {{-- Urutan & nama fasilitas dari Master Fasilitas; fasilitas nonaktif tidak ditampilkan. --}}
+            @php $facilityCatalog = app(\App\Services\Membership\MembershipFacilityService::class)->all(); @endphp
             @foreach($membershipPlans as $planIndex => $plan)
                 @php
-                    $orderedBenefits = $plan->benefits->sortBy(fn ($b) => $facilityOrder[$b->facility] ?? 9)->values();
+                    $orderedBenefits = $plan->benefits
+                        ->filter(fn ($b) => $facilityCatalog[$b->facility]['is_active'] ?? true)
+                        ->sortBy(fn ($b) => $facilityCatalog[$b->facility]['sort_order'] ?? 999)->values();
                     $isFlagship = $planIndex === $membershipPlans->count() - 1 && $membershipPlans->count() > 1;
                 @endphp
                 <div class="group relative rounded-2xl overflow-hidden backdrop-blur-md shadow-md flex flex-col hover:-translate-y-1 transition-all"

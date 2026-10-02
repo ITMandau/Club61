@@ -354,6 +354,7 @@ class Club61PermissionMatrix
                         'actions' => [
                             'view_membership_plans' => 'Lihat Daftar Paket Membership',
                             'manage_membership_plans' => 'Kelola Paket, Harga & Benefit Membership',
+                            'manage_membership_facilities' => 'Kelola Master Fasilitas Membership (tambah fasilitas, nama & deskripsi benefit)',
                         ],
                     ],
                 ],

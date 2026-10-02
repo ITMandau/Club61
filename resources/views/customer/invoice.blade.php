@@ -61,7 +61,7 @@
                         <div class="text-[11px] text-amber-800 mt-0.5">The system is automatically verifying your payment settlement every 3 seconds. No page refresh needed.</div>
                     </div>
                 </div>
-                <span class="text-xs font-mono font-bold text-amber-900 bg-amber-100 px-3 py-1 rounded-full border border-amber-300 shrink-0" x-text="'Polling ' + pollCount + '/10'"></span>
+                <span class="text-xs font-mono font-bold text-amber-900 bg-amber-100 px-3 py-1 rounded-full border border-amber-300 shrink-0" x-text="'Cek ke-' + pollCount"></span>
             </div>
 
             <!-- Loading State -->

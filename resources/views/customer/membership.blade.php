@@ -1,14 +1,14 @@
 <x-app-layout>
     @php
-        $plansData = $allPlans->map(function($p) {
-            $padel = $p->benefits->firstWhere('facility', 'PADEL');
-            $gym = $p->benefits->firstWhere('facility', 'GYM');
-            $sauna = $p->benefits->firstWhere('facility', 'SAUNA');
+        // Nama fasilitas & teks benefit dari Master Fasilitas (MembershipFacilityService) — bukan teks tetap di view.
+        $facilityService = app(\App\Services\Membership\MembershipFacilityService::class);
 
+        $plansData = $allPlans->map(function($p) {
             return [
                 'id' => $p->id,
                 'code' => $p->code,
                 'name' => $p->name,
+                'description' => (string) ($p->description ?? ''),
                 'ownership_type' => $p->ownership_type,
                 'duration_days' => $p->duration_days,
                 'price' => (float) $p->price,
@@ -24,23 +24,6 @@
                         'grand_total' => (float) $calc['grand_total'],
                     ];
                 })(),
-                'padel' => [
-                    'quota_type' => $padel->quota_type ?? 'NONE',
-                    'quota_value' => (float) ($padel->quota_value ?? 0),
-                    'discount_percent' => (float) ($padel->discount_percent ?? 0),
-                    'booking_priority_days' => (int) ($padel->booking_priority_days ?? 0),
-                ],
-                'gym' => [
-                    'quota_type' => $gym->quota_type ?? 'NONE',
-                    'quota_value' => $gym && $gym->quota_value ? (float) $gym->quota_value : null,
-                    'is_unlimited' => $gym && $gym->quota_type === 'VISITS' && is_null($gym->quota_value),
-                ],
-                'sauna' => [
-                    'quota_type' => $sauna->quota_type ?? 'NONE',
-                    'quota_value' => $sauna && $sauna->quota_value ? (float) $sauna->quota_value : null,
-                    'is_unlimited' => $sauna && $sauna->quota_type === 'VISITS' && is_null($sauna->quota_value),
-                    'discount_percent' => (float) ($sauna->discount_percent ?? 0),
-                ],
             ];
         })->keyBy('id');
 
@@ -90,9 +73,6 @@
                     @foreach($allPlans as $p)
                         @php
                             $isInitial = ($initialPlan['id'] ?? null) === $p->id;
-                            $padelBenefit = $p->benefits->firstWhere('facility', 'PADEL');
-                            $gymBenefit = $p->benefits->firstWhere('facility', 'GYM');
-                            $saunaBenefit = $p->benefits->firstWhere('facility', 'SAUNA');
                         @endphp
                         <button type="button" 
                                 onclick="switchPlan('{{ $p->id }}')"
@@ -120,15 +100,7 @@
                             </div>
 
                             <div class="mt-3 pt-2.5 border-t border-[#DFC387]/50 flex items-center justify-between text-[11px] font-bold text-[#7A5818]">
-                                <span>
-                                    @if($padelBenefit && $padelBenefit->quota_type === 'HOURS')
-                                        {{ (float)$padelBenefit->quota_value }} Jam Padel
-                                    @elseif($padelBenefit && $padelBenefit->discount_percent > 0)
-                                        Diskon {{ $padelBenefit->discount_percent }}% Padel
-                                    @else
-                                        Padel Reguler
-                                    @endif
-                                </span>
+                                <span>{{ $facilityService->headline($p) }}</span>
                                 <span class="text-[#8C6418] font-extrabold group-hover:translate-x-0.5 transition-transform">&rarr;</span>
                             </div>
                         </button>
@@ -159,6 +131,7 @@
                                     <span>&bull;</span>
                                     <span class="text-[#1E7E34]">Aktivasi Instan Otomatis</span>
                                 </div>
+                                <p id="detailPlanDesc" class="text-xs text-[#7A643E] mt-2 leading-relaxed max-w-xl {{ ($initialPlan['description'] ?? '') === '' ? 'hidden' : '' }}">{{ $initialPlan['description'] ?? '' }}</p>
                             </div>
 
                             <div class="text-left sm:text-right">
@@ -169,120 +142,62 @@
                             </div>
                         </div>
 
-                        <!-- 4 Detailed Benefit Cards Grid -->
+                        <!-- Benefit Cards (dinamis per paket) -->
                         <div class="space-y-3">
                             <div class="flex items-center justify-between">
                                 <h4 class="font-serif font-black text-xs sm:text-sm text-[#1F170D] uppercase tracking-wider">
                                     Rincian Hak Akses &amp; Benefit yang Didapat
                                 </h4>
-                                <span class="text-[11px] font-bold text-[#8C6418]">All-Inclusive Privilege</span>
                             </div>
 
-                            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-                                <!-- Benefit 1: Padel Court -->
-                                <div class="p-4 rounded-2xl bg-white border border-[#DFC387] shadow-sm flex items-start gap-3.5 hover:border-[#D4AF37] transition-all">
-                                    <div class="w-10 h-10 rounded-xl bg-[#FAF2DE] border border-[#DFC387] flex items-center justify-center shrink-0 text-xs font-black text-[#7A5818]">
-                                        PADEL
-                                    </div>
-                                    <div class="text-xs">
-                                        <strong class="text-[#1F170D] block font-extrabold text-sm" id="benefitPadelTitle">
-                                            @if($initialPlan['padel']['quota_type'] === 'HOURS')
-                                                {{ $initialPlan['padel']['quota_value'] }} Jam Main Lapangan Padel
-                                            @elseif($initialPlan['padel']['discount_percent'] > 0)
-                                                Diskon {{ $initialPlan['padel']['discount_percent'] }}% Sewa Lapangan
-                                            @else
-                                                Akses Reservasi Court Reguler
-                                            @endif
-                                        </strong>
-                                        <span class="text-[#7A643E] block mt-1 leading-relaxed" id="benefitPadelDesc">
-                                            @if($initialPlan['padel']['quota_type'] === 'HOURS')
-                                                Prioritas reservasi H-{{ $initialPlan['padel']['booking_priority_days'] }} lebih awal &amp; diskon court tambahan {{ $initialPlan['padel']['discount_percent'] }}% di luar kuota. 3 panoramic courts WPT standard.
-                                            @elseif($initialPlan['padel']['discount_percent'] > 0)
-                                                Akses reservasi 3 panoramic courts indoor &amp; outdoor dengan potongan harga member sebesar {{ $initialPlan['padel']['discount_percent'] }}%.
-                                            @else
-                                                Reservasi 3 lapangan standar WPT Club 61.
-                                            @endif
-                                        </span>
-                                    </div>
-                                </div>
+                            {{-- Kartu benefit dari Master Fasilitas + benefit paket (dulu 4 kartu dengan teks dummy). Satu grid per
+                                 paket, yang tidak dipilih disembunyikan — semua teks lewat {{ }} (ter-escape). --}}
+                            @foreach ($allPlans as $p)
+                                @php
+                                    $cards = $facilityService->presentPlan($p);
+                                    $perks = array_values(array_filter((array) ($p->perks ?? []), fn ($perk) => is_string($perk) && trim($perk) !== ''));
+                                @endphp
+                                <div data-plan-benefits="{{ $p->id }}" class="grid grid-cols-1 sm:grid-cols-2 gap-3.5 {{ ($initialPlan['id'] ?? null) === $p->id ? '' : 'hidden' }}">
+                                    @foreach ($cards as $card)
+                                        <div class="p-4 rounded-2xl bg-white border border-[#DFC387] shadow-sm flex items-start gap-3.5 hover:border-[#D4AF37] transition-all">
+                                            <div class="w-10 h-10 rounded-xl bg-[#FAF2DE] border border-[#DFC387] flex items-center justify-center shrink-0 text-[10px] font-black text-[#7A5818]">
+                                                {{ $card['badge'] }}
+                                            </div>
+                                            <div class="text-xs">
+                                                <strong class="text-[#1F170D] block font-extrabold text-sm">{{ $card['title'] }}</strong>
+                                                @if ($card['description'])
+                                                    <span class="text-[#7A643E] block mt-1 leading-relaxed">{{ $card['description'] }}</span>
+                                                @endif
+                                                @if ($card['details'])
+                                                    <span class="text-[#8C6418] block mt-1 font-bold leading-relaxed">{{ implode(' • ', $card['details']) }}</span>
+                                                @endif
+                                            </div>
+                                        </div>
+                                    @endforeach
 
-                                <!-- Benefit 2: Gym & Fitness -->
-                                <div class="p-4 rounded-2xl bg-white border border-[#DFC387] shadow-sm flex items-start gap-3.5 hover:border-[#D4AF37] transition-all">
-                                    <div class="w-10 h-10 rounded-xl bg-[#FAF2DE] border border-[#DFC387] flex items-center justify-center shrink-0 text-xs font-black text-[#7A5818]">
-                                        GYM
-                                    </div>
-                                    <div class="text-xs">
-                                        <strong class="text-[#1F170D] block font-extrabold text-sm" id="benefitGymTitle">
-                                            @if($initialPlan['gym']['is_unlimited'])
-                                                Akses Unlimited Gym &amp; Fitness
-                                            @elseif($initialPlan['gym']['quota_value'])
-                                                {{ $initialPlan['gym']['quota_value'] }} Sesi Kunjungan Gym &amp; Fitness
-                                            @else
-                                                Akses Reguler Gym
-                                            @endif
-                                        </strong>
-                                        <span class="text-[#7A643E] block mt-1 leading-relaxed" id="benefitGymDesc">
-                                            @if($initialPlan['gym']['is_unlimited'])
-                                                Akses turnstile gate harian tanpa batas kuota ke gym Technogym, area kardio, &amp; ruang pemanasan atlet.
-                                            @elseif($initialPlan['gym']['quota_value'])
-                                                Akses turnstile gate gym sebanyak {{ $initialPlan['gym']['quota_value'] }} sesi kunjungan ke area Technogym.
-                                            @else
-                                                Tersedia opsi tiket masuk gym reguler.
-                                            @endif
-                                        </span>
-                                    </div>
-                                </div>
+                                    @if ($perks)
+                                        <div class="p-4 rounded-2xl bg-white border border-[#DFC387] shadow-sm flex items-start gap-3.5 hover:border-[#D4AF37] transition-all">
+                                            <div class="w-10 h-10 rounded-xl bg-[#FAF2DE] border border-[#DFC387] flex items-center justify-center shrink-0 text-[10px] font-black text-[#7A5818]">
+                                                PERKS
+                                            </div>
+                                            <div class="text-xs">
+                                                <strong class="text-[#1F170D] block font-extrabold text-sm">Privilege Member</strong>
+                                                <ul class="text-[#7A643E] mt-1 leading-relaxed list-disc pl-4 space-y-0.5">
+                                                    @foreach ($perks as $perk)
+                                                        <li>{{ $perk }}</li>
+                                                    @endforeach
+                                                </ul>
+                                            </div>
+                                        </div>
+                                    @endif
 
-                                <!-- Benefit 3: Sauna & Cold Plunge -->
-                                <div class="p-4 rounded-2xl bg-white border border-[#DFC387] shadow-sm flex items-start gap-3.5 hover:border-[#D4AF37] transition-all">
-                                    <div class="w-10 h-10 rounded-xl bg-[#FAF2DE] border border-[#DFC387] flex items-center justify-center shrink-0 text-xs font-black text-[#7A5818]">
-                                        SAUNA
-                                    </div>
-                                    <div class="text-xs">
-                                        <strong class="text-[#1F170D] block font-extrabold text-sm" id="benefitSaunaTitle">
-                                            @if($initialPlan['sauna']['is_unlimited'])
-                                                Akses Unlimited Sauna &amp; Ice Bath
-                                            @elseif($initialPlan['sauna']['quota_value'])
-                                                {{ $initialPlan['sauna']['quota_value'] }} Sesi Finnish Sauna &amp; Cold Plunge
-                                            @else
-                                                Akses Reguler Sauna
-                                            @endif
-                                        </strong>
-                                        <span class="text-[#7A643E] block mt-1 leading-relaxed" id="benefitSaunaDesc">
-                                            @if($initialPlan['sauna']['is_unlimited'])
-                                                Relaksasi cedarwood sauna Finlandia &amp; 4°C cold plunge pemulihan otot atlet tanpa batas kunjungan.
-                                            @elseif($initialPlan['sauna']['quota_value'])
-                                                Relaksasi cedarwood sauna Finlandia &amp; kolam pemulihan air es 4°C sebanyak {{ $initialPlan['sauna']['quota_value'] }} sesi.
-                                            @else
-                                                Tersedia tiket masuk sauna reguler.
-                                            @endif
-                                        </span>
-                                    </div>
+                                    @if (! $cards && ! $perks)
+                                        <div class="sm:col-span-2 p-4 rounded-2xl border border-dashed border-[#DFC387] text-xs text-[#7A643E]">
+                                            Rincian benefit paket ini belum diisi. Silakan hubungi frontdesk Club 61.
+                                        </div>
+                                    @endif
                                 </div>
-
-                                <!-- Benefit 4: Club Privileges -->
-                                <div class="p-4 rounded-2xl bg-white border border-[#DFC387] shadow-sm flex items-start gap-3.5 hover:border-[#D4AF37] transition-all">
-                                    <div class="w-10 h-10 rounded-xl bg-[#FAF2DE] border border-[#DFC387] flex items-center justify-center shrink-0 text-xs font-black text-[#7A5818]">
-                                        PERKS
-                                    </div>
-                                    <div class="text-xs">
-                                        <strong class="text-[#1F170D] block font-extrabold text-sm" id="benefitPerksTitle">
-                                            @if($initialPlan['ownership_type'] === 'ORGANIZATIONAL')
-                                                Roster Tim Korporat s/d 10 Personil
-                                            @else
-                                                Digital VIP Pass &amp; Privilege
-                                            @endif
-                                        </strong>
-                                        <span class="text-[#7A643E] block mt-1 leading-relaxed" id="benefitPerksDesc">
-                                            @if($initialPlan['ownership_type'] === 'ORGANIZATIONAL')
-                                                Portal monitoring kuota bersama, Digital QR Pass masing-masing karyawan, &amp; Free VIP Valet.
-                                            @else
-                                                Digital QR Pass smartphone, Free VIP Valet Parking, Diskon Cafe Lounge, &amp; Turnamen internal.
-                                            @endif
-                                        </span>
-                                    </div>
-                                </div>
-                            </div>
+                            @endforeach
                         </div>
 
                         <!-- Highlights Guarantee -->
@@ -513,49 +428,14 @@
             document.getElementById('detailBadge').innerText = plan.ownership_type === 'ORGANIZATIONAL' ? 'Paket Sponsor Corporate Pool' : 'Keanggotaan Individual VIP';
             document.getElementById('detailPriceDisplay').innerText = plan.price_formatted;
 
-            // 3. Update Padel Benefit
-            if (plan.padel.quota_type === 'HOURS') {
-                document.getElementById('benefitPadelTitle').innerText = plan.padel.quota_value + ' Jam Main Lapangan Padel';
-                document.getElementById('benefitPadelDesc').innerText = 'Prioritas reservasi H-' + plan.padel.booking_priority_days + ' lebih awal & diskon court tambahan ' + plan.padel.discount_percent + '% di luar kuota. 3 panoramic courts WPT standard.';
-            } else if (plan.padel.discount_percent > 0) {
-                document.getElementById('benefitPadelTitle').innerText = 'Diskon ' + plan.padel.discount_percent + '% Sewa Lapangan';
-                document.getElementById('benefitPadelDesc').innerText = 'Akses reservasi 3 panoramic courts indoor & outdoor dengan potongan harga member sebesar ' + plan.padel.discount_percent + '%.';
-            } else {
-                document.getElementById('benefitPadelTitle').innerText = 'Akses Reservasi Court Reguler';
-                document.getElementById('benefitPadelDesc').innerText = 'Reservasi 3 lapangan standar WPT Club 61.';
-            }
-
-            // 4. Update Gym Benefit
-            if (plan.gym.is_unlimited) {
-                document.getElementById('benefitGymTitle').innerText = 'Akses Unlimited Gym & Fitness';
-                document.getElementById('benefitGymDesc').innerText = 'Akses turnstile gate harian tanpa batas kuota ke gym Technogym, area kardio, & ruang pemanasan atlet.';
-            } else if (plan.gym.quota_value) {
-                document.getElementById('benefitGymTitle').innerText = plan.gym.quota_value + ' Sesi Kunjungan Gym & Fitness';
-                document.getElementById('benefitGymDesc').innerText = 'Akses turnstile gate gym sebanyak ' + plan.gym.quota_value + ' sesi kunjungan ke area Technogym.';
-            } else {
-                document.getElementById('benefitGymTitle').innerText = 'Akses Reguler Gym';
-                document.getElementById('benefitGymDesc').innerText = 'Tersedia opsi tiket masuk gym reguler.';
-            }
-
-            // 5. Update Sauna Benefit
-            if (plan.sauna.is_unlimited) {
-                document.getElementById('benefitSaunaTitle').innerText = 'Akses Unlimited Sauna & Ice Bath';
-                document.getElementById('benefitSaunaDesc').innerText = 'Relaksasi cedarwood sauna Finlandia & 4°C cold plunge pemulihan otot atlet tanpa batas kunjungan.';
-            } else if (plan.sauna.quota_value) {
-                document.getElementById('benefitSaunaTitle').innerText = plan.sauna.quota_value + ' Sesi Finnish Sauna & Cold Plunge';
-                document.getElementById('benefitSaunaDesc').innerText = 'Relaksasi cedarwood sauna Finlandia & kolam pemulihan air es 4°C sebanyak ' + plan.sauna.quota_value + ' sesi.';
-            } else {
-                document.getElementById('benefitSaunaTitle').innerText = 'Akses Reguler Sauna';
-                document.getElementById('benefitSaunaDesc').innerText = 'Tersedia tiket masuk sauna reguler.';
-            }
-
-            // 6. Update Perks Benefit
-            if (plan.ownership_type === 'ORGANIZATIONAL') {
-                document.getElementById('benefitPerksTitle').innerText = 'Roster Tim Korporat s/d 10 Personil';
-                document.getElementById('benefitPerksDesc').innerText = 'Portal monitoring kuota bersama, Digital QR Pass masing-masing karyawan, & Free VIP Valet.';
-            } else {
-                document.getElementById('benefitPerksTitle').innerText = 'Digital VIP Pass & Privilege';
-                document.getElementById('benefitPerksDesc').innerText = 'Digital QR Pass smartphone, Free VIP Valet Parking, Diskon Cafe Lounge, & Turnamen internal.';
+            // 3. Benefit & privilege: grid per paket sudah dirender server (Master Fasilitas) — cukup tampilkan yang dipilih.
+            document.querySelectorAll('[data-plan-benefits]').forEach(grid => {
+                grid.classList.toggle('hidden', grid.dataset.planBenefits !== planId);
+            });
+            const desc = document.getElementById('detailPlanDesc');
+            if (desc) {
+                desc.innerText = plan.description || '';
+                desc.classList.toggle('hidden', !plan.description);
             }
 
             // 7. Update Bill Breakdown (pajak & biaya layanan sesungguhnya)

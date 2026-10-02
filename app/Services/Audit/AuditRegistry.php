@@ -6,6 +6,7 @@ use App\Models\Fnb\FnbCategory;
 use App\Models\Fnb\FnbMenu;
 use App\Models\Fnb\FnbModifierGroup;
 use App\Models\Fnb\FnbModifierOption;
+use App\Models\Membership\MembershipFacility;
 use App\Models\Membership\MembershipPlan;
 use App\Models\Membership\MembershipPlanBenefit;
 use App\Models\Padel\BookingTimeSetting;
@@ -114,6 +115,7 @@ class AuditRegistry
                 'severity' => ['updated' => ActivityLogger::WARNING],
             ],
             Voucher::class => ['module' => 'FINANCE', 'label' => 'Voucher', 'title' => ['code'], 'admin_only' => ['used_count', 'quota'], 'severity' => ['created' => ActivityLogger::WARNING]],
+            MembershipFacility::class => ['module' => 'MEMBERSHIP', 'label' => 'Fasilitas Membership', 'title' => ['name'], 'severity' => ['deleted' => ActivityLogger::WARNING]],
             MembershipPlan::class => ['module' => 'MEMBERSHIP', 'label' => 'Paket Membership', 'severity' => ['updated' => ActivityLogger::WARNING]],
             MembershipPlanBenefit::class => [
                 'module' => 'MEMBERSHIP',

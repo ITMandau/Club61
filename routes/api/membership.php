@@ -14,5 +14,6 @@ Route::prefix('v1/membership')->group(function () {
         Route::get('/my-purchases', [MembershipController::class, 'myPurchases']);
         Route::get('/history', [MembershipController::class, 'history']);
         Route::post('/checkin-gym', [MembershipController::class, 'checkinGym']);
+        Route::post('/checkin', [MembershipController::class, 'checkin']);
     });
 });

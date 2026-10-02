@@ -40,7 +40,7 @@ Dokumen pelacak progres (Single Source of Truth). Status di bawah ini hasil audi
 | 19 | Realtime (Laravel Reverb) | Belum terpasang, masih polling | 0% |
 | 20 | Halaman Admin Pendukung (Dashboard, Club, Karyawan, Turnamen, Marketing) | DUMMY semua | 0% |
 
-**Automated test suite:** 544 passed (2261 assertions) — termasuk regresi audit "bom waktu" 1 Okt 2026 (`tests/Feature/Padel/PaymentTimeBombRegressionTest.php`).
+**Automated test suite:** 566 passed (2352 assertions) — termasuk regresi audit "bom waktu" 1 Okt 2026 (`tests/Feature/Padel/PaymentTimeBombRegressionTest.php`).
 
 ---
 
@@ -58,6 +58,9 @@ Dokumen pelacak progres (Single Source of Truth). Status di bawah ini hasil audi
 - [ ] Modul 17: Laporan keuangan per modul + tiap transaksi bisa dilacak detail & invoice-nya.
 - [ ] Modul 18: Panel pengaturan invoice untuk semua modul.
 - [ ] Rapikan pembayaran membership online di portal customer.
+  - [x] Master Fasilitas Membership (menu **Fasilitas Membership**): tambah fasilitas baru (mode check-in / info saja), nama & deskripsi benefit diatur admin; paket punya deskripsi + daftar privilege + catatan per benefit. Halaman membership, My Club, teaser depan, POS Jual Membership & API `/membership/plans` (`benefit_cards`) tidak lagi memakai teks dummy (2 Okt 2026).
+  - [x] Check-in generik `POST /api/v1/membership/checkin`; check-in Gym unlimited dulu selalu gagal, paket "diskon saja" dulu bisa check-in gratis — keduanya diperbaiki.
+  - [ ] Lanjutkan bayar membership PENDING_PAYMENT dari My Club, cegah order pending dobel.
 - [ ] Reset sandi via email (Gmail / SMTP).
 - [ ] Reverb untuk update tanpa refresh.
 
