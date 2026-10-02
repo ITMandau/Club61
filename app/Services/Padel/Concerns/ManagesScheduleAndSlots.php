@@ -235,7 +235,7 @@ trait ManagesScheduleAndSlots
                 $currLock = $startDt->copy();
                 while ($currLock->lt($endDt)) {
                     $lockKey = "padel_lock:{$slot['court_id']}:{$bookingDate}:" . $currLock->format('Hi');
-                    $lock = Cache::lock($lockKey, self::HOLD_DURATION_SECONDS);
+                    $lock = Cache::lock($lockKey, app(\App\Services\Padel\BookingTimeService::class)->holdSeconds());
 
                     if (! $lock->get()) {
                         throw new SlotConflictException(
@@ -251,7 +251,10 @@ trait ManagesScheduleAndSlots
             }
 
             // TIER 2: PESSIMISTIC DB LOCK DALAM TRANSAKSI ACID
-            return DB::transaction(function () use ($slots, $bookingDate, $user, $coachId) {
+            // Waktu tahan slot diatur admin; disimpan per booking supaya perubahan pengaturan tidak memengaruhi hold yang sedang berjalan.
+            $holdExpiresAt = app(\App\Services\Padel\BookingTimeService::class)->holdExpiresAt();
+
+            return DB::transaction(function () use ($slots, $bookingDate, $user, $coachId, $holdExpiresAt) {
                 $createdBookings = [];
                 $totalCourtFee = 0;
                 $batchId = 'BATCH-PAD-' . strtoupper(Str::random(8));
@@ -315,18 +318,17 @@ trait ManagesScheduleAndSlots
                         'equipment_fee' => 0.00,
                         'total_amount' => $courtFee,
                         'status' => 'LOCKED',
+                        'expires_at' => $holdExpiresAt,
                         'qr_code_hash' => hash_hmac('sha256', $bookingCode . $user->id . $court->id . $startDt->toISOString(), config('app.key')),
                     ]);
 
                     $createdBookings[] = $booking;
                 }
 
-                $expiresAt = now()->addSeconds(self::HOLD_DURATION_SECONDS);
-
                 return [
                     'batch_id' => $batchId,
-                    'expires_at' => $expiresAt->toISOString(),
-                    'hold_seconds_remaining' => self::HOLD_DURATION_SECONDS,
+                    'expires_at' => $holdExpiresAt->toISOString(),
+                    'hold_seconds_remaining' => app(\App\Services\Padel\BookingTimeService::class)->holdSeconds(),
                     'bookings' => $createdBookings,
                     'subtotal' => $totalCourtFee,
                 ];
@@ -449,17 +451,18 @@ trait ManagesScheduleAndSlots
      * yang sudah bayar tapi webhook-nya tidak sampai akan kehilangan booking (slot dilepas ke
      * orang lain) padahal uangnya sudah masuk.
      *   - Lunas di Midtrans      → dilunasi sekarang, TIDAK dihanguskan.
-     *   - Masih pending / Midtrans tidak bisa dihubungi → tunda dulu, maksimal 60 menit
-     *     (setelah itu transaksi Snap 15 menit pasti sudah kedaluwarsa di Midtrans).
+     *   - Masih pending / Midtrans tidak bisa dihubungi → tunda dulu, paling lama
+     *     BookingTimeService::GATEWAY_UNCERTAIN_MAX_MINUTES setelah batas bayar booking itu (semua sesi Midtrans
+     *     dibuat berakhir sebelum batas bayar, jadi "pending" setelahnya hanya notifikasi yang telat).
      *   - Expire / cancel / tidak dikenal Midtrans → dihanguskan seperti biasa.
      */
     private function withoutBookingsPaidAtGateway(\Illuminate\Support\Collection $bookings): \Illuminate\Support\Collection
     {
         $reconciler = app(\App\Services\Payment\MidtransReconciliationService::class);
-        $hardDeadline = now()->subMinutes(60);
+        $times = app(\App\Services\Padel\BookingTimeService::class);
         $decisions = [];
 
-        return $bookings->filter(function (PadelBooking $booking) use ($reconciler, $hardDeadline, &$decisions) {
+        return $bookings->filter(function (PadelBooking $booking) use ($reconciler, $times, &$decisions) {
             if (! $booking->order_id) {
                 return true;
             }
@@ -479,7 +482,7 @@ trait ManagesScheduleAndSlots
             return match ($decisions[$booking->order_id]) {
                 \App\Services\Payment\MidtransReconciliationService::PAID => false,
                 \App\Services\Payment\MidtransReconciliationService::PENDING,
-                \App\Services\Payment\MidtransReconciliationService::ERROR => $booking->created_at->lt($hardDeadline),
+                \App\Services\Payment\MidtransReconciliationService::ERROR => now()->gt($times->paymentDeadlineFor($booking)->copy()->addMinutes(\App\Services\Padel\BookingTimeService::GATEWAY_UNCERTAIN_MAX_MINUTES)),
                 default => true,
             };
         })->values();
@@ -493,14 +496,20 @@ trait ManagesScheduleAndSlots
 
     public function releaseExpiredLocks(): int
     {
-        $holdThreshold = now()->subSeconds(self::HOLD_DURATION_SECONDS); // 10 menit
-        $paymentThreshold = now()->subMinutes(15); // 15 menit
+        // Batas waktu per booking (`expires_at`, diatur di admin). Booking lama / buatan kasir tanpa `expires_at` memakai
+        // aturan lama: dihitung dari created_at dengan durasi pengaturan saat ini.
+        $times = app(\App\Services\Padel\BookingTimeService::class);
+        $holdThreshold = now()->subMinutes($times->holdMinutes());
+        $paymentThreshold = now()->subMinutes($times->paymentWindowMinutes());
+        // Jeda setelah batas bayar: notifikasi Midtrans bisa telat beberapa detik s/d 90 detik.
+        $paymentDeadlineWithGrace = now()->subMinutes(\App\Services\Padel\BookingTimeService::GRACE_MINUTES);
 
         $orderNumbersToCancel = [];
 
-        // 1. Slot LOCKED tanpa checkout (> 10 menit)
+        // 1. Slot LOCKED tanpa checkout (waktu tahan habis)
         $expiredHolds = PadelBooking::where('status', 'LOCKED')
-            ->where('created_at', '<', $holdThreshold)
+            ->where(fn ($q) => $q->where('expires_at', '<', now())
+                ->orWhere(fn ($legacy) => $legacy->whereNull('expires_at')->where('created_at', '<', $holdThreshold)))
             ->where('reschedule_count', 0)
             ->where(function ($query) {
                 $query->whereNull('order_id')
@@ -510,9 +519,10 @@ trait ManagesScheduleAndSlots
             })
             ->get();
 
-        // 2. Slot PENDING_PAYMENT / PENDING yang tidak selesai dibayar (> 15 menit)
+        // 2. Slot PENDING_PAYMENT / PENDING yang tidak dibayar sampai batas bayar (+ jeda)
         $expiredPendingPayments = PadelBooking::whereIn('status', ['PENDING_PAYMENT', 'PENDING'])
-            ->where('created_at', '<', $paymentThreshold)
+            ->where(fn ($q) => $q->where('expires_at', '<', $paymentDeadlineWithGrace)
+                ->orWhere(fn ($legacy) => $legacy->whereNull('expires_at')->where('created_at', '<', $paymentThreshold)))
             ->where('reschedule_count', 0)
             ->where(function ($query) {
                 $query->whereNull('order_id')

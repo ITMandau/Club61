@@ -40,7 +40,7 @@ Dokumen pelacak progres (Single Source of Truth). Status di bawah ini hasil audi
 | 19 | Realtime (Laravel Reverb) | Belum terpasang, masih polling | 0% |
 | 20 | Halaman Admin Pendukung (Dashboard, Club, Karyawan, Turnamen, Marketing) | DUMMY semua | 0% |
 
-**Automated test suite:** 515 passed (2099 assertions) — termasuk regresi audit "bom waktu" 1 Okt 2026 (`tests/Feature/Padel/PaymentTimeBombRegressionTest.php`).
+**Automated test suite:** 544 passed (2261 assertions) — termasuk regresi audit "bom waktu" 1 Okt 2026 (`tests/Feature/Padel/PaymentTimeBombRegressionTest.php`).
 
 ---
 
@@ -311,6 +311,8 @@ Dokumen pelacak progres (Single Source of Truth). Status di bawah ini hasil audi
 
 ### Status: 10%
 Sumber pendapatan yang harus masuk laporan: POS Walk-In Padel, Booking Online Padel, Membership (online & kasir), POS F&B, POS Wellness, Gym, Merchandise.
+
+PRD: [`PRD_MODUL_17_BUKU_TRANSAKSI_TERPADU.md`](PRD_MODUL_17_BUKU_TRANSAKSI_TERPADU.md) (draft 1 Okt 2026, belum dikerjakan).
 
 - [~] Halaman **Analytics & Keuangan** sudah query data asli, tapi:
   - [ ] **Pendapatan F&B tidak dihitung sama sekali.**

@@ -51,10 +51,11 @@ All protected endpoints require the HTTP Authorization Header:
 - `GET /courts` : List all courts (indoor/outdoor, regular & prime rates)
 - `GET /schedule?date=&timezone=` : Real-time hourly slot availability (06:00 - 23:00 WIB, masked privacy)
 - `GET /equipments` : List rental equipment (rackets, balls, fresh pack) & coaching add-ons
-- `POST /hold-slot` : Atomic multi-slot temporary reservation (10-minute hold with distributed cache lock)
+- `POST /hold-slot` : Atomic multi-slot temporary reservation (distributed cache lock). Lama tahan slot diatur admin (default 10 menit) — pakai `data.expires_at` / `data.hold_seconds_remaining` dari respons untuk countdown, jangan hardcode.
 - `POST /release-slot` : Voluntarily release held slot from customer cart
 - `POST /checkout` : Idempotent checkout with `X-Idempotency-Key` (Midtrans Snap / Xendit / Mock)
 - `POST /bookings/{id}/retry-payment` : Retry payment for booking; handles **pending price delta ($\Delta$)** when rescheduled to Prime Time under the same `order_id`
+  - Batas bayar dihitung sejak checkout (klik bayar) dan tersimpan di booking (`expires_at`, default 15 menit, diatur admin). Bayar ulang / ganti metode **tidak memperpanjang** batas ini: sesi Midtrans baru hanya diberi sisa waktunya. Sisa < 2 menit → `422` ("Batas waktu pembayaran booking ini sudah habis"), arahkan customer membuat booking baru. Countdown di aplikasi pakai `expires_at` dari `GET /bookings/{id}/ticket`.
 - `GET /my-bookings` : Player booking history categorized by status (`UPCOMING`, `COMPLETED`, `CANCELLED`)
 - `GET /bookings/{id}/ticket` : Customer boarding pass ticket payload; includes `has_pending_delta`, `unpaid_delta`, `total_paid`, and turnstile `qr_code_hash` (held `null` while delta is unpaid)
 - `POST /bookings/{id}/refund` : Customer self-service refund (applicable >= H-24 before kickoff)
@@ -93,3 +94,10 @@ All protected endpoints require the HTTP Authorization Header:
 - `POST /payments/charge` : Request payment gateway charge (QRIS, VA)
 - `POST /payments/simulate` : Development simulator for instant payment confirmation
 - `POST /payments/webhook` : 3rd party webhook notification receiver
+
+### 9. Metode Pembayaran Online (`/api/v1/payment-methods`)
+- `GET /payment-methods?amount={total}` : Daftar metode pembayaran online yang **sedang aktif** (diatur admin di menu *Metode Pembayaran Online*), urut sesuai pengaturan. Publik, read-only.
+  - `amount` (opsional) = total tagihan; metode di luar batas nominal tidak ikut (mis. QRIS maks Rp10.000.000 per transaksi — ketentuan BI).
+  - Item: `code`, `name`, `note`, `badge`, `group` (`QRIS` / `VA` / `CARD`), `min_amount`, `max_amount` (null = tanpa batas).
+  - **Aplikasi mobile WAJIB memakai endpoint ini** — jangan menulis daftar metode sendiri. Nilai `code` dikirim sebagai `payment_method` ke `POST /padel/checkout`, `POST /padel/bookings/{id}/retry-payment`, dan `POST /membership/checkout`.
+  - Server menolak (422) metode yang tidak dikenal, sedang nonaktif, atau di luar batas nominal.

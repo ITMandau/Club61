@@ -304,6 +304,7 @@ trait ManagesCheckoutAndPayments
                 $midtransItems[$targetIdx]['price'] += $diff;
             }
 
+            $paymentDeadline = null;
             if ($grandTotal <= 0) {
                 // Tentukan sumber sebenarnya yang menutup 100% biaya ini — dulu selalu di-hardcode
                 // 'MEMBERSHIP_QUOTA' walau yang benar-benar menutupnya voucher jam sponsor corporate
@@ -326,10 +327,19 @@ trait ManagesCheckoutAndPayments
                 ];
                 $initialStatus = 'PAID';
             } else {
+                // Metode harus aktif & sesuai batas nominal (mis. QRIS maks Rp10 juta) — dicek di server, bukan cuma
+                // disaring di halaman. Gagal di sini = seluruh checkout di-rollback (booking tetap LOCKED, bisa dicoba lagi).
+                $paymentMethod = app(\App\Services\Payment\OnlinePaymentMethodService::class)->assertSelectable($paymentMethod, (float) $grandTotal);
+
+                // Batas bayar dihitung SEJAK KLIK BAYAR dan dipakai dua-duanya: expiry sesi Midtrans & pelepasan slot.
+                $bookingTimes = app(\App\Services\Padel\BookingTimeService::class);
+                $paymentDeadline = $bookingTimes->paymentExpiresAt();
+
                 // Panggil Payment Manager (Midtrans & Mock Simulator)
                 $paymentManager = app(\App\Services\Payment\PaymentManager::class);
                 $paymentResult = $paymentManager->createPayment([
                     'order_id' => $orderNumber,
+                    'expiry_minutes' => $bookingTimes->paymentWindowMinutes(),
                     'gross_amount' => (int) $grandTotal,
                     'item_details' => $midtransItems,
                     'customer_details' => [
@@ -359,6 +369,7 @@ trait ManagesCheckoutAndPayments
                 $booking->update([
                     'order_id' => $order->id,
                     'status' => $initialStatus,
+                    'expires_at' => $initialStatus === 'PENDING_PAYMENT' ? $paymentDeadline : null,
                     'qr_code_hash' => $initialStatus === 'PAID'
                         ? ('VNT-TICKET-' . strtoupper(bin2hex(random_bytes(16))))
                         : null,
@@ -531,6 +542,7 @@ trait ManagesCheckoutAndPayments
                 $deltaAmount = (float) $pendingSupplementalPayment->amount;
                 $chargeTotal = max(0, $deltaAmount);
                 $newGatewayFee = 0;
+                $paymentMethod = app(\App\Services\Payment\OnlinePaymentMethodService::class)->assertSelectable($paymentMethod, (float) $chargeTotal);
 
                 // Midtrans Snap untuk Pelunasan Delta
                 $orderNumber = $order->order_number ?: ('ORD-PAD-' . strtoupper(Str::random(8)));
@@ -599,6 +611,25 @@ trait ManagesCheckoutAndPayments
             }
 
             // Normal Flow: Retry Pembayaran Penuh untuk Cart Baru
+
+            // Bayar ulang / ganti metode TIDAK memperpanjang batas bayar: sesi Midtrans baru hanya diberi sisa waktu
+            // sampai batas bayar booking (dihitung sejak klik bayar pertama). Booking yang masih LOCKED (belum pernah
+            // checkout) = klik bayar pertama → batas bayar mulai dihitung sekarang.
+            $bookingTimes = app(\App\Services\Padel\BookingTimeService::class);
+            $unpaidBookings = $bookings->filter(fn (PadelBooking $b) => in_array($b->status, ['LOCKED', 'PENDING_PAYMENT', 'PENDING'], true));
+            if ($booking->status === 'LOCKED') {
+                $paymentDeadline = $bookingTimes->paymentExpiresAt();
+                foreach ($unpaidBookings as $b) {
+                    $b->update(['status' => 'PENDING_PAYMENT', 'expires_at' => $paymentDeadline]);
+                }
+            } else {
+                $paymentDeadline = $bookingTimes->paymentDeadlineFor($booking);
+            }
+            $expiryMinutes = $bookingTimes->remainingPaymentMinutes($paymentDeadline);
+            if ($expiryMinutes === null) {
+                throw new HttpException(422, 'Batas waktu pembayaran booking ini sudah habis, slot akan dilepas. Silakan buat booking baru.');
+            }
+
             $courtTotal = $bookings->sum('court_fee');
             $equipmentTotal = $bookings->sum('equipment_fee');
             $baseAmount = $courtTotal + $equipmentTotal;
@@ -620,6 +651,10 @@ trait ManagesCheckoutAndPayments
                 'service_charge' => $totalServiceCharge,
                 'grand_total' => $grandTotal,
             ]);
+
+            if ($grandTotal > 0) {
+                $paymentMethod = app(\App\Services\Payment\OnlinePaymentMethodService::class)->assertSelectable($paymentMethod, (float) $grandTotal);
+            }
 
             // On-the-Fly Suffix Logic untuk Midtrans Snap
             $orderNumber = $order->order_number ?: ('ORD-PAD-' . strtoupper(Str::random(8)));
@@ -692,6 +727,7 @@ trait ManagesCheckoutAndPayments
             $paymentManager = app(\App\Services\Payment\PaymentManager::class);
             $paymentResult = $paymentManager->createPayment([
                 'order_id' => $suffixedOrderId,
+                'expiry_minutes' => $expiryMinutes,
                 'gross_amount' => (int) $grandTotal,
                 'item_details' => $midtransItems,
                 'customer_details' => [
@@ -708,12 +744,40 @@ trait ManagesCheckoutAndPayments
             // Simpan PERMANEN order_id yang dikirim ke Midtrans — cache di atas hilang dalam 24 jam,
             // padahal rekonsiliasi (MidtransReconciliationService) butuh id persis ini untuk
             // menanyakan status pembayaran kalau webhook-nya tidak pernah sampai.
-            $pendingPayment = Payment::where('order_id', $order->id)->where('status', 'PENDING')->latest()->first();
+            $pendingPayment = Payment::where('order_id', $order->id)->where('status', 'PENDING')->latest()->lockForUpdate()->first();
             if ($pendingPayment) {
                 $log = is_array($pendingPayment->payload_log) ? $pendingPayment->payload_log : [];
                 $log['midtrans_order_id'] = $suffixedOrderId;
                 $log['midtrans_order_ids'] = array_values(array_unique(array_merge((array) ($log['midtrans_order_ids'] ?? []), [$suffixedOrderId])));
-                $pendingPayment->update(['payload_log' => $log]);
+                $log['snap_token'] = $paymentResult['snap_token'] ?? null;
+                // Nominal ikut grand_total yang baru dihitung ulang di atas (pajak/biaya bisa berubah sejak checkout).
+                $updates = ['amount' => (float) $grandTotal, 'payload_log' => $log];
+                if ($pendingPayment->payment_gateway === 'MIDTRANS') {
+                    // Metode yang SEKARANG dipilih customer — dulu tetap metode lama sampai webhook lunas masuk.
+                    $updates['payment_method'] = $paymentMethod;
+                    $updates['snap_token'] = $paymentResult['snap_token'] ?? $pendingPayment->snap_token;
+                    $updates['payment_url'] = $paymentResult['payment_url'] ?? $paymentResult['redirect_url'] ?? $pendingPayment->payment_url;
+                } else {
+                    // Tagihan kasir (bayar nanti) tetap tagihan kasir; percobaan bayar online cukup dicatat.
+                    $log['online_payment_method'] = $paymentMethod;
+                    $updates['payload_log'] = $log;
+                }
+                $pendingPayment->update($updates);
+            } else {
+                // Tagihan lama sudah ditutup (mis. rekonsiliasi menandai FAILED) tapi booking masih menunggu bayar.
+                // Dulu sesi Snap baru ini tidak tercatat di mana pun selain cache 24 jam → kalau webhook-nya hilang,
+                // rekonsiliasi tidak pernah menanyakannya dan uang customer tidak terdeteksi.
+                Payment::create([
+                    'order_id' => $order->id,
+                    'payment_gateway' => 'MIDTRANS',
+                    'transaction_id' => $suffixedOrderId,
+                    'snap_token' => $paymentResult['snap_token'] ?? null,
+                    'payment_url' => $paymentResult['payment_url'] ?? $paymentResult['redirect_url'] ?? null,
+                    'amount' => (float) $grandTotal,
+                    'payment_method' => $paymentMethod,
+                    'status' => 'PENDING',
+                    'payload_log' => ['midtrans_order_id' => $suffixedOrderId, 'midtrans_order_ids' => [$suffixedOrderId], 'snap_token' => $paymentResult['snap_token'] ?? null],
+                ]);
             }
 
             return [
@@ -737,11 +801,15 @@ trait ManagesCheckoutAndPayments
      */
     public function formatPaymentMethodLabel(?string $method, ?array $payload = null): string
     {
+        // 1. Metode yang BENAR-BENAR dipakai customer menurut Midtrans (webhook / rekonsiliasi).
         if (!empty($payload['payment_type'])) {
             $pt = strtolower((string) $payload['payment_type']);
             if ($pt === 'bank_transfer' && !empty($payload['va_numbers'][0]['bank'])) {
                 $bank = strtoupper($payload['va_numbers'][0]['bank']);
                 return "{$bank} Virtual Account";
+            }
+            if ($pt === 'bank_transfer' && !empty($payload['permata_va_number'])) {
+                return 'Permata Virtual Account';
             }
             if ($pt === 'echannel') {
                 return 'Mandiri Virtual Account';
@@ -749,6 +817,17 @@ trait ManagesCheckoutAndPayments
             if (in_array($pt, ['qris', 'gopay', 'shopeepay'])) {
                 return 'QRIS Instan (GoPay/OVO/BCA)';
             }
+            if ($pt === 'credit_card') {
+                return 'Kartu Kredit / Debit Online';
+            }
+        }
+
+        // 2. Metode online pilihan customer: nama dari pengaturan "Metode Pembayaran Online" / katalog resmi.
+        //    Pembayaran kasir (ada bukti EDC/QRIS frontdesk) memakai kode yang sama (QRIS, CREDIT_CARD) tapi BUKAN
+        //    pembayaran online — jangan diberi label online.
+        $isCounterPayment = !empty($payload['edc_details']) || !empty($payload['qris_details']) || !empty($payload['cashier_id']);
+        if ($method && ! $isCounterPayment && ($onlineLabel = app(\App\Services\Payment\OnlinePaymentMethodService::class)->label($method))) {
+            return $onlineLabel;
         }
 
         return match (strtoupper((string) $method)) {
@@ -757,7 +836,7 @@ trait ManagesCheckoutAndPayments
             'BRI_VA' => 'BRI Virtual Account',
             'BNI_VA' => 'BNI Virtual Account',
             'CIMB_VA' => 'CIMB Virtual Account',
-            'BSI_VA' => 'BSI Virtual Account',
+            'BSI_VA' => 'VA Bank Lain (Permata, BSI, dll.)',
             'QRIS' => 'QRIS Instan (GoPay/OVO/BCA)',
             'CASH' => 'Tunai di Kasir (CASH)',
             'DEBIT_CARD', 'DEBIT' => 'Kartu Debit (EDC)',

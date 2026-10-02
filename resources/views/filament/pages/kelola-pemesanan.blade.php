@@ -324,7 +324,7 @@
                                         @else
                                             <div
                                                 style="background: #FFFBEB; color: #92400E; border: 1px solid #FDE68A; border-radius: 6px; padding: 0.35rem 0.55rem; font-size: 0.71875rem; font-weight: 600; line-height: 1.35;">
-                                                Kedaluwarsa Pembayaran (Belum Bayar > 15 Menit)
+                                                Kedaluwarsa Pembayaran (Lewat Batas Bayar {{ app(\App\Services\Padel\BookingTimeService::class)->paymentWindowMinutes() }} Menit)
                                             </div>
                                         @endif
                                     @else

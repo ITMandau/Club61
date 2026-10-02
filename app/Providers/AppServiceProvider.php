@@ -20,6 +20,8 @@ class AppServiceProvider extends ServiceProvider
     {
         // Singleton per request: jadwal jam peak dibaca sekali, bukan sekali per slot grid (lapangan x jam).
         $this->app->singleton(\App\Services\Padel\PeakHourService::class);
+        $this->app->singleton(\App\Services\Payment\OnlinePaymentMethodService::class);
+        $this->app->singleton(\App\Services\Padel\BookingTimeService::class);
 
         $this->app->singleton(\App\Services\Payment\PaymentFulfillmentRegistry::class, function () {
             $registry = new \App\Services\Payment\PaymentFulfillmentRegistry();

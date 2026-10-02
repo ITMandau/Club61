@@ -25,8 +25,29 @@ class PaymentWebhookController extends Controller
 
     /**
      * Handler webhook universal untuk driver pembayaran (midtrans, mock).
+     *
+     * Error tak terduga (deadlock, DB putus, bug) dibalas 503, bukan 500: Midtrans hanya mengulang notifikasi
+     * 1× untuk 500, tapi 4× untuk 503 (2m, 10m, 30m, 1.5j). Aman diulang karena pelunasan idempoten.
      */
     public function handle(string $driver, Request $request): JsonResponse
+    {
+        try {
+            return $this->process($driver, $request);
+        } catch (\Throwable $e) {
+            report($e);
+            Log::error("[ALERT] Webhook {$driver} gagal diproses, dibalas 503 supaya dikirim ulang: ".$e->getMessage(), [
+                'order_id' => $request->input('order_id'),
+                'transaction_status' => $request->input('transaction_status'),
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Notifikasi belum bisa diproses, silakan kirim ulang.',
+            ], 503);
+        }
+    }
+
+    private function process(string $driver, Request $request): JsonResponse
     {
         if (strtolower($driver) === 'mock' && app()->environment('production')) {
             return response()->json([
@@ -152,6 +173,15 @@ class PaymentWebhookController extends Controller
                 ]);
             } elseif ($status === 'CANCELLED') {
                 $this->handleGatewayCancellation($order, $incomingOrderId, (string) $request->input('transaction_status', ''), $request->all());
+            } elseif (in_array($rawStatus = (string) $request->input('transaction_status', ''), ['refund', 'partial_refund', 'chargeback', 'partial_chargeback'], true)) {
+                // Uang ditarik kembali di sisi Midtrans/bank (refund dari dashboard atau chargeback kartu) — sistem
+                // TIDAK otomatis membatalkan booking/membership, tapi wajib terlihat supaya ditindaklanjuti manual.
+                Log::critical("[ALERT] Midtrans melaporkan {$rawStatus} untuk order [{$order->order_number}] ({$incomingOrderId}) — cek & tindak lanjuti manual.", [
+                    'order_id' => $order->id,
+                    'gross_amount' => $grossAmount,
+                    'refund_amount' => $request->input('refund_amount'),
+                    'payment_type' => $paymentType,
+                ]);
             }
         }
 

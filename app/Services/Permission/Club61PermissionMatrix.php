@@ -20,6 +20,11 @@ class Club61PermissionMatrix
         'reschedule_padel_booking',
         'View:PengaturanBiayaPajak',
         'manage_tax_and_fees',
+        // Menentukan metode bayar online yang bisa dipilih customer (salah atur = customer gagal bayar).
+        'View:MetodePembayaranOnline',
+        'manage_online_payment_methods',
+        // Lama tahan slot & batas bayar online (salah atur = slot ditahan terlalu lama / customer kehabisan waktu bayar).
+        'manage_booking_time_limits',
         'manage_court_pricing',
         'View:RoleResource',
         'view_roles',
@@ -339,6 +344,9 @@ class Club61PermissionMatrix
                             'manage_court_pricing' => 'Kelola Tarif Sewa Lapangan Per Jam',
                             'manage_court_equipment' => 'Kelola Tarif Sewa Raket & Bola Padel',
                             'manage_tax_and_fees' => 'Kelola Pengaturan Biaya Layanan & Pajak',
+                            'View:MetodePembayaranOnline' => 'Akses Halaman Metode Pembayaran Online',
+                            'manage_online_payment_methods' => 'Kelola Metode Pembayaran Online (aktif, nama, urutan, batas nominal)',
+                            'manage_booking_time_limits' => 'Atur Waktu Tahan Slot & Batas Waktu Bayar Online',
                         ],
                     ],
                     'membership_plans' => [
@@ -431,6 +439,38 @@ class Club61PermissionMatrix
      * @param string $guardName
      * @return int Jumlah permission yang terdaftar
      */
+    /**
+     * Untuk deploy fitur baru: buat izin di matriks yang BELUM ada di database, lalu berikan HANYA izin baru itu ke
+     * role yang preset-nya memuatnya (mis. super_admin). Izin yang sudah ada tidak disentuh sama sekali, jadi
+     * centangan yang diubah manual lewat menu "Roles & Hak Akses" tetap aman.
+     *
+     * @return array<int, string> izin yang baru dibuat
+     */
+    public static function grantNewPermissionsToPresetRoles(string $guardName = 'web'): array
+    {
+        $existing = Permission::where('guard_name', $guardName)->pluck('name')->all();
+        $new = array_values(array_diff(self::getAllPermissionSlugs(), $existing));
+
+        if ($new === []) {
+            return [];
+        }
+
+        foreach ($new as $slug) {
+            Permission::create(['name' => $slug, 'guard_name' => $guardName]);
+        }
+
+        foreach (\App\Models\Role::where('guard_name', $guardName)->get() as $role) {
+            $grant = array_values(array_intersect($new, self::defaultRolePermissions($role->name)));
+            if ($grant !== []) {
+                $role->givePermissionTo($grant);
+            }
+        }
+
+        app(\Spatie\Permission\PermissionRegistrar::class)->forgetCachedPermissions();
+
+        return $new;
+    }
+
     public static function syncAllPermissions(string $guardName = 'web'): int
     {
         $slugs = self::getAllPermissionSlugs();

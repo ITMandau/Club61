@@ -239,7 +239,8 @@ class CustomerDirectoryLiveMonitoringTest extends TestCase
             ->assertSee('Gold Ultimate VIP')
             ->assertSee('Rincian Hak Akses &amp; Benefit yang Didapat', false)
             ->assertSee('Bayar via Midtrans Snap (Cashless)', false)
-            ->assertSee('QRIS Instant', false)
-            ->assertSee('Virtual Account Bank &amp; Kartu Kredit', false);
+            ->assertSee('QRIS (GoPay / OVO / DANA / ShopeePay / m-Banking)', false)
+            ->assertSee('BCA Virtual Account', false)
+            ->assertDontSee('MIDTRANS_SNAP', false);
     }
 }

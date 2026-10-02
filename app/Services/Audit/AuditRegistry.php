@@ -8,9 +8,11 @@ use App\Models\Fnb\FnbModifierGroup;
 use App\Models\Fnb\FnbModifierOption;
 use App\Models\Membership\MembershipPlan;
 use App\Models\Membership\MembershipPlanBenefit;
+use App\Models\Padel\BookingTimeSetting;
 use App\Models\Padel\CourtEquipment;
 use App\Models\Padel\PadelCourt;
 use App\Models\Pos\ClubFinanceSetting;
+use App\Models\Pos\OnlinePaymentMethod;
 use App\Models\Pos\PosCashierShift;
 use App\Models\Pos\Voucher;
 use App\Models\Role;
@@ -98,6 +100,18 @@ class AuditRegistry
                 'label' => 'Pengaturan Biaya & Pajak',
                 'title' => fn () => 'Pajak & Biaya Layanan',
                 'severity' => ['created' => ActivityLogger::CRITICAL, 'updated' => ActivityLogger::CRITICAL, 'deleted' => ActivityLogger::CRITICAL],
+            ],
+            OnlinePaymentMethod::class => [
+                'module' => 'FINANCE',
+                'label' => 'Metode Pembayaran Online',
+                'title' => ['label'],
+                'severity' => ['updated' => ActivityLogger::WARNING],
+            ],
+            BookingTimeSetting::class => [
+                'module' => 'FINANCE',
+                'label' => 'Waktu Tahan Slot & Batas Bayar',
+                'title' => fn () => 'Waktu Tahan Slot & Batas Bayar',
+                'severity' => ['updated' => ActivityLogger::WARNING],
             ],
             Voucher::class => ['module' => 'FINANCE', 'label' => 'Voucher', 'title' => ['code'], 'admin_only' => ['used_count', 'quota'], 'severity' => ['created' => ActivityLogger::WARNING]],
             MembershipPlan::class => ['module' => 'MEMBERSHIP', 'label' => 'Paket Membership', 'severity' => ['updated' => ActivityLogger::WARNING]],

@@ -87,29 +87,27 @@ class MidtransService
             ],
             'item_details' => $itemDetails,
             'customer_details' => $customerDetails,
+            // Batas bayar dari pengaturan admin (BookingTimeService) — SAMA dengan batas pelepasan slot. Bayar ulang
+            // mengirim sisa waktunya sendiri (`expiry_minutes`) supaya ganti metode tidak memperpanjang batas bayar.
+            // Nilai di sini mengalahkan pengaturan "Payment Expiry" di dashboard Midtrans.
             'expiry' => [
                 'start_time' => now()->timezone('Asia/Jakarta')->format('Y-m-d H:i:s O'),
                 'unit' => 'minute',
-                'duration' => 15,
+                'duration' => max(1, (int) ($params['expiry_minutes'] ?? app(\App\Services\Padel\BookingTimeService::class)->paymentWindowMinutes())),
             ],
         ];
 
         if (!empty($params['payment_method'])) {
-            $method = strtoupper($params['payment_method']);
-            $enabledPayments = match ($method) {
-                'QRIS' => ['other_qris', 'gopay', 'shopeepay'],
-                'BCA_VA' => ['bca_va'],
-                'MANDIRI_VA' => ['echannel'],
-                'BNI_VA' => ['bni_va'],
-                'BRI_VA' => ['bri_va'],
-                'CIMB_VA' => ['cimb_va'],
-                'BSI_VA' => ['permata_va', 'other_va'],
-                'CREDIT_CARD' => ['credit_card'],
-                default => null,
-            };
+            // Pemetaan dari katalog resmi (OnlinePaymentCatalog) — satu sumber dengan halaman checkout & validasi.
+            $enabledPayments = OnlinePaymentCatalog::midtransChannels((string) $params['payment_method']);
 
             if ($enabledPayments) {
                 $payload['enabled_payments'] = $enabledPayments;
+            }
+
+            // Kartu online WAJIB 3D Secure (OTP bank) — tanpa ini kartu curian bisa dipakai lalu berujung chargeback.
+            if (in_array('credit_card', $enabledPayments ?? [], true)) {
+                $payload['credit_card'] = ['secure' => true];
             }
         }
 
@@ -235,7 +233,9 @@ class MidtransService
     public static function normalizeStatus(string $transactionStatus, ?string $fraudStatus = null): string
     {
         return match ($transactionStatus) {
-            'capture' => ($fraudStatus === 'challenge') ? 'CHALLENGE' : 'PAID',
+            // Kartu: lunas HANYA kalau fraud_status = accept (rekomendasi Midtrans). Challenge / deny / status lain =
+            // belum lunas (menunggu keputusan di dashboard Midtrans). Kanal non-kartu tidak mengirim fraud_status.
+            'capture' => in_array($fraudStatus, [null, '', 'accept'], true) ? 'PAID' : 'CHALLENGE',
             'settlement' => 'PAID',
             'pending' => 'PENDING',
             'deny', 'expire', 'cancel' => 'CANCELLED',

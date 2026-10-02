@@ -13,6 +13,17 @@
                 'duration_days' => $p->duration_days,
                 'price' => (float) $p->price,
                 'price_formatted' => 'Rp ' . number_format($p->price, 0, ',', '.'),
+                // Rincian tagihan = TaxAndFeeService (kanal ONLINE, modul MEMBERSHIP), sama persis dengan checkout server.
+                'bill' => (function () use ($p) {
+                    $calc = app(\App\Services\Finance\TaxAndFeeService::class)->calculate(subtotal: (float) $p->price, discountAmount: 0, channel: 'ONLINE', module: 'MEMBERSHIP');
+                    return [
+                        'tax' => (float) $calc['tax_amount'],
+                        'tax_name' => $calc['tax_name'] ?: 'Pajak',
+                        'admin_fee' => (float) $calc['admin_fee_amount'],
+                        'admin_fee_name' => $calc['admin_fee_name'] ?: 'Biaya Layanan',
+                        'grand_total' => (float) $calc['grand_total'],
+                    ];
+                })(),
                 'padel' => [
                     'quota_type' => $padel->quota_type ?? 'NONE',
                     'quota_value' => (float) ($padel->quota_value ?? 0),
@@ -295,42 +306,43 @@
                         <div class="border-b border-[#DFC387]/50 pb-3">
                             <span class="text-[10px] font-extrabold uppercase tracking-wider text-[#8C6418] block">Langkah Terakhir</span>
                             <h4 class="font-serif font-black text-lg text-[#1F170D] mt-0.5">
-                                Konfirmasi &amp; Bayar Cashless
+                                Konfirmasi &amp; Payment
                             </h4>
-                            <p class="text-xs text-[#7A643E] mt-0.5">Pilih metode digital dan selesaikan pembayaran via Midtrans Snap</p>
+                            <p class="text-xs text-[#7A643E] mt-0.5"></p>
                         </div>
 
                         <!-- Cashless Channel Selector -->
                         <div class="space-y-2.5">
                             <div class="flex items-center justify-between">
                                 <label class="block text-xs font-extrabold uppercase tracking-wider text-[#7A5818]">
-                                    Saluran Pembayaran Midtrans:
+                                    Choice of Cashless Payment
                                 </label>
                                 <span class="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
-                                    Bebas Uang Tunai
+                                    
                                 </span>
                             </div>
 
-                            <div class="space-y-2">
-                                <label class="p-3.5 rounded-2xl border-2 border-[#DFC387] bg-white hover:bg-[#FAF2DE]/50 cursor-pointer flex items-start gap-3 transition-all text-xs font-bold text-[#1F170D] has-[:checked]:border-[#B38622] has-[:checked]:bg-[#FAF2DE] shadow-sm">
-                                    <input type="radio" name="payment_method" value="QRIS" checked class="text-[#D4AF37] focus:ring-[#D4AF37] w-4 h-4 mt-0.5">
-                                    <div>
-                                        <div class="font-extrabold text-xs">QRIS Instant (GoPay / OVO / Dana / BCA QR)</div>
-                                        <div class="text-[11px] text-[#7A643E] font-normal mt-0.5 leading-relaxed">
-                                            Scan kode QR langsung dari aplikasi e-wallet atau mobile banking apa pun. Kuota aktif seketika.
+                            @php $onlineMethods = app(\App\Services\Payment\OnlinePaymentMethodService::class)->forFrontend(); @endphp
+                            <div class="space-y-2" id="paymentMethodList">
+                                @foreach ($onlineMethods as $i => $m)
+                                    <label data-method-option data-min="{{ $m['min_amount'] ?? '' }}" data-max="{{ $m['max_amount'] ?? '' }}"
+                                        class="p-3.5 rounded-2xl border-2 border-[#DFC387] bg-white hover:bg-[#FAF2DE]/50 cursor-pointer flex items-start gap-3 transition-all text-xs font-bold text-[#1F170D] has-[:checked]:border-[#B38622] has-[:checked]:bg-[#FAF2DE] shadow-sm">
+                                        <input type="radio" name="payment_method" value="{{ $m['code'] }}" @checked($i === 0) class="text-[#D4AF37] focus:ring-[#D4AF37] w-4 h-4 mt-0.5">
+                                        <span class="w-8 h-8 rounded-lg bg-white border border-[#DFC387] flex items-center justify-center font-bold text-[10px] text-[#8C6418] shrink-0">{{ $m['badge'] }}</span>
+                                        <div>
+                                            <div class="font-extrabold text-xs">{{ $m['name'] }}</div>
+                                            @if ($m['note'])
+                                                <div class="text-[11px] text-[#7A643E] font-normal mt-0.5 leading-relaxed">{{ $m['note'] }}</div>
+                                            @endif
+                                            @if ($m['max_amount'])
+                                                <div class="text-[10px] text-[#8C7A58] font-normal mt-0.5">Maksimal Rp {{ number_format($m['max_amount'], 0, ',', '.') }} per transaksi</div>
+                                            @endif
                                         </div>
-                                    </div>
-                                </label>
-
-                                <label class="p-3.5 rounded-2xl border-2 border-[#DFC387] bg-white hover:bg-[#FAF2DE]/50 cursor-pointer flex items-start gap-3 transition-all text-xs font-bold text-[#1F170D] has-[:checked]:border-[#B38622] has-[:checked]:bg-[#FAF2DE] shadow-sm">
-                                    <input type="radio" name="payment_method" value="MIDTRANS_SNAP" class="text-[#D4AF37] focus:ring-[#D4AF37] w-4 h-4 mt-0.5">
-                                    <div>
-                                        <div class="font-extrabold text-xs">Virtual Account Bank &amp; Kartu Kredit</div>
-                                        <div class="text-[11px] text-[#7A643E] font-normal mt-0.5 leading-relaxed">
-                                            BCA, Mandiri, BNI, BRI, Permata VA &amp; Kartu Debit/Kredit Online berlogo Visa/Mastercard.
-                                        </div>
-                                    </div>
-                                </label>
+                                    </label>
+                                @endforeach
+                                <div id="noPaymentMethodNotice" class="hidden p-3.5 rounded-2xl border-2 border-dashed border-rose-200 bg-rose-50 text-xs text-rose-700 font-bold">
+                                    Belum ada metode pembayaran online untuk paket ini. Silakan beli di frontdesk Club 61.
+                                </div>
                             </div>
                         </div>
 
@@ -340,13 +352,17 @@
                                 <span>Harga Paket Keanggotaan:</span>
                                 <span id="billSubtotal" class="font-bold text-[#1F170D]">{{ $initialPlan['price_formatted'] }}</span>
                             </div>
-                            <div class="flex justify-between items-center text-xs text-[#7A643E]">
-                                <span>Biaya Layanan &amp; Aktivasi Online:</span>
-                                <span class="font-bold text-[#1E7E34]">Termasuk (Rp 0)</span>
+                            <div id="billTaxRow" class="flex justify-between items-center text-xs text-[#7A643E] {{ $initialPlan['bill']['tax'] > 0 ? '' : 'hidden' }}">
+                                <span id="billTaxName">{{ $initialPlan['bill']['tax_name'] }}:</span>
+                                <span id="billTax" class="font-bold text-[#1F170D]">Rp {{ number_format($initialPlan['bill']['tax'], 0, ',', '.') }}</span>
+                            </div>
+                            <div id="billAdminFeeRow" class="flex justify-between items-center text-xs text-[#7A643E] {{ $initialPlan['bill']['admin_fee'] > 0 ? '' : 'hidden' }}">
+                                <span id="billAdminFeeName">{{ $initialPlan['bill']['admin_fee_name'] }}:</span>
+                                <span id="billAdminFee" class="font-bold text-[#1F170D]">Rp {{ number_format($initialPlan['bill']['admin_fee'], 0, ',', '.') }}</span>
                             </div>
                             <div class="flex justify-between items-center pt-2.5 border-t border-[#DFC387]/50 text-sm font-bold">
                                 <span class="font-serif font-black text-[#1F170D]">Total Pembayaran Cashless:</span>
-                                <span id="billGrandTotal" class="font-serif font-black text-xl text-[#8C6418]">{{ $initialPlan['price_formatted'] }}</span>
+                                <span id="billGrandTotal" class="font-serif font-black text-xl text-[#8C6418]">Rp {{ number_format($initialPlan['bill']['grand_total'], 0, ',', '.') }}</span>
                             </div>
                         </div>
 
@@ -542,9 +558,17 @@
                 document.getElementById('benefitPerksDesc').innerText = 'Digital QR Pass smartphone, Free VIP Valet Parking, Diskon Cafe Lounge, & Turnamen internal.';
             }
 
-            // 7. Update Bill Breakdown
+            // 7. Update Bill Breakdown (pajak & biaya layanan sesungguhnya)
+            const rupiah = (v) => 'Rp ' + Math.round(v).toLocaleString('id-ID');
             document.getElementById('billSubtotal').innerText = plan.price_formatted;
-            document.getElementById('billGrandTotal').innerText = plan.price_formatted;
+            document.getElementById('billTaxRow').classList.toggle('hidden', !(plan.bill.tax > 0));
+            document.getElementById('billTaxName').innerText = plan.bill.tax_name + ':';
+            document.getElementById('billTax').innerText = rupiah(plan.bill.tax);
+            document.getElementById('billAdminFeeRow').classList.toggle('hidden', !(plan.bill.admin_fee > 0));
+            document.getElementById('billAdminFeeName').innerText = plan.bill.admin_fee_name + ':';
+            document.getElementById('billAdminFee').innerText = rupiah(plan.bill.admin_fee);
+            document.getElementById('billGrandTotal').innerText = rupiah(plan.bill.grand_total);
+            filterPaymentMethods(plan.bill.grand_total);
 
             // 8. Update Mobile Bar
             const mobileName = document.getElementById('mobilePlanName');
@@ -553,11 +577,36 @@
             if (mobilePrice) mobilePrice.innerText = plan.price_formatted;
         }
 
+        /** Sembunyikan metode di luar batas nominal (mis. QRIS maks Rp10 juta untuk paket Corporate). */
+        function filterPaymentMethods(total) {
+            let firstVisible = null;
+            let checkedStillVisible = false;
+            document.querySelectorAll('[data-method-option]').forEach(label => {
+                const min = label.dataset.min === '' ? null : parseFloat(label.dataset.min);
+                const max = label.dataset.max === '' ? null : parseFloat(label.dataset.max);
+                const ok = (min === null || total >= min) && (max === null || total <= max);
+                const input = label.querySelector('input');
+                label.classList.toggle('hidden', !ok);
+                input.disabled = !ok;
+                if (ok && !firstVisible) firstVisible = input;
+                if (ok && input.checked) checkedStillVisible = true;
+            });
+            if (!checkedStillVisible && firstVisible) firstVisible.checked = true;
+            document.getElementById('noPaymentMethodNotice').classList.toggle('hidden', !!firstVisible);
+            document.getElementById('btnSubmitCheckout').disabled = !firstVisible;
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            const plan = plansMap[currentSelectedPlanId];
+            if (plan) filterPaymentMethods(plan.bill.grand_total);
+        });
+
         async function submitMembershipCheckout() {
             if (!currentSelectedPlanId) return;
 
             const methodInput = document.querySelector('input[name="payment_method"]:checked');
-            const paymentMethod = methodInput ? methodInput.value : 'QRIS';
+            if (!methodInput) return;
+            const paymentMethod = methodInput.value;
 
             const btn = document.getElementById('btnSubmitCheckout');
             const btnText = document.getElementById('btnSubmitText');

@@ -255,7 +255,7 @@ class MasterDataPricingAndAddonsTest extends TestCase
                 ['equipment_id' => $inactiveEquipment->id, 'quantity' => 2],
             ],
             null,
-            'bank_transfer',
+            'BCA_VA',
             'IDEMPOTENCY-' . uniqid(),
             $this->adminUser
         );

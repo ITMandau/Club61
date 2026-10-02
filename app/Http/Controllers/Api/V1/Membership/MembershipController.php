@@ -53,7 +53,9 @@ class MembershipController extends Controller
     {
         $validated = $request->validate([
             'plan_id' => 'required|string|exists:membership_plans,id',
-            'payment_method' => 'required|string|max:50',
+            // Dulu teks apa saja diterima & tersimpan apa adanya. Kode wajib dari katalog resmi; aktif/nonaktif &
+            // batas nominal dicek setelah total (termasuk pajak) diketahui.
+            'payment_method' => ['required', 'string', \Illuminate\Validation\Rule::in(array_keys(\App\Services\Payment\OnlinePaymentCatalog::all()))],
         ]);
 
         // 100% Cashless: pembayaran tunai tidak diperbolehkan sama sekali di jalur checkout online.
@@ -88,6 +90,10 @@ class MembershipController extends Controller
                 );
 
                 $grandTotal = (float) $calc['grand_total'];
+
+                // Sebelum order dibuat: metode harus aktif & sesuai batas nominal (mis. QRIS maks Rp10 juta —
+                // paket Corporate Rp25 juta dulu tetap menawarkan QRIS lalu gagal di Midtrans).
+                $paymentMethod = app(\App\Services\Payment\OnlinePaymentMethodService::class)->assertSelectable($validated['payment_method'], $grandTotal);
 
                 // Buat Order resmi
                 $order = Order::create([
@@ -146,19 +152,30 @@ class MembershipController extends Controller
                 // Buat kartu membership dengan status PENDING_PAYMENT (kuota remaining 0.00)
                 $membership = $this->balanceService->purchasePlan($user, $plan, $membershipOptions);
 
+                // Item Midtrans WAJIB berjumlah sama dengan gross_amount. Dulu hanya harga paket yang dikirim padahal
+                // total sudah termasuk pajak + biaya layanan → begitu pajak membership diaktifkan, MidtransService
+                // menolak (jumlah item ≠ total) dan customer mendapat error 500.
+                $itemDetails = [[
+                    'id' => substr($plan->id, 0, 50),
+                    'price' => (int) round((float) $calc['subtotal']),
+                    'quantity' => 1,
+                    'name' => substr($plan->name, 0, 50),
+                ]];
+                if ((float) $calc['tax_amount'] > 0) {
+                    $itemDetails[] = ['id' => 'TAX-FEE', 'price' => (int) round((float) $calc['tax_amount']), 'quantity' => 1, 'name' => substr($calc['tax_name'] ?: 'Pajak', 0, 50)];
+                }
+                if ((float) $calc['admin_fee_amount'] > 0) {
+                    $itemDetails[] = ['id' => 'ADMIN-FEE', 'price' => (int) round((float) $calc['admin_fee_amount']), 'quantity' => 1, 'name' => substr($calc['admin_fee_name'] ?: 'Biaya Layanan', 0, 50)];
+                }
+                // Selisih pembulatan rupiah dititipkan ke baris terakhir supaya jumlah item = gross_amount persis.
+                $roundingDiff = (int) $grandTotal - array_sum(array_map(fn ($i) => $i['price'] * $i['quantity'], $itemDetails));
+                $itemDetails[array_key_last($itemDetails)]['price'] += $roundingDiff;
+
                 // Panggil Payment Gateway Manager
-                $paymentMethod = $validated['payment_method'];
                 $paymentResult = $this->paymentManager->createPayment([
                     'order_id' => $orderNumber,
                     'gross_amount' => (int) $grandTotal,
-                    'item_details' => [
-                        [
-                            'id' => substr($plan->id, 0, 50),
-                            'price' => (int) $price,
-                            'quantity' => 1,
-                            'name' => substr($plan->name, 0, 50),
-                        ],
-                    ],
+                    'item_details' => $itemDetails,
                     'customer_details' => [
                         'first_name' => $user->name,
                         'email' => $user->email,
@@ -211,6 +228,14 @@ class MembershipController extends Controller
                 'success' => false,
                 'message' => $e->getMessage(),
             ], 422);
+        } catch (\InvalidArgumentException $e) {
+            // Data transaksi ke Midtrans tidak konsisten (bug sisi kita) — jangan bocorkan detail teknis ke customer.
+            report($e);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Pembayaran belum bisa diproses. Silakan coba lagi beberapa saat atau hubungi frontdesk.',
+            ], 503);
         }
     }
 
