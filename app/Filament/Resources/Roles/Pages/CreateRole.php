@@ -47,6 +47,8 @@ class CreateRole extends CreateRecord
 
         $this->record->syncPermissions($this->matrixPermissions);
 
+        \App\Services\Audit\ActivityLogger::rolePermissionsChanged($this->record, [], $this->matrixPermissions);
+
         app(\Spatie\Permission\PermissionRegistrar::class)->forgetCachedPermissions();
 
         app('cache')

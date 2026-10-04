@@ -112,16 +112,30 @@
 
             // Payment Methods State & Modal
             showPaymentModal: false,
-            selectedMethod: { id: 'qris', code: 'QRIS', name: 'QRIS Instant (GoPay/OVO/BCA)', badge: 'QRIS', fee: 0, note: 'Automated Midtrans Confirmation' },
-            paymentMethods: [
-                { id: 'qris', code: 'QRIS', name: 'QRIS Instant (GoPay/OVO/BCA)', badge: 'QRIS', fee: 0, note: 'Automated Midtrans Confirmation' },
-                { id: 'bca', code: 'BCA_VA', name: 'BCA Virtual Account', badge: 'BCA', fee: 0, note: 'Automated Midtrans Verification' },
-                { id: 'mandiri', code: 'MANDIRI_VA', name: 'Mandiri Virtual Account', badge: 'MDR', fee: 0, note: 'Automated Midtrans Verification' },
-                { id: 'bri', code: 'BRI_VA', name: 'BRI Virtual Account', badge: 'BRI', fee: 0, note: 'Automated Midtrans Verification' },
-                { id: 'bni', code: 'BNI_VA', name: 'BNI Virtual Account', badge: 'BNI', fee: 0, note: 'Automated Midtrans Verification' },
-                { id: 'cimb', code: 'CIMB_VA', name: 'CIMB Virtual Account', badge: 'CIMB', fee: 0, note: 'Automated Midtrans Verification' },
-                { id: 'bsi', code: 'BSI_VA', name: 'BSI Virtual Account', badge: 'BSI', fee: 0, note: 'Sharia Automated Midtrans' },
-            ],
+            // Pilihan bayar = metode AKTIF dari menu "Metode Pembayaran Online" (sama dengan validasi server).
+            // catalogMethods = semua metode (termasuk nonaktif) hanya untuk menampilkan nama metode pembayaran lama.
+            paymentMethods: @js(app(\App\Services\Payment\OnlinePaymentMethodService::class)->forFrontend()),
+            catalogMethods: @js(app(\App\Services\Payment\OnlinePaymentMethodService::class)->catalogForDisplay()),
+            selectedMethod: (@js(app(\App\Services\Payment\OnlinePaymentMethodService::class)->forFrontend())[0]) || { id: '', code: '', name: 'Tidak ada metode tersedia', badge: '-', fee: 0, note: '' },
+
+            /** Nominal yang akan dibayar sekarang: selisih reschedule yang belum lunas, atau total order. */
+            get amountToPay() {
+                const t = this.currentTicket;
+                if (!t) return 0;
+                return parseFloat(t.has_pending_delta ? t.unpaid_delta : (t.order_grand_total ?? t.total_amount)) || 0;
+            },
+
+            /** Metode yang berlaku untuk nominal ini (batas nominal per metode, mis. QRIS maks Rp10 juta). */
+            get availableMethods() {
+                const total = this.amountToPay;
+                return this.paymentMethods.filter(m => (m.min_amount === null || total >= m.min_amount) && (m.max_amount === null || total <= m.max_amount));
+            },
+
+            ensureSelectedMethodAvailable() {
+                if (! this.availableMethods.some(m => m.code === this.selectedMethod.code) && this.availableMethods.length) {
+                    this.selectedMethod = this.availableMethods[0];
+                }
+            },
             isSubmittingPayment: false,
             isCashNotice: false,
             lastSnapToken: null,
@@ -163,14 +177,18 @@
                 if (!rawCodeOrName) return null;
                 const upper = String(rawCodeOrName).toUpperCase();
 
-                if (upper.includes('BCA')) return this.paymentMethods.find(m => m.code === 'BCA_VA') || { id: 'bca', code: 'BCA_VA', name: 'BCA Virtual Account', badge: 'BCA' };
-                if (upper.includes('MANDIRI')) return this.paymentMethods.find(m => m.code === 'MANDIRI_VA') || { id: 'mandiri', code: 'MANDIRI_VA', name: 'Mandiri Virtual Account', badge: 'MDR' };
-                if (upper.includes('BRI')) return this.paymentMethods.find(m => m.code === 'BRI_VA') || { id: 'bri', code: 'BRI_VA', name: 'BRI Virtual Account', badge: 'BRI' };
-                if (upper.includes('BNI')) return this.paymentMethods.find(m => m.code === 'BNI_VA') || { id: 'bni', code: 'BNI_VA', name: 'BNI Virtual Account', badge: 'BNI' };
-                if (upper.includes('CIMB')) return this.paymentMethods.find(m => m.code === 'CIMB_VA') || { id: 'cimb', code: 'CIMB_VA', name: 'CIMB Virtual Account', badge: 'CIMB' };
-                if (upper.includes('BSI')) return this.paymentMethods.find(m => m.code === 'BSI_VA') || { id: 'bsi', code: 'BSI_VA', name: 'BSI Virtual Account', badge: 'BSI' };
-                if (upper.includes('CASH') || upper.includes('TUNAI')) return this.paymentMethods.find(m => m.code === 'CASH') || { id: 'cash', code: 'CASH', name: 'Cash on Arrival (Walk-in)', badge: 'CASH' };
-                if (upper.includes('QRIS') || upper.includes('GOPAY') || upper.includes('OVO')) return this.paymentMethods.find(m => m.code === 'QRIS') || { id: 'qris', code: 'QRIS', name: 'QRIS Instant (GoPay/OVO/BCA)', badge: 'QRIS' };
+                const exact = this.catalogMethods.find(m => m.code === upper);
+                if (exact) return exact;
+                if (upper.includes('PERMATA')) return this.catalogMethods.find(m => m.code === 'BSI_VA') || { id: 'bsi_va', code: 'BSI_VA', name: 'VA Bank Lain (Permata, BSI, dll.)', badge: 'VA' };
+                if (upper.includes('CREDIT')) return this.catalogMethods.find(m => m.code === 'CREDIT_CARD') || { id: 'credit_card', code: 'CREDIT_CARD', name: 'Kartu Kredit / Debit Online', badge: 'CARD' };
+                if (upper.includes('BCA')) return this.catalogMethods.find(m => m.code === 'BCA_VA') || { id: 'bca', code: 'BCA_VA', name: 'BCA Virtual Account', badge: 'BCA' };
+                if (upper.includes('MANDIRI')) return this.catalogMethods.find(m => m.code === 'MANDIRI_VA') || { id: 'mandiri', code: 'MANDIRI_VA', name: 'Mandiri Virtual Account', badge: 'MDR' };
+                if (upper.includes('BRI')) return this.catalogMethods.find(m => m.code === 'BRI_VA') || { id: 'bri', code: 'BRI_VA', name: 'BRI Virtual Account', badge: 'BRI' };
+                if (upper.includes('BNI')) return this.catalogMethods.find(m => m.code === 'BNI_VA') || { id: 'bni', code: 'BNI_VA', name: 'BNI Virtual Account', badge: 'BNI' };
+                if (upper.includes('CIMB')) return this.catalogMethods.find(m => m.code === 'CIMB_VA') || { id: 'cimb', code: 'CIMB_VA', name: 'CIMB Virtual Account', badge: 'CIMB' };
+                if (upper.includes('BSI')) return this.catalogMethods.find(m => m.code === 'BSI_VA') || { id: 'bsi_va', code: 'BSI_VA', name: 'VA Bank Lain (Permata, BSI, dll.)', badge: 'VA' };
+                if (upper.includes('CASH') || upper.includes('TUNAI')) return this.catalogMethods.find(m => m.code === 'CASH') || { id: 'cash', code: 'CASH', name: 'Cash on Arrival (Walk-in)', badge: 'CASH' };
+                if (upper.includes('QRIS') || upper.includes('GOPAY') || upper.includes('OVO')) return this.catalogMethods.find(m => m.code === 'QRIS') || { id: 'qris', code: 'QRIS', name: 'QRIS Instant (GoPay/OVO/BCA)', badge: 'QRIS' };
 
                 return { id: 'custom', code: upper, name: rawCodeOrName, badge: 'PAY' };
             },
@@ -191,6 +209,17 @@
 
             async payNow() {
                 if (!this.currentTicket) return;
+                if (! this.availableMethods.length) {
+                    this.showNotice('Pembayaran Online Tidak Tersedia', 'Belum ada metode pembayaran online yang bisa dipakai untuk nominal ini. Silakan hubungi frontdesk.', 'error', 'Tutup');
+                    return;
+                }
+                // Jangan diam-diam membayar dengan metode lain — beri tahu customer dulu, biar dia yang lanjutkan.
+                if (! this.availableMethods.some(m => m.code === this.selectedMethod.code)) {
+                    const previous = this.selectedMethod.name;
+                    this.ensureSelectedMethodAvailable();
+                    this.showNotice('Metode Pembayaran Diganti', `${previous} tidak bisa dipakai untuk nominal ini. Metode diganti ke ${this.selectedMethod.name}. Periksa lagi lalu tekan bayar.`, 'info', 'Oke');
+                    return;
+                }
                 if (['EXPIRED', 'CANCELLED', 'REFUNDED'].includes(this.currentTicket.status)) {
                     this.showNotice('Reservation Inactive', 'This reservation has expired or has been cancelled and can no longer be processed. Please make a new booking.', 'error', 'Close');
                     return;
@@ -198,7 +227,10 @@
                 this.isSubmittingPayment = true;
 
                 try {
-                    const targetId = this.currentTicket.order_id || this.currentTicket.id;
+                    // Tagihan selisih reschedule melekat ke booking-nya → kirim id booking, bukan id order.
+                    const targetId = this.currentTicket.has_pending_delta
+                        ? this.currentTicket.id
+                        : (this.currentTicket.order_id || this.currentTicket.id);
                     const res = await fetch(`/api/v1/padel/bookings/${targetId}/retry-payment`, {
                         method: 'POST',
                         headers: {
@@ -382,7 +414,7 @@
                             }
                         }
 
-                        if (this.ticket.status === 'PENDING' || this.ticket.status === 'PENDING_PAYMENT') {
+                        if (this.isAwaitingPayment(this.ticket)) {
                             this.startAutoPolling(id);
                         }
 
@@ -548,32 +580,63 @@
                 return 1;
             },
 
+            /** Masih menunggu pembayaran: booking belum lunas, atau selisih reschedule yang belum dibayar. */
+            isAwaitingPayment(t) {
+                if (!t) return false;
+                return ['PENDING', 'PENDING_PAYMENT'].includes(t.status) || !!t.has_pending_delta;
+            },
+
+            /**
+             * Cek status ke server (yang ikut menanyakan Midtrans) sampai lunas, batal, atau batas bayar lewat.
+             * Dulu berhenti setelah 30 detik — customer VA yang transfer 1–3 menit kemudian tetap melihat
+             * "menunggu pembayaran" sampai refresh. Tiap 3 detik di menit pertama, lalu tiap 10 detik; jeda saat
+             * tab tidak dibuka.
+             */
             startAutoPolling(id) {
                 if (this.isPolling) return;
                 this.isPolling = true;
                 this.pollCount = 0;
 
+                const startedAt = Date.now();
+                let lastPollAt = 0;
+                let busy = false;
+                const stopAt = () => {
+                    const t = this.currentTicket;
+                    // Batas bayar dari server (+3 menit jeda notifikasi). Selisih reschedule tidak punya batas → 20 menit.
+                    const exp = t && ['PENDING', 'PENDING_PAYMENT'].includes(t.status) && t.expires_at ? new Date(t.expires_at).getTime() : NaN;
+                    return isNaN(exp) ? startedAt + 20 * 60 * 1000 : exp + 3 * 60 * 1000;
+                };
+                const stop = () => {
+                    clearInterval(this.pollingInterval);
+                    this.pollingInterval = null;
+                    this.isPolling = false;
+                };
+
                 this.pollingInterval = setInterval(async () => {
+                    const now = Date.now();
+                    if (now > stopAt()) return stop();
+                    if (busy || document.visibilityState === 'hidden') return;
+                    if (now - lastPollAt < ((now - startedAt) < 60000 ? 3000 : 10000)) return;
+
+                    lastPollAt = now;
+                    busy = true;
                     this.pollCount++;
                     try {
-                        const res = await fetch(`/api/v1/padel/bookings/${id}/ticket`);
+                        // verify_payment=1: server ikut menanyakan status ke Midtrans, jadi tetap
+                        // berubah lunas walau webhook Midtrans tidak sampai.
+                        const res = await fetch(`/api/v1/padel/bookings/${id}/ticket?verify_payment=1`);
                         const json = await res.json();
                         if (json.success && json.data) {
                             this.ticket = json.data;
                             this.currentTicket = json.data;
 
-                            if (this.ticket.status === 'PAID' || this.ticket.status === 'CONFIRMED' || this.ticket.status === 'CHECKED_IN') {
-                                clearInterval(this.pollingInterval);
-                                this.isPolling = false;
-                            }
+                            if (!this.isAwaitingPayment(this.ticket)) stop();
                         }
-                    } catch(e) {}
-
-                    if (this.pollCount >= this.maxPolls) {
-                        clearInterval(this.pollingInterval);
-                        this.isPolling = false;
+                    } catch(e) {
+                    } finally {
+                        busy = false;
                     }
-                }, 3000);
+                }, 1000);
             },
 
             formatNumber(val) {
@@ -927,15 +990,24 @@
                     ctx.stroke();
                 }
 
-                drawSumRow(summaryY + 60, 'Padel Court Rental', 'Rp ' + this.formatNumber(cFee), false);
+                // Rincian harus menjumlah ke TOTAL AMOUNT: diskon mengurangi sewa lapangan,
+                // pajak & biaya layanan (per order, dari Pengaturan Biaya & Pajak) ditampilkan terpisah.
+                const discount = this.totalMemberDiscount + this.totalSponsorDiscount;
+                const order = this.ticket ? this.ticket.order : null;
+                const taxAndService = order ? (parseFloat(order.tax_amount) || 0) + (parseFloat(order.service_charge) || 0) : 0;
+
+                drawSumRow(summaryY + 60, discount > 0 ? 'Padel Court Rental (after discount)' : 'Padel Court Rental', 'Rp ' + this.formatNumber(Math.max(0, cFee - discount)), false);
                 drawSumRow(summaryY + 98, 'Equipment Rental (Rackets & Balls)', 'Rp ' + this.formatNumber(eFee), false);
-                drawSumRow(summaryY + 136, 'Payment Method', payMethod, true);
+                drawSumRow(summaryY + 136, 'Tax & Service Fee', 'Rp ' + this.formatNumber(taxAndService), false);
 
                 // Grand Total Highlight Banner
                 drawRoundRect(60, summaryY + 160, width - 120, 68, 12, true, true, '#FAF4E6', '#DFC387', 1.5);
                 ctx.fillStyle = '#1F170D';
                 ctx.font = 'bold 14px sans-serif';
-                ctx.fillText('TOTAL AMOUNT', 80, summaryY + 200);
+                ctx.fillText('TOTAL AMOUNT', 80, summaryY + 192);
+                ctx.fillStyle = '#7A643E';
+                ctx.font = '11px sans-serif';
+                ctx.fillText('Paid via ' + payMethod, 80, summaryY + 212);
 
                 ctx.fillStyle = '#8C6418';
                 ctx.font = 'bold 22px monospace';

@@ -66,13 +66,8 @@ class User extends Authenticatable implements FilamentUser
         static::saved(function (User $user) {
             if ($user->pendingRole) {
                 $role = Role::findOrCreate($user->pendingRole, 'web');
-                if (strtolower($user->pendingRole) === 'admin' && $role->permissions()->count() === 0 && class_exists(\App\Services\Permission\Club61PermissionMatrix::class)) {
-                    \App\Services\Permission\Club61PermissionMatrix::syncAllPermissions('web');
-                    $role->syncPermissions(\App\Services\Permission\Club61PermissionMatrix::getAllPermissionSlugs());
-                }
-                if ($role->wasRecentlyCreated && strtolower($user->pendingRole) === 'customer') {
-                    $perm = \Spatie\Permission\Models\Permission::firstOrCreate(['name' => 'cancel_padel_booking', 'guard_name' => 'web']);
-                    $role->givePermissionTo($perm);
+                if ($role->wasRecentlyCreated) {
+                    \App\Services\Permission\Club61PermissionMatrix::applyDefaultPermissionsTo($role);
                 }
                 $user->syncRoles([$role]);
                 $user->pendingRole = null;
@@ -83,7 +78,7 @@ class User extends Authenticatable implements FilamentUser
 
     public function canCancelBooking(): bool
     {
-        return $this->can('cancel_padel_booking') || $this->can('cancel_refund_padel') || $this->isAdmin();
+        return $this->can('cancel_padel_booking') || $this->can('cancel_refund_padel');
     }
 
     public function isCustomer(): bool
@@ -107,7 +102,9 @@ class User extends Authenticatable implements FilamentUser
             return true;
         }
 
-        $nonAdminRoles = ['customer', 'cashier', 'kitchen'];
+        // isAdmin() = "staf backoffice" untuk routing (/pos, /kitchen), BUKAN izin aksi —
+        // aksi sensitif wajib dicek lewat can(). Role frontline di sini tidak dianggap backoffice.
+        $nonAdminRoles = ['customer', 'cashier', 'kitchen', 'receptionist'];
         return $this->roles->contains(fn ($role) => ! in_array(strtolower($role->name), $nonAdminRoles, true));
     }
 

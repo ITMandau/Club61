@@ -82,6 +82,10 @@ class AuthController extends Controller
         }
 
         if (! $user || ! Hash::check($validated['password'], $user->password)) {
+            // Login API tidak lewat Auth::attempt(), jadi event Failed bawaan tidak terpicu — catat manual.
+            // Akun yang dicoba dicatat sebagai subject, bukan pelaku (pemilik akun bukan yang mencoba).
+            \App\Services\Audit\ActivityLogger::loginFailed($identifier, $user, viaApi: true);
+
             return response()->json([
                 'success' => false,
                 'message' => 'Email/No HP atau password yang Anda masukkan salah.',
@@ -98,6 +102,14 @@ class AuthController extends Controller
         }
 
         $token = $user->createToken('flutter-mobile-app')->plainTextToken;
+
+        \App\Services\Audit\ActivityLogger::record(
+            module: 'AUTH',
+            event: 'auth.login',
+            description: 'Login ke sistem lewat aplikasi (API)',
+            subject: $user,
+            causer: $user,
+        );
 
         return response()->json([
             'success' => true,

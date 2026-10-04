@@ -57,6 +57,10 @@ class DatabaseSeeder extends Seeder
                 'description' => 'Kasir Frontdesk & POS Terminal',
                 'home_route' => '/pos',
             ],
+            'receptionist' => [
+                'description' => 'Resepsionis Frontdesk (Walk-In Booking & Check-In Tiket)',
+                'home_route' => '/admin/book-offline-court',
+            ],
             'kitchen' => [
                 'description' => 'Koki Dapur & Barista KDS',
                 'home_route' => '/kitchen',
@@ -86,41 +90,17 @@ class DatabaseSeeder extends Seeder
             ]);
         }
 
-        // Berikan seluruh izin ke peran super_admin dan admin
-        $allPermissions = \App\Services\Permission\Club61PermissionMatrix::getAllPermissionSlugs();
-        \App\Models\Role::findByName('super_admin', 'web')->syncPermissions($allPermissions);
-        \App\Models\Role::findByName('admin', 'web')->syncPermissions($allPermissions);
-
-        // Berikan izin operasional kasir
-        \App\Models\Role::findByName('cashier', 'web')->syncPermissions([
-            'access_pos_terminal',
-            'pos_cash_payment',
-            'pos_qris_payment',
-            'settle_unpaid_booking',
-            'apply_pos_voucher',
-            'view_padel_bookings',
-            'checkin_padel_ticket',
-            'print_padel_invoice',
-            'View:BookOfflineCourt',
-            'process_walkin_booking',
-            'open_pos_shift',
-            'close_pos_shift',
-        ]);
-
-        // Berikan izin operasional dapur KDS
-        \App\Models\Role::findByName('kitchen', 'web')->syncPermissions([
-            'view_kitchen_kds',
-            'update_kitchen_order_status',
-            'view_fnb_menu',
-        ]);
-
-        // Berikan izin default pelanggan (dapat diatur ulang di menu Role & Hak Akses)
-        \App\Models\Role::findByName('customer', 'web')->syncPermissions([
-            'cancel_padel_booking',
-        ]);
+        // Preset izin per role (sumber tunggal: Club61PermissionMatrix::defaultRolePermissions).
+        // admin = semua izin KECUALI BACKDOOR_PERMISSIONS (refund, reschedule override, tarif,
+        // pajak, matriks role, hapus user/staf) — itu hanya super_admin lewat Gate::before.
+        foreach (['super_admin', 'admin', 'cashier', 'receptionist', 'kitchen', 'customer'] as $roleName) {
+            \App\Models\Role::findByName($roleName, 'web')->syncPermissions(
+                \App\Services\Permission\Club61PermissionMatrix::defaultRolePermissions($roleName)
+            );
+        }
 
         // 1. SEED USERS & STAFF
-        $password = Hash::make('password123');
+        $password = Hash::make('Club61!@#'); // Password default untuk semua akun uji
 
         $admin = User::create([
             'name' => 'Super Admin Club 61',
@@ -130,6 +110,24 @@ class DatabaseSeeder extends Seeder
             'is_active' => true,
         ]);
         $admin->assignRole('super_admin');
+
+        $manager = User::create([
+            'name' => 'Admin Venue Club 61',
+            'email' => 'manager@club61.com',
+            'phone' => '08110000006',
+            'password' => $password,
+            'is_active' => true,
+        ]);
+        $manager->assignRole('admin');
+
+        $receptionist = User::create([
+            'name' => 'Resepsionis Frontdesk',
+            'email' => 'resepsionis@club61.com',
+            'phone' => '08110000007',
+            'password' => $password,
+            'is_active' => true,
+        ]);
+        $receptionist->assignRole('receptionist');
 
         $cashier = User::create([
             'name' => 'Kasir Frontdesk POS',

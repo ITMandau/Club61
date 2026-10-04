@@ -23,6 +23,13 @@ class Payment extends Model
         'payload_log',
     ];
 
+    /**
+     * payload_log berisi notifikasi mentah gateway (dulu termasuk signature_key Midtrans), data kasir & bukti EDC.
+     * Tidak pernah ikut ke JSON — dulu API tiket customer membocorkannya dan signature-nya bisa dipakai ulang untuk
+     * memalsukan webhook "lunas". Kode server tetap membaca atributnya langsung.
+     */
+    protected $hidden = ['payload_log'];
+
     protected function casts(): array
     {
         return [

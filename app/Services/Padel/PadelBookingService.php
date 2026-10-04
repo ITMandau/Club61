@@ -17,7 +17,8 @@ class PadelBookingService
     use ManagesRescheduleAndCashier;
 
     /**
-     * Durasi kuncian slot (10 Menit = 600 Detik).
+     * @deprecated Durasi tahan slot sekarang diatur admin — pakai BookingTimeService::holdSeconds().
+     *             Dipertahankan hanya untuk kompatibilitas kode lama.
      */
     public const HOLD_DURATION_SECONDS = 600;
 

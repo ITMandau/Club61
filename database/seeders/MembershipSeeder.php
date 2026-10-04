@@ -128,7 +128,7 @@ class MembershipSeeder extends Seeder
         }
 
         $userCorp = User::firstOrCreate(
-            ['email' => 'corporate.sinar@club61.com'],
+            ['email' => 'corporate.sinar@club61.id'],
             [
                 'name' => 'PT Sinar Harapan Abadi',
                 'phone' => '081311223344',

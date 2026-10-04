@@ -118,21 +118,45 @@ trait ManagesTicketsAndRefunds
 
             if ($order) {
                 $booking->setAttribute('order_grand_total', (float) $order->grand_total);
-                $latestPayment = $order->payments->first();
+                // Label metode bayar dari pembayaran yang SUDAH lunas — tagihan selisih yang masih menunggu
+                // tidak boleh membuat invoice menampilkan "MENUNGGU_PEMBAYARAN" sebagai metode bayar.
+                $latestPayment = $order->payments->firstWhere('status', 'SUCCESS') ?? $order->payments->first();
+
+                // Rincian selisih reschedule untuk invoice (lunas / menunggu) + selisih yang hangus.
+                $booking->setAttribute('reschedule_charges', $order->payments
+                    ->filter(fn ($p) => (($p->payload_log['type'] ?? null) === 'RESCHEDULE_PRICE_DELTA') && in_array($p->status, ['SUCCESS', 'PENDING'], true))
+                    ->sortBy('created_at')
+                    ->map(fn ($p) => [
+                        'amount' => (float) $p->amount,
+                        'status' => $p->status,
+                        'method_label' => $p->status === 'SUCCESS' ? $this->formatPaymentMethodLabel($p->payment_method, $p->payload_log) : null,
+                        'schedule_before' => $p->payload_log['schedule_before'] ?? null,
+                        'date' => $p->created_at?->toIso8601String(),
+                    ])->values());
+                $booking->setAttribute('order_reschedule_forfeited', (float) $orderBookings->sum('reschedule_forfeited_amount'));
                 $rawMethod = $latestPayment?->payment_method;
                 $methodLabel = $this->formatPaymentMethodLabel($rawMethod, $latestPayment?->payload_log);
 
                 $totalPaid = (float) $order->payments->where('status', 'SUCCESS')->sum('amount');
-                $pendingSupplementalPayment = $order->payments->where('status', 'PENDING')->first();
-                $unpaidDelta = $pendingSupplementalPayment ? (float) $pendingSupplementalPayment->amount : max(0, (float) $order->grand_total - $totalPaid);
+                // Tagihan milik booking INI (order bisa berisi beberapa booking dengan tagihan selisih masing-masing).
+                $booking->setRelation('order', $order);
+                $pendingSupplementalPayment = $this->pendingBillForBooking($booking);
+                $unpaidDelta = $pendingSupplementalPayment
+                    ? (float) $pendingSupplementalPayment->amount
+                    : (in_array($booking->status, ['LOCKED', 'PENDING_PAYMENT', 'PENDING'], true) ? max(0, (float) $order->grand_total - $totalPaid) : 0.0);
 
                 $booking->setAttribute('order', $order);
                 $booking->setAttribute('payment_method', $rawMethod);
                 $booking->setAttribute('payment_method_label', $methodLabel);
                 $booking->setAttribute('total_paid', $totalPaid);
                 $booking->setAttribute('unpaid_delta', $unpaidDelta);
-                $booking->setAttribute('has_pending_delta', $unpaidDelta > 0 && $totalPaid > 0);
+                // Selisih reschedule juga untuk booking yang dulu 100% ditanggung kuota member / voucher (dibayar Rp0).
+                $isRescheduleBill = $pendingSupplementalPayment
+                    && (($pendingSupplementalPayment->payload_log['type'] ?? null) === 'RESCHEDULE_PRICE_DELTA' || (int) $booking->reschedule_count > 0);
+                $booking->setAttribute('has_pending_delta', $unpaidDelta > 0 && ($totalPaid > 0 || $isRescheduleBill));
                 $booking->setAttribute('pending_supplemental_id', $pendingSupplementalPayment?->id);
+                // Pilihan bayar selisih yang dicatat resepsionis: CASHIER (di kasir saat datang) / ONLINE (Midtrans).
+                $booking->setAttribute('pending_delta_channel', $pendingSupplementalPayment?->payload_log['preferred_channel'] ?? null);
             }
         }
 

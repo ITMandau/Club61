@@ -137,13 +137,14 @@ class PadelBookingApiTest extends TestCase
         $response->assertStatus(201)
             ->assertJson(['success' => true])
             ->assertJsonPath('data.hold_seconds_remaining', 600)
-            ->assertJsonCount(2, 'data.bookings');
+            // Jam berurutan di lapangan yang sama digabung jadi SATU booking 08:00-10:00 (tidak bisa dipecah saat reschedule).
+            ->assertJsonCount(1, 'data.bookings');
 
-        $this->assertDatabaseCount('padel_bookings', 2);
-        $this->assertDatabaseHas('padel_bookings', [
-            'court_id' => $this->court1->id,
-            'status' => 'LOCKED',
-        ]);
+        $this->assertDatabaseCount('padel_bookings', 1);
+        $booking = PadelBooking::first();
+        $this->assertSame('LOCKED', $booking->status);
+        $this->assertSame('08:00', $booking->start_time->format('H:i'));
+        $this->assertSame('10:00', $booking->end_time->format('H:i'));
     }
 
     /**
@@ -734,9 +735,12 @@ class PadelBookingApiTest extends TestCase
         $orderId = $checkout->json('data.order_id');
         $this->assertEquals(200000, $checkout->json('data.grand_total'));
 
-        // Simulasikan status PENDING_PAYMENT saat menunggu pembayaran customer
+        // Simulasikan status PENDING_PAYMENT saat menunggu pembayaran customer (di environment test
+        // checkout langsung lunas lewat mock, jadi pembayarannya juga dikembalikan ke PENDING — kondisi
+        // nyata saat customer belum membayar di Midtrans).
         PadelBooking::where('id', $bookingId)->update(['status' => 'PENDING_PAYMENT']);
         \App\Models\Pos\Order::where('order_number', $orderId)->update(['payment_status' => 'PENDING']);
+        \App\Models\Pos\Payment::whereHas('order', fn ($q) => $q->where('order_number', $orderId))->update(['status' => 'PENDING', 'payment_gateway' => 'MIDTRANS']);
 
         // Customer menutup Snap dan ganti metode ke QRIS
         $retry = $this->withHeader('Authorization', "Bearer {$this->customerToken}")
@@ -796,9 +800,12 @@ class PadelBookingApiTest extends TestCase
 
         $orderId = $checkout->json('data.order_id');
 
-        // Simulasikan status PENDING_PAYMENT saat menunggu pembayaran customer
+        // Simulasikan status PENDING_PAYMENT saat menunggu pembayaran customer (di environment test
+        // checkout langsung lunas lewat mock, jadi pembayarannya juga dikembalikan ke PENDING — kondisi
+        // nyata saat customer belum membayar di Midtrans).
         PadelBooking::where('id', $bookingId)->update(['status' => 'PENDING_PAYMENT']);
         \App\Models\Pos\Order::where('order_number', $orderId)->update(['payment_status' => 'PENDING']);
+        \App\Models\Pos\Payment::whereHas('order', fn ($q) => $q->where('order_number', $orderId))->update(['status' => 'PENDING', 'payment_gateway' => 'MIDTRANS']);
 
         // Venue 100% Cashless: retry-payment ke CASH wajib ditolak validasi.
         $this->withHeader('Authorization', "Bearer {$this->customerToken}")
@@ -916,7 +923,8 @@ class PadelBookingApiTest extends TestCase
             bookingId: $booking->id,
             paymentMethod: 'QRIS',
             amountReceived: 300000,
-            cashierUser: $this->cashier
+            cashierUser: $this->cashier,
+            paymentProof: ['qris_rrn' => 'RRNTEST0001'],
         );
 
         $this->assertTrue($result['success']);

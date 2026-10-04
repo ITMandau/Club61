@@ -7,7 +7,92 @@ use Spatie\Permission\Models\Permission;
 class Club61PermissionMatrix
 {
     /**
-     * Definisi lengkap 12 kategori modul beserta sub-modul dan aksi izin.
+     * Izin "pintu belakang" (override finansial, refund, eskalasi hak akses) — hanya untuk
+     * super_admin (lewat Gate::before) dan tidak pernah masuk preset role lain. Role "admin"
+     * yang mendapat salah satunya bisa memberi dirinya akses penuh (update_roles) atau
+     * memindahkan uang tanpa jejak persetujuan owner (refund/tarif/pajak). Halaman Customer
+     * (data pribadi & membership seluruh pelanggan) juga khusus super_admin.
+     */
+    public const BACKDOOR_PERMISSIONS = [
+        'View:Kustomer',
+        'grant_corporate_membership',
+        'cancel_refund_padel',
+        'reschedule_padel_booking',
+        'View:PengaturanBiayaPajak',
+        'manage_tax_and_fees',
+        // Menentukan metode bayar online yang bisa dipilih customer (salah atur = customer gagal bayar).
+        'View:MetodePembayaranOnline',
+        'manage_online_payment_methods',
+        // Lama tahan slot & batas bayar online (salah atur = slot ditahan terlalu lama / customer kehabisan waktu bayar).
+        'manage_booking_time_limits',
+        'manage_court_pricing',
+        'View:RoleResource',
+        'view_roles',
+        'create_roles',
+        'update_roles',
+        'delete_roles',
+        'delete_users',
+        'delete_staff',
+        // Log aktivitas berisi siapa melakukan refund, perubahan izin, dan data pelanggan.
+        'View:LogAktivitas',
+        'export_activity_logs',
+    ];
+
+    /**
+     * Preset izin bawaan per role — satu-satunya sumber untuk DatabaseSeeder, UserFactory,
+     * dan role yang dibuat otomatis lewat User::$role. Setelah itu tetap bisa diubah dari
+     * menu "Roles & Hak Akses".
+     *
+     * @return array<int, string>
+     */
+    public static function defaultRolePermissions(string $role): array
+    {
+        return match (strtolower($role)) {
+            'super_admin' => self::getAllPermissionSlugs(),
+            'admin' => array_values(array_diff(self::getAllPermissionSlugs(), self::BACKDOOR_PERMISSIONS)),
+            'cashier' => [
+                'access_pos_terminal',
+                'pos_cash_payment',
+                'pos_qris_payment',
+                'settle_unpaid_booking',
+                'apply_pos_voucher',
+                'view_padel_bookings',
+                'checkin_padel_ticket',
+                'print_padel_invoice',
+                'View:BookOfflineCourt',
+                'process_walkin_booking',
+                'process_fnb_order',
+                'open_pos_shift',
+                'close_pos_shift',
+            ],
+            'receptionist' => [
+                'View:BookOfflineCourt',
+                'View:BookingSystem',
+                'process_walkin_booking',
+                'open_pos_shift',
+                'close_pos_shift',
+                'pos_qris_payment',
+                'apply_pos_voucher',
+                'settle_unpaid_booking',
+                'View:KelolaPemesanan',
+                'view_padel_bookings',
+                'checkin_padel_ticket',
+                'print_padel_invoice',
+            ],
+            'kitchen' => [
+                'view_kitchen_kds',
+                'update_kitchen_order_status',
+                'view_fnb_menu',
+            ],
+            'customer' => [
+                'cancel_padel_booking',
+            ],
+            default => [],
+        };
+    }
+
+    /**
+     * Definisi lengkap 13 kategori modul beserta sub-modul dan aksi izin.
      * Semua teks murni tanpa emoji maupun ikon.
      *
      * @return array<string, array<string, mixed>>
@@ -57,6 +142,7 @@ class Club61PermissionMatrix
                             'close_pos_shift' => 'Tutup Sesi Shift & Rekonsiliasi Kas',
                             'View:JualMembership' => 'Akses Halaman POS Jual Membership',
                             'sell_membership' => 'Jual & Aktivasi Membership Kasir',
+                            'process_fnb_order' => 'Proses Transaksi & Pembayaran Menu F&B di Kasir',
                         ],
                     ],
                 ],
@@ -75,6 +161,7 @@ class Club61PermissionMatrix
                     'fnb_menu' => [
                         'label' => 'Menu & Resep Dapur',
                         'actions' => [
+                            'View:KelolaMenuFnb' => 'Akses Halaman Kelola Menu F&B',
                             'view_fnb_menu' => 'Lihat Daftar Menu Makanan & Minuman',
                             'manage_fnb_menu' => 'Kelola Menu, Varian & Harga Jual',
                             'manage_recipe_bom' => 'Kelola Formula Resep & Bill of Materials',
@@ -218,7 +305,9 @@ class Club61PermissionMatrix
                         'label' => 'Dashboard & Portal Member',
                         'actions' => [
                             'View:Dashboard' => 'Akses Halaman Utama Dashboard Admin',
-                            'View:Kustomer' => 'Akses Halaman Kustomer & Member VIP',
+                            // Slug WAJIB "View:{NamaClassPage}" (HasPageShield) — class-nya tetap
+                            // App\Filament\Pages\Kustomer, jadi yang diganti cukup label-nya saja.
+                            'View:Kustomer' => 'Akses Halaman Customer & Member VIP',
                         ],
                     ],
                     'user_accounts' => [
@@ -240,6 +329,13 @@ class Club61PermissionMatrix
                             'delete_roles' => 'Hapus Peran Pengguna',
                         ],
                     ],
+                    'activity_log' => [
+                        'label' => 'Log Aktivitas & Jejak Audit',
+                        'actions' => [
+                            'View:LogAktivitas' => 'Akses Menu Log Aktivitas (Read-only)',
+                            'export_activity_logs' => 'Export Log Aktivitas ke CSV',
+                        ],
+                    ],
                     'pricing_equipment' => [
                         'label' => 'Tarif Lapangan & Fasilitas',
                         'actions' => [
@@ -248,6 +344,9 @@ class Club61PermissionMatrix
                             'manage_court_pricing' => 'Kelola Tarif Sewa Lapangan Per Jam',
                             'manage_court_equipment' => 'Kelola Tarif Sewa Raket & Bola Padel',
                             'manage_tax_and_fees' => 'Kelola Pengaturan Biaya Layanan & Pajak',
+                            'View:MetodePembayaranOnline' => 'Akses Halaman Metode Pembayaran Online',
+                            'manage_online_payment_methods' => 'Kelola Metode Pembayaran Online (aktif, nama, urutan, batas nominal)',
+                            'manage_booking_time_limits' => 'Atur Waktu Tahan Slot & Batas Waktu Bayar Online',
                         ],
                     ],
                     'membership_plans' => [
@@ -255,6 +354,7 @@ class Club61PermissionMatrix
                         'actions' => [
                             'view_membership_plans' => 'Lihat Daftar Paket Membership',
                             'manage_membership_plans' => 'Kelola Paket, Harga & Benefit Membership',
+                            'manage_membership_facilities' => 'Kelola Master Fasilitas Membership (tambah fasilitas, nama & deskripsi benefit)',
                         ],
                     ],
                 ],
@@ -266,8 +366,10 @@ class Club61PermissionMatrix
                     'sponsor_organizations' => [
                         'label' => 'Kelola Sponsor Korporat',
                         'actions' => [
+                            'View:SponsorDashboard' => 'Akses Menu Dashboard Sponsor (Lihat Dashboard PIC, Read-only)',
                             'view_sponsor_organizations' => 'Lihat Daftar Akun Sponsor Corporate',
                             'manage_sponsor_organizations' => 'Kelola (Tambah/Ubah/Hapus) Akun Sponsor Corporate',
+                            'grant_corporate_membership' => 'Berikan Paket Membership Corporate Langsung (Tanpa Pembelian)',
                         ],
                     ],
                     'sponsor_access_schedules' => [
@@ -279,7 +381,36 @@ class Club61PermissionMatrix
                     ],
                 ],
             ],
+
+            'website_content' => [
+                'title' => '13. Konten Website (Company Profile)',
+                'submodules' => [
+                    'company_profile' => [
+                        'label' => 'Konten Landing Page & Profil Perusahaan',
+                        'actions' => [
+                            'View:KelolaKontenWebsite' => 'Akses Halaman Konten Website',
+                            'manage_company_profile_content' => 'Ubah & Simpan Konten Landing Page',
+                        ],
+                    ],
+                ],
+            ],
         ];
+    }
+
+    /**
+     * Pasang preset izin ke role yang BARU dibuat. Sengaja tidak dipanggil untuk role yang
+     * sudah ada — kalau super_admin sengaja mengosongkan izin sebuah role dari menu Roles &
+     * Hak Akses, izin itu tidak boleh "tumbuh kembali" sendiri saat ada user baru dibuat.
+     */
+    public static function applyDefaultPermissionsTo(\Spatie\Permission\Models\Role $role): void
+    {
+        $preset = self::defaultRolePermissions($role->name);
+        if ($preset === []) {
+            return;
+        }
+
+        self::syncAllPermissions($role->guard_name);
+        $role->syncPermissions($preset);
     }
 
     /**
@@ -309,6 +440,38 @@ class Club61PermissionMatrix
      * @param string $guardName
      * @return int Jumlah permission yang terdaftar
      */
+    /**
+     * Untuk deploy fitur baru: buat izin di matriks yang BELUM ada di database, lalu berikan HANYA izin baru itu ke
+     * role yang preset-nya memuatnya (mis. super_admin). Izin yang sudah ada tidak disentuh sama sekali, jadi
+     * centangan yang diubah manual lewat menu "Roles & Hak Akses" tetap aman.
+     *
+     * @return array<int, string> izin yang baru dibuat
+     */
+    public static function grantNewPermissionsToPresetRoles(string $guardName = 'web'): array
+    {
+        $existing = Permission::where('guard_name', $guardName)->pluck('name')->all();
+        $new = array_values(array_diff(self::getAllPermissionSlugs(), $existing));
+
+        if ($new === []) {
+            return [];
+        }
+
+        foreach ($new as $slug) {
+            Permission::create(['name' => $slug, 'guard_name' => $guardName]);
+        }
+
+        foreach (\App\Models\Role::where('guard_name', $guardName)->get() as $role) {
+            $grant = array_values(array_intersect($new, self::defaultRolePermissions($role->name)));
+            if ($grant !== []) {
+                $role->givePermissionTo($grant);
+            }
+        }
+
+        app(\Spatie\Permission\PermissionRegistrar::class)->forgetCachedPermissions();
+
+        return $new;
+    }
+
     public static function syncAllPermissions(string $guardName = 'web'): int
     {
         $slugs = self::getAllPermissionSlugs();

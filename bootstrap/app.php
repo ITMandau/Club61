@@ -20,6 +20,7 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->trustProxies(at: '*');
         $middleware->statefulApi();
         $middleware->append(\App\Http\Middleware\SecurityHeaders::class);
+        $middleware->web(append: [\App\Http\Middleware\SetLocale::class]);
     })
     ->withExceptions(function (Exceptions $exceptions) {
         // Enforce JSON responses for all /api/* requests
@@ -69,5 +70,18 @@ return Application::configure(basePath: dirname(__DIR__))
                     'errors' => null,
                 ], $e->getStatusCode());
             }
+        });
+
+        // 5. Log Aktivitas: setiap percobaan membuka halaman / menjalankan aksi tanpa izin (403).
+        // Dicatat di sini — SETELAH transaksi aksi yang ditolak di-rollback — supaya jejaknya tetap ada.
+        $exceptions->respond(function (\Symfony\Component\HttpFoundation\Response $response, Throwable $e, Request $request) {
+            if ($response->getStatusCode() === 403) {
+                $message = $e->getMessage();
+                \App\Services\Audit\ActivityLogger::accessDenied(
+                    $message !== '' && $message !== 'This action is unauthorized.' ? $message : 'tidak memiliki izin untuk halaman / aksi ini'
+                );
+            }
+
+            return $response;
         });
     })->create();

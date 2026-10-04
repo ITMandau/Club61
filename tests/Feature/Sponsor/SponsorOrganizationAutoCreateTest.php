@@ -88,10 +88,10 @@ class SponsorOrganizationAutoCreateTest extends TestCase
     {
         \App\Services\Permission\Club61PermissionMatrix::syncAllPermissions('web');
         $cashier = User::factory()->cashier()->create(['is_active' => true]);
-        $cashier->givePermissionTo(['View:JualMembership']);
+        $cashier->givePermissionTo(['View:JualMembership', 'sell_membership']);
         PosCashierShift::create([
-            'shift_number' => 'SFT-MBR-'.now()->format('Ymd').'-0001',
-            'counter' => 'MEMBERSHIP_DESK',
+            'shift_number' => 'SFT-PADEL-'.now()->format('Ymd').'-0001',
+            'counter' => 'PADEL_FRONTDESK',
             'status' => 'OPEN',
             'opened_by_id' => $cashier->id,
             'opened_at' => now(),
@@ -108,7 +108,7 @@ class SponsorOrganizationAutoCreateTest extends TestCase
             ->set('walkInName', 'PT Pembeli Corporate')
             ->set('walkInPhone', '081277778888')
             ->set('paymentMethod', 'QRIS')
-            ->set('qrisProvider', 'GOPAY')
+            ->set('qrisProvider', 'GOPAY_QRIS')
             ->set('qrisRrn', '112233445566')
             ->set('qrisSenderName', 'PT Pembeli Corporate')
             ->call('submitSale');

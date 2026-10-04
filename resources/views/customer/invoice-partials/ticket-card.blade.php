@@ -346,14 +346,82 @@
                     x-text="'Rp ' + formatNumber(currentTicket.equipment_fee)"></span>
             </div>
 
+            {{-- Diskon, pajak & biaya layanan dihitung per ORDER (bukan per lapangan), jadi dibaca
+                 dari sumber yang sama dengan Transaction Summary di kanan — dulu kotak ini hanya
+                 menjumlah sewa lapangan + alat sehingga biaya layanan dari Pengaturan Biaya & Pajak
+                 tidak pernah muncul dan totalnya lebih kecil dari invoice. --}}
+            <template x-if="totalMemberDiscount > 0">
+                <div class="flex justify-between items-center gap-3 pb-2 sm:pb-1.5 border-b border-[#DFC387]/30 text-[#8C6418]">
+                    <span class="text-[11px] sm:text-xs font-semibold uppercase tracking-wider shrink-0">Membership Discount:</span>
+                    <span class="font-mono font-bold text-xs sm:text-sm whitespace-nowrap text-right" x-text="'- Rp ' + formatNumber(totalMemberDiscount)"></span>
+                </div>
+            </template>
+            <template x-if="totalSponsorDiscount > 0">
+                <div class="flex justify-between items-center gap-3 pb-2 sm:pb-1.5 border-b border-[#DFC387]/30 text-[#1E3327]">
+                    <span class="text-[11px] sm:text-xs font-semibold uppercase tracking-wider shrink-0">Corporate Voucher Discount:</span>
+                    <span class="font-mono font-bold text-xs sm:text-sm whitespace-nowrap text-right" x-text="'- Rp ' + formatNumber(totalSponsorDiscount)"></span>
+                </div>
+            </template>
+            <template x-if="ticket && ticket.order && ticket.order.tax_amount > 0">
+                <div class="flex justify-between items-center gap-3 pb-2 sm:pb-1.5 border-b border-[#DFC387]/30 text-[#5C410F]">
+                    <span class="text-[11px] sm:text-xs font-semibold text-[#8C6418] uppercase tracking-wider shrink-0">Pajak (PB1 / PPh):</span>
+                    <span class="font-mono font-bold text-xs sm:text-sm text-[#1F170D] whitespace-nowrap text-right" x-text="'Rp ' + formatNumber(ticket.order.tax_amount)"></span>
+                </div>
+            </template>
+            <template x-if="ticket && ticket.order && ticket.order.service_charge > 0">
+                <div class="flex justify-between items-center gap-3 pb-2 sm:pb-1.5 border-b border-[#DFC387]/30 text-[#5C410F]">
+                    <span class="text-[11px] sm:text-xs font-semibold text-[#8C6418] uppercase tracking-wider shrink-0">Biaya Layanan &amp; Admin:</span>
+                    <span class="font-mono font-bold text-xs sm:text-sm text-[#1F170D] whitespace-nowrap text-right" x-text="'Rp ' + formatNumber(ticket.order.service_charge)"></span>
+                </div>
+            </template>
+
+            {{-- Reschedule: selisih ke jam lebih mahal sudah termasuk di Session Fee / pajak / biaya layanan
+                 di atas (tarif jadwal baru) — baris ini menjelaskan asal tambahannya & status bayarnya. --}}
+            <template x-if="ticket && ticket.reschedule_charges && ticket.reschedule_charges.length > 0">
+                <div class="rounded-lg border border-[#DFC387]/60 bg-[#FFFDF7] px-3 py-2 space-y-1">
+                    <template x-for="(rc, idx) in ticket.reschedule_charges" :key="idx">
+                        <div class="flex justify-between items-start gap-3 text-[#5C410F]">
+                            <span class="text-[11px] sm:text-xs font-semibold uppercase tracking-wider">
+                                Selisih Reschedule
+                                <span class="normal-case font-bold"
+                                    :class="rc.status === 'SUCCESS' ? 'text-[#8C6418]' : 'text-red-700'"
+                                    x-text="rc.status === 'SUCCESS' ? '(Lunas • ' + (rc.method_label || '-') + ')' : '(Belum dibayar)'"></span>
+                            </span>
+                            <span class="font-mono font-bold text-xs sm:text-sm text-[#1F170D] whitespace-nowrap" x-text="'Rp ' + formatNumber(rc.amount)"></span>
+                        </div>
+                    </template>
+                    <p class="text-[10px] sm:text-[11px] text-[#7A643E] leading-snug">
+                        <span x-show="ticket.reschedule_charges[0].schedule_before">Dipindah dari <span class="font-semibold" x-text="ticket.reschedule_charges[0].schedule_before"></span>. </span>
+                        Sudah termasuk dalam sewa lapangan, pajak &amp; biaya layanan jadwal baru di atas.
+                    </p>
+                </div>
+            </template>
+            <template x-if="ticket && ticket.order_reschedule_forfeited > 0">
+                <div class="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2">
+                    <div class="flex justify-between items-center gap-3 text-amber-900">
+                        <span class="text-[11px] sm:text-xs font-semibold uppercase tracking-wider">Selisih Reschedule Hangus</span>
+                        <span class="font-mono font-bold text-xs sm:text-sm whitespace-nowrap" x-text="'Rp ' + formatNumber(ticket.order_reschedule_forfeited)"></span>
+                    </div>
+                    <p class="text-[10px] sm:text-[11px] text-amber-800 leading-snug">
+                        Jadwal dipindah ke jam yang lebih murah. Sesuai kebijakan venue, selisihnya tidak dikembalikan.
+                    </p>
+                </div>
+            </template>
+
             <!-- Total Payment -->
             <div
                 class="pt-2.5 sm:pt-3 border-t border-[#DFC387]/60 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-1.5 sm:gap-4">
                 <span
                     class="font-serif font-black text-xs sm:text-sm text-[#1F170D] uppercase tracking-wider shrink-0">Total Ticket Amount:</span>
                 <span class="font-mono font-black text-base sm:text-lg text-[#1F170D] whitespace-nowrap sm:text-right"
-                    x-text="'Rp ' + formatNumber(currentTicket.total_amount)"></span>
+                    x-text="'Rp ' + formatNumber(displayGrandTotal)"></span>
             </div>
+            <template x-if="ticket && ticket.order_bookings && ticket.order_bookings.length > 1">
+                <p class="text-[10px] sm:text-[11px] text-[#7A643E] leading-snug">
+                    Diskon, pajak, biaya layanan &amp; total berlaku untuk seluruh
+                    <span x-text="ticket.order_bookings.length"></span> lapangan dalam order ini.
+                </p>
+            </template>
         </div>
     </div>
 

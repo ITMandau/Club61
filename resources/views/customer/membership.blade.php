@@ -1,35 +1,29 @@
 <x-app-layout>
     @php
-        $plansData = $allPlans->map(function($p) {
-            $padel = $p->benefits->firstWhere('facility', 'PADEL');
-            $gym = $p->benefits->firstWhere('facility', 'GYM');
-            $sauna = $p->benefits->firstWhere('facility', 'SAUNA');
+        // Nama fasilitas & teks benefit dari Master Fasilitas (MembershipFacilityService) — bukan teks tetap di view.
+        $facilityService = app(\App\Services\Membership\MembershipFacilityService::class);
 
+        $plansData = $allPlans->map(function($p) {
             return [
                 'id' => $p->id,
                 'code' => $p->code,
                 'name' => $p->name,
+                'description' => (string) ($p->description ?? ''),
                 'ownership_type' => $p->ownership_type,
                 'duration_days' => $p->duration_days,
                 'price' => (float) $p->price,
                 'price_formatted' => 'Rp ' . number_format($p->price, 0, ',', '.'),
-                'padel' => [
-                    'quota_type' => $padel->quota_type ?? 'NONE',
-                    'quota_value' => (float) ($padel->quota_value ?? 0),
-                    'discount_percent' => (float) ($padel->discount_percent ?? 0),
-                    'booking_priority_days' => (int) ($padel->booking_priority_days ?? 0),
-                ],
-                'gym' => [
-                    'quota_type' => $gym->quota_type ?? 'NONE',
-                    'quota_value' => $gym && $gym->quota_value ? (float) $gym->quota_value : null,
-                    'is_unlimited' => $gym && $gym->quota_type === 'VISITS' && is_null($gym->quota_value),
-                ],
-                'sauna' => [
-                    'quota_type' => $sauna->quota_type ?? 'NONE',
-                    'quota_value' => $sauna && $sauna->quota_value ? (float) $sauna->quota_value : null,
-                    'is_unlimited' => $sauna && $sauna->quota_type === 'VISITS' && is_null($sauna->quota_value),
-                    'discount_percent' => (float) ($sauna->discount_percent ?? 0),
-                ],
+                // Rincian tagihan = TaxAndFeeService (kanal ONLINE, modul MEMBERSHIP), sama persis dengan checkout server.
+                'bill' => (function () use ($p) {
+                    $calc = app(\App\Services\Finance\TaxAndFeeService::class)->calculate(subtotal: (float) $p->price, discountAmount: 0, channel: 'ONLINE', module: 'MEMBERSHIP');
+                    return [
+                        'tax' => (float) $calc['tax_amount'],
+                        'tax_name' => $calc['tax_name'] ?: 'Pajak',
+                        'admin_fee' => (float) $calc['admin_fee_amount'],
+                        'admin_fee_name' => $calc['admin_fee_name'] ?: 'Biaya Layanan',
+                        'grand_total' => (float) $calc['grand_total'],
+                    ];
+                })(),
             ];
         })->keyBy('id');
 
@@ -79,9 +73,6 @@
                     @foreach($allPlans as $p)
                         @php
                             $isInitial = ($initialPlan['id'] ?? null) === $p->id;
-                            $padelBenefit = $p->benefits->firstWhere('facility', 'PADEL');
-                            $gymBenefit = $p->benefits->firstWhere('facility', 'GYM');
-                            $saunaBenefit = $p->benefits->firstWhere('facility', 'SAUNA');
                         @endphp
                         <button type="button" 
                                 onclick="switchPlan('{{ $p->id }}')"
@@ -109,15 +100,7 @@
                             </div>
 
                             <div class="mt-3 pt-2.5 border-t border-[#DFC387]/50 flex items-center justify-between text-[11px] font-bold text-[#7A5818]">
-                                <span>
-                                    @if($padelBenefit && $padelBenefit->quota_type === 'HOURS')
-                                        {{ (float)$padelBenefit->quota_value }} Jam Padel
-                                    @elseif($padelBenefit && $padelBenefit->discount_percent > 0)
-                                        Diskon {{ $padelBenefit->discount_percent }}% Padel
-                                    @else
-                                        Padel Reguler
-                                    @endif
-                                </span>
+                                <span>{{ $facilityService->headline($p) }}</span>
                                 <span class="text-[#8C6418] font-extrabold group-hover:translate-x-0.5 transition-transform">&rarr;</span>
                             </div>
                         </button>
@@ -148,6 +131,7 @@
                                     <span>&bull;</span>
                                     <span class="text-[#1E7E34]">Aktivasi Instan Otomatis</span>
                                 </div>
+                                <p id="detailPlanDesc" class="text-xs text-[#7A643E] mt-2 leading-relaxed max-w-xl {{ ($initialPlan['description'] ?? '') === '' ? 'hidden' : '' }}">{{ $initialPlan['description'] ?? '' }}</p>
                             </div>
 
                             <div class="text-left sm:text-right">
@@ -158,120 +142,62 @@
                             </div>
                         </div>
 
-                        <!-- 4 Detailed Benefit Cards Grid -->
+                        <!-- Benefit Cards (dinamis per paket) -->
                         <div class="space-y-3">
                             <div class="flex items-center justify-between">
                                 <h4 class="font-serif font-black text-xs sm:text-sm text-[#1F170D] uppercase tracking-wider">
                                     Rincian Hak Akses &amp; Benefit yang Didapat
                                 </h4>
-                                <span class="text-[11px] font-bold text-[#8C6418]">All-Inclusive Privilege</span>
                             </div>
 
-                            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-                                <!-- Benefit 1: Padel Court -->
-                                <div class="p-4 rounded-2xl bg-white border border-[#DFC387] shadow-sm flex items-start gap-3.5 hover:border-[#D4AF37] transition-all">
-                                    <div class="w-10 h-10 rounded-xl bg-[#FAF2DE] border border-[#DFC387] flex items-center justify-center shrink-0 text-xs font-black text-[#7A5818]">
-                                        PADEL
-                                    </div>
-                                    <div class="text-xs">
-                                        <strong class="text-[#1F170D] block font-extrabold text-sm" id="benefitPadelTitle">
-                                            @if($initialPlan['padel']['quota_type'] === 'HOURS')
-                                                {{ $initialPlan['padel']['quota_value'] }} Jam Main Lapangan Padel
-                                            @elseif($initialPlan['padel']['discount_percent'] > 0)
-                                                Diskon {{ $initialPlan['padel']['discount_percent'] }}% Sewa Lapangan
-                                            @else
-                                                Akses Reservasi Court Reguler
-                                            @endif
-                                        </strong>
-                                        <span class="text-[#7A643E] block mt-1 leading-relaxed" id="benefitPadelDesc">
-                                            @if($initialPlan['padel']['quota_type'] === 'HOURS')
-                                                Prioritas reservasi H-{{ $initialPlan['padel']['booking_priority_days'] }} lebih awal &amp; diskon court tambahan {{ $initialPlan['padel']['discount_percent'] }}% di luar kuota. 3 panoramic courts WPT standard.
-                                            @elseif($initialPlan['padel']['discount_percent'] > 0)
-                                                Akses reservasi 3 panoramic courts indoor &amp; outdoor dengan potongan harga member sebesar {{ $initialPlan['padel']['discount_percent'] }}%.
-                                            @else
-                                                Reservasi 3 lapangan standar WPT Club 61.
-                                            @endif
-                                        </span>
-                                    </div>
-                                </div>
+                            {{-- Kartu benefit dari Master Fasilitas + benefit paket (dulu 4 kartu dengan teks dummy). Satu grid per
+                                 paket, yang tidak dipilih disembunyikan — semua teks lewat {{ }} (ter-escape). --}}
+                            @foreach ($allPlans as $p)
+                                @php
+                                    $cards = $facilityService->presentPlan($p);
+                                    $perks = array_values(array_filter((array) ($p->perks ?? []), fn ($perk) => is_string($perk) && trim($perk) !== ''));
+                                @endphp
+                                <div data-plan-benefits="{{ $p->id }}" class="grid grid-cols-1 sm:grid-cols-2 gap-3.5 {{ ($initialPlan['id'] ?? null) === $p->id ? '' : 'hidden' }}">
+                                    @foreach ($cards as $card)
+                                        <div class="p-4 rounded-2xl bg-white border border-[#DFC387] shadow-sm flex items-start gap-3.5 hover:border-[#D4AF37] transition-all">
+                                            <div class="w-10 h-10 rounded-xl bg-[#FAF2DE] border border-[#DFC387] flex items-center justify-center shrink-0 text-[10px] font-black text-[#7A5818]">
+                                                {{ $card['badge'] }}
+                                            </div>
+                                            <div class="text-xs">
+                                                <strong class="text-[#1F170D] block font-extrabold text-sm">{{ $card['title'] }}</strong>
+                                                @if ($card['description'])
+                                                    <span class="text-[#7A643E] block mt-1 leading-relaxed">{{ $card['description'] }}</span>
+                                                @endif
+                                                @if ($card['details'])
+                                                    <span class="text-[#8C6418] block mt-1 font-bold leading-relaxed">{{ implode(' • ', $card['details']) }}</span>
+                                                @endif
+                                            </div>
+                                        </div>
+                                    @endforeach
 
-                                <!-- Benefit 2: Gym & Fitness -->
-                                <div class="p-4 rounded-2xl bg-white border border-[#DFC387] shadow-sm flex items-start gap-3.5 hover:border-[#D4AF37] transition-all">
-                                    <div class="w-10 h-10 rounded-xl bg-[#FAF2DE] border border-[#DFC387] flex items-center justify-center shrink-0 text-xs font-black text-[#7A5818]">
-                                        GYM
-                                    </div>
-                                    <div class="text-xs">
-                                        <strong class="text-[#1F170D] block font-extrabold text-sm" id="benefitGymTitle">
-                                            @if($initialPlan['gym']['is_unlimited'])
-                                                Akses Unlimited Gym &amp; Fitness
-                                            @elseif($initialPlan['gym']['quota_value'])
-                                                {{ $initialPlan['gym']['quota_value'] }} Sesi Kunjungan Gym &amp; Fitness
-                                            @else
-                                                Akses Reguler Gym
-                                            @endif
-                                        </strong>
-                                        <span class="text-[#7A643E] block mt-1 leading-relaxed" id="benefitGymDesc">
-                                            @if($initialPlan['gym']['is_unlimited'])
-                                                Akses turnstile gate harian tanpa batas kuota ke gym Technogym, area kardio, &amp; ruang pemanasan atlet.
-                                            @elseif($initialPlan['gym']['quota_value'])
-                                                Akses turnstile gate gym sebanyak {{ $initialPlan['gym']['quota_value'] }} sesi kunjungan ke area Technogym.
-                                            @else
-                                                Tersedia opsi tiket masuk gym reguler.
-                                            @endif
-                                        </span>
-                                    </div>
-                                </div>
+                                    @if ($perks)
+                                        <div class="p-4 rounded-2xl bg-white border border-[#DFC387] shadow-sm flex items-start gap-3.5 hover:border-[#D4AF37] transition-all">
+                                            <div class="w-10 h-10 rounded-xl bg-[#FAF2DE] border border-[#DFC387] flex items-center justify-center shrink-0 text-[10px] font-black text-[#7A5818]">
+                                                PERKS
+                                            </div>
+                                            <div class="text-xs">
+                                                <strong class="text-[#1F170D] block font-extrabold text-sm">Privilege Member</strong>
+                                                <ul class="text-[#7A643E] mt-1 leading-relaxed list-disc pl-4 space-y-0.5">
+                                                    @foreach ($perks as $perk)
+                                                        <li>{{ $perk }}</li>
+                                                    @endforeach
+                                                </ul>
+                                            </div>
+                                        </div>
+                                    @endif
 
-                                <!-- Benefit 3: Sauna & Cold Plunge -->
-                                <div class="p-4 rounded-2xl bg-white border border-[#DFC387] shadow-sm flex items-start gap-3.5 hover:border-[#D4AF37] transition-all">
-                                    <div class="w-10 h-10 rounded-xl bg-[#FAF2DE] border border-[#DFC387] flex items-center justify-center shrink-0 text-xs font-black text-[#7A5818]">
-                                        SAUNA
-                                    </div>
-                                    <div class="text-xs">
-                                        <strong class="text-[#1F170D] block font-extrabold text-sm" id="benefitSaunaTitle">
-                                            @if($initialPlan['sauna']['is_unlimited'])
-                                                Akses Unlimited Sauna &amp; Ice Bath
-                                            @elseif($initialPlan['sauna']['quota_value'])
-                                                {{ $initialPlan['sauna']['quota_value'] }} Sesi Finnish Sauna &amp; Cold Plunge
-                                            @else
-                                                Akses Reguler Sauna
-                                            @endif
-                                        </strong>
-                                        <span class="text-[#7A643E] block mt-1 leading-relaxed" id="benefitSaunaDesc">
-                                            @if($initialPlan['sauna']['is_unlimited'])
-                                                Relaksasi cedarwood sauna Finlandia &amp; 4°C cold plunge pemulihan otot atlet tanpa batas kunjungan.
-                                            @elseif($initialPlan['sauna']['quota_value'])
-                                                Relaksasi cedarwood sauna Finlandia &amp; kolam pemulihan air es 4°C sebanyak {{ $initialPlan['sauna']['quota_value'] }} sesi.
-                                            @else
-                                                Tersedia tiket masuk sauna reguler.
-                                            @endif
-                                        </span>
-                                    </div>
+                                    @if (! $cards && ! $perks)
+                                        <div class="sm:col-span-2 p-4 rounded-2xl border border-dashed border-[#DFC387] text-xs text-[#7A643E]">
+                                            Rincian benefit paket ini belum diisi. Silakan hubungi frontdesk Club 61.
+                                        </div>
+                                    @endif
                                 </div>
-
-                                <!-- Benefit 4: Club Privileges -->
-                                <div class="p-4 rounded-2xl bg-white border border-[#DFC387] shadow-sm flex items-start gap-3.5 hover:border-[#D4AF37] transition-all">
-                                    <div class="w-10 h-10 rounded-xl bg-[#FAF2DE] border border-[#DFC387] flex items-center justify-center shrink-0 text-xs font-black text-[#7A5818]">
-                                        PERKS
-                                    </div>
-                                    <div class="text-xs">
-                                        <strong class="text-[#1F170D] block font-extrabold text-sm" id="benefitPerksTitle">
-                                            @if($initialPlan['ownership_type'] === 'ORGANIZATIONAL')
-                                                Roster Tim Korporat s/d 10 Personil
-                                            @else
-                                                Digital VIP Pass &amp; Privilege
-                                            @endif
-                                        </strong>
-                                        <span class="text-[#7A643E] block mt-1 leading-relaxed" id="benefitPerksDesc">
-                                            @if($initialPlan['ownership_type'] === 'ORGANIZATIONAL')
-                                                Portal monitoring kuota bersama, Digital QR Pass masing-masing karyawan, &amp; Free VIP Valet.
-                                            @else
-                                                Digital QR Pass smartphone, Free VIP Valet Parking, Diskon Cafe Lounge, &amp; Turnamen internal.
-                                            @endif
-                                        </span>
-                                    </div>
-                                </div>
-                            </div>
+                            @endforeach
                         </div>
 
                         <!-- Highlights Guarantee -->
@@ -295,42 +221,43 @@
                         <div class="border-b border-[#DFC387]/50 pb-3">
                             <span class="text-[10px] font-extrabold uppercase tracking-wider text-[#8C6418] block">Langkah Terakhir</span>
                             <h4 class="font-serif font-black text-lg text-[#1F170D] mt-0.5">
-                                Konfirmasi &amp; Bayar Cashless
+                                Konfirmasi &amp; Payment
                             </h4>
-                            <p class="text-xs text-[#7A643E] mt-0.5">Pilih metode digital dan selesaikan pembayaran via Midtrans Snap</p>
+                            <p class="text-xs text-[#7A643E] mt-0.5"></p>
                         </div>
 
                         <!-- Cashless Channel Selector -->
                         <div class="space-y-2.5">
                             <div class="flex items-center justify-between">
                                 <label class="block text-xs font-extrabold uppercase tracking-wider text-[#7A5818]">
-                                    Saluran Pembayaran Midtrans:
+                                    Choice of Cashless Payment
                                 </label>
                                 <span class="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
-                                    Bebas Uang Tunai
+                                    
                                 </span>
                             </div>
 
-                            <div class="space-y-2">
-                                <label class="p-3.5 rounded-2xl border-2 border-[#DFC387] bg-white hover:bg-[#FAF2DE]/50 cursor-pointer flex items-start gap-3 transition-all text-xs font-bold text-[#1F170D] has-[:checked]:border-[#B38622] has-[:checked]:bg-[#FAF2DE] shadow-sm">
-                                    <input type="radio" name="payment_method" value="QRIS" checked class="text-[#D4AF37] focus:ring-[#D4AF37] w-4 h-4 mt-0.5">
-                                    <div>
-                                        <div class="font-extrabold text-xs">QRIS Instant (GoPay / OVO / Dana / BCA QR)</div>
-                                        <div class="text-[11px] text-[#7A643E] font-normal mt-0.5 leading-relaxed">
-                                            Scan kode QR langsung dari aplikasi e-wallet atau mobile banking apa pun. Kuota aktif seketika.
+                            @php $onlineMethods = app(\App\Services\Payment\OnlinePaymentMethodService::class)->forFrontend(); @endphp
+                            <div class="space-y-2" id="paymentMethodList">
+                                @foreach ($onlineMethods as $i => $m)
+                                    <label data-method-option data-min="{{ $m['min_amount'] ?? '' }}" data-max="{{ $m['max_amount'] ?? '' }}"
+                                        class="p-3.5 rounded-2xl border-2 border-[#DFC387] bg-white hover:bg-[#FAF2DE]/50 cursor-pointer flex items-start gap-3 transition-all text-xs font-bold text-[#1F170D] has-[:checked]:border-[#B38622] has-[:checked]:bg-[#FAF2DE] shadow-sm">
+                                        <input type="radio" name="payment_method" value="{{ $m['code'] }}" @checked($i === 0) class="text-[#D4AF37] focus:ring-[#D4AF37] w-4 h-4 mt-0.5">
+                                        <span class="w-8 h-8 rounded-lg bg-white border border-[#DFC387] flex items-center justify-center font-bold text-[10px] text-[#8C6418] shrink-0">{{ $m['badge'] }}</span>
+                                        <div>
+                                            <div class="font-extrabold text-xs">{{ $m['name'] }}</div>
+                                            @if ($m['note'])
+                                                <div class="text-[11px] text-[#7A643E] font-normal mt-0.5 leading-relaxed">{{ $m['note'] }}</div>
+                                            @endif
+                                            @if ($m['max_amount'])
+                                                <div class="text-[10px] text-[#8C7A58] font-normal mt-0.5">Maksimal Rp {{ number_format($m['max_amount'], 0, ',', '.') }} per transaksi</div>
+                                            @endif
                                         </div>
-                                    </div>
-                                </label>
-
-                                <label class="p-3.5 rounded-2xl border-2 border-[#DFC387] bg-white hover:bg-[#FAF2DE]/50 cursor-pointer flex items-start gap-3 transition-all text-xs font-bold text-[#1F170D] has-[:checked]:border-[#B38622] has-[:checked]:bg-[#FAF2DE] shadow-sm">
-                                    <input type="radio" name="payment_method" value="MIDTRANS_SNAP" class="text-[#D4AF37] focus:ring-[#D4AF37] w-4 h-4 mt-0.5">
-                                    <div>
-                                        <div class="font-extrabold text-xs">Virtual Account Bank &amp; Kartu Kredit</div>
-                                        <div class="text-[11px] text-[#7A643E] font-normal mt-0.5 leading-relaxed">
-                                            BCA, Mandiri, BNI, BRI, Permata VA &amp; Kartu Debit/Kredit Online berlogo Visa/Mastercard.
-                                        </div>
-                                    </div>
-                                </label>
+                                    </label>
+                                @endforeach
+                                <div id="noPaymentMethodNotice" class="hidden p-3.5 rounded-2xl border-2 border-dashed border-rose-200 bg-rose-50 text-xs text-rose-700 font-bold">
+                                    Belum ada metode pembayaran online untuk paket ini. Silakan beli di frontdesk Club 61.
+                                </div>
                             </div>
                         </div>
 
@@ -340,13 +267,17 @@
                                 <span>Harga Paket Keanggotaan:</span>
                                 <span id="billSubtotal" class="font-bold text-[#1F170D]">{{ $initialPlan['price_formatted'] }}</span>
                             </div>
-                            <div class="flex justify-between items-center text-xs text-[#7A643E]">
-                                <span>Biaya Layanan &amp; Aktivasi Online:</span>
-                                <span class="font-bold text-[#1E7E34]">Termasuk (Rp 0)</span>
+                            <div id="billTaxRow" class="flex justify-between items-center text-xs text-[#7A643E] {{ $initialPlan['bill']['tax'] > 0 ? '' : 'hidden' }}">
+                                <span id="billTaxName">{{ $initialPlan['bill']['tax_name'] }}:</span>
+                                <span id="billTax" class="font-bold text-[#1F170D]">Rp {{ number_format($initialPlan['bill']['tax'], 0, ',', '.') }}</span>
+                            </div>
+                            <div id="billAdminFeeRow" class="flex justify-between items-center text-xs text-[#7A643E] {{ $initialPlan['bill']['admin_fee'] > 0 ? '' : 'hidden' }}">
+                                <span id="billAdminFeeName">{{ $initialPlan['bill']['admin_fee_name'] }}:</span>
+                                <span id="billAdminFee" class="font-bold text-[#1F170D]">Rp {{ number_format($initialPlan['bill']['admin_fee'], 0, ',', '.') }}</span>
                             </div>
                             <div class="flex justify-between items-center pt-2.5 border-t border-[#DFC387]/50 text-sm font-bold">
                                 <span class="font-serif font-black text-[#1F170D]">Total Pembayaran Cashless:</span>
-                                <span id="billGrandTotal" class="font-serif font-black text-xl text-[#8C6418]">{{ $initialPlan['price_formatted'] }}</span>
+                                <span id="billGrandTotal" class="font-serif font-black text-xl text-[#8C6418]">Rp {{ number_format($initialPlan['bill']['grand_total'], 0, ',', '.') }}</span>
                             </div>
                         </div>
 
@@ -497,54 +428,27 @@
             document.getElementById('detailBadge').innerText = plan.ownership_type === 'ORGANIZATIONAL' ? 'Paket Sponsor Corporate Pool' : 'Keanggotaan Individual VIP';
             document.getElementById('detailPriceDisplay').innerText = plan.price_formatted;
 
-            // 3. Update Padel Benefit
-            if (plan.padel.quota_type === 'HOURS') {
-                document.getElementById('benefitPadelTitle').innerText = plan.padel.quota_value + ' Jam Main Lapangan Padel';
-                document.getElementById('benefitPadelDesc').innerText = 'Prioritas reservasi H-' + plan.padel.booking_priority_days + ' lebih awal & diskon court tambahan ' + plan.padel.discount_percent + '% di luar kuota. 3 panoramic courts WPT standard.';
-            } else if (plan.padel.discount_percent > 0) {
-                document.getElementById('benefitPadelTitle').innerText = 'Diskon ' + plan.padel.discount_percent + '% Sewa Lapangan';
-                document.getElementById('benefitPadelDesc').innerText = 'Akses reservasi 3 panoramic courts indoor & outdoor dengan potongan harga member sebesar ' + plan.padel.discount_percent + '%.';
-            } else {
-                document.getElementById('benefitPadelTitle').innerText = 'Akses Reservasi Court Reguler';
-                document.getElementById('benefitPadelDesc').innerText = 'Reservasi 3 lapangan standar WPT Club 61.';
+            // 3. Benefit & privilege: grid per paket sudah dirender server (Master Fasilitas) — cukup tampilkan yang dipilih.
+            document.querySelectorAll('[data-plan-benefits]').forEach(grid => {
+                grid.classList.toggle('hidden', grid.dataset.planBenefits !== planId);
+            });
+            const desc = document.getElementById('detailPlanDesc');
+            if (desc) {
+                desc.innerText = plan.description || '';
+                desc.classList.toggle('hidden', !plan.description);
             }
 
-            // 4. Update Gym Benefit
-            if (plan.gym.is_unlimited) {
-                document.getElementById('benefitGymTitle').innerText = 'Akses Unlimited Gym & Fitness';
-                document.getElementById('benefitGymDesc').innerText = 'Akses turnstile gate harian tanpa batas kuota ke gym Technogym, area kardio, & ruang pemanasan atlet.';
-            } else if (plan.gym.quota_value) {
-                document.getElementById('benefitGymTitle').innerText = plan.gym.quota_value + ' Sesi Kunjungan Gym & Fitness';
-                document.getElementById('benefitGymDesc').innerText = 'Akses turnstile gate gym sebanyak ' + plan.gym.quota_value + ' sesi kunjungan ke area Technogym.';
-            } else {
-                document.getElementById('benefitGymTitle').innerText = 'Akses Reguler Gym';
-                document.getElementById('benefitGymDesc').innerText = 'Tersedia opsi tiket masuk gym reguler.';
-            }
-
-            // 5. Update Sauna Benefit
-            if (plan.sauna.is_unlimited) {
-                document.getElementById('benefitSaunaTitle').innerText = 'Akses Unlimited Sauna & Ice Bath';
-                document.getElementById('benefitSaunaDesc').innerText = 'Relaksasi cedarwood sauna Finlandia & 4°C cold plunge pemulihan otot atlet tanpa batas kunjungan.';
-            } else if (plan.sauna.quota_value) {
-                document.getElementById('benefitSaunaTitle').innerText = plan.sauna.quota_value + ' Sesi Finnish Sauna & Cold Plunge';
-                document.getElementById('benefitSaunaDesc').innerText = 'Relaksasi cedarwood sauna Finlandia & kolam pemulihan air es 4°C sebanyak ' + plan.sauna.quota_value + ' sesi.';
-            } else {
-                document.getElementById('benefitSaunaTitle').innerText = 'Akses Reguler Sauna';
-                document.getElementById('benefitSaunaDesc').innerText = 'Tersedia tiket masuk sauna reguler.';
-            }
-
-            // 6. Update Perks Benefit
-            if (plan.ownership_type === 'ORGANIZATIONAL') {
-                document.getElementById('benefitPerksTitle').innerText = 'Roster Tim Korporat s/d 10 Personil';
-                document.getElementById('benefitPerksDesc').innerText = 'Portal monitoring kuota bersama, Digital QR Pass masing-masing karyawan, & Free VIP Valet.';
-            } else {
-                document.getElementById('benefitPerksTitle').innerText = 'Digital VIP Pass & Privilege';
-                document.getElementById('benefitPerksDesc').innerText = 'Digital QR Pass smartphone, Free VIP Valet Parking, Diskon Cafe Lounge, & Turnamen internal.';
-            }
-
-            // 7. Update Bill Breakdown
+            // 7. Update Bill Breakdown (pajak & biaya layanan sesungguhnya)
+            const rupiah = (v) => 'Rp ' + Math.round(v).toLocaleString('id-ID');
             document.getElementById('billSubtotal').innerText = plan.price_formatted;
-            document.getElementById('billGrandTotal').innerText = plan.price_formatted;
+            document.getElementById('billTaxRow').classList.toggle('hidden', !(plan.bill.tax > 0));
+            document.getElementById('billTaxName').innerText = plan.bill.tax_name + ':';
+            document.getElementById('billTax').innerText = rupiah(plan.bill.tax);
+            document.getElementById('billAdminFeeRow').classList.toggle('hidden', !(plan.bill.admin_fee > 0));
+            document.getElementById('billAdminFeeName').innerText = plan.bill.admin_fee_name + ':';
+            document.getElementById('billAdminFee').innerText = rupiah(plan.bill.admin_fee);
+            document.getElementById('billGrandTotal').innerText = rupiah(plan.bill.grand_total);
+            filterPaymentMethods(plan.bill.grand_total);
 
             // 8. Update Mobile Bar
             const mobileName = document.getElementById('mobilePlanName');
@@ -553,11 +457,36 @@
             if (mobilePrice) mobilePrice.innerText = plan.price_formatted;
         }
 
+        /** Sembunyikan metode di luar batas nominal (mis. QRIS maks Rp10 juta untuk paket Corporate). */
+        function filterPaymentMethods(total) {
+            let firstVisible = null;
+            let checkedStillVisible = false;
+            document.querySelectorAll('[data-method-option]').forEach(label => {
+                const min = label.dataset.min === '' ? null : parseFloat(label.dataset.min);
+                const max = label.dataset.max === '' ? null : parseFloat(label.dataset.max);
+                const ok = (min === null || total >= min) && (max === null || total <= max);
+                const input = label.querySelector('input');
+                label.classList.toggle('hidden', !ok);
+                input.disabled = !ok;
+                if (ok && !firstVisible) firstVisible = input;
+                if (ok && input.checked) checkedStillVisible = true;
+            });
+            if (!checkedStillVisible && firstVisible) firstVisible.checked = true;
+            document.getElementById('noPaymentMethodNotice').classList.toggle('hidden', !!firstVisible);
+            document.getElementById('btnSubmitCheckout').disabled = !firstVisible;
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            const plan = plansMap[currentSelectedPlanId];
+            if (plan) filterPaymentMethods(plan.bill.grand_total);
+        });
+
         async function submitMembershipCheckout() {
             if (!currentSelectedPlanId) return;
 
             const methodInput = document.querySelector('input[name="payment_method"]:checked');
-            const paymentMethod = methodInput ? methodInput.value : 'QRIS';
+            if (!methodInput) return;
+            const paymentMethod = methodInput.value;
 
             const btn = document.getElementById('btnSubmitCheckout');
             const btnText = document.getElementById('btnSubmitText');

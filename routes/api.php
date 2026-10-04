@@ -22,6 +22,10 @@ Route::get('/v1/health', function () {
     ]);
 });
 
+// Metode pembayaran online aktif (publik, read-only) — satu sumber untuk web & Flutter.
+Route::get('/v1/payment-methods', [\App\Http\Controllers\Api\V1\Payment\PaymentMethodController::class, 'index'])
+    ->middleware('throttle:60,1');
+
 // Domain Modular Routes
 require __DIR__ . '/api/auth.php';
 require __DIR__ . '/api/padel.php';

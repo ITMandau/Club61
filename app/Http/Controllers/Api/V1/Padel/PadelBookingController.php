@@ -117,13 +117,16 @@ class PadelBookingController extends Controller
         $validated = $request->validate([
             'booking_ids' => ['required', 'array', 'min:1'],
             'booking_ids.*' => ['required', 'string'],
+            // true = hanya lepas slot yang masih DITAHAN (LOCKED). Dipakai keranjang & checkout (countdown habis,
+            // hapus item) supaya tidak pernah membatalkan booking yang sudah klik bayar & sedang dibayar di Midtrans.
+            'only_locked' => ['sometimes', 'boolean'],
         ]);
 
         $user = $request->user();
         $canCancel = $user->canCancelBooking();
 
         // Jika user tidak memiliki izin batal, cegah pembatalan tiket yang sudah berstatus PENDING/PENDING_PAYMENT
-        if (! $canCancel) {
+        if (! $canCancel && empty($validated['only_locked'])) {
             $hasPendingBooking = \App\Models\Padel\PadelBooking::whereIn('id', $validated['booking_ids'])
                 ->where('user_id', $user->id)
                 ->whereIn('status', ['PENDING', 'PENDING_PAYMENT'])
@@ -134,7 +137,7 @@ class PadelBookingController extends Controller
             }
         }
 
-        $releasedCount = $this->bookingService->releaseSlots($validated['booking_ids'], $user);
+        $releasedCount = $this->bookingService->releaseSlots($validated['booking_ids'], $user, onlyLocked: (bool) ($validated['only_locked'] ?? false));
 
         return response()->json([
             'success' => true,
@@ -187,7 +190,8 @@ class PadelBookingController extends Controller
             'equipments.*.equipment_id' => ['required', 'string'],
             'equipments.*.quantity' => ['required', 'integer', 'min:1'],
             'voucher_code' => ['nullable', 'string'],
-            'payment_method' => ['required', 'string', 'in:QRIS,BCA_VA,MANDIRI_VA,BRI_VA,BNI_VA,CIMB_VA,BSI_VA'],
+            // Kode harus ada di katalog resmi; aktif/nonaktif & batas nominal divalidasi di service (butuh total tagihan).
+            'payment_method' => ['required', 'string', \Illuminate\Validation\Rule::in(array_keys(\App\Services\Payment\OnlinePaymentCatalog::all()))],
             // 'NONE' = customer sengaja memilih TIDAK memakai benefit membership untuk booking ini
             // (toggle di halaman checkout), null = auto-detect membership aktif seperti biasa.
             'membership_balance_id' => ['nullable', 'string'],
@@ -216,7 +220,8 @@ class PadelBookingController extends Controller
     public function retryPayment(string $id, Request $request): JsonResponse
     {
         $validated = $request->validate([
-            'payment_method' => ['required', 'string', 'in:QRIS,BCA_VA,MANDIRI_VA,BRI_VA,BNI_VA,CIMB_VA,BSI_VA,CREDIT_CARD'],
+            // Kode harus ada di katalog resmi; aktif/nonaktif & batas nominal divalidasi di service (butuh total tagihan).
+            'payment_method' => ['required', 'string', \Illuminate\Validation\Rule::in(array_keys(\App\Services\Payment\OnlinePaymentCatalog::all()))],
         ]);
 
         $result = $this->bookingService->retryPayment(
@@ -248,7 +253,23 @@ class PadelBookingController extends Controller
      */
     public function ticket(string $id, Request $request): JsonResponse
     {
+        // getTicket() sekaligus memastikan tiket ini milik user yang login.
         $booking = $this->bookingService->getTicket($id, $request->user());
+
+        // Polling halaman invoice: kalau masih menunggu bayar, tanya langsung ke Midtrans juga —
+        // jadi status tetap berubah jadi lunas walau webhook-nya tidak pernah sampai.
+        // Termasuk booking LOCKED hasil reschedule yang menunggu pelunasan selisih — dulu dilewati, jadi
+        // customer yang sudah bayar selisih via Midtrans tetap melihat "belum lunas" kalau webhook tidak sampai.
+        $awaitingPayment = in_array($booking->status, ['PENDING_PAYMENT', 'PENDING'], true)
+            || ($booking->status === 'LOCKED' && (int) $booking->reschedule_count > 0);
+
+        if ($request->boolean('verify_payment') && $awaitingPayment && $booking->order_id) {
+            $order = \App\Models\Pos\Order::find($booking->order_id);
+
+            if ($order && app(\App\Services\Payment\MidtransReconciliationService::class)->reconcileOrder($order, cacheSeconds: 10) === \App\Services\Payment\MidtransReconciliationService::PAID) {
+                $booking = $this->bookingService->getTicket($id, $request->user());
+            }
+        }
 
         return response()->json([
             'success' => true,

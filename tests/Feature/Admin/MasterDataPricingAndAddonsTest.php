@@ -255,7 +255,7 @@ class MasterDataPricingAndAddonsTest extends TestCase
                 ['equipment_id' => $inactiveEquipment->id, 'quantity' => 2],
             ],
             null,
-            'bank_transfer',
+            'BCA_VA',
             'IDEMPOTENCY-' . uniqid(),
             $this->adminUser
         );
@@ -299,7 +299,8 @@ class MasterDataPricingAndAddonsTest extends TestCase
         $this->court->update(['description' => 'Indoor • VIP Central AC']);
 
         $service = app(PadelBookingService::class);
-        $matrix = $service->getScheduleMatrix('2026-09-21');
+        // Tanggal masa depan — tanggal lampau kini ditandai PAST (sama seperti POS Walk-In).
+        $matrix = $service->getScheduleMatrix(now()->addDays(3)->format('Y-m-d'));
 
         $courtData = collect($matrix['courts'])->firstWhere('court_id', $this->court->id);
         $this->assertNotNull($courtData);
@@ -379,7 +380,8 @@ class MasterDataPricingAndAddonsTest extends TestCase
         ]);
 
         $service = app(PadelBookingService::class);
-        $matrix = $service->getScheduleMatrix('2026-09-21');
+        // Tanggal masa depan — tanggal lampau kini ditandai PAST (sama seperti POS Walk-In).
+        $matrix = $service->getScheduleMatrix(now()->addDays(3)->format('Y-m-d'));
 
         $courtData = collect($matrix['courts'])->firstWhere('court_id', $this->court->id);
         $this->assertNotNull($courtData);

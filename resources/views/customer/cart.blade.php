@@ -154,7 +154,7 @@
 
                         <!-- VIP Privilege Note -->
                         <div class="p-3.5 rounded-2xl bg-[#FAF8F2] border border-[#E8DCC0] text-[11px] text-[#7A643E] leading-relaxed">
-                            <strong class="text-[#3B2B11]">VIP Guarantee:</strong> Your slots are automatically locked for 10 minutes. Complete checkout before expiration to prevent automatic release.
+                            <strong class="text-[#3B2B11]">VIP Guarantee:</strong> Your slots are automatically locked for {{ app(\App\Services\Padel\BookingTimeService::class)->holdMinutes() }} minutes. Complete checkout before expiration to prevent automatic release.
                         </div>
 
                     </div>
@@ -413,9 +413,9 @@
                         } catch(e) {}
                     }
 
-                    // Fallback: 10 minutes default if expires_at missing
+                    // Fallback kalau expires_at tidak ada: waktu tahan slot dari pengaturan admin.
                     if (!this.expiresAtTime && this.items.length > 0) {
-                        this.expiresAtTime = Date.now() + (10 * 60 * 1000);
+                        this.expiresAtTime = Date.now() + (@js(app(\App\Services\Padel\BookingTimeService::class)->holdMinutes()) * 60 * 1000);
                     }
 
                     // GUARDRAIL 1: Run Timer
@@ -475,7 +475,7 @@
                                     'Accept': 'application/json',
                                     'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
                                 },
-                                body: JSON.stringify({ booking_ids: bookingIds })
+                                body: JSON.stringify({ booking_ids: bookingIds, only_locked: true })
                             });
                         } catch(e) {
                             console.error('Error auto-releasing expired cart slots:', e);
@@ -518,7 +518,7 @@
                                          'Accept': 'application/json',
                                          'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
                                     },
-                                    body: JSON.stringify({ booking_ids: [bookingMatch.id] })
+                                    body: JSON.stringify({ booking_ids: [bookingMatch.id], only_locked: true })
                                 });
                             } catch(e) {}
                         }
@@ -552,7 +552,7 @@
                                      'Accept': 'application/json',
                                      'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
                                 },
-                                body: JSON.stringify({ booking_ids: bookingIds })
+                                body: JSON.stringify({ booking_ids: bookingIds, only_locked: true })
                             });
                         } catch(e) {}
                     }

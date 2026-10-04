@@ -55,8 +55,13 @@ trait ManagesCheckoutAndPayments
                 ->lockForUpdate()
                 ->get();
 
-            if ($bookings->count() !== count($bookingIds)) {
-                throw new HttpException(422, 'Satu atau lebih slot booking tidak valid atau masa kuncian (10 menit) telah kedaluwarsa.');
+            $bookingTimes = app(\App\Services\Padel\BookingTimeService::class);
+            $holdExpired = $bookings->contains(fn (PadelBooking $b) => ($b->expires_at ?? $b->created_at->copy()->addMinutes($bookingTimes->holdMinutes()))->isPast());
+
+            // Hold yang waktunya sudah habis tapi belum sempat dibersihkan tidak boleh di-checkout — slotnya sedang/akan
+            // dilepas pembersih otomatis (dulu bisa balapan: checkout menang lalu bookingnya tetap ditimpa EXPIRED).
+            if ($bookings->count() !== count($bookingIds) || $holdExpired) {
+                throw new HttpException(422, 'Satu atau lebih slot booking tidak valid atau masa kuncian ('.$bookingTimes->holdMinutes().' menit) telah kedaluwarsa. Silakan pilih slot lagi.');
             }
 
             // Terapkan kuota atau diskon membership jika ada
@@ -304,6 +309,7 @@ trait ManagesCheckoutAndPayments
                 $midtransItems[$targetIdx]['price'] += $diff;
             }
 
+            $paymentDeadline = null;
             if ($grandTotal <= 0) {
                 // Tentukan sumber sebenarnya yang menutup 100% biaya ini — dulu selalu di-hardcode
                 // 'MEMBERSHIP_QUOTA' walau yang benar-benar menutupnya voucher jam sponsor corporate
@@ -326,10 +332,19 @@ trait ManagesCheckoutAndPayments
                 ];
                 $initialStatus = 'PAID';
             } else {
+                // Metode harus aktif & sesuai batas nominal (mis. QRIS maks Rp10 juta) — dicek di server, bukan cuma
+                // disaring di halaman. Gagal di sini = seluruh checkout di-rollback (booking tetap LOCKED, bisa dicoba lagi).
+                $paymentMethod = app(\App\Services\Payment\OnlinePaymentMethodService::class)->assertSelectable($paymentMethod, (float) $grandTotal);
+
+                // Batas bayar dihitung SEJAK KLIK BAYAR dan dipakai dua-duanya: expiry sesi Midtrans & pelepasan slot.
+                $bookingTimes = app(\App\Services\Padel\BookingTimeService::class);
+                $paymentDeadline = $bookingTimes->paymentExpiresAt();
+
                 // Panggil Payment Manager (Midtrans & Mock Simulator)
                 $paymentManager = app(\App\Services\Payment\PaymentManager::class);
                 $paymentResult = $paymentManager->createPayment([
                     'order_id' => $orderNumber,
+                    'expiry_minutes' => $bookingTimes->paymentWindowMinutes(),
                     'gross_amount' => (int) $grandTotal,
                     'item_details' => $midtransItems,
                     'customer_details' => [
@@ -359,6 +374,7 @@ trait ManagesCheckoutAndPayments
                 $booking->update([
                     'order_id' => $order->id,
                     'status' => $initialStatus,
+                    'expires_at' => $initialStatus === 'PENDING_PAYMENT' ? $paymentDeadline : null,
                     'qr_code_hash' => $initialStatus === 'PAID'
                         ? ('VNT-TICKET-' . strtoupper(bin2hex(random_bytes(16))))
                         : null,
@@ -465,6 +481,8 @@ trait ManagesCheckoutAndPayments
                         $q->orWhere('order_id', $orderId);
                     }
                 })
+                // Dicari per order: utamakan booking yang memang masih punya tagihan (bukan booking lunas pertama).
+                ->orderByRaw("CASE WHEN status IN ('LOCKED', 'PENDING_PAYMENT', 'PENDING') THEN 0 ELSE 1 END")
                 ->lockForUpdate()
                 ->firstOrFail();
 
@@ -496,12 +514,36 @@ trait ManagesCheckoutAndPayments
                 ->get();
             $totalPaid = (float) $successfulPayments->sum('amount');
 
-            $pendingSupplementalPayment = Payment::where('order_id', $order->id)
-                ->where('status', 'PENDING')
-                ->latest()
-                ->first();
+            // Tagihan MILIK booking ini (order bisa punya beberapa tagihan selisih untuk booking berbeda).
+            $booking->setRelation('order', $order);
+            $pendingSupplementalPayment = $this->pendingBillForBooking($booking, lock: true);
 
-            $isSupplementalDelta = ($totalPaid > 0 && $pendingSupplementalPayment);
+            // Order yang SUDAH pernah dibayar tapi tagihan PENDING-nya hilang (mis. ditutup rekonsiliasi)
+            // tidak boleh jatuh ke "retry pembayaran penuh" di bawah — itu menagih ulang seluruh order
+            // yang sudah lunas. Buat ulang tagihan sisa (grand_total - sudah dibayar), atau tolak kalau lunas.
+            if ($totalPaid > 0 && ! $pendingSupplementalPayment) {
+                $remaining = round((float) $order->grand_total - $totalPaid, 2);
+                if ($remaining <= 0) {
+                    throw new HttpException(422, 'Pesanan ini sudah lunas, tidak ada tagihan yang perlu dibayar.');
+                }
+
+                $pendingSupplementalPayment = Payment::create([
+                    'order_id' => $order->id,
+                    'payment_gateway' => 'CASHIER_POS',
+                    'transaction_id' => 'SUPP-'.strtoupper(Str::random(12)),
+                    'amount' => $remaining,
+                    'payment_method' => 'MENUNGGU_PEMBAYARAN',
+                    'status' => 'PENDING',
+                    'payload_log' => ['type' => 'RESCHEDULE_PRICE_DELTA', 'booking_id' => $booking->id, 'recreated_from_remaining_balance' => true],
+                ]);
+            }
+
+            // Tagihan selisih reschedule ditentukan dari TAGIHANNYA, bukan dari "sudah pernah bayar": booking yang dulu
+            // 100% ditanggung kuota member / voucher punya pembayaran Rp0, tapi selisih reschedule-nya tetap selisih —
+            // dulu jatuh ke "bayar ulang penuh" yang menghitung ulang seluruh order & menimpa nominal tagihan kasir.
+            $isRescheduleBill = $pendingSupplementalPayment
+                && (($pendingSupplementalPayment->payload_log['type'] ?? null) === 'RESCHEDULE_PRICE_DELTA' || (int) $booking->reschedule_count > 0);
+            $isSupplementalDelta = $pendingSupplementalPayment && ($totalPaid > 0 || $isRescheduleBill);
 
             if ($isSupplementalDelta) {
                 // HANYA menagih nominal selisih (delta), bukan menagih ulang seluruh order.
@@ -510,10 +552,13 @@ trait ManagesCheckoutAndPayments
                 $deltaAmount = (float) $pendingSupplementalPayment->amount;
                 $chargeTotal = max(0, $deltaAmount);
                 $newGatewayFee = 0;
+                $paymentMethod = app(\App\Services\Payment\OnlinePaymentMethodService::class)->assertSelectable($paymentMethod, (float) $chargeTotal);
 
                 // Midtrans Snap untuk Pelunasan Delta
                 $orderNumber = $order->order_number ?: ('ORD-PAD-' . strtoupper(Str::random(8)));
-                $suffixedOrderId = $orderNumber . '_DELTA_' . time();
+                // + komponen acak: dua permintaan di detik yang sama dulu menghasilkan order_id kembar → Midtrans
+                // menolak dan customer melihat pesan "gateway down" yang menyesatkan.
+                $suffixedOrderId = $orderNumber . '_DELTA_' . time() . strtoupper(Str::random(4));
 
                 $midtransItems = [
                     [
@@ -552,6 +597,10 @@ trait ManagesCheckoutAndPayments
                     'payment_method' => $paymentMethod,
                     'payload_log' => array_merge($pendingSupplementalPayment->payload_log ?? [], [
                         'midtrans_order_id' => $suffixedOrderId,
+                        'midtrans_order_ids' => array_values(array_unique(array_merge(
+                            (array) ($pendingSupplementalPayment->payload_log['midtrans_order_ids'] ?? []),
+                            [$suffixedOrderId]
+                        ))),
                         'snap_token' => $paymentResult['snap_token'] ?? null,
                         'gateway_fee' => $newGatewayFee,
                     ]),
@@ -572,6 +621,25 @@ trait ManagesCheckoutAndPayments
             }
 
             // Normal Flow: Retry Pembayaran Penuh untuk Cart Baru
+
+            // Bayar ulang / ganti metode TIDAK memperpanjang batas bayar: sesi Midtrans baru hanya diberi sisa waktu
+            // sampai batas bayar booking (dihitung sejak klik bayar pertama). Booking yang masih LOCKED (belum pernah
+            // checkout) = klik bayar pertama → batas bayar mulai dihitung sekarang.
+            $bookingTimes = app(\App\Services\Padel\BookingTimeService::class);
+            $unpaidBookings = $bookings->filter(fn (PadelBooking $b) => in_array($b->status, ['LOCKED', 'PENDING_PAYMENT', 'PENDING'], true) && (int) $b->reschedule_count === 0);
+            if ($booking->status === 'LOCKED') {
+                $paymentDeadline = $bookingTimes->paymentExpiresAt();
+                foreach ($unpaidBookings as $b) {
+                    $b->update(['status' => 'PENDING_PAYMENT', 'expires_at' => $paymentDeadline]);
+                }
+            } else {
+                $paymentDeadline = $bookingTimes->paymentDeadlineFor($booking);
+            }
+            $expiryMinutes = $bookingTimes->remainingPaymentMinutes($paymentDeadline);
+            if ($expiryMinutes === null) {
+                throw new HttpException(422, 'Batas waktu pembayaran booking ini sudah habis, slot akan dilepas. Silakan buat booking baru.');
+            }
+
             $courtTotal = $bookings->sum('court_fee');
             $equipmentTotal = $bookings->sum('equipment_fee');
             $baseAmount = $courtTotal + $equipmentTotal;
@@ -594,9 +662,13 @@ trait ManagesCheckoutAndPayments
                 'grand_total' => $grandTotal,
             ]);
 
+            if ($grandTotal > 0) {
+                $paymentMethod = app(\App\Services\Payment\OnlinePaymentMethodService::class)->assertSelectable($paymentMethod, (float) $grandTotal);
+            }
+
             // On-the-Fly Suffix Logic untuk Midtrans Snap
             $orderNumber = $order->order_number ?: ('ORD-PAD-' . strtoupper(Str::random(8)));
-            $suffixedOrderId = $orderNumber . '_' . time();
+            $suffixedOrderId = $orderNumber . '_' . time() . strtoupper(Str::random(4));
 
             // Susun item details Midtrans yang presisi
             $midtransItems = [];
@@ -665,6 +737,7 @@ trait ManagesCheckoutAndPayments
             $paymentManager = app(\App\Services\Payment\PaymentManager::class);
             $paymentResult = $paymentManager->createPayment([
                 'order_id' => $suffixedOrderId,
+                'expiry_minutes' => $expiryMinutes,
                 'gross_amount' => (int) $grandTotal,
                 'item_details' => $midtransItems,
                 'customer_details' => [
@@ -677,6 +750,47 @@ trait ManagesCheckoutAndPayments
 
             // Petakan suffixed order id ke bookings di Cache selama 24 jam
             Cache::put("order_bookings:{$suffixedOrderId}", $bookings->pluck('id')->toArray(), 86400);
+
+            // Simpan PERMANEN order_id yang dikirim ke Midtrans — cache di atas hilang dalam 24 jam,
+            // padahal rekonsiliasi (MidtransReconciliationService) butuh id persis ini untuk
+            // menanyakan status pembayaran kalau webhook-nya tidak pernah sampai.
+            $pendingPayment = Payment::where('order_id', $order->id)->where('status', 'PENDING')->latest()->lockForUpdate()->first();
+            if ($pendingPayment) {
+                $log = is_array($pendingPayment->payload_log) ? $pendingPayment->payload_log : [];
+                $log['midtrans_order_id'] = $suffixedOrderId;
+                $log['midtrans_order_ids'] = array_values(array_unique(array_merge((array) ($log['midtrans_order_ids'] ?? []), [$suffixedOrderId])));
+                $log['snap_token'] = $paymentResult['snap_token'] ?? null;
+                $updates = ['payload_log' => $log];
+                if ($pendingPayment->payment_gateway === 'MIDTRANS') {
+                    // Nominal ikut grand_total yang baru dihitung ulang di atas (pajak/biaya bisa berubah sejak checkout).
+                    // Tagihan kasir TIDAK diubah nominalnya — itu yang ditagih kasir kalau customer batal bayar online.
+                    $updates['amount'] = (float) $grandTotal;
+                    // Metode yang SEKARANG dipilih customer — dulu tetap metode lama sampai webhook lunas masuk.
+                    $updates['payment_method'] = $paymentMethod;
+                    $updates['snap_token'] = $paymentResult['snap_token'] ?? $pendingPayment->snap_token;
+                    $updates['payment_url'] = $paymentResult['payment_url'] ?? $paymentResult['redirect_url'] ?? $pendingPayment->payment_url;
+                } else {
+                    // Tagihan kasir (bayar nanti) tetap tagihan kasir; percobaan bayar online cukup dicatat.
+                    $log['online_payment_method'] = $paymentMethod;
+                    $updates['payload_log'] = $log;
+                }
+                $pendingPayment->update($updates);
+            } else {
+                // Tagihan lama sudah ditutup (mis. rekonsiliasi menandai FAILED) tapi booking masih menunggu bayar.
+                // Dulu sesi Snap baru ini tidak tercatat di mana pun selain cache 24 jam → kalau webhook-nya hilang,
+                // rekonsiliasi tidak pernah menanyakannya dan uang customer tidak terdeteksi.
+                Payment::create([
+                    'order_id' => $order->id,
+                    'payment_gateway' => 'MIDTRANS',
+                    'transaction_id' => $suffixedOrderId,
+                    'snap_token' => $paymentResult['snap_token'] ?? null,
+                    'payment_url' => $paymentResult['payment_url'] ?? $paymentResult['redirect_url'] ?? null,
+                    'amount' => (float) $grandTotal,
+                    'payment_method' => $paymentMethod,
+                    'status' => 'PENDING',
+                    'payload_log' => ['midtrans_order_id' => $suffixedOrderId, 'midtrans_order_ids' => [$suffixedOrderId], 'snap_token' => $paymentResult['snap_token'] ?? null],
+                ]);
+            }
 
             return [
                 'success' => true,
@@ -699,11 +813,15 @@ trait ManagesCheckoutAndPayments
      */
     public function formatPaymentMethodLabel(?string $method, ?array $payload = null): string
     {
+        // 1. Metode yang BENAR-BENAR dipakai customer menurut Midtrans (webhook / rekonsiliasi).
         if (!empty($payload['payment_type'])) {
             $pt = strtolower((string) $payload['payment_type']);
             if ($pt === 'bank_transfer' && !empty($payload['va_numbers'][0]['bank'])) {
                 $bank = strtoupper($payload['va_numbers'][0]['bank']);
                 return "{$bank} Virtual Account";
+            }
+            if ($pt === 'bank_transfer' && !empty($payload['permata_va_number'])) {
+                return 'Permata Virtual Account';
             }
             if ($pt === 'echannel') {
                 return 'Mandiri Virtual Account';
@@ -711,6 +829,17 @@ trait ManagesCheckoutAndPayments
             if (in_array($pt, ['qris', 'gopay', 'shopeepay'])) {
                 return 'QRIS Instan (GoPay/OVO/BCA)';
             }
+            if ($pt === 'credit_card') {
+                return 'Kartu Kredit / Debit Online';
+            }
+        }
+
+        // 2. Metode online pilihan customer: nama dari pengaturan "Metode Pembayaran Online" / katalog resmi.
+        //    Pembayaran kasir (ada bukti EDC/QRIS frontdesk) memakai kode yang sama (QRIS, CREDIT_CARD) tapi BUKAN
+        //    pembayaran online — jangan diberi label online.
+        $isCounterPayment = !empty($payload['edc_details']) || !empty($payload['qris_details']) || !empty($payload['cashier_id']);
+        if ($method && ! $isCounterPayment && ($onlineLabel = app(\App\Services\Payment\OnlinePaymentMethodService::class)->label($method))) {
+            return $onlineLabel;
         }
 
         return match (strtoupper((string) $method)) {
@@ -719,7 +848,7 @@ trait ManagesCheckoutAndPayments
             'BRI_VA' => 'BRI Virtual Account',
             'BNI_VA' => 'BNI Virtual Account',
             'CIMB_VA' => 'CIMB Virtual Account',
-            'BSI_VA' => 'BSI Virtual Account',
+            'BSI_VA' => 'VA Bank Lain (Permata, BSI, dll.)',
             'QRIS' => 'QRIS Instan (GoPay/OVO/BCA)',
             'CASH' => 'Tunai di Kasir (CASH)',
             'DEBIT_CARD', 'DEBIT' => 'Kartu Debit (EDC)',
@@ -728,6 +857,8 @@ trait ManagesCheckoutAndPayments
             'EDC_MANDIRI' => 'Debit/Kartu EDC Mandiri',
             'QRIS_STATIS' => 'QRIS Kasir Frontdesk',
             'BANK_TRANSFER' => 'Transfer Bank (VA)',
+            'TRANSFER_BANK' => 'Transfer Bank (Frontdesk)',
+            'MENUNGGU_PEMBAYARAN' => 'Menunggu Pembayaran',
             'MEMBERSHIP_QUOTA' => 'Kuota Jam Membership (Gratis)',
             'SPONSOR_VOUCHER' => 'Voucher Jam Corporate (Gratis)',
             'MEMBERSHIP_AND_SPONSOR_VOUCHER' => 'Kuota Membership + Voucher Corporate (Gratis)',
@@ -810,205 +941,221 @@ trait ManagesCheckoutAndPayments
         $holdResult = $this->holdBatchSlots($slots, $bookingDate, $customer);
         $bookingIds = collect($holdResult['bookings'])->pluck('id')->toArray();
 
-        return DB::transaction(function () use ($customer, $bookingIds, $equipments, $paymentMethod, $cashier, $autoCheckIn, $paymentMeta, $membershipBalanceId) {
-            $bookings = PadelBooking::with('court')
-                ->whereIn('id', $bookingIds)
-                ->where('user_id', $customer->id)
-                ->where('status', 'LOCKED')
-                ->get();
+        // Checkout gagal (bukti EDC dipakai ulang, stok habis, shift belum dibuka, dll.) → lepas lagi slot yang barusan
+        // ditahan. Dulu slot tetap terkunci selama waktu tahan (sampai 30 menit) dan kasir yang mencoba ulang mendapat
+        // "slot sedang di-hold pemain lain".
+        try {
+            return DB::transaction(function () use ($customer, $bookingIds, $equipments, $paymentMethod, $cashier, $autoCheckIn, $paymentMeta, $membershipBalanceId) {
+                $bookings = PadelBooking::with('court')
+                    ->whereIn('id', $bookingIds)
+                    ->where('user_id', $customer->id)
+                    ->where('status', 'LOCKED')
+                    ->get();
 
-            if ($bookings->count() !== count($bookingIds)) {
-                throw new HttpException(422, 'Satu atau lebih slot booking tidak valid atau masa kuncian telah kedaluwarsa.');
-            }
+                if ($bookings->count() !== count($bookingIds)) {
+                    throw new HttpException(422, 'Satu atau lebih slot booking tidak valid atau masa kuncian telah kedaluwarsa.');
+                }
 
-            // Terapkan kuota atau diskon membership jika ada
-            $this->applyMembershipBenefitToCourtBookings($bookings, $customer, $membershipBalanceId);
+                // Terapkan kuota atau diskon membership jika ada
+                $this->applyMembershipBenefitToCourtBookings($bookings, $customer, $membershipBalanceId);
 
-            $courtTotal = (float) $bookings->sum('court_fee');
-            $equipmentTotal = 0;
-            $equipmentItems = [];
-            $orderNumber = 'ORD-PAD-' . strtoupper(Str::random(10));
+                $courtTotal = (float) $bookings->sum('court_fee');
+                $equipmentTotal = 0;
+                $equipmentItems = [];
+                $orderNumber = 'ORD-PAD-' . strtoupper(Str::random(10));
 
-            // Sewa Alat (Raket, Bola, Handuk) - Item Type: PADEL
-            if (! empty($equipments)) {
-                $primaryBooking = $bookings->first();
+                // Sewa Alat (Raket, Bola, Handuk) - Item Type: PADEL
+                if (! empty($equipments)) {
+                    $primaryBooking = $bookings->first();
 
-                foreach ($equipments as $item) {
-                    // Lock row equipment SEBELUM baca stock_quantity — anti-race kalau 2 transaksi kasir
-                    // bersamaan rebutan sisa stok BALL yang sama.
-                    $eq = CourtEquipment::where('id', $item['equipment_id'])->lockForUpdate()->first();
-                    if (! $eq || ! $eq->is_active) {
-                        continue;
-                    }
-
-                    $qty = max(1, (int)$item['quantity']);
-
-                    // BALL = consumable (dibeli habis, bukan disewa) -> stok dipotong SEKARANG saat checkout.
-                    // RACKET/TOWEL = disewa (dipinjamkan fisik) -> stok baru dipotong nanti saat check-in
-                    // (lihat ManagesCheckInAndTurnstile::checkIn()), dan bisa di-restock manual lewat retur alat.
-                    $isConsumable = strtoupper($eq->type) === 'BALL';
-                    if ($isConsumable) {
-                        if ((int) $eq->stock_quantity < $qty) {
-                            throw new HttpException(422, "Stok {$eq->name} tidak cukup (sisa {$eq->stock_quantity}, diminta {$qty}).");
+                    foreach ($equipments as $item) {
+                        // Lock row equipment SEBELUM baca stock_quantity — anti-race kalau 2 transaksi kasir
+                        // bersamaan rebutan sisa stok BALL yang sama.
+                        $eq = CourtEquipment::where('id', $item['equipment_id'])->lockForUpdate()->first();
+                        if (! $eq || ! $eq->is_active) {
+                            continue;
                         }
-                        $eq->decrement('stock_quantity', $qty);
+
+                        $qty = max(1, (int)$item['quantity']);
+
+                        // BALL = consumable (dibeli habis, bukan disewa) -> stok dipotong SEKARANG saat checkout.
+                        // RACKET/TOWEL = disewa (dipinjamkan fisik) -> stok baru dipotong nanti saat check-in
+                        // (lihat ManagesCheckInAndTurnstile::checkIn()), dan bisa di-restock manual lewat retur alat.
+                        $isConsumable = strtoupper($eq->type) === 'BALL';
+                        if ($isConsumable) {
+                            if ((int) $eq->stock_quantity < $qty) {
+                                throw new HttpException(422, "Stok {$eq->name} tidak cukup (sisa {$eq->stock_quantity}, diminta {$qty}).");
+                            }
+                            $eq->decrement('stock_quantity', $qty);
+                        }
+
+                        $subtotal = (float) $eq->rental_price * $qty;
+                        $equipmentTotal += $subtotal;
+
+                        $equipmentItems[] = [
+                            'equipment_id' => $eq->id,
+                            'name' => $eq->name,
+                            'quantity' => $qty,
+                            'unit_price' => (float) $eq->rental_price,
+                            'subtotal' => (float) $subtotal,
+                            'stock_deducted' => $isConsumable,
+                        ];
                     }
 
-                    $subtotal = (float) $eq->rental_price * $qty;
-                    $equipmentTotal += $subtotal;
-
-                    $equipmentItems[] = [
-                        'equipment_id' => $eq->id,
-                        'name' => $eq->name,
-                        'quantity' => $qty,
-                        'unit_price' => (float) $eq->rental_price,
-                        'subtotal' => (float) $subtotal,
-                        'stock_deducted' => $isConsumable,
-                    ];
+                    if ($equipmentTotal > 0) {
+                        $primaryBooking->increment('equipment_fee', $equipmentTotal);
+                        $primaryBooking->increment('total_amount', $equipmentTotal);
+                    }
                 }
 
-                if ($equipmentTotal > 0) {
-                    $primaryBooking->increment('equipment_fee', $equipmentTotal);
-                    $primaryBooking->increment('total_amount', $equipmentTotal);
+                $walkInFinanceCalc = app(\App\Services\Finance\TaxAndFeeService::class)->calculate(
+                    subtotal: $courtTotal + $equipmentTotal,
+                    discountAmount: 0,
+                    channel: 'POS_WALKIN',
+                    module: 'PADEL'
+                );
+
+                $grandTotal = $walkInFinanceCalc['grand_total'];
+
+                // Buat Order resmi dengan order_type = 'WALK_IN' dan cashier_id terisi
+                $order = Order::create([
+                    'order_number' => $orderNumber,
+                    'user_id' => $customer->id,
+                    'cashier_id' => $cashier->id,
+                    'order_type' => 'WALK_IN',
+                    'subtotal' => $walkInFinanceCalc['subtotal'],
+                    'discount_amount' => 0.00,
+                    'voucher_code' => null,
+                    'tax_amount' => $walkInFinanceCalc['tax_amount'],
+                    'service_charge' => $walkInFinanceCalc['admin_fee_amount'],
+                    'grand_total' => $grandTotal,
+                    'payment_status' => 'UNPAID',
+                ]);
+
+                // Catat data sewa peralatan
+                if (! empty($equipmentItems)) {
+                    $primaryBooking = $bookings->first();
+                    foreach ($equipmentItems as $eqItem) {
+                        PadelBookingEquipment::create([
+                            'order_id' => $order->id,
+                            'booking_id' => $primaryBooking->id,
+                            'equipment_id' => $eqItem['equipment_id'],
+                            'quantity' => $eqItem['quantity'],
+                            'unit_price' => $eqItem['unit_price'],
+                            'subtotal' => $eqItem['subtotal'],
+                            'stock_deducted_at' => ! empty($eqItem['stock_deducted']) ? now() : null,
+                        ]);
+                    }
                 }
-            }
 
-            $walkInFinanceCalc = app(\App\Services\Finance\TaxAndFeeService::class)->calculate(
-                subtotal: $courtTotal + $equipmentTotal,
-                discountAmount: 0,
-                channel: 'POS_WALKIN',
-                module: 'PADEL'
-            );
+                // Catat order_items (semua item_type = 'PADEL')
+                foreach ($bookings as $b) {
+                    $order->items()->create([
+                        'item_type' => 'PADEL',
+                        'reference_id' => $b->id,
+                        'item_name' => 'Sewa ' . ($b->court ? $b->court->name : 'Court Padel'),
+                        'quantity' => 1,
+                        'unit_price' => $b->court_fee,
+                        'subtotal' => $b->court_fee,
+                    ]);
+                }
 
-            $grandTotal = $walkInFinanceCalc['grand_total'];
-
-            // Buat Order resmi dengan order_type = 'WALK_IN' dan cashier_id terisi
-            $order = Order::create([
-                'order_number' => $orderNumber,
-                'user_id' => $customer->id,
-                'cashier_id' => $cashier->id,
-                'order_type' => 'WALK_IN',
-                'subtotal' => $walkInFinanceCalc['subtotal'],
-                'discount_amount' => 0.00,
-                'voucher_code' => null,
-                'tax_amount' => $walkInFinanceCalc['tax_amount'],
-                'service_charge' => $walkInFinanceCalc['admin_fee_amount'],
-                'grand_total' => $grandTotal,
-                'payment_status' => 'UNPAID',
-            ]);
-
-            // Catat data sewa peralatan
-            if (! empty($equipmentItems)) {
-                $primaryBooking = $bookings->first();
                 foreach ($equipmentItems as $eqItem) {
-                    PadelBookingEquipment::create([
-                        'order_id' => $order->id,
-                        'booking_id' => $primaryBooking->id,
-                        'equipment_id' => $eqItem['equipment_id'],
+                    $order->items()->create([
+                        'item_type' => 'PADEL',
+                        'reference_id' => $eqItem['equipment_id'],
+                        'item_name' => $eqItem['name'],
                         'quantity' => $eqItem['quantity'],
                         'unit_price' => $eqItem['unit_price'],
                         'subtotal' => $eqItem['subtotal'],
-                        'stock_deducted_at' => ! empty($eqItem['stock_deducted']) ? now() : null,
                     ]);
                 }
-            }
 
-            // Catat order_items (semua item_type = 'PADEL')
-            foreach ($bookings as $b) {
-                $order->items()->create([
-                    'item_type' => 'PADEL',
-                    'reference_id' => $b->id,
-                    'item_name' => 'Sewa ' . ($b->court ? $b->court->name : 'Court Padel'),
-                    'quantity' => 1,
-                    'unit_price' => $b->court_fee,
-                    'subtotal' => $b->court_fee,
-                ]);
-            }
+                // Kaitkan booking dengan Order dan update status ke PENDING_PAYMENT
+                foreach ($bookings as $b) {
+                    $b->update([
+                        'order_id' => $order->id,
+                        'status' => 'PENDING_PAYMENT',
+                    ]);
+                }
 
-            foreach ($equipmentItems as $eqItem) {
-                $order->items()->create([
-                    'item_type' => 'PADEL',
-                    'reference_id' => $eqItem['equipment_id'],
-                    'item_name' => $eqItem['name'],
-                    'quantity' => $eqItem['quantity'],
-                    'unit_price' => $eqItem['unit_price'],
-                    'subtotal' => $eqItem['subtotal'],
-                ]);
-            }
-
-            // Kaitkan booking dengan Order dan update status ke PENDING_PAYMENT
-            foreach ($bookings as $b) {
-                $b->update([
-                    'order_id' => $order->id,
-                    'status' => 'PENDING_PAYMENT',
-                ]);
-            }
-
-            // Susun payload_log audit finansial
-            $payloadLog = [
-                'cashier_id' => $cashier->id,
-                'cashier_name' => $cashier->name,
-                'source' => 'WALK_IN_OFFLINE',
-                'payment_method' => strtoupper($paymentMethod),
-            ];
-
-            if (in_array(strtoupper($paymentMethod), ['DEBIT_CARD', 'CREDIT_CARD', 'EDC_BCA', 'EDC_MANDIRI', 'DEBIT', 'CREDIT'])) {
-                $cardType = $paymentMeta['card_type'] ?? (str_contains(strtoupper($paymentMethod), 'CREDIT') ? 'CREDIT' : 'DEBIT');
-                $terminal = $paymentMeta['terminal'] ?? ($paymentMethod === 'EDC_MANDIRI' ? 'EDC_MANDIRI' : 'EDC_BCA');
-
-                $payloadLog['edc_details'] = [
-                    'terminal' => $terminal,
-                    'card_type' => $cardType,
-                    'card_network' => $paymentMeta['card_network'] ?? null,
-                    'card_issuer' => $paymentMeta['card_issuer'] ?? 'BCA',
-                    'card_last_4' => $paymentMeta['card_last_4'] ?? null,
-                    'approval_code' => $paymentMeta['approval_code'] ?? null,
-                    'trace_number' => $paymentMeta['trace_number'] ?? null,
-                    'charged_amount' => isset($paymentMeta['charged_amount']) ? (float) $paymentMeta['charged_amount'] : (float) $grandTotal,
+                // Susun payload_log audit finansial
+                $payloadLog = [
+                    'cashier_id' => $cashier->id,
+                    'cashier_name' => $cashier->name,
+                    'source' => 'WALK_IN_OFFLINE',
+                    'payment_method' => strtoupper($paymentMethod),
                 ];
-            } elseif (in_array(strtoupper($paymentMethod), ['QRIS_STATIS', 'QRIS'])) {
-                $payloadLog['qris_details'] = [
-                    'provider' => $paymentMeta['qris_provider'] ?? 'BCA_QRIS',
-                    'rrn' => $paymentMeta['qris_rrn'] ?? null,
-                    'sender_name' => $paymentMeta['qris_sender_name'] ?? null,
-                ];
-            }
 
-            // Eksekusi pelunasan langsung via PaymentOrchestratorService sebagai single writer
-            $orchestrator = app(\App\Services\Payment\PaymentOrchestratorService::class);
-            $orchestrator->markOrderAsPaid($order, [
-                'payment_gateway' => 'CASHIER_POS',
-                'counter' => 'PADEL_FRONTDESK',
-                'transaction_id' => $orderNumber,
-                'payment_method' => strtoupper($paymentMethod),
-                'amount' => (float) $grandTotal,
-                'cashier_id' => $cashier->id,
-                'payload_log' => $payloadLog,
-            ]);
+                if (in_array(strtoupper($paymentMethod), ['DEBIT_CARD', 'CREDIT_CARD', 'EDC_BCA', 'EDC_MANDIRI', 'DEBIT', 'CREDIT'])) {
+                    $cardType = $paymentMeta['card_type'] ?? (str_contains(strtoupper($paymentMethod), 'CREDIT') ? 'CREDIT' : 'DEBIT');
+                    $terminal = $paymentMeta['terminal'] ?? ($paymentMethod === 'EDC_MANDIRI' ? 'EDC_MANDIRI' : 'EDC_BCA');
 
-            // Opsi Auto Check-In Software
-            if ($autoCheckIn) {
-                PadelBooking::where('order_id', $order->id)->update([
-                    'status' => 'CHECKED_IN',
-                    'checked_in_at' => now(),
+                    $payloadLog['edc_details'] = [
+                        'terminal' => $terminal,
+                        'card_type' => $cardType,
+                        'card_network' => $paymentMeta['card_network'] ?? null,
+                        'card_issuer' => $paymentMeta['card_issuer'] ?? 'BCA',
+                        'card_last_4' => $paymentMeta['card_last_4'] ?? null,
+                        'approval_code' => $paymentMeta['approval_code'] ?? null,
+                        'trace_number' => $paymentMeta['trace_number'] ?? null,
+                        'charged_amount' => isset($paymentMeta['charged_amount']) ? (float) $paymentMeta['charged_amount'] : (float) $grandTotal,
+                    ];
+                } elseif (in_array(strtoupper($paymentMethod), ['QRIS_STATIS', 'QRIS'])) {
+                    $payloadLog['qris_details'] = [
+                        'provider' => $paymentMeta['qris_provider'] ?? 'BCA_QRIS',
+                        'rrn' => $paymentMeta['qris_rrn'] ?? null,
+                        'sender_name' => $paymentMeta['qris_sender_name'] ?? null,
+                    ];
+                }
+
+                // Satu RRN / approval code hanya boleh melunasi satu transaksi (dulu walk-in tidak pernah dicek).
+                \App\Services\Pos\PosPaymentProof::assertProofNotReused($payloadLog);
+
+                // Eksekusi pelunasan langsung via PaymentOrchestratorService sebagai single writer
+                $orchestrator = app(\App\Services\Payment\PaymentOrchestratorService::class);
+                $orchestrator->markOrderAsPaid($order, [
+                    'payment_gateway' => 'CASHIER_POS',
+                    'counter' => 'PADEL_FRONTDESK',
+                    'transaction_id' => $orderNumber,
+                    'payment_method' => strtoupper($paymentMethod),
+                    'amount' => (float) $grandTotal,
+                    'cashier_id' => $cashier->id,
+                    'payload_log' => $payloadLog,
                 ]);
+
+                // Opsi Auto Check-In Software
+                if ($autoCheckIn) {
+                    PadelBooking::where('order_id', $order->id)->update([
+                        'status' => 'CHECKED_IN',
+                        'checked_in_at' => now(),
+                    ]);
+                }
+
+                $updatedBookings = PadelBooking::with(['court', 'equipments.equipment'])
+                    ->where('order_id', $order->id)
+                    ->get();
+
+                return [
+                    'success' => true,
+                    'message' => 'Reservasi walk-in berhasil diproses dan lunas.',
+                    'order' => $order->fresh(['items', 'payments']),
+                    'bookings' => $updatedBookings,
+                    'grand_total' => (float) $grandTotal,
+                    'payment_method' => strtoupper($paymentMethod),
+                    'customer' => $customer->fresh(),
+                    'auto_checked_in' => $autoCheckIn,
+                ];
+            });
+        } catch (\Throwable $e) {
+            try {
+                $this->releaseSlots($bookingIds, $customer, onlyLocked: true);
+            } catch (\Throwable $releaseError) {
+                report($releaseError); // jangan menutupi error checkout aslinya
             }
 
-            $updatedBookings = PadelBooking::with(['court', 'equipments.equipment'])
-                ->where('order_id', $order->id)
-                ->get();
-
-            return [
-                'success' => true,
-                'message' => 'Reservasi walk-in berhasil diproses dan lunas.',
-                'order' => $order->fresh(['items', 'payments']),
-                'bookings' => $updatedBookings,
-                'grand_total' => (float) $grandTotal,
-                'payment_method' => strtoupper($paymentMethod),
-                'customer' => $customer->fresh(),
-                'auto_checked_in' => $autoCheckIn,
-            ];
-        });
+            throw $e;
+        }
     }
 
     /**

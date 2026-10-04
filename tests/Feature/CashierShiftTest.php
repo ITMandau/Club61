@@ -183,7 +183,8 @@ class CashierShiftTest extends TestCase
             bookingId: $booking->id,
             paymentMethod: 'QRIS',
             amountReceived: 200000.00,
-            cashierUser: $this->cashier
+            cashierUser: $this->cashier,
+            paymentProof: ['qris_rrn' => 'RRNTEST0001'],
         );
     }
 
@@ -380,7 +381,8 @@ class CashierShiftTest extends TestCase
             bookingId: $booking->id,
             paymentMethod: 'QRIS',
             amountReceived: 50000.00,
-            cashierUser: $this->cashier2
+            cashierUser: $this->cashier2,
+            paymentProof: ['qris_rrn' => 'RRNTEST0002'],
         );
 
         $this->assertTrue($settleResult['success']);
@@ -398,13 +400,17 @@ class CashierShiftTest extends TestCase
         $this->assertEquals(0.00, $summary2['expected_cash']);
     }
 
-    public function test_super_admin_can_bypass_shift_guard(): void
+    public function test_super_admin_cannot_bypass_shift_guard(): void
     {
+        // Uang yang masuk tanpa shift tidak pernah ikut rekap setoran — berlaku juga untuk super_admin.
         $this->assertNull(PosCashierShift::getActiveShift('PADEL_FRONTDESK'));
 
         $this->actingAs($this->superAdmin);
 
-        $result = $this->service->processWalkInCheckout(
+        $this->expectException(\Symfony\Component\HttpKernel\Exception\HttpException::class);
+        $this->expectExceptionMessage('Tidak ada shift kasir yang aktif');
+
+        $this->service->processWalkInCheckout(
             customer: $this->customer,
             slots: [
                 [
@@ -419,9 +425,6 @@ class CashierShiftTest extends TestCase
             cashier: $this->superAdmin,
             autoCheckIn: false
         );
-
-        $this->assertTrue($result['success']);
-        $this->assertNull($result['order']->pos_shift_id);
     }
 
     public function test_walkin_edc_payment_records_card_details_in_orchestrator_payload_log(): void

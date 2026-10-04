@@ -5,6 +5,10 @@ namespace App\Filament\Pages;
 use App\Models\Padel\CourtEquipment;
 use App\Models\Padel\PadelBookingEquipment;
 use App\Models\Padel\PadelCourt;
+use App\Models\Padel\PadelHoliday;
+use App\Models\Padel\PadelPeakHourRule;
+use App\Services\Audit\ActivityLogger;
+use App\Services\Padel\PeakHourService;
 use BackedEnum;
 use BezhanSalleh\FilamentShield\Traits\HasPageShield;
 use Filament\Notifications\Notification;
@@ -61,9 +65,16 @@ class MasterData extends Page
     // Filter status tampilan Add-ons ('ALL', 'ACTIVE', 'INACTIVE')
     public string $equipmentFilter = 'ALL';
 
+    // Tab Jam Peak & Libur: grid jam peak diedit di browser (Alpine) lalu dikirim utuh ke savePeakGrid().
+    public string $holidayDate = '';
+
+    public string $holidayName = '';
+
+    public const DAY_LABELS = [1 => 'Senin', 2 => 'Selasa', 3 => 'Rabu', 4 => 'Kamis', 5 => 'Jumat', 6 => 'Sabtu', 0 => 'Minggu'];
+
     public function setActiveTab(string $tab): void
     {
-        $this->activeTab = in_array($tab, ['courts', 'equipments']) ? $tab : 'courts';
+        $this->activeTab = in_array($tab, ['courts', 'equipments', 'peak_hours']) ? $tab : 'courts';
     }
 
     public function setEquipmentFilter(string $filter): void
@@ -77,6 +88,8 @@ class MasterData extends Page
 
     public function openCreateCourtModal(): void
     {
+        $this->authorizeCourtManagement();
+
         $this->editingCourtId = null;
         $this->courtName = '';
         $this->courtType = 'INDOOR';
@@ -91,6 +104,8 @@ class MasterData extends Page
 
     public function openEditCourtModal(string $courtId): void
     {
+        $this->authorizeCourtManagement();
+
         $court = PadelCourt::find($courtId);
         if (! $court) {
             Notification::make()->title('Lapangan tidak ditemukan')->danger()->send();
@@ -118,6 +133,8 @@ class MasterData extends Page
 
     public function openOperatingHoursModal(): void
     {
+        $this->authorizeCourtManagement();
+
         $firstCourt = PadelCourt::first();
         $this->bulkOpenTime = (string) ($firstCourt?->open_time ?: '06:00');
         $this->bulkCloseTime = (string) ($firstCourt?->close_time ?: '23:00');
@@ -131,7 +148,7 @@ class MasterData extends Page
 
     public function saveOperatingHoursAllCourts(): void
     {
-        $this->authorizeAdminAction();
+        $this->authorizeCourtManagement();
 
         $this->validate([
             'bulkOpenTime' => ['required', 'string'],
@@ -165,7 +182,7 @@ class MasterData extends Page
 
     public function saveCourt(): void
     {
-        $this->authorizeAdminAction();
+        $this->authorizeCourtManagement();
 
         $this->validate([
             'courtName' => ['required', 'string', 'max:50'],
@@ -241,7 +258,7 @@ class MasterData extends Page
 
     public function toggleCourtStatus(string $courtId): void
     {
-        $this->authorizeAdminAction();
+        $this->authorizeCourtManagement();
 
         $court = PadelCourt::find($courtId);
         if (! $court) {
@@ -266,6 +283,8 @@ class MasterData extends Page
 
     public function openCreateEquipmentModal(): void
     {
+        $this->authorizeEquipmentManagement();
+
         $this->editingEquipmentId = null;
         $this->equipmentName = '';
         $this->equipmentType = 'RACKET';
@@ -277,6 +296,8 @@ class MasterData extends Page
 
     public function openEditEquipmentModal(string $equipmentId): void
     {
+        $this->authorizeEquipmentManagement();
+
         $equipment = CourtEquipment::find($equipmentId);
         if (! $equipment) {
             Notification::make()->title('Add-on tidak ditemukan')->danger()->send();
@@ -300,7 +321,7 @@ class MasterData extends Page
 
     public function saveEquipment(): void
     {
-        $this->authorizeAdminAction();
+        $this->authorizeEquipmentManagement();
 
         $this->validate([
             'equipmentName' => ['required', 'string', 'max:100'],
@@ -357,7 +378,7 @@ class MasterData extends Page
 
     public function toggleEquipmentStatus(string $equipmentId): void
     {
-        $this->authorizeAdminAction();
+        $this->authorizeEquipmentManagement();
 
         $equipment = CourtEquipment::find($equipmentId);
         if (! $equipment) {
@@ -383,7 +404,7 @@ class MasterData extends Page
      */
     public function deleteEquipment(string $equipmentId): void
     {
-        $this->authorizeAdminAction();
+        $this->authorizeEquipmentManagement();
 
         $actionTaken = DB::transaction(function () use ($equipmentId) {
             $equipment = CourtEquipment::where('id', $equipmentId)->lockForUpdate()->first();
@@ -419,6 +440,204 @@ class MasterData extends Page
     }
 
     // ==========================================
+    // LOGIKA TAB 3: JAM PEAK (PRIME TIME) & TANGGAL MERAH
+    // Berlaku untuk SEMUA lapangan; dipakai grid POS, booking customer, checkout & selisih reschedule
+    // lewat PeakHourService. Booking yang sudah dibayar tidak berubah (nominalnya sudah tersimpan).
+    // ==========================================
+
+    /**
+     * Grid jam peak untuk editor: [hari => [24 boolean]] (true = jam peak). Hari 0 = Minggu ... 6 = Sabtu.
+     *
+     * @return array<int, array<int, bool>>
+     */
+    public function getPeakGridProperty(): array
+    {
+        $rules = app(PeakHourService::class)->rules();
+        $grid = [];
+        foreach (array_keys(self::DAY_LABELS) as $day) {
+            $grid[$day] = array_fill(0, 24, false);
+            foreach ($rules[$day] ?? [] as [$start, $end]) {
+                for ($h = $start; $h < min(24, $end); $h++) {
+                    $grid[$day][$h] = true;
+                }
+            }
+        }
+
+        return $grid;
+    }
+
+    /** Rentang jam yang ditampilkan di editor = jam operasional lapangan aktif (jam di luar itu tetap tersimpan). */
+    public function getPeakEditorHoursProperty(): array
+    {
+        $courts = PadelCourt::where('is_active', true)->get();
+        $open = (int) ($courts->min(fn ($c) => (int) substr($c->open_time ?: '06:00', 0, 2)) ?? 6);
+        $close = (int) ($courts->max(fn ($c) => in_array($c->close_time, ['00:00', '24:00'], true) ? 24 : (int) substr($c->close_time ?: '23:00', 0, 2)) ?? 24);
+
+        return $open < $close ? range($open, $close - 1) : range(0, 23);
+    }
+
+    /** Contoh tarif untuk keterangan warna di editor (rentang tarif seluruh lapangan aktif). */
+    public function getPeakRateExampleProperty(): array
+    {
+        $courts = PadelCourt::where('is_active', true)->get();
+        $fmt = function ($min, $max) {
+            $label = fn ($v) => 'Rp '.number_format((float) $v, 0, ',', '.');
+
+            return $min == $max ? $label($min) : $label($min).' – '.$label($max);
+        };
+
+        return $courts->isEmpty() ? ['regular' => null, 'prime' => null] : [
+            'regular' => $fmt($courts->min('hourly_rate_regular'), $courts->max('hourly_rate_regular')),
+            'prime' => $fmt($courts->min('hourly_rate_prime'), $courts->max('hourly_rate_prime')),
+        ];
+    }
+
+    /**
+     * Simpan grid jam peak dari editor. Grid datang dari browser → divalidasi ulang di sini; jam yang ditandai
+     * peak secara berurutan digabung jadi rentang [mulai, selesai).
+     *
+     * @param  array<int|string, mixed>  $grid
+     */
+    public function savePeakGrid(array $grid): bool
+    {
+        $this->authorizeCourtManagement();
+
+        $parsed = [];
+        foreach (array_keys(self::DAY_LABELS) as $day) {
+            $hours = $grid[$day] ?? $grid[(string) $day] ?? null;
+            if (! is_array($hours) || count($hours) !== 24) {
+                Notification::make()->title('Gagal Menyimpan')->body('Data jam peak tidak lengkap. Muat ulang halaman lalu coba lagi.')->danger()->send();
+
+                return false;
+            }
+
+            $ranges = [];
+            $start = null;
+            foreach (array_values($hours) as $hour => $isPeak) {
+                $isPeak = filter_var($isPeak, FILTER_VALIDATE_BOOLEAN);
+                if ($isPeak && $start === null) {
+                    $start = $hour;
+                } elseif (! $isPeak && $start !== null) {
+                    $ranges[] = [$start, $hour];
+                    $start = null;
+                }
+            }
+            if ($start !== null) {
+                $ranges[] = [$start, 24];
+            }
+            $parsed[$day] = $ranges;
+        }
+
+        $before = $this->peakSummary(app(PeakHourService::class)->rules());
+
+        DB::transaction(function () use ($parsed) {
+            PadelPeakHourRule::query()->delete();
+            foreach ($parsed as $day => $ranges) {
+                foreach ($ranges as [$start, $end]) {
+                    PadelPeakHourRule::create(['day_of_week' => $day, 'start_hour' => $start, 'end_hour' => $end]);
+                }
+            }
+        });
+        app(PeakHourService::class)->flush();
+
+        $after = $this->peakSummary($parsed);
+        if ($before !== $after) {
+            ActivityLogger::record(
+                module: 'MASTER_DATA',
+                event: 'peak_hours.updated',
+                description: 'Mengubah jam peak (prime time) padel untuk semua lapangan',
+                changes: collect($after)->mapWithKeys(fn ($v, $day) => [$day => ['old' => $before[$day] ?? '-', 'new' => $v]])
+                    ->filter(fn ($c) => $c['old'] !== $c['new'])->all(),
+                severity: ActivityLogger::WARNING,
+            );
+        }
+
+        Notification::make()
+            ->title('Jam Peak Tersimpan')
+            ->body('Harga slot baru di POS, booking online, dan selisih reschedule langsung mengikuti jam peak ini. Booking yang sudah dibayar tidak berubah.')
+            ->success()
+            ->send();
+
+        return true;
+    }
+
+    public function addHoliday(): void
+    {
+        $this->authorizeCourtManagement();
+
+        $this->validate([
+            'holidayDate' => ['required', 'date_format:Y-m-d', 'after_or_equal:today', 'unique:padel_holidays,date'],
+            'holidayName' => ['required', 'string', 'max:100'],
+        ], [
+            'holidayDate.required' => 'Tanggal wajib diisi.',
+            'holidayDate.after_or_equal' => 'Tanggal merah tidak boleh di masa lampau.',
+            'holidayDate.unique' => 'Tanggal ini sudah ada di daftar.',
+            'holidayName.required' => 'Nama hari libur wajib diisi (contoh: Hari Raya Natal).',
+        ]);
+
+        $holiday = PadelHoliday::create(['date' => $this->holidayDate, 'name' => trim($this->holidayName)]);
+        app(PeakHourService::class)->flush();
+
+        ActivityLogger::record(
+            module: 'MASTER_DATA',
+            event: 'holiday.created',
+            description: "Menambah tanggal merah {$holiday->date->translatedFormat('d M Y')} ({$holiday->name}) — tarif mengikuti jam peak hari Minggu",
+            subject: $holiday,
+            subjectLabel: $holiday->name,
+        );
+
+        $this->holidayDate = '';
+        $this->holidayName = '';
+        Notification::make()->title('Tanggal Merah Ditambahkan')->body("{$holiday->name} memakai jam peak hari Minggu.")->success()->send();
+    }
+
+    public function deleteHoliday(string $holidayId): void
+    {
+        $this->authorizeCourtManagement();
+
+        $holiday = PadelHoliday::find($holidayId);
+        if (! $holiday) {
+            return;
+        }
+        $label = $holiday->date->translatedFormat('d M Y').' ('.$holiday->name.')';
+        $holiday->delete();
+        app(PeakHourService::class)->flush();
+
+        ActivityLogger::record(
+            module: 'MASTER_DATA',
+            event: 'holiday.deleted',
+            description: "Menghapus tanggal merah {$label}",
+            severity: ActivityLogger::WARNING,
+        );
+
+        Notification::make()->title('Tanggal Merah Dihapus')->success()->send();
+    }
+
+    public function getHolidaysProperty(): Collection
+    {
+        return PadelHoliday::where('date', '>=', now('Asia/Jakarta')->toDateString())->orderBy('date')->get();
+    }
+
+    /** Ringkasan jam peak per hari untuk header tab Lapangan, mis. "Senin: 17:00–24:00". */
+    public function getPeakSummaryProperty(): array
+    {
+        return $this->peakSummary(app(PeakHourService::class)->rules());
+    }
+
+    /** @param  array<int, array<int, array{0: int, 1: int}>>  $rules */
+    protected function peakSummary(array $rules): array
+    {
+        $summary = [];
+        foreach (self::DAY_LABELS as $day => $label) {
+            $ranges = collect($rules[$day] ?? [])->sortBy(0)
+                ->map(fn ($r) => sprintf('%02d:00–%02d:00', $r[0], $r[1]))->implode(', ');
+            $summary[$label] = $ranges !== '' ? $ranges : 'Reguler seharian';
+        }
+
+        return $summary;
+    }
+
+    // ==========================================
     // DATA COMPUTED PROPERTIES UNTUK BLADE
     // ==========================================
 
@@ -451,16 +670,31 @@ class MasterData extends Page
         });
     }
 
-    protected function authorizeAdminAction(): void
+    public function getCanManageCourtsProperty(): bool
+    {
+        return (bool) auth()->user()?->can('manage_court_pricing');
+    }
+
+    public function getCanManageEquipmentProperty(): bool
+    {
+        return (bool) auth()->user()?->can('manage_court_equipment');
+    }
+
+    protected function authorizeCourtManagement(): void
     {
         abort_unless(
-            auth()->user() && (
-                auth()->user()->hasAnyRole(['super_admin', 'admin']) ||
-                auth()->user()->can('manage_court_pricing') ||
-                auth()->user()->can('manage_court_equipment')
-            ),
+            $this->canManageCourts,
             403,
-            'Akses ditolak: Anda tidak memiliki izin untuk mengelola master data dan tarif.'
+            'Akses ditolak: Anda tidak memiliki izin [manage_court_pricing] untuk mengelola lapangan, jam operasional & tarif.'
+        );
+    }
+
+    protected function authorizeEquipmentManagement(): void
+    {
+        abort_unless(
+            $this->canManageEquipment,
+            403,
+            'Akses ditolak: Anda tidak memiliki izin [manage_court_equipment] untuk mengelola alat sewa.'
         );
     }
 }

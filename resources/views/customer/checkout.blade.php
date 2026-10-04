@@ -462,7 +462,7 @@
                 </div>
 
                 <div class="space-y-2.5 max-h-96 overflow-y-auto pr-1">
-                    <template x-for="m in paymentMethods" :key="m.id">
+                    <template x-for="m in availableMethods" :key="m.id">
                         <button type="button" @click="selectPaymentMethod(m)"
                             :class="selectedMethod.id === m.id ? 'border-[#D4AF37] bg-[#FAF6EC]' :
                                 'border-[#E8DCC0] hover:bg-gray-50'"
@@ -751,7 +751,7 @@
                 <div class="space-y-2">
                     <h3 class="font-serif font-black text-xl text-[#1F170D]">Waktu Checkout Habis!</h3>
                     <p class="text-xs text-[#7A643E] leading-relaxed">
-                        Batas waktu kuncian slot 10 menit telah berakhir. Slot lapangan telah otomatis dirilis kembali agar dapat dipesan pemain lain.
+                        Batas waktu kuncian slot {{ app(\App\Services\Padel\BookingTimeService::class)->holdMinutes() }} menit telah berakhir. Slot lapangan telah otomatis dirilis kembali agar dapat dipesan pemain lain.
                     </p>
                 </div>
                 <div class="pt-2">
@@ -869,6 +869,7 @@
                 timerDisplay: '10:00',
                 timerInterval: null,
                 isExpired: false,
+                paymentStarted: false,
                 showExpiredModal: false,
                 showCancelModal: false,
                 isCancellingCheckout: false,
@@ -904,71 +905,21 @@
                         quantity: 1
                     },
                 ],
-                selectedMethod: {
-                    id: 'qris',
-                    code: 'QRIS',
-                    name: 'QRIS Instant (GoPay/Shopee/BCA)',
-                    badge: 'QRIS',
-                    fee: 0,
-                    note: ''
+                // Daftar metode dari menu "Metode Pembayaran Online" (OnlinePaymentMethodService) — sama dengan yang
+                // divalidasi server. Metode di luar batas nominal (mis. QRIS maks Rp10 juta) disembunyikan otomatis.
+                paymentMethods: @js(app(\App\Services\Payment\OnlinePaymentMethodService::class)->forFrontend()),
+                selectedMethod: (@js(app(\App\Services\Payment\OnlinePaymentMethodService::class)->forFrontend())[0]) || { id: '', code: '', name: 'Tidak ada metode tersedia', badge: '-', fee: 0, note: '' },
+
+                get availableMethods() {
+                    const total = this.grandTotal;
+                    return this.paymentMethods.filter(m => (m.min_amount === null || total >= m.min_amount) && (m.max_amount === null || total <= m.max_amount));
                 },
-                paymentMethods: [{
-                        id: 'qris',
-                        code: 'QRIS',
-                        name: 'QRIS Instant (GoPay/OVO/BCA)',
-                        badge: 'QRIS',
-                        fee: 0,
-                        note: ''
-                    },
-                    {
-                        id: 'bca',
-                        code: 'BCA_VA',
-                        name: 'BCA Virtual Account',
-                        badge: 'BCA',
-                        fee: 0,
-                        note: ''
-                    },
-                    {
-                        id: 'mandiri',
-                        code: 'MANDIRI_VA',
-                        name: 'Mandiri Virtual Account',
-                        badge: 'MDR',
-                        fee: 0,
-                        note: ''
-                    },
-                    {
-                        id: 'bri',
-                        code: 'BRI_VA',
-                        name: 'BRI Virtual Account',
-                        badge: 'BRI',
-                        fee: 0,
-                        note: ''
-                    },
-                    {
-                        id: 'bni',
-                        code: 'BNI_VA',
-                        name: 'BNI Virtual Account',
-                        badge: 'BNI',
-                        fee: 0,
-                        note: ''
-                    },
-                    {
-                        id: 'cimb',
-                        code: 'CIMB_VA',
-                        name: 'CIMB Virtual Account',
-                        badge: 'CIMB',
-                        fee: 0,
-                        note: ''
-                    },
-                    {
-                        id: 'bsi',
-                        code: 'BSI_VA',
-                        name: 'BSI Virtual Account',
-                        badge: 'BSI',
-                        fee: 0,
-                        note: ''
-                    },
-                ],
+
+                ensureSelectedMethodAvailable() {
+                    if (! this.availableMethods.some(m => m.code === this.selectedMethod.code) && this.availableMethods.length) {
+                        this.selectedMethod = this.availableMethods[0];
+                    }
+                },
 
                 init() {
                     const saved = localStorage.getItem('club61_cart') || sessionStorage.getItem('club61_cart') ||
@@ -999,7 +950,7 @@
 
                     // Fallback if no expires_at
                     if (!this.expiresAtTime && this.bookingItems.length > 0) {
-                        this.expiresAtTime = Date.now() + (10 * 60 * 1000);
+                        this.expiresAtTime = Date.now() + (@js(app(\App\Services\Padel\BookingTimeService::class)->holdMinutes()) * 60 * 1000);
                     }
 
                     // Countdown Timer & Visibility Listener
@@ -1108,7 +1059,8 @@
                 },
 
                 async checkExpiry() {
-                    if (!this.expiresAtTime) return;
+                    // Jangan melepas slot saat checkout sedang dikirim (termasuk panggilan Midtrans) atau sudah klik bayar.
+                    if (!this.expiresAtTime || this.paymentStarted || this.isSubmitting) return;
 
                     const now = Date.now();
                     const diffMs = this.expiresAtTime - now;
@@ -1145,7 +1097,7 @@
                                     'Accept': 'application/json',
                                     'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
                                 },
-                                body: JSON.stringify({ booking_ids: bookingIds })
+                                body: JSON.stringify({ booking_ids: bookingIds, only_locked: true })
                             });
                         } catch(e) {
                             console.error('Error auto-releasing expired slots:', e);
@@ -1337,6 +1289,21 @@
                 async executePayment() {
                     if (this.isSubmitting || this.isExpired) return;
 
+                    // Total bisa berubah (voucher, add-on) setelah metode dipilih — pastikan metodenya masih berlaku.
+                    if (this.grandTotal > 0) {
+                        if (! this.availableMethods.length) {
+                            this.showNotice('Pembayaran Online Tidak Tersedia', 'Belum ada metode pembayaran online yang bisa dipakai untuk total tagihan ini. Silakan hubungi frontdesk.', 'error', 'Tutup');
+                            return;
+                        }
+                        // Jangan diam-diam membayar dengan metode lain — beri tahu customer dulu, biar dia yang lanjutkan.
+                        if (! this.availableMethods.some(m => m.code === this.selectedMethod.code)) {
+                            const previous = this.selectedMethod.name;
+                            this.ensureSelectedMethodAvailable();
+                            this.showNotice('Metode Pembayaran Diganti', `${previous} tidak bisa dipakai untuk total tagihan ini. Metode diganti ke ${this.selectedMethod.name}. Periksa lagi lalu tekan bayar.`, 'info', 'Oke');
+                            return;
+                        }
+                    }
+
                     this.isSubmitting = true;
 
                     try {
@@ -1397,6 +1364,19 @@
                             this.createdBookingId = data.booking_id || (data.bookings && data.bookings[0] ? data
                                 .bookings[0].booking_id : '');
                             this.createdOrderId = data.order_id || '';
+
+                            // Sudah klik bayar: waktu tahan slot selesai, sekarang berlaku batas bayar (diatur server & Midtrans).
+                            // Dulu countdown tetap jalan & saat habis memanggil "lepas slot" — booking dibatalkan padahal
+                            // customer sedang membayar di popup Midtrans.
+                            this.paymentStarted = true;
+                            if (this.timerInterval) clearInterval(this.timerInterval);
+                            // Hapus data hold dari browser SEKARANG (bukan baru saat redirect): kalau halaman ter-reload
+                            // (pindah ke aplikasi e-wallet, tab dibuang browser), keranjang/checkout tidak lagi membaca
+                            // countdown lama lalu memanggil "lepas slot" untuk booking yang sedang dibayar.
+                            ['club61_cart', 'club61_hold_data', 'vantage_cart', 'vantage_hold_data'].forEach(k => {
+                                try { localStorage.removeItem(k); sessionStorage.removeItem(k); } catch (e) {}
+                            });
+                            window.dispatchEvent(new CustomEvent('cart-updated'));
 
                             if (data.driver === 'midtrans' && window.snap && typeof window.snap.pay === 'function' && !
                                 data.is_mock && data.snap_token) {
@@ -1499,7 +1479,8 @@
                                         .getAttribute('content'),
                                 },
                                 body: JSON.stringify({
-                                    booking_ids: bookingIds
+                                    booking_ids: bookingIds,
+                                    only_locked: true
                                 })
                             });
                         } catch (e) {

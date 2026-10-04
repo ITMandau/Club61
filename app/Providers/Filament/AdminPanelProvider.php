@@ -38,6 +38,9 @@ class AdminPanelProvider extends PanelProvider
             ->brandLogoHeight('2.25rem')
             ->favicon(asset('images/club61-logo.png'))
             ->maxContentWidth('full')
+            // Sidebar bisa diciutkan ke samping jadi strip ikon (tombol di header sidebar);
+            // status buka/ciut diingat browser per user.
+            ->sidebarCollapsibleOnDesktop()
             ->colors([
                 'primary' => Color::Amber,
             ])
@@ -46,6 +49,7 @@ class AdminPanelProvider extends PanelProvider
                 \App\Filament\Resources\Users\UserResource::class,
                 \App\Filament\Resources\Roles\RoleResource::class,
                 \App\Filament\Resources\Membership\MembershipPlanResource::class,
+                \App\Filament\Resources\Membership\Facilities\MembershipFacilityResource::class,
                 \App\Filament\Resources\Sponsor\SponsorOrganizationResource::class,
                 \App\Filament\Resources\Sponsor\SponsorAccessScheduleResource::class,
             ])
@@ -55,6 +59,15 @@ class AdminPanelProvider extends PanelProvider
             ->renderHook(
                 'panels::head.end',
                 fn () => view('filament.custom-styles')
+            )
+            ->renderHook(
+                'panels::body.end',
+                fn () => view('filament.sidebar-auto-collapse')
+            )
+            // Dialog konfirmasi Club61 (pengganti popup bawaan browser / wire:confirm).
+            ->renderHook(
+                'panels::body.end',
+                fn () => view('filament.confirm-dialog')
             )
             ->pages([
                 \App\Filament\Pages\Dashboard::class,
@@ -70,6 +83,11 @@ class AdminPanelProvider extends PanelProvider
                 \App\Filament\Pages\Marketing::class,
                 \App\Filament\Pages\MasterData::class,
                 \App\Filament\Pages\PengaturanBiayaPajak::class,
+                \App\Filament\Pages\MetodePembayaranOnline::class,
+                \App\Filament\Pages\KelolaKontenWebsite::class,
+                \App\Filament\Pages\KelolaMenuFnb::class,
+                \App\Filament\Pages\SponsorDashboard::class,
+                \App\Filament\Pages\LogAktivitas::class,
             ])
             ->widgets([])
             ->middleware([
@@ -85,6 +103,7 @@ class AdminPanelProvider extends PanelProvider
             ])
             ->authMiddleware([
                 Authenticate::class,
+                \App\Http\Middleware\RedirectToFirstAccessiblePanelPage::class,
             ]);
     }
 }

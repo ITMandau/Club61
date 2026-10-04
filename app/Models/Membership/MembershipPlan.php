@@ -16,6 +16,8 @@ class MembershipPlan extends Model
     protected $fillable = [
         'code',
         'name',
+        'description',
+        'perks',
         'ownership_type',
         'duration_days',
         'price',
@@ -27,6 +29,7 @@ class MembershipPlan extends Model
         'price' => 'decimal:2',
         'duration_days' => 'integer',
         'is_active' => 'boolean',
+        'perks' => 'array',
     ];
 
     public function benefits(): HasMany

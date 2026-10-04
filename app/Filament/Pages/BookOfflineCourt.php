@@ -112,11 +112,213 @@ class BookOfflineCourt extends Page
 
     public ?array $completedOrderData = null;
 
+    // Pelunasan selisih reschedule: kasir klik sel "Bayar" di grid (atau datang dari tautan di Kelola
+    // Pemesanan), customer & nominal terisi otomatis, lalu dibayar lewat layar pembayaran yang SAMA dengan
+    // walk-in biasa. Kelola Pemesanan hanya mencatat pilihan cara bayarnya.
+
+    // #[Locked]: diisi server (startSettlement). Dulu bisa diubah dari browser — booking yang dilunasi bisa
+    // diganti diam-diam, atau nominal yang tampil di layar diubah jadi Rp 0 sementara yang tercatat nominal penuh.
+    #[\Livewire\Attributes\Locked]
+    public ?array $settleBill = null;
+
+    /** Dibuka dari tombol "Bayar di POS" di Kelola Pemesanan: /admin/book-offline-court?tagihan={bookingId} */
+    #[\Livewire\Attributes\Url(as: 'tagihan')]
+    public ?string $settleRequest = null;
+
     public function mount(): void
     {
         $this->bookingDate = now()->format('Y-m-d');
         $this->initializeEquipmentQuantities();
         $this->checkPendingDraft();
+
+        if ($this->settleRequest) {
+            $this->startSettlement($this->settleRequest);
+        }
+    }
+
+    /** Sama persis dengan yang dihitung server saat pelunasan (tagihan MILIK booking ini). */
+    protected function amountDueFor(PadelBooking $booking): float
+    {
+        return app(PadelBookingService::class)->amountDueForBooking($booking);
+    }
+
+    public function startSettlement(string $bookingId): void
+    {
+        $this->settleRequest = null;
+
+        if (! auth()->user()?->can('settle_unpaid_booking')) {
+            \App\Services\Audit\ActivityLogger::accessDenied('mencoba pelunasan tagihan tanpa izin [settle_unpaid_booking] di POS Walk-In');
+            Notification::make()->title('Akses Ditolak')->body('Anda tidak memiliki izin [settle_unpaid_booking] untuk menerima pelunasan.')->danger()->send();
+
+            return;
+        }
+
+        $booking = PadelBooking::with(['user', 'court', 'order.payments'])->find($bookingId);
+        if (! $booking || ! in_array($booking->status, ['LOCKED', 'PENDING_PAYMENT', 'PENDING'], true)) {
+            Notification::make()->title('Tidak Ada Tagihan')->body('Booking ini tidak punya tagihan yang perlu dilunasi.')->info()->send();
+
+            return;
+        }
+
+        // Customer sudah / sedang bayar online? Jangan sampai ditagih dua kali.
+        $order = $booking->order_id ? \App\Models\Pos\Order::find($booking->order_id) : null;
+        $reconciler = app(\App\Services\Payment\MidtransReconciliationService::class);
+        if ($order && $reconciler->hasOnlinePaymentAttempt($order)) {
+            $online = $reconciler->reconcileOrder($order);
+            if ($online === \App\Services\Payment\MidtransReconciliationService::PAID) {
+                Notification::make()->title('Sudah Dibayar Online')
+                    ->body("Customer sudah membayar tagihan {$booking->booking_code} via Midtrans. Tiket otomatis aktif — jangan terima pembayaran lagi.")
+                    ->success()->persistent()->send();
+
+                return;
+            }
+            if ($online === \App\Services\Payment\MidtransReconciliationService::PENDING) {
+                Notification::make()->title('Customer Sedang Bayar Online')
+                    ->body('Midtrans masih menunggu pembayaran customer. Minta customer menyelesaikan atau membatalkan pembayaran online-nya dulu supaya tidak ditagih dua kali.')
+                    ->warning()->persistent()->send();
+
+                return;
+            }
+        }
+
+        $amount = $this->amountDueFor($booking->fresh(['order.payments']));
+        if ($amount <= 0) {
+            Notification::make()->title('Tidak Ada Tagihan')->body('Tagihan booking ini sudah lunas.')->info()->send();
+
+            return;
+        }
+
+        $pending = app(PadelBookingService::class)->pendingBillForBooking($booking);
+        $this->settleBill = [
+            'booking_id' => $booking->id,
+            'code' => $booking->booking_code,
+            'customer' => $booking->user?->name ?? 'Customer',
+            'phone' => $booking->user?->phone,
+            'court' => $booking->court?->name ?? '-',
+            'schedule' => $booking->start_time->format('d M Y, H:i').' - '.$booking->end_time->format('H:i').' WIB',
+            'type' => $booking->status === 'LOCKED' ? 'Selisih Reschedule' : 'Booking Belum Dibayar',
+            'schedule_before' => $pending?->payload_log['schedule_before'] ?? null,
+            'amount' => $amount,
+        ];
+
+        // Keranjang dikosongkan & customer otomatis diambil dari booking — kasir tidak perlu mengetik ulang.
+        $this->selectedSlots = [];
+        $this->initializeEquipmentQuantities();
+        foreach (array_keys($this->rentalQuantities) as $equipmentId) {
+            $this->rentalQuantities[$equipmentId] = 0;
+        }
+        $this->customerMode = 'search';
+        $this->selectedCustomerId = $booking->user_id;
+        $this->selectedCustomerName = $booking->user?->name;
+        $this->selectedCustomerPhone = $booking->user?->phone;
+        $this->activeMembershipInfo = null;
+        $this->bookingDate = $booking->booking_date->format('Y-m-d');
+
+        $this->paymentMethod = 'QRIS';
+        $this->edcLast4 = '';
+        $this->edcApprovalCode = '';
+        $this->edcTraceNumber = '';
+        $this->qrisRrn = '';
+        $this->qrisSenderName = '';
+        $this->posStep = 'selection';
+    }
+
+    public function cancelSettlement(): void
+    {
+        $this->settleBill = null;
+        $this->selectedCustomerId = null;
+        $this->selectedCustomerName = null;
+        $this->selectedCustomerPhone = null;
+        $this->customerMode = 'quick_create';
+        $this->posStep = 'selection';
+    }
+
+    public function submitSettlement(PadelBookingService $service): void
+    {
+        if (! $this->settleBill) {
+            return;
+        }
+
+        if (! auth()->user()?->can('settle_unpaid_booking')) {
+            \App\Services\Audit\ActivityLogger::accessDenied('mencoba pelunasan tagihan tanpa izin [settle_unpaid_booking] di POS Walk-In');
+            Notification::make()->title('Akses Ditolak')->body('Anda tidak memiliki izin [settle_unpaid_booking] untuk menerima pelunasan.')->danger()->send();
+
+            return;
+        }
+
+        [$method, $proof] = \App\Services\Pos\PosPaymentProof::fromPosForm(
+            $this->paymentMethod, $this->edcTerminal, $this->edcCardType, $this->edcLast4, $this->edcApprovalCode,
+            $this->edcTraceNumber, $this->qrisProvider, $this->qrisRrn, $this->qrisSenderName, $this->edcCardNetwork, $this->edcBank,
+        );
+
+        $bookingForBill = PadelBooking::with('order')->find($this->settleBill['booking_id'] ?? null);
+        if (! $bookingForBill) {
+            $this->cancelSettlement();
+
+            return;
+        }
+        $pendingPaymentId = $service->pendingBillForBooking($bookingForBill)?->id;
+
+        // Tagihan berubah sejak layar dibuka (dibayar online, dibatalkan, di-reschedule)? Jangan lanjut menagih.
+        $currentDue = $service->amountDueForBooking($bookingForBill);
+        if (abs($currentDue - (float) $this->settleBill['amount']) > 1) {
+            Notification::make()->title('Tagihan Berubah')
+                ->body('Nominal tagihan '.$this->settleBill['code'].' sekarang Rp '.number_format($currentDue, 0, ',', '.').'. Buka ulang tagihannya dari grid sebelum menerima pembayaran.')
+                ->warning()->persistent()->send();
+            $this->cancelSettlement();
+
+            return;
+        }
+
+        try {
+            // Nominal yang tampil di layar ikut dikirim: kalau tagihan berubah sejak layar dibuka, server menolak.
+            $result = $service->adminSettleCashierPayment(
+                bookingId: $this->settleBill['booking_id'],
+                paymentMethod: $method,
+                amountReceived: (float) $this->settleBill['amount'],
+                cashierUser: auth()->user(),
+                paymentProof: $proof,
+            );
+        } catch (\Symfony\Component\HttpKernel\Exception\HttpException|\App\Exceptions\SlotConflictException $e) {
+            Notification::make()->title('Pelunasan Gagal')->body($e->getMessage())->danger()->persistent()->send();
+
+            return;
+        } catch (\Throwable $e) {
+            // Error teknis (SQL dsb.) tidak ditampilkan mentah ke kasir.
+            report($e);
+            Notification::make()->title('Pelunasan Gagal')->body('Terjadi kesalahan sistem. Pembayaran TIDAK tercatat — jangan anggap lunas, hubungi admin.')->danger()->persistent()->send();
+
+            return;
+        }
+
+        Cache::forget('kelola_pemesanan_tab_counts');
+
+        if (($result['settled_via'] ?? null) === 'MIDTRANS') {
+            Notification::make()->title('Sudah Dibayar Online')->body($result['message'])->warning()->persistent()->send();
+        } else {
+            Notification::make()->title('Pelunasan Berhasil')
+                ->body("Tagihan {$this->settleBill['code']} Rp ".number_format($this->settleBill['amount'], 0, ',', '.').' lunas. QR tiket aktif, customer bisa check-in.')
+                ->success()->send();
+
+            // Struk pelunasan langsung tampil & bisa dicetak (sama seperti transaksi walk-in biasa).
+            // Ambil PERSIS tagihan yang barusan dilunasi (bukan "pembayaran terbaru" — bisa sama detiknya
+            // dengan pembayaran awal order).
+            $payment = $pendingPaymentId
+                ? \App\Models\Pos\Payment::whereKey($pendingPaymentId)->where('status', 'SUCCESS')->first()
+                : null;
+            $payment ??= \App\Models\Pos\Payment::where('order_id', PadelBooking::whereKey($this->settleBill['booking_id'])->value('order_id'))
+                ->where('status', 'SUCCESS')->where('payment_gateway', 'CASHIER_POS')->latest()->orderByDesc('id')->first();
+            if ($payment) {
+                $receipt = $this->buildWalkInReceipt($payment);
+                $this->cancelSettlement();
+                $this->completedOrderData = $receipt;
+                $this->showSuccessModal = true;
+
+                return;
+            }
+        }
+
+        $this->cancelSettlement();
     }
 
     protected function initializeEquipmentQuantities(): void
@@ -155,6 +357,10 @@ class BookOfflineCourt extends Page
 
     public function toggleSlot(string $courtId, string $courtName, string $startTime, string $endTime, float $price): void
     {
+        if ($this->settleBill) {
+            $this->cancelSettlement();
+        }
+
         $slotKey = "{$courtId}_{$startTime}";
 
         if (isset($this->selectedSlots[$slotKey])) {
@@ -461,6 +667,10 @@ class BookOfflineCourt extends Page
 
     public function getGrandTotalProperty(): float
     {
+        if ($this->settleBill) {
+            return (float) $this->settleBill['amount'];
+        }
+
         return (float) $this->financeCalculation['grand_total'];
     }
 
@@ -479,7 +689,7 @@ class BookOfflineCourt extends Page
     {
         $user = auth()->user();
         abort_unless(
-            $user && ($user->hasAnyRole(['super_admin', 'admin']) || $user->can('open_pos_shift')),
+            $user && $user->can('open_pos_shift'),
             403,
             'Akses ditolak: Anda tidak memiliki izin [open_pos_shift] untuk membuka sesi shift kasir.'
         );
@@ -558,7 +768,7 @@ class BookOfflineCourt extends Page
     {
         $user = auth()->user();
         abort_unless(
-            $user && ($user->hasAnyRole(['super_admin', 'admin']) || $user->can('close_pos_shift')),
+            $user && $user->can('close_pos_shift'),
             403,
             'Akses ditolak: Anda tidak memiliki izin [close_pos_shift] untuk menutup sesi shift kasir.'
         );
@@ -801,10 +1011,22 @@ class BookOfflineCourt extends Page
     {
         // 0. Guard Shift Kasir Aktif PADEL_FRONTDESK
         $activeShift = $this->activeShift;
-        $currentUser = auth()->user();
-        $isSuperAdmin = $currentUser && method_exists($currentUser, 'hasRole') && $currentUser->hasRole('super_admin');
 
-        if (! $activeShift && ! $isSuperAdmin) {
+        if ($this->settleBill) {
+            if (! $activeShift) {
+                // Pelunasan tagihan wajib masuk shift (berlaku juga untuk super_admin) supaya ikut rekap setoran.
+                Notification::make()->title('Shift Kasir Belum Dibuka')->body('Buka shift kasir dulu sebelum menerima pelunasan.')->danger()->send();
+
+                return;
+            }
+
+            $this->posStep = 'payment';
+
+            return;
+        }
+
+        // Berlaku untuk semua user termasuk super_admin: transaksi tanpa shift tidak ikut rekap setoran.
+        if (! $activeShift) {
             Notification::make()
                 ->title('Shift Kasir Belum Dibuka')
                 ->body('Silakan buka sesi shift kasir terlebih dahulu sebelum melanjutkan ke pembayaran.')
@@ -911,15 +1133,19 @@ class BookOfflineCourt extends Page
 
     public function submitWalkInBooking(PadelBookingService $service): void
     {
+        if ($this->settleBill) {
+            $this->submitSettlement($service);
+
+            return;
+        }
+
         // 0. Guard Permission
         abort_unless(auth()->user() && auth()->user()->can('process_walkin_booking'), 403, 'Akses ditolak: Anda tidak memiliki izin untuk memproses transaksi walk-in.');
 
         // 0.1 Guard Shift Kasir Aktif
         $activeShift = $this->activeShift;
-        $currentUser = auth()->user();
-        $isSuperAdmin = $currentUser && method_exists($currentUser, 'hasRole') && $currentUser->hasRole('super_admin');
 
-        if (! $activeShift && ! $isSuperAdmin) {
+        if (! $activeShift) {
             Notification::make()
                 ->title('Shift Kasir Belum Dibuka')
                 ->body('Silakan buka sesi shift kasir terlebih dahulu sebelum melayani transaksi walk-in.')
@@ -1061,6 +1287,17 @@ class BookOfflineCourt extends Page
                 'qris_rrn' => $rrn,
                 'qris_sender_name' => trim($this->qrisSenderName) ?: null,
             ];
+        } else {
+            // Metode pembayaran di luar daftar yang dikenali (misal permintaan hasil rekayasa
+            // langsung ke Livewire, bukan lewat UI <select>/tab) WAJIB ditolak — tanpa else ini,
+            // order bisa lolos ditandai LUNAS tanpa satu pun bukti bayar (approval code/RRN)
+            // tersimpan, membuka celah fraud pada kebijakan 100% Cashless.
+            Notification::make()
+                ->title('Metode Pembayaran Tidak Dikenali')
+                ->body('Pilih salah satu metode pembayaran yang tersedia: QRIS, Kartu Debit, atau Kartu Kredit.')
+                ->danger()
+                ->send();
+            return;
         }
 
         // 3. Susun array slots untuk service
@@ -1109,7 +1346,8 @@ class BookOfflineCourt extends Page
                 'customer_phone' => $customer->phone,
                 'cashier_name' => $cashier->name,
                 'booking_date' => Carbon::parse($this->bookingDate)->translatedFormat('d F Y'),
-                'payment_method' => $service->formatPaymentMethodLabel($this->paymentMethod),
+                // Pembayaran di kasir: label EDC/QRIS frontdesk, bukan label metode online.
+                'payment_method' => $service->formatPaymentMethodLabel($this->paymentMethod, ['cashier_id' => auth()->id()]),
                 'subtotal' => $result['order']->subtotal,
                 'tax_amount' => $result['order']->tax_amount,
                 'tax_name' => $this->taxName,
@@ -1184,7 +1422,227 @@ class BookOfflineCourt extends Page
     {
         $this->showSuccessModal = false;
         $this->completedOrderData = null;
+        $this->posStep = $this->receiptFromHistory ? 'history' : 'selection';
+        $this->receiptFromHistory = false;
+    }
+
+    // ===================== RIWAYAT TRANSAKSI & CETAK ULANG STRUK =====================
+
+    public string $historyDate = '';
+
+    public string $historySearch = '';
+
+    /** Struk yang sedang tampil dibuka dari Riwayat (tutup modal = kembali ke Riwayat). */
+    public bool $receiptFromHistory = false;
+
+    /** Riwayat & cetak ulang struk = izin yang sama dengan yang boleh menerima pembayaran di loket ini. */
+    protected function canViewWalkInHistory(): bool
+    {
+        $user = auth()->user();
+
+        return $user && ($user->can('process_walkin_booking') || $user->can('settle_unpaid_booking'));
+    }
+
+    public function getCanShowHistoryTabProperty(): bool
+    {
+        return $this->canViewWalkInHistory();
+    }
+
+    public function showHistory(): void
+    {
+        if (! $this->canViewWalkInHistory()) {
+            \App\Services\Audit\ActivityLogger::accessDenied('membuka riwayat transaksi POS Walk-In tanpa izin');
+            Notification::make()->title('Akses Ditolak')->body('Anda tidak memiliki izin untuk melihat riwayat transaksi loket.')->danger()->send();
+
+            return;
+        }
+
+        $this->historyDate = $this->historyDate ?: now('Asia/Jakarta')->toDateString();
+        $this->posStep = 'history';
+    }
+
+    public function showCashier(): void
+    {
         $this->posStep = 'selection';
+    }
+
+    /**
+     * Semua pembayaran yang diterima di loket padel pada tanggal terpilih: transaksi walk-in, pelunasan
+     * selisih reschedule, dan pelunasan booking online di kasir. Kosong (bukan 403) untuk staf tanpa izin.
+     */
+    public function getTransactionHistoryProperty(): \Illuminate\Support\Collection
+    {
+        if (! $this->canViewWalkInHistory() || $this->posStep !== 'history') {
+            return collect();
+        }
+
+        $date = $this->resolvedHistoryDate();
+        $search = trim($this->historySearch);
+
+        // updated_at = saat pembayaran jadi SUCCESS. created_at tagihan selisih = saat reschedule (bisa berhari-hari
+        // sebelumnya) → pelunasan hari ini dulu tidak muncul di riwayat hari ini & jam di struk salah.
+        return \App\Models\Pos\Payment::query()
+            ->with(['order.user:id,name,phone', 'order.cashier:id,name', 'order.padelBookings.court:id,name', 'order.refunds', 'order.payments'])
+            ->where('status', 'SUCCESS')
+            ->where('payment_gateway', 'CASHIER_POS')
+            ->whereHas('order', fn ($q) => $q->whereIn('order_type', ['WALK_IN', 'ONLINE_BOOKING']))
+            ->whereBetween('updated_at', [
+                Carbon::parse($date, 'Asia/Jakarta')->startOfDay()->setTimezone(config('app.timezone')),
+                Carbon::parse($date, 'Asia/Jakarta')->endOfDay()->setTimezone(config('app.timezone')),
+            ])
+            ->when($search !== '', fn ($q) => $q->where(fn ($w) => $w
+                ->whereHas('order', fn ($o) => $o->where('order_number', 'like', "%{$search}%")
+                    ->orWhereHas('user', fn ($u) => $u->where('name', 'like', "%{$search}%")->orWhere('phone', 'like', "%{$search}%"))
+                    ->orWhereHas('padelBookings', fn ($b) => $b->where('booking_code', 'like', "%{$search}%")))))
+            ->latest('updated_at')
+            ->limit(100)
+            ->get()
+            ->map(function (\App\Models\Pos\Payment $payment) {
+                $order = $payment->order;
+                $log = is_array($payment->payload_log) ? $payment->payload_log : [];
+
+                return [
+                    'payment_id' => $payment->id,
+                    'time' => $payment->updated_at->setTimezone('Asia/Jakarta')->format('H:i'),
+                    'status' => $this->historyStatusLabel($order),
+                    'order_number' => $order->order_number,
+                    'type' => $this->transactionTypeLabel($payment, $log),
+                    'customer' => $order->user?->name ?? 'Walk-In',
+                    'detail' => $order->padelBookings->map(fn ($b) => ($b->court?->name ?? 'Lapangan').' '.$b->start_time->format('H:i').'-'.$b->end_time->format('H:i'))->implode(', '),
+                    'cashier' => $log['settled_by_name'] ?? $log['cashier_name'] ?? $order->cashier?->name ?? '-',
+                    'method' => app(PadelBookingService::class)->formatPaymentMethodLabel($payment->payment_method, $log),
+                    'amount' => (float) $payment->amount,
+                ];
+            });
+    }
+
+    /** Tanggal riwayat yang aman dipakai (input dari browser bisa berupa teks sembarang → Carbon::parse error). */
+    protected function resolvedHistoryDate(): string
+    {
+        $date = \DateTime::createFromFormat('!Y-m-d', $this->historyDate);
+
+        return $date && $date->format('Y-m-d') === $this->historyDate ? $this->historyDate : now('Asia/Jakarta')->toDateString();
+    }
+
+    /** Status order SEKARANG — transaksi yang sudah direfund/dibatalkan tidak boleh tetap tampil "LUNAS". */
+    protected function historyStatusLabel(\App\Models\Pos\Order $order): string
+    {
+        $refunded = (float) $order->refunds->whereIn('status', ['APPROVED', 'PROCESSED'])->sum('refund_amount');
+        $refundPending = $order->refunds->where('status', 'PENDING')->isNotEmpty();
+        $paid = (float) $order->payments->where('status', 'SUCCESS')->sum('amount');
+
+        return match (true) {
+            $refunded > 0 && $refunded >= $paid - 1 => 'DIREFUND',
+            $refunded > 0 => 'DIREFUND SEBAGIAN',
+            $refundPending => 'REFUND DIPROSES',
+            $order->padelBookings->isNotEmpty() && $order->padelBookings->every(fn ($b) => $b->status === 'CANCELLED') => 'DIBATALKAN',
+            default => 'LUNAS',
+        };
+    }
+
+    protected function transactionTypeLabel(\App\Models\Pos\Payment $payment, array $log): string
+    {
+        return match (true) {
+            ($log['type'] ?? null) === 'RESCHEDULE_PRICE_DELTA' => 'Pelunasan Selisih Reschedule',
+            $payment->order->order_type === 'WALK_IN' => 'Booking Walk-In',
+            default => 'Pelunasan Booking',
+        };
+    }
+
+    public function viewTransactionReceipt(string $paymentId): void
+    {
+        abort_unless($this->canViewWalkInHistory(), 403, 'Akses ditolak: Anda tidak memiliki izin untuk melihat struk transaksi loket.');
+
+        $payment = \App\Models\Pos\Payment::query()
+            ->where('status', 'SUCCESS')
+            ->where('payment_gateway', 'CASHIER_POS')
+            ->whereHas('order', fn ($q) => $q->whereIn('order_type', ['WALK_IN', 'ONLINE_BOOKING']))
+            ->findOrFail($paymentId);
+
+        $this->completedOrderData = $this->buildWalkInReceipt($payment, reprint: true);
+        $this->receiptFromHistory = true;
+        $this->showSuccessModal = true;
+    }
+
+    /**
+     * Susun data struk dari data TERSIMPAN (order, booking, alat sewa, pembayaran) — dipakai untuk cetak
+     * ulang dari Riwayat dan struk pelunasan, supaya isinya selalu sama dengan yang tercatat di sistem.
+     */
+    public function buildWalkInReceipt(\App\Models\Pos\Payment $payment, bool $reprint = false): array
+    {
+        $order = $payment->order()->with(['user', 'cashier', 'padelBookings.court', 'payments'])->firstOrFail();
+        $log = is_array($payment->payload_log) ? $payment->payload_log : [];
+        $bookings = $order->padelBookings->sortBy('start_time')->values();
+        $settings = \App\Models\Pos\ClubFinanceSetting::getSettings();
+
+        $paymentMeta = [];
+        if (! empty($log['edc_details'])) {
+            $paymentMeta = array_intersect_key($log['edc_details'], array_flip(['terminal', 'card_type', 'card_network', 'card_issuer', 'card_last_4', 'approval_code', 'trace_number']));
+        } elseif (! empty($log['qris_details'])) {
+            $paymentMeta = [
+                'qris_provider' => $log['qris_details']['provider'] ?? null,
+                'qris_rrn' => $log['qris_details']['rrn'] ?? null,
+            ];
+        }
+
+        $paidBefore = (float) $order->payments
+            ->where('status', 'SUCCESS')
+            // Pembayaran yang terjadi SEBELUM pembayaran ini (waktu, lalu id ULID sebagai penentu kalau sama detik).
+            ->filter(fn ($p) => $p->id !== $payment->id
+                && ($p->updated_at->lt($payment->updated_at) || ($p->updated_at->eq($payment->updated_at) && strcmp($p->id, $payment->id) < 0)))
+            ->sum('amount');
+        $isSettlement = $paidBefore > 0 || $order->order_type !== 'WALK_IN';
+
+        // Struk PENJUALAN dicetak ulang setelah booking di-reschedule: total order sekarang sudah ikut menghitung
+        // tagihan selisih. Kembalikan angka ke nilai saat transaksi (dikurangi seluruh tagihan selisih) supaya
+        // struk tidak menampilkan nominal yang tidak pernah dibayar customer di transaksi ini.
+        $deltaBills = $order->payments->filter(fn ($p) => in_array($p->status, ['SUCCESS', 'PENDING'], true)
+            && (($p->payload_log['type'] ?? null) === 'RESCHEDULE_PRICE_DELTA') && $p->id !== $payment->id);
+        $sumDelta = fn (string $key) => (float) $deltaBills->sum(fn ($p) => (float) ($p->payload_log[$key] ?? 0));
+        $courtDeltaFor = fn ($b) => (float) $deltaBills->filter(fn ($p) => ($p->payload_log['booking_id'] ?? null) === $b->id)
+            ->sum(fn ($p) => (float) ($p->payload_log['court_delta'] ?? 0));
+        $atSale = ! $isSettlement;
+        $wasRescheduled = $bookings->contains(fn ($b) => (int) $b->reschedule_count > 0);
+
+        return [
+            'order_number' => $order->order_number,
+            'customer_name' => $order->user?->name ?? 'Walk-In',
+            'customer_phone' => $order->user?->phone ?? '-',
+            'cashier_name' => $log['settled_by_name'] ?? $log['cashier_name'] ?? $order->cashier?->name ?? (auth()->user()?->name ?? '-'),
+            'booking_date' => $bookings->first()?->booking_date?->translatedFormat('d F Y') ?? '-',
+            'payment_method' => app(PadelBookingService::class)->formatPaymentMethodLabel($payment->payment_method, $log),
+            'subtotal' => (float) $order->subtotal - ($atSale ? $sumDelta('court_delta') : 0),
+            'tax_amount' => (float) $order->tax_amount - ($atSale ? $sumDelta('tax_delta') : 0),
+            'tax_name' => $settings->tax_name,
+            'service_charge' => (float) $order->service_charge - ($atSale ? $sumDelta('admin_fee_delta') : 0),
+            'admin_fee_name' => $settings->admin_fee_name,
+            'grand_total' => $atSale ? (float) $payment->amount : (float) $order->grand_total,
+            'auto_checked_in' => false,
+            // Waktu uang diterima (pembayaran jadi SUCCESS), bukan waktu tagihan dibuat.
+            'created_at' => $payment->updated_at->setTimezone('Asia/Jakarta')->format('d/m/Y H:i:s'),
+            'payment_meta' => $paymentMeta,
+            'note' => $atSale && $wasRescheduled ? 'Jadwal di bawah adalah jadwal TERBARU (booking sudah dipindah setelah transaksi ini).' : null,
+            'bookings' => $bookings->map(fn ($b) => [
+                'booking_code' => $b->booking_code,
+                'court_name' => $b->court?->name ?? 'Lapangan Padel',
+                'time_label' => $b->start_time->format('H:i').' - '.$b->end_time->format('H:i'),
+                'court_fee' => (float) $b->court_fee - ($atSale ? $courtDeltaFor($b) : 0),
+                'status' => $b->status,
+                'qr_code_hash' => $b->qr_code_hash,
+            ])->all(),
+            'equipments' => \App\Models\Padel\PadelBookingEquipment::with('equipment')
+                ->where('order_id', $order->id)
+                ->get()
+                ->map(fn ($e) => ['name' => $e->equipment?->name ?? 'Alat Sewa', 'quantity' => $e->quantity, 'price' => (float) $e->subtotal])
+                ->all(),
+            'receipt_type' => $isSettlement ? 'SETTLEMENT' : 'SALE',
+            'paid_before' => $paidBefore,
+            'paid_now' => (float) $payment->amount,
+            'settlement_label' => ($log['type'] ?? null) === 'RESCHEDULE_PRICE_DELTA' ? 'PELUNASAN SELISIH' : 'PELUNASAN',
+            'schedule_before' => $log['schedule_before'] ?? null,
+            'is_reprint' => $reprint,
+            'reprinted_at' => $reprint ? now('Asia/Jakarta')->format('d/m/Y H:i') : null,
+        ];
     }
 
     protected function getViewData(): array
@@ -1209,7 +1667,7 @@ class BookOfflineCourt extends Page
         }
 
         $courts = PadelCourt::where('is_active', true)->orderBy('name')->get();
-        $isWeekend = Carbon::parse($this->bookingDate)->isWeekend();
+        $peakHours = app(\App\Services\Padel\PeakHourService::class); // jam peak diatur di Master Data
         $isToday = $this->bookingDate === now()->format('Y-m-d');
         $currentHour = (int) now()->format('H');
 
@@ -1276,7 +1734,7 @@ class BookOfflineCourt extends Page
                 $endTimeStr = $oh['end_time'];
                 $slotKey = "{$court->id}_{$startTimeStr}";
 
-                $isPrime = $isWeekend || $h >= 17;
+                $isPrime = $peakHours->isPeak(Carbon::parse("{$this->bookingDate} {$startTimeStr}"));
                 $rate = $isPrime ? (float) $court->hourly_rate_prime : (float) $court->hourly_rate_regular;
 
                 // Tentukan status slot
@@ -1301,7 +1759,17 @@ class BookOfflineCourt extends Page
                     });
 
                     if ($matchedBooking) {
-                        if (in_array($matchedBooking->status, ['PAID', 'CHECKED_IN', 'COMPLETED'])) {
+                        if ($matchedBooking->status === 'LOCKED' && (int) $matchedBooking->reschedule_count > 0) {
+                            // Jadwal hasil reschedule yang selisihnya belum dibayar — kasir klik untuk melunasi.
+                            $status = 'UNPAID_DELTA';
+                            $bookingDetail = [
+                                'id' => $matchedBooking->id,
+                                'code' => $matchedBooking->booking_code,
+                                'player' => $matchedBooking->user?->name ?? 'Pemain',
+                                'status' => 'LOCKED',
+                                'is_active_bill' => ($this->settleBill['booking_id'] ?? null) === $matchedBooking->id,
+                            ];
+                        } elseif (in_array($matchedBooking->status, ['PAID', 'CHECKED_IN', 'COMPLETED'])) {
                             $status = 'BOOKED';
                             $bookingDetail = [
                                 'code' => $matchedBooking->booking_code,
@@ -1357,7 +1825,7 @@ class BookOfflineCourt extends Page
                     continue;
                 }
                 $totalSlotsAll++;
-                if (in_array($slot['status'], ['BOOKED', 'LOCKED', 'SELECTED'], true)) {
+                if (in_array($slot['status'], ['BOOKED', 'LOCKED', 'SELECTED', 'UNPAID_DELTA'], true)) {
                     $bookedSlotsAll++;
                 }
             }

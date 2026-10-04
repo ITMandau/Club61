@@ -36,7 +36,7 @@
                     <div class="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full shadow-md backdrop-blur-md"
                          style="color: #FFFFFF !important; background: rgba(0,0,0,0.75); border: 1.5px solid #D4AF37;">
                         <span class="w-2 h-2 rounded-full animate-pulse" style="background-color: #D4AF37; box-shadow: 0 0 8px #D4AF37;"></span>
-                        <span class="font-bold tracking-wider text-[11px] uppercase" style="color: #FFFFFF !important;">&bull; VENUE LIVE &bull; 3 COURTS OPEN</span>
+                        <span class="font-bold tracking-wider text-[11px] uppercase" style="color: #FFFFFF !important;">&bull; VENUE LIVE &bull; {{ $companyProfile->court_count }} COURTS OPEN</span>
                     </div>
                 </div>
 
@@ -54,43 +54,19 @@
                               style="color: #F7E7B4; text-shadow: 0 0 20px rgba(212,175,55,0.7);">Refined Luxury.</span>
                     </h2>
 
-                    <!-- 3 Brushed Metallic Gold Experience Cards -->
-                    <div class="grid grid-cols-3 gap-2.5 mt-4">
-                        <!-- Card 1: Padel Arena -->
-                        <div class="p-2.5 rounded-2xl backdrop-blur-md transition-all group shadow-md hover:-translate-y-0.5 cursor-pointer"
-                             style="background: linear-gradient(135deg, rgba(235, 205, 130, 0.45) 0%, rgba(184, 134, 11, 0.35) 50%, rgba(120, 85, 20, 0.45) 100%); border: 1.5px solid rgba(245, 222, 145, 0.6); box-shadow: 0 4px 15px rgba(0,0,0,0.4), inset 0 1px 1px rgba(255,255,255,0.4);">
-                            <div class="mb-1 group-hover:scale-110 transition-transform" style="color: #FFFFFF !important;">
-                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="stroke: #FFFFFF;">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16M9 6v12m6-12v12" />
-                                </svg>
+                    <!-- Kartu fasilitas: sumber datanya sama dengan halaman depan (welcome.blade.php),
+                         diedit lewat Filament menu "Konten Website" -->
+                    <div class="grid grid-cols-2 sm:grid-cols-3 gap-2.5 mt-4">
+                        @foreach($companyProfile->localizedFacilityCards() as $card)
+                            <div class="p-2.5 rounded-2xl backdrop-blur-md transition-all group shadow-md hover:-translate-y-0.5 cursor-pointer"
+                                 style="background: linear-gradient(135deg, rgba(235, 205, 130, 0.45) 0%, rgba(184, 134, 11, 0.35) 50%, rgba(120, 85, 20, 0.45) 100%); border: 1.5px solid rgba(245, 222, 145, 0.6); box-shadow: 0 4px 15px rgba(0,0,0,0.4), inset 0 1px 1px rgba(255,255,255,0.4);">
+                                <div class="mb-1 group-hover:scale-110 transition-transform" style="color: #FFFFFF !important;">
+                                    <x-company-profile.icon :icon-key="$card['icon_key']" class="w-4 h-4" style="stroke: #FFFFFF;" />
+                                </div>
+                                <div class="font-extrabold text-[11px]" style="color: #FFFFFF !important; text-shadow: 0 1px 3px rgba(0,0,0,0.8);">{{ $card['title'] }}</div>
+                                <div class="text-[9px] font-semibold" style="color: #FFF2D1 !important; text-shadow: 0 1px 3px rgba(0,0,0,0.8);">{{ $card['subtitle'] }}</div>
                             </div>
-                            <div class="font-extrabold text-[11px]" style="color: #FFFFFF !important; text-shadow: 0 1px 3px rgba(0,0,0,0.8);">Padel Arena</div>
-                            <div class="text-[9px] font-semibold" style="color: #FFF2D1 !important; text-shadow: 0 1px 3px rgba(0,0,0,0.8);">+ Panoramic Courts</div>
-                        </div>
-
-                        <!-- Card 2: Wellness Suite -->
-                        <div class="p-2.5 rounded-2xl backdrop-blur-md transition-all group shadow-md hover:-translate-y-0.5 cursor-pointer"
-                             style="background: linear-gradient(135deg, rgba(235, 205, 130, 0.45) 0%, rgba(184, 134, 11, 0.35) 50%, rgba(120, 85, 20, 0.45) 100%); border: 1.5px solid rgba(245, 222, 145, 0.6); box-shadow: 0 4px 15px rgba(0,0,0,0.4), inset 0 1px 1px rgba(255,255,255,0.4);">
-                            <div class="mb-1 group-hover:scale-110 transition-transform" style="color: #FFFFFF !important;">
-                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="stroke: #FFFFFF;">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
-                                </svg>
-                            </div>
-                            <div class="font-extrabold text-[11px]" style="color: #FFFFFF !important; text-shadow: 0 1px 3px rgba(0,0,0,0.8);">Wellness Suite</div>
-                            <div class="text-[9px] font-semibold" style="color: #FFF2D1 !important; text-shadow: 0 1px 3px rgba(0,0,0,0.8);">Sauna &amp; Ice Plunge</div>
-                        </div>
-
-                        <!-- Card 3: Social Lounge -->
-                        <div class="p-2.5 rounded-2xl backdrop-blur-md transition-all group shadow-md hover:-translate-y-0.5 cursor-pointer"
-                             style="background: linear-gradient(135deg, rgba(235, 205, 130, 0.45) 0%, rgba(184, 134, 11, 0.35) 50%, rgba(120, 85, 20, 0.45) 100%); border: 1.5px solid rgba(245, 222, 145, 0.6); box-shadow: 0 4px 15px rgba(0,0,0,0.4), inset 0 1px 1px rgba(255,255,255,0.4);">
-                            <div class="mb-1 group-hover:scale-110 transition-transform" style="color: #FFFFFF !important;">
-                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="stroke: #FFFFFF;">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v13m0-13V6a2 2 0 112 2h-2zm0 0V4a2 2 0 10-2 2h2m0 13c-3 0-6-2-6-5V8h12v6c0 3-3 5-6 5z" />
-                                </svg>
-                            </div>
-                            <div class="font-extrabold text-[11px]" style="color: #FFFFFF !important; text-shadow: 0 1px 3px rgba(0,0,0,0.8);">Social Lounge</div>
-                            <div class="text-[9px] font-semibold" style="color: #FFF2D1 !important; text-shadow: 0 1px 3px rgba(0,0,0,0.8);">Artisan Cafe &amp; Bar</div>
-                        </div>
+                        @endforeach
                     </div>
                 </div>
 
@@ -99,10 +75,10 @@
                      style="background: rgba(10, 7, 3, 0.85); border-top: 1.5px solid #C59B46; color: #FFFFFF !important;">
                     <div class="flex items-center gap-2">
                         <span class="w-2 h-2 rounded-full" style="background-color: #D4AF37; box-shadow: 0 0 8px #D4AF37;"></span>
-                        <span style="color: #FFFFFF !important; font-weight: 500; font-size: 12px;">Gedung Indosat Medan &bull; Open 06:00 &ndash; 23:00</span>
+                        <span style="color: #FFFFFF !important; font-weight: 500; font-size: 12px;">Gedung Indosat Medan &bull; {{ $companyProfile->localized('operating_hours_text') }}</span>
                     </div>
                     <div class="font-mono text-[11px]" style="color: #F5E2B5 !important; font-weight: 700; letter-spacing: 0.05em;">
-                        portal.club61padel.com
+                        {{ $companyProfile->portal_domain_text }}
                     </div>
                 </div>
             </div>
@@ -120,19 +96,11 @@
 
                     <!-- Card Top Header -->
                     <div class="relative z-10 mb-4">
-                        <div class="flex items-center justify-between">
-                            <span class="text-[10px] font-bold uppercase tracking-widest text-[#7A5818] bg-[#FDF9ED] border border-[#D9BE84] px-3 py-1 rounded-full shadow-sm">
-                                SINGLE SMART GATEWAY
-                            </span>
-                            <span class="text-[10px] font-mono px-2.5 py-0.5 rounded-full bg-[#EDE0C4]/70 border border-[#D1B679]/60 text-[#6B4F1B] font-semibold">
-                                v2.4 &bull; ENTERPRISE
-                            </span>
-                        </div>
                         <h1 class="text-2xl sm:text-3xl font-extrabold text-[#1F170D] font-serif mt-2 tracking-tight">
-                            Masuk ke Club Portal
+                            Portal Club 61 Padel Court
                         </h1>
                         <p class="text-xs text-[#6B5738] mt-1 leading-relaxed">
-                            Akses terpusat untuk Member, Kasir POS, Barista Cafe, dan Manajemen Venue.
+                            
                         </p>
                     </div>
 
@@ -178,7 +146,7 @@
                                 <div class="text-[9px] text-[#6B4E15] font-medium truncate">Display KDS</div>
                             </button>
 
-                            <button type="button" onclick="selectRole('admin@club61.com', 'password123', 'Admin Panel Filament (/admin)')" 
+                            <button type="button" onclick="selectRole('admin@club61.id', 'password123', 'Admin Panel Filament (/admin)')" 
                                     class="role-btn text-left p-2 transition-all duration-200 text-xs active:scale-95 group shadow-sm hover:shadow-md cursor-pointer"
                                     style="background: linear-gradient(145deg, #FDF9EE 0%, #EEDBB0 55%, #CF9E46 100%); border: 1.5px solid #BD923E; border-radius: 12px;">
                                 <div class="mb-0.5">

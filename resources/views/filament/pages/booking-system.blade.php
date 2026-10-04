@@ -981,14 +981,17 @@
                 </div>
 
                 <div style="padding: 1.5rem; display: flex; flex-direction: column; gap: 1rem;">
-                    <form wire:submit.prevent="executeCheckIn(app(\App\Services\Padel\PadelBookingService::class))">
+                    <form wire:submit.prevent="executeCheckIn">
                         <div style="display: flex; flex-direction: column; gap: 0.5rem;">
                             <label
                                 style="font-size: 0.75rem; font-weight: 800; color: #7A6335; text-transform: uppercase;">
                                 Masukkan Kode Tiket / Scan Hash Barcode:
                             </label>
+                            {{-- autofocus diabaikan browser di modal yang muncul belakangan; scanner barcode
+                                 USB "mengetik" ke elemen yang sedang fokus, jadi fokus wajib dipaksa. --}}
                             <input type="text" wire:model="checkInQuery"
-                                placeholder="Contoh: BK-PAD-VRK0QHPJ atau Hash QR" autofocus
+                                placeholder="Contoh: BK-PAD-VRK0QHPJ atau Hash QR" autocomplete="off"
+                                x-init="$nextTick(() => $el.focus())"
                                 style="width: 100%; padding: 0.75rem 1rem; border: 2px solid #D4AF37; border-radius: 12px; font-size: 0.875rem; font-weight: 700; color: #1A150B; outline: none;">
                         </div>
 

@@ -4,6 +4,7 @@ namespace App\Models\Fnb;
 
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 
 class FnbModifierGroup extends Model
 {
@@ -22,5 +23,10 @@ class FnbModifierGroup extends Model
     public function options()
     {
         return $this->hasMany(FnbModifierOption::class, 'group_id');
+    }
+
+    public function menus(): BelongsToMany
+    {
+        return $this->belongsToMany(FnbMenu::class, 'fnb_menu_modifier_group', 'group_id', 'menu_id');
     }
 }

@@ -358,7 +358,8 @@ class MembershipBalanceService
     }
 
     /**
-     * Record Gym facility check-in with validation and quota decrement.
+     * Check-in fasilitas bermode CHECK_IN (Gym + fasilitas baru dari Master Fasilitas): validasi + potong 1 kunjungan.
+     * Dulu hanya GYM yang diterima, jadi fasilitas baru di paket tidak pernah bisa dipakai.
      */
     public function recordCheckin(string $balanceId, string $userId, ?string $staffId = null): FacilityCheckin
     {
@@ -377,8 +378,21 @@ class MembershipBalanceService
                 throw new DomainException("Membership tidak aktif atau sudah kadaluarsa.");
             }
 
-            if ($balance->facility !== 'GYM') {
-                throw new DomainException("Fasilitas {$balance->facility} tidak mendukung check-in langsung.");
+            $facilities = app(\App\Services\Membership\MembershipFacilityService::class);
+            if ($facilities->mode($balance->facility) !== \App\Models\Membership\MembershipFacility::MODE_CHECK_IN) {
+                throw new DomainException("Fasilitas {$facilities->name($balance->facility)} tidak memakai check-in langsung.");
+            }
+            $facility = $facilities->find($balance->facility);
+            if ($facility && ! $facility['is_active']) {
+                throw new DomainException("Fasilitas {$facility['name']} sedang tidak tersedia.");
+            }
+            // "Tanpa kuota" = paket hanya memberi diskon, BUKAN akses gratis (dulu tetap bisa check-in tanpa bayar).
+            if ($balance->quota_type !== 'VISITS') {
+                throw new DomainException("Paket Anda tidak termasuk akses masuk {$facilities->name($balance->facility)} — silakan beli tiket di kasir.");
+            }
+            // Kuota kunjungan habis → tolak (VISITS dengan initial_quota null = unlimited).
+            if ($balance->quota_type === 'VISITS' && $balance->initial_quota !== null && (float) $balance->remaining_quota < 1) {
+                throw new DomainException("Kuota kunjungan {$facilities->name($balance->facility)} sudah habis.");
             }
 
             // Time window restriction check
@@ -391,20 +405,20 @@ class MembershipBalanceService
                 }
             }
 
-            // Decrement visit quota if VISITS
-            if ($balance->quota_type === 'VISITS') {
+            // Potong 1 kunjungan (unlimited = initial_quota null, tidak dipotong).
+            if ($balance->quota_type === 'VISITS' && $balance->initial_quota !== null) {
                 $this->adjustQuota(
                     balanceId: $balance->id,
                     changeType: 'DECREMENT',
                     quantity: 1.00,
-                    notes: 'Check-in fasilitas Gym',
+                    notes: 'Check-in fasilitas '.$facilities->name($balance->facility),
                     relatedType: FacilityCheckin::class,
                     performedBy: $staffId
                 );
             }
 
             return FacilityCheckin::create([
-                'facility' => 'GYM',
+                'facility' => $balance->facility,
                 'balance_id' => $balance->id,
                 'user_id' => $userId,
                 'staff_id' => $staffId,

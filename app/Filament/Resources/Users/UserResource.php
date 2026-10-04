@@ -93,6 +93,10 @@ class UserResource extends Resource
 
     public static function table(Table $table): Table
     {
+        // Relasi roles disimpan Filament lewat sync() biasa (tanpa event Spatie) — snapshot sebelum
+        // & sesudah simpan supaya pergantian role tercatat di Log Aktivitas.
+        $rolesBefore = [];
+
         return $table
             ->columns([
                 \Filament\Tables\Columns\TextColumn::make('name')
@@ -118,6 +122,7 @@ class UserResource extends Resource
                         'super_admin' => 'danger',
                         'admin' => 'warning',
                         'cashier' => 'success',
+                        'receptionist' => 'success',
                         'kitchen' => 'info',
                         'trainer' => 'purple',
                         'stylist' => 'pink',
@@ -153,6 +158,12 @@ class UserResource extends Resource
                             }
                         }
                         return $data;
+                    })
+                    ->before(function (User $record) use (&$rolesBefore) {
+                        $rolesBefore = $record->roles()->pluck('name')->all();
+                    })
+                    ->after(function (User $record) use (&$rolesBefore) {
+                        \App\Services\Audit\ActivityLogger::userRolesChanged($record, $rolesBefore, $record->roles()->pluck('name')->all());
                     }),
                 DeleteAction::make(),
                 ForceDeleteAction::make(),

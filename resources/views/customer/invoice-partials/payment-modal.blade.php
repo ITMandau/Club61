@@ -9,7 +9,7 @@
         </div>
 
         <div class="space-y-2.5 max-h-96 overflow-y-auto pr-1">
-            <template x-for="m in paymentMethods" :key="m.id">
+            <template x-for="m in availableMethods" :key="m.id">
                 <button type="button" 
                         @click="selectPaymentMethod(m)"
                         :class="selectedMethod.id === m.id ? 'border-[#D4AF37] bg-[#FAF6EC]' : 'border-[#E8DCC0] hover:bg-gray-50'"

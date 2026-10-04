@@ -40,7 +40,6 @@ class KelolaPemesanan extends Page
 
     // Modal State
     public bool $showRescheduleModal = false;
-    public bool $showSettleModal = false;
     public bool $showCancelRefundModal = false;
 
     // Reschedule Form State
@@ -53,17 +52,11 @@ class KelolaPemesanan extends Page
     public array $availableSlots = [];
     public float $rescheduleEstimatedFee = 0.0;
     public float $rescheduleDelta = 0.0;
-    public bool $rescheduleIsDeltaPaidNow = true;
-    public string $reschedulePaymentMethod = 'QRIS';
+    /** Pilihan customer untuk membayar selisih: CASHIER (POS Walk-In) / ONLINE (Midtrans via invoice). */
+    public string $rescheduleDeltaChannel = 'CASHIER';
     public string $rescheduleReason = '';
-
-    // Settle Modal State
-    public ?string $settleBookingId = null;
-    public ?string $settleBookingCode = null;
-    public ?string $settleCustomerName = null;
-    public float $settleAmount = 0.0;
-    public string $settlePaymentMethod = 'QRIS';
-
+    /** Rincian selisih slot terpilih (hasil PadelBookingService::quoteReschedule, sama persis dengan yang ditagih). */
+    public array $rescheduleQuote = [];
     // Cancel & Refund Form State
     public ?string $cancelBookingId = null;
     public ?string $cancelBookingCode = null;
@@ -100,9 +93,68 @@ class KelolaPemesanan extends Page
         $this->resetPage();
     }
 
+    public function getCanRescheduleProperty(): bool
+    {
+        return (bool) auth()->user()?->can('reschedule_padel_booking');
+    }
+
+    public function getCanRefundProperty(): bool
+    {
+        return (bool) auth()->user()?->can('cancel_refund_padel');
+    }
+
+    public function getCanSettleProperty(): bool
+    {
+        return (bool) auth()->user()?->can('settle_unpaid_booking');
+    }
+
+    public function getCanOpenPosProperty(): bool
+    {
+        return \App\Filament\Pages\BookOfflineCourt::canAccess();
+    }
+
+    public function getCanCheckInProperty(): bool
+    {
+        return (bool) auth()->user()?->can('checkin_padel_ticket');
+    }
+
+    /** true = aksi ditolak (notifikasi sudah dikirim); tombolnya juga disembunyikan di Blade. */
+    protected function deniedWithout(string $permission): bool
+    {
+        if (auth()->user()?->can($permission)) {
+            return false;
+        }
+
+        \App\Services\Audit\ActivityLogger::accessDenied("mencoba aksi tanpa izin [{$permission}] di Kelola Pemesanan");
+
+        Notification::make()
+            ->title('Akses Ditolak')
+            ->body("Anda tidak memiliki izin [{$permission}] untuk aksi ini.")
+            ->danger()
+            ->send();
+
+        return true;
+    }
+
     public function openRescheduleModal(string $bookingId, PadelBookingService $service): void
     {
+        if ($this->deniedWithout('reschedule_padel_booking')) {
+            return;
+        }
+
         $booking = PadelBooking::with(['court', 'user', 'order'])->findOrFail($bookingId);
+
+        if ($booking->status !== 'PAID') {
+            Notification::make()
+                ->title('Tidak Bisa Dipindah')
+                ->body($booking->status === 'LOCKED' && $booking->reschedule_count > 0
+                    ? 'Booking ini masih punya tagihan selisih reschedule yang belum lunas. Lunasi dulu di POS Walk-In (klik slot "Bayar" di grid jadwal).'
+                    : "Hanya booking yang sudah lunas yang bisa dipindah jadwalnya (status saat ini: {$booking->status}).")
+                ->warning()
+                ->send();
+
+            return;
+        }
 
         $this->selectedBookingId = $booking->id;
         $this->rescheduleCourtId = $booking->court_id;
@@ -123,12 +175,13 @@ class KelolaPemesanan extends Page
             'original_date' => $booking->booking_date->format('d M Y'),
             'original_time' => $booking->start_time->format('H:i') . ' - ' . $booking->end_time->format('H:i') . ' WIB',
             'original_court_fee' => (float) $booking->court_fee,
+            'original_benefit' => (float) $booking->member_discount_court + (float) $booking->sponsor_discount_court,
             'duration_hours' => $this->rescheduleDurationHours,
         ];
 
         $this->rescheduleReason = '';
-        $this->rescheduleIsDeltaPaidNow = true;
-        $this->reschedulePaymentMethod = 'QRIS';
+        $this->rescheduleDeltaChannel = 'CASHIER';
+        $this->rescheduleQuote = [];
 
         $this->loadAvailableSlots($service);
         $this->showRescheduleModal = true;
@@ -202,6 +255,7 @@ class KelolaPemesanan extends Page
         if (empty($this->availableSlots) || ! $this->rescheduleStartTime) {
             $this->rescheduleEstimatedFee = 0.0;
             $this->rescheduleDelta = 0.0;
+            $this->rescheduleQuote = [];
             return;
         }
 
@@ -209,11 +263,16 @@ class KelolaPemesanan extends Page
         if ($chosenSlot) {
             $this->rescheduleEstimatedFee = (float) $chosenSlot['estimated_fee'];
             $this->rescheduleDelta = (float) $chosenSlot['delta'];
+            $this->rescheduleQuote = $chosenSlot;
         }
     }
 
     public function executeReschedule(PadelBookingService $service): void
     {
+        if ($this->deniedWithout('reschedule_padel_booking')) {
+            return;
+        }
+
         if (! $this->rescheduleStartTime) {
             Notification::make()
                 ->title('Pilih Jam Main')
@@ -226,22 +285,29 @@ class KelolaPemesanan extends Page
         try {
             $adminUser = auth()->user() ?? \App\Models\User::role(['admin', 'super_admin'])->first();
 
-            $service->adminRescheduleBooking(
+            $result = $service->adminRescheduleBooking(
                 bookingId: $this->selectedBookingId,
                 newCourtId: $this->rescheduleCourtId,
                 newDate: $this->rescheduleDate,
                 newStartTimeStr: $this->rescheduleStartTime,
                 reason: $this->rescheduleReason ?: 'Permintaan Reschedule via Admin',
                 adminUser: $adminUser,
-                paymentMethod: $this->reschedulePaymentMethod,
-                isDeltaPaid: $this->rescheduleIsDeltaPaidNow
+                isDeltaPaid: false, // pembayaran dieksekusi di POS Walk-In / Midtrans, bukan di sini
+                deltaPaymentChannel: $this->rescheduleDeltaChannel === 'ONLINE' ? 'ONLINE' : 'CASHIER',
             );
 
             Cache::forget('kelola_pemesanan_tab_counts');
 
+            $rupiah = fn (float $v) => 'Rp '.number_format($v, 0, ',', '.');
             Notification::make()
                 ->title('Reschedule Berhasil')
-                ->body('Jadwal reservasi berhasil dipindahkan dan dicatat dalam pembukuan.')
+                ->body((! empty($result['benefit_dropped_reason']) ? 'Benefit gugur: '.$result['benefit_dropped_reason'].' ' : '').match (true) {
+                    ($result['total_charge'] ?? 0) > 0 => 'Jadwal dipindahkan & slot ditahan. Selisih '.$rupiah($result['total_charge']).($this->rescheduleDeltaChannel === 'ONLINE'
+                        ? ' dibayar customer via Midtrans dari halaman invoice-nya.'
+                        : ' dilunasi di POS Walk-In (klik slot "Bayar" di grid jadwal) saat customer datang.').' QR & check-in terkunci sampai lunas.',
+                    ($result['forfeited'] ?? 0) > 0 => 'Jadwal dipindahkan ke jam lebih murah. Selisih '.$rupiah($result['forfeited']).' hangus sesuai kebijakan (tidak dikembalikan).',
+                    default => 'Jadwal reservasi berhasil dipindahkan tanpa selisih biaya.',
+                })
                 ->success()
                 ->send();
 
@@ -255,70 +321,68 @@ class KelolaPemesanan extends Page
         }
     }
 
-    public function openSettleModal(string $bookingId): void
+    /** Customer bilang "sudah bayar tapi masih pending": tanya langsung ke Midtrans. */
+    public function checkMidtransPayment(string $bookingId): void
     {
-        $booking = PadelBooking::with(['user', 'order.payments'])->findOrFail($bookingId);
-
-        $pendingPayment = Payment::where('order_id', $booking->order_id)
-            ->where('status', 'PENDING')
-            ->latest()
-            ->first();
-
-        $this->settleBookingId = $booking->id;
-        $this->settleBookingCode = $booking->booking_code;
-        $this->settleCustomerName = $booking->user?->name ?? 'Guest';
-        $this->settleAmount = $pendingPayment 
-            ? (float) $pendingPayment->amount 
-            : (float) ($booking->order?->grand_total ?: $booking->total_amount);
-        $this->settlePaymentMethod = 'QRIS';
-
-        $this->showSettleModal = true;
-    }
-
-    public function executeSettleSupplemental(PadelBookingService $service): void
-    {
-        try {
-            $adminUser = auth()->user() ?? \App\Models\User::role(['admin', 'super_admin'])->first();
-
-            $service->adminSettleCashierPayment(
-                bookingId: $this->settleBookingId,
-                paymentMethod: $this->settlePaymentMethod,
-                amountReceived: (float) $this->settleAmount,
-                cashierUser: $adminUser
-            );
-
-            Cache::forget('kelola_pemesanan_tab_counts');
-
-            Notification::make()
-                ->title('Pelunasan Berhasil')
-                ->body('Pelunasan kasir berhasil diverifikasi dan QR Tiket aktif.')
-                ->success()
-                ->send();
-
-            $this->showSettleModal = false;
-        } catch (\Throwable $e) {
-            Notification::make()
-                ->title('Gagal Melunasi')
-                ->body($e->getMessage())
-                ->danger()
-                ->send();
+        if ($this->deniedWithout('settle_unpaid_booking')) {
+            return;
         }
+
+        $booking = PadelBooking::findOrFail($bookingId);
+        $order = $booking->order_id ? \App\Models\Pos\Order::find($booking->order_id) : null;
+
+        if (! $order) {
+            Notification::make()->title('Tidak Ada Transaksi Online')->body("Tiket {$booking->booking_code} tidak punya order pembayaran Midtrans.")->warning()->send();
+
+            return;
+        }
+
+        $result = app(\App\Services\Payment\MidtransReconciliationService::class)->reconcileOrder($order);
+        Cache::forget('kelola_pemesanan_tab_counts');
+
+        $booking->refresh();
+        $service = app(PadelBookingService::class);
+        $openBill = $service->pendingBillForBooking($booking);
+        if ($result === \App\Services\Payment\MidtransReconciliationService::NOT_PAID && $openBill) {
+            Notification::make()->title('Tagihan Belum Dibayar')
+                ->body("Belum ada pembayaran untuk tagihan {$booking->booking_code} Rp ".number_format((float) $openBill->amount, 0, ',', '.').'. Tagihan masih terbuka: dibayar di POS Walk-In atau via invoice customer.')
+                ->warning()->send();
+
+            return;
+        }
+
+        [$title, $body, $color] = match ($result) {
+            \App\Services\Payment\MidtransReconciliationService::PAID => ['Pembayaran Terkonfirmasi', "Midtrans mencatat order {$order->order_number} LUNAS. Tiket {$booking->booking_code} ".($booking->status === 'LOCKED' ? 'masih menunggu tagihan lain.' : 'sudah diaktifkan.'), 'success'],
+            \App\Services\Payment\MidtransReconciliationService::PENDING => ['Belum Dibayar', "Midtrans masih menunggu pembayaran order {$order->order_number}.", 'warning'],
+            \App\Services\Payment\MidtransReconciliationService::NOT_PAID => ['Tidak Ada Pembayaran', "Midtrans tidak mencatat pembayaran lunas untuk order {$order->order_number} (kedaluwarsa / dibatalkan / tidak ditemukan).", 'danger'],
+            default => ['Gagal Menghubungi Midtrans', 'Coba lagi beberapa saat, atau cek langsung di dashboard Midtrans.', 'danger'],
+        };
+
+        Notification::make()->title($title)->body($body)->color($color)->send();
     }
 
     public function openCancelRefundModal(string $bookingId): void
     {
-        if (! auth()->user()->can('cancel_refund_padel') && ! auth()->user()->can('cancel_padel_booking') && ! auth()->user()->isAdmin()) {
-            Notification::make()->title('Akses Ditolak: Anda tidak memiliki izin membatalkan pesanan.')->danger()->send();
+        // Hanya cancel_refund_padel — cancel_padel_booking itu izin customer membatalkan
+        // pesanannya sendiri, bukan izin staf memindahkan uang kembali.
+        if ($this->deniedWithout('cancel_refund_padel')) {
             return;
         }
 
-        $booking = PadelBooking::with(['user'])->findOrFail($bookingId);
+        $booking = PadelBooking::with(['user', 'order'])->findOrFail($bookingId);
+
+        // Default & batas = uang yang benar-benar sudah dibayar untuk booking ini. Dulu total_amount (sudah ikut
+        // menghitung tagihan selisih yang BELUM dibayar) → selisih yang tidak pernah masuk ikut "dikembalikan".
+        $refundable = app(PadelBookingService::class)->refundableAmountForBooking($booking);
+        if ($refundable <= 0 && $booking->status === 'PAID' && (! $booking->order_id || ! \App\Models\Pos\Payment::where('order_id', $booking->order_id)->exists())) {
+            $refundable = (float) $booking->total_amount; // data legacy tanpa catatan pembayaran
+        }
 
         $this->cancelBookingId = $booking->id;
         $this->cancelBookingCode = $booking->booking_code;
         $this->cancelCustomerName = $booking->user?->name ?? 'Guest';
-        $this->originalTotalAmount = (float) $booking->total_amount;
-        $this->refundAmount = (float) $booking->total_amount;
+        $this->originalTotalAmount = $refundable;
+        $this->refundAmount = $refundable;
         $this->refundMethod = 'TRANSFER_MANUAL';
         $this->refundCategory = 'SALAH_BAYAR';
         $this->refundNotes = '';
@@ -328,8 +392,7 @@ class KelolaPemesanan extends Page
 
     public function executeCancelRefund(PadelBookingService $service): void
     {
-        if (! auth()->user()->can('cancel_refund_padel') && ! auth()->user()->can('cancel_padel_booking') && ! auth()->user()->isAdmin()) {
-            Notification::make()->title('Akses Ditolak: Anda tidak memiliki izin membatalkan pesanan.')->danger()->send();
+        if ($this->deniedWithout('cancel_refund_padel')) {
             return;
         }
 
@@ -379,6 +442,10 @@ class KelolaPemesanan extends Page
 
     public function executeCheckIn(PadelBookingService $service): void
     {
+        if ($this->deniedWithout('checkin_padel_ticket')) {
+            return;
+        }
+
         $code = trim($this->checkInQuery);
         if (empty($code)) {
             Notification::make()
@@ -410,6 +477,10 @@ class KelolaPemesanan extends Page
 
     public function executeComplete(string $bookingId, PadelBookingService $service): void
     {
+        if ($this->deniedWithout('checkin_padel_ticket')) {
+            return;
+        }
+
         try {
             $staffUser = auth()->user() ?? \App\Models\User::role(['admin', 'super_admin'])->first();
             $booking = $service->completeBooking($bookingId, $staffUser);
@@ -430,6 +501,10 @@ class KelolaPemesanan extends Page
 
     public function executeReturnEquipment(string $bookingId, PadelBookingService $service): void
     {
+        if ($this->deniedWithout('checkin_padel_ticket')) {
+            return;
+        }
+
         try {
             $staffUser = auth()->user() ?? \App\Models\User::role(['admin', 'super_admin'])->first();
             $result = $service->returnEquipment($bookingId, $staffUser);

@@ -136,7 +136,7 @@ class UnifiedPaymentOrchestratorTest extends TestCase
         }
 
         // Assert order_items tercipta
-        $this->assertCount(3, $order->items); // 2 slot lapangan + 1 peralatan
+        $this->assertCount(2, $order->items); // 2 jam berurutan digabung jadi 1 booking lapangan + 1 peralatan
     }
 
     /**

@@ -92,6 +92,13 @@ class BookingSystem extends Page
 
     public function executeCheckIn(PadelBookingService $service): void
     {
+        if (! auth()->user()?->can('checkin_padel_ticket')) {
+            \App\Services\Audit\ActivityLogger::accessDenied('mencoba aksi tanpa izin [checkin_padel_ticket] di Monitoring Lapangan');
+            Notification::make()->title('Akses Ditolak')->body('Anda tidak memiliki izin [checkin_padel_ticket] untuk aksi ini.')->danger()->send();
+
+            return;
+        }
+
         $code = trim($this->checkInQuery);
         if (empty($code)) {
             Notification::make()
@@ -195,8 +202,7 @@ class BookingSystem extends Page
         $startFormatted = sprintf('%02d:00', $h);
         $endFormatted = sprintf('%02d:00', $h + 1);
 
-        $isWeekend = Carbon::parse($this->selectedDate)->isWeekend();
-        $isPrime = $isWeekend || $h >= 17;
+        $isPrime = app(\App\Services\Padel\PeakHourService::class)->isPeak(Carbon::parse("{$this->selectedDate} {$startFormatted}"));
         $rate = $isPrime ? (float) $court->hourly_rate_prime : (float) $court->hourly_rate_regular;
 
         $this->inspectData = [
@@ -224,9 +230,22 @@ class BookingSystem extends Page
 
     public function quickCheckInFromInspector(string $bookingId, PadelBookingService $service): void
     {
+        if (! auth()->user()?->can('checkin_padel_ticket')) {
+            \App\Services\Audit\ActivityLogger::accessDenied('mencoba aksi tanpa izin [checkin_padel_ticket] di Monitoring Lapangan');
+            Notification::make()->title('Akses Ditolak')->body('Anda tidak memiliki izin [checkin_padel_ticket] untuk aksi ini.')->danger()->send();
+
+            return;
+        }
+
         try {
             $staffUser = auth()->user() ?? \App\Models\User::role(['cashier', 'admin', 'super_admin'])->first();
-            $result = $service->checkIn($bookingId, $staffUser);
+            // checkIn() mencari berdasarkan booking_code / qr_code_hash, BUKAN id database —
+            // mengoper $bookingId langsung selalu berakhir "Tiket tidak ditemukan".
+            $bookingCode = \App\Models\Padel\PadelBooking::whereKey($bookingId)->value('booking_code');
+            if (! $bookingCode) {
+                throw new \RuntimeException('Tiket tidak ditemukan.');
+            }
+            $result = $service->checkIn($bookingCode, $staffUser);
 
             Notification::make()
                 ->title('Check-In Berhasil!')
@@ -246,6 +265,13 @@ class BookingSystem extends Page
 
     public function executeComplete(string $bookingId, PadelBookingService $service): void
     {
+        if (! auth()->user()?->can('checkin_padel_ticket')) {
+            \App\Services\Audit\ActivityLogger::accessDenied('mencoba aksi tanpa izin [checkin_padel_ticket] di Monitoring Lapangan');
+            Notification::make()->title('Akses Ditolak')->body('Anda tidak memiliki izin [checkin_padel_ticket] untuk aksi ini.')->danger()->send();
+
+            return;
+        }
+
         try {
             $staffUser = auth()->user() ?? \App\Models\User::role(['cashier', 'admin', 'super_admin'])->first();
             $booking = $service->completeBooking($bookingId, $staffUser);
@@ -383,8 +409,7 @@ class BookingSystem extends Page
                         'price' => 0,
                     ];
                 } else {
-                    $isWeekend = $targetDate->isWeekend();
-                    $isPrime = $isWeekend || (int) $h >= 17;
+                    $isPrime = app(\App\Services\Padel\PeakHourService::class)->isPeak($targetDate->copy()->setTime((int) $h, 0));
                     $slotPrice = $isPrime ? (float) $court->hourly_rate_prime : (float) $court->hourly_rate_regular;
 
                     $courtRow['slots'][$h] = [

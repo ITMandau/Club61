@@ -1,193 +1,382 @@
 # Roadmap & Progress Checklist: Club 61 Central Backend System
 
-Dokumen pelacak progres (Single Source of Truth) untuk memantau status penyelesaian fitur, modul yang sudah beres ([x]), dan modul yang siap dikerjakan selanjutnya ([ ]). Seluruh teks disajikan bersih tanpa ikon atau emoji.
+Dokumen pelacak progres (Single Source of Truth). Status di bawah ini hasil audit langsung ke kode (bukan ke PRD) per **30 September 2026**. Seluruh teks disajikan bersih tanpa ikon atau emoji.
+
+### Legenda
+
+| Tanda | Arti |
+| :--- | :--- |
+| `[x]` | Selesai, sudah pakai data asli (database / service / payment gateway) |
+| `[~]` | Sebagian jalan, masih ada bagian yang kurang |
+| `[ ]` | Belum dikerjakan |
+| **DUMMY** | Halaman / fitur sudah tampil, tapi isinya data palsu (hardcoded) atau tombolnya tidak melakukan apa-apa |
+| **SKEMA SAJA** | Tabel database & model sudah ada, tapi belum dipakai kode mana pun |
+| **KRITIS** | Bug yang bisa bikin rugi uang / celah keamanan, wajib dibereskan sebelum live |
 
 ---
 
-## Ringkasan Status Progres Global
+## Ringkasan Status Global
 
 | Modul | Deskripsi | Status | Progress |
-| :--- | :--- | :---: | :---: |
-| Modul 01 | Core Auth, Multi-Door (Web, API Sanctum, Filament RBAC) | Selesai Penuh | 100% |
-| Modul 02 | Padel Court Booking Engine (Core Flow, Reschedule & Delta) | Selesai Penuh | 100% |
-| Modul 03 | Wellness & Sauna (Cold Plunge & Finnish Sauna) | Database Ready | 25% |
-| Modul 04 | Salon & Beauty Appointments (Stylist Stacking) | Database Ready | 25% |
-| Modul 05 | Gym Membership & QR Gate Pass | Database Ready | 25% |
-| Modul 06 | F&B Cafe, Table QR Ordering & Kitchen KOT (BOM) | Database & UI KDS Ready | 40% |
-| Modul 07 | Merchandise Retail | Database Ready | 25% |
-| Modul 08 | POS Frontdesk, Split Bill & Multi-Gateway | Database & UI POS Ready | 50% |
-| Modul 09 | Enterprise Role & Sidebar Permission Matrix (Club 61 Matrix) | Selesai Penuh | 100% |
+| :--- | :--- | :--- | :---: |
+| 01 | Core Auth & Multi-Door Login | Jalan, reset sandi via email belum | 85% |
+| 02 | Padel Court Booking Engine | Selesai | 97% |
+| 03 | Wellness & Sauna | API booking jalan, pembayaran & halaman belum | 35% |
+| 04 | Salon & Beauty | Katalog saja | 15% |
+| 05 | Membership (Padel/Gym/Wellness) & Gym Pass | Jalan, pembayaran online perlu dirapikan | 75% |
+| 06 | F&B Cafe, Table QR & Kitchen KDS | POS Kasir F&B jalan, KDS DUMMY, self-order belum | 45% |
+| 07 | Merchandise Retail | Katalog saja | 10% |
+| 08 | POS Frontdesk & Split Bill | POS Padel & F&B jalan, split bill belum | 55% |
+| 09 | Role & Permission Matrix | Selesai | 100% |
+| 10 | Unified Payment Gateway (Midtrans) | Jalan + rekonsiliasi, handler baru Padel & Membership | 80% |
+| 11 | Walk-In Offline Booking (POS Padel) | Selesai | 100% |
+| 12 | Sponsor / Corporate Account | Jalan | 90% |
+| 13 | Multi-Branch Tenancy | PRD saja | 0% |
+| 14 | Company Profile / Konten Website | Selesai | 100% |
+| 15 | Manajemen Menu F&B | Selesai | 100% |
+| 16 | Activity / Audit Log | Jalan (panel superadmin, transaksi, perubahan data, login) | 85% |
+| 17 | Laporan Keuangan & Riwayat Transaksi Terpadu | Belum ada (URGENT) | 10% |
+| 18 | Pengaturan Invoice / Struk Terpusat | Belum ada | 0% |
+| 19 | Realtime (Laravel Reverb) | Belum terpasang, masih polling | 0% |
+| 20 | Halaman Admin Pendukung (Dashboard, Club, Karyawan, Turnamen, Marketing) | DUMMY semua | 0% |
+
+**Automated test suite:** 566 passed (2352 assertions) — termasuk regresi audit "bom waktu" 1 Okt 2026 (`tests/Feature/Padel/PaymentTimeBombRegressionTest.php`).
+
+---
+
+## PRIORITAS SEBELUM LIVE
+
+### KRITIS (bisa bikin rugi uang)
+- [x] **KRITIS: Midtrans gagal = dianggap lunas** (DIPERBAIKI 30 Sep 2026). Dulu `MidtransService::createSnapTransaction()` menangkap semua error Midtrans (key salah, jaringan putus, request ditolak) atau server key kosong, lalu mengembalikan token palsu `is_mock=true`, sehingga booking padel langsung `PAID` dan membership online langsung aktif gratis.
+  - Sekarang fail-closed: token mock hanya di environment `local` (tanpa key) / `testing`. Selain itu checkout ditolak HTTP 503 (`PaymentGatewayUnavailableException`), transaksi DB di-rollback, slot tetap `LOCKED` supaya customer bisa coba lagi, dan error dicatat `[ALERT]` di log.
+  - Test: `tests/Feature/Payment/MidtransFailClosedTest.php` (7 test).
+  - Catatan: driver `mock` via config `PAYMENT_DRIVER=mock` masih bisa dipakai di server non-production. Pastikan server sandbox / production memakai `PAYMENT_DRIVER=midtrans`.
+- [ ] Client key cadangan `'SB-Mid-client-demo-61'` masih dipakai kalau config kosong (`checkout.blade.php:1528`, `invoice-scripts.blade.php:1012`).
+
+### URGENT (permintaan PM)
+- [x] Modul 16: Activity / Audit Log untuk superadmin.
+- [ ] Modul 17: Laporan keuangan per modul + tiap transaksi bisa dilacak detail & invoice-nya.
+- [ ] Modul 18: Panel pengaturan invoice untuk semua modul.
+- [ ] Rapikan pembayaran membership online di portal customer.
+  - [x] Master Fasilitas Membership (menu **Fasilitas Membership**): tambah fasilitas baru (mode check-in / info saja), nama & deskripsi benefit diatur admin; paket punya deskripsi + daftar privilege + catatan per benefit. Halaman membership, My Club, teaser depan, POS Jual Membership & API `/membership/plans` (`benefit_cards`) tidak lagi memakai teks dummy (2 Okt 2026).
+  - [x] Check-in generik `POST /api/v1/membership/checkin`; check-in Gym unlimited dulu selalu gagal, paket "diskon saja" dulu bisa check-in gratis — keduanya diperbaiki.
+  - [ ] Lanjutkan bayar membership PENDING_PAYMENT dari My Club, cegah order pending dobel.
+- [ ] Reset sandi via email (Gmail / SMTP).
+- [ ] Reverb untuk update tanpa refresh.
 
 ---
 
 ## MODUL 01: CORE AUTHENTICATION & MULTI-DOOR ACCESS
 
-### Status: 100% SELESAI
-- [x] Sistem autentikasi multi-guard (Web Session Guard dan API Sanctum Bearer Token).
-- [x] Unifikasi password default dev (`password123`) di seeder dan database aktif.
-- [x] Shortcut login username admin (`admin`) pada form web `/login`.
-- [x] Smart Multi-Door Redirection berbasis `home_route` peran pengguna:
-  - [x] Staf Kasir langsung mendarat di `/pos`.
-  - [x] Staf Dapur / Barista langsung mendarat di `/kitchen`.
-  - [x] Staf Admin & Super Admin langsung mendarat di `/admin`.
-  - [x] Member Customer langsung mendarat di `/dashboard`.
-- [x] Tombol navigasi dinamis pada landing page `welcome.blade.php` menyesuaikan peran pengguna yang sedang login.
+### Status: 85%
+- [x] Autentikasi multi-guard (Web Session & API Sanctum Bearer Token).
+- [x] Login dengan username / email, shortcut `admin`.
+- [x] Redirect otomatis berdasarkan `home_route` role (`/admin`, `/pos`, `/kitchen`, `/admin/book-offline-court`, `/dashboard`).
+- [x] Staf diblokir dari halaman portal customer (middleware `CustomerPortalOnly`).
+- [x] Staf tanpa akses Dashboard diarahkan ke halaman admin pertama yang boleh dibuka.
+- [x] Reset sandi: controller jalan, pesan generik (tidak membocorkan email terdaftar), token Sanctum dicabut setelah reset.
+- [ ] **Reset sandi via email belum sampai ke user.** `MAIL_MAILER=log`, jadi link reset cuma masuk ke `storage/logs`. Perlu:
+  - [ ] Setting SMTP (Gmail App Password / Mailtrap / Resend / SES) di `.env` server.
+  - [ ] Template email reset bertema Club 61 (sekarang masih email bawaan Laravel).
+  - [ ] Pengirim `MAIL_FROM_ADDRESS` masih `hello@example.com`.
+- [ ] **Verifikasi email tidak aktif.** Model `User` tidak mengimplementasikan `MustVerifyEmail`, jadi middleware `verified` di route portal tidak berfungsi.
 
 ---
 
 ## MODUL 02: PADEL COURT BOOKING ENGINE
 
-### Status: 100% SELESAI (PRODUCTION-HARDENED & ENTERPRISE ARCHITECTURE)
-Alur pemesanan lapangan oleh customer dari memilih jam, kuncian slot, pembayaran payment gateway, boarding pass digital, check-in gate kasir, internal override reschedule/refund, pelunasan selisih delta, hingga proteksi anti-premature expiry sudah 100% SELESAI dan lulus automated test suite.
-
-### Yang Sudah Selesai Penuh:
-- [x] Matriks Jadwal Real-time (06:00 - 23:00 WIB): Endpoint `GET /api/v1/padel/schedule` timezone-aware.
-- [x] Diferensiasi Tarif Jam: Otomatis membedakan Tarif Reguler vs Prime Time (17:00+ & Akhir Pekan).
-- [x] Privasi Terproteksi: Identitas pemain di jadwal publik di-masking (`BOOKED`).
-- [x] Katalog Sewa Alat (Add-Ons): Endpoint `GET /api/v1/padel/equipments` (Raket Carbon, Bola, dll.).
-- [x] Two-Tier Concurrency Lock (Anti-Double Booking):
-  - [x] Tier 1: Distributed Cache Lock (TTL 600s keranjang, TTL 86.400s reschedule) dengan sorted keys anti-deadlock.
-  - [x] Tier 2: Database Pessimistic Lock (`SELECT ... FOR UPDATE`) rumus matematika terbuka (`<` dan `>`).
-- [x] Atomic Multi-Slot (All-or-Nothing): Jika 1 slot bentrok saat hold multi-jam, seluruh batch otomatis dibatalkan (409 Conflict).
-- [x] Auto Expiry Garbage Collection (10 Menit & Anti-Premature Guard):
-  - [x] Scheduler `padel:release-expired-slots` berjalan tiap 1 menit melepaskan slot `LOCKED` keranjang yang ditinggal tanpa pembayaran.
-  - [x] Anti-Premature Expiry Rule: GC strictly kebal (immune) terhadap booking yang memiliki `reschedule_count > 0` atau memiliki record pembayaran sukses (`SUCCESS`).
-- [x] Countdown Timer di Web Customer: Timer digital di `/cart` dan `/checkout` dengan auto-freeze & modal sesi habis.
-- [x] Checkout Idempotent: Header `X-Idempotency-Key` (TTL 24h) anti-debit ganda.
-- [x] Multi-Driver Payment Gateway:
-  - [x] Midtrans Snap Pop-up + SHA512 Signature Webhook Validation.
-  - [x] Xendit Invoice + Callback Token Webhook Validation.
-  - [x] Mock Driver untuk testing offline.
-- [x] Penyatuan Multi-Jam (Consolidated Invoice):
-  - [x] Multi-jam nempel (misal: 08:00 - 11:00) digabung menjadi 1 Boarding Pass & 1 Order ID Resmi.
-- [x] Pelunasan Selisih Tarif Reschedule (Delta Settlement Under Same Order):
-  - [x] Endpoint `POST /api/v1/padel/bookings/{id}/retry-payment` menagihkan hanya nominal selisih delta via Midtrans Snap.
-  - [x] Konsolidasi pembayaran di bawah `order_id` yang sama, baik pelunasan via Kasir Frontdesk maupun Online.
-  - [x] Webhook Midtrans otomatis rilis QR Turnstile begitu selisih delta lunas.
-  - [x] Data delta transparan di API tiket (`has_pending_delta`, `unpaid_delta`, `total_paid`) dan customer invoice.
-- [x] Pintu Belakang Admin: Pindah Jadwal (Admin Reschedule):
-  - [x] Anti-Jebakan Durasi Multi-Jam: Mengunci durasi asli (D jam) dan mengeksekusi Contiguous Check.
-  - [x] Validasi Anti-Tanggal Lampau: Menolak pemindahan jadwal ke tanggal kemarin (HTTP 422).
-  - [x] Flat Equipment Zero-Overhead: Raket tetap terikat ke `order_id` tanpa overhead manipulasi data.
-  - [x] Eksekusi Finansial Price Delta: Kurang Bayar (tagihan supplemental `payments`) & Lebih Bayar (deposit member `refunds`).
-  - [x] Filament Atomic Action: Terbungkus utuh di dalam `DB::transaction()`.
-  - [x] Modal interaktif "Pindah Jadwal" di Filament Admin `/admin/kelola-pemesanan`.
-- [x] Pintu Belakang Admin: Pelunasan Tagihan Menggantung (Quick Settle):
-  - [x] Notifikasi status kurang bayar dan penahanan QR pada tabel Filament.
-  - [x] Method `adminSettleSupplementalPayment()` dan modal 1-klik kasir untuk melunasi dan merilis QR tiket.
-- [x] Pintu Belakang Admin: Batalkan & Refund (Admin Void/Refund):
-  - [x] Method `adminCancelAndRefund()` di `PadelBookingService.php` (set status `REFUNDED`/`CANCELLED`, revoke QR, catat audit di tabel `refunds`, rilis slot lapangan ke publik).
-  - [x] Modal aksi "Batalkan & Refund" di Filament Admin `/admin/kelola-pemesanan`.
-- [x] Scan QR Check-in Kasir Frontdesk & Turnstile Gate:
-  - [x] Single-use hash, toleransi double scan 30 detik, audit penyerahan raket, dan penolakan jika tiket memiliki tagihan delta belum lunas.
-- [x] Refaktor Arsitektur Modular (Concerns Traits):
-  - [x] `PadelBookingService.php` (29 baris) merangkai 5 traits terisolasi: `ManagesScheduleAndSlots`, `ManagesCheckoutAndPayments`, `ManagesCheckInAndTurnstile`, `ManagesTicketsAndRefunds`, dan `ManagesRescheduleAndCashier`.
-- [x] Dropdown Pemilihan Pelatih (Coach Padel): Kolom `coach_id` & `coach_fee` terintegrasi di skema.
-- [x] Konfigurasi Jumlah Lapangan Pasti: 4 Lapangan aktif (Panoramic Pro, Panoramic Elite, Club Elite, Center Court).
+### Status: 95%
+- [x] Matriks jadwal real-time timezone-aware, tarif Reguler vs Prime Time.
+- [x] Jam yang sudah lewat disembunyikan / ditolak (customer, POS walk-in, monitoring).
+- [x] Privasi identitas pemain di jadwal publik.
+- [x] Katalog sewa alat + pengurangan stok.
+- [x] Two-tier concurrency lock (cache lock + `SELECT ... FOR UPDATE`), atomic multi-slot.
+- [x] Auto-expiry slot yang tidak dibayar (scheduler tiap 1 menit) dengan anti-premature guard.
+- [x] Countdown timer di `/cart` dan `/checkout`.
+- [x] Checkout idempotent (`X-Idempotency-Key`).
+- [x] Consolidated invoice multi-jam (1 order, 1 boarding pass).
+- [x] Pelunasan selisih reschedule (delta) via Midtrans maupun kasir.
+- [x] Admin: pindah jadwal, quick settle, batalkan & refund, cek status bayar ke Midtrans.
+- [x] Reschedule & selisih bayar (diperbaiki 30 Sep 2026, `tests/Feature/Padel/ReschedulePaymentTest.php`):
+  - [x] Benefit membership (kuota / diskon %) & voucher sponsor ikut pindah ke jadwal baru — tidak ada lagi tagih ganda.
+  - [x] Modal menampilkan rincian lengkap (tarif, benefit, selisih, pajak, biaya layanan, total) dengan rumus yang sama persis dengan yang ditagih.
+  - [x] Bayar di frontdesk wajib shift aktif + bukti bayar (RRN QRIS / slip EDC / referensi transfer), 1 bukti hanya untuk 1 transaksi, uang masuk rekap shift.
+  - [x] "Kirim tagihan ke customer": bayar via Midtrans di invoice atau di kasir; rekonsiliasi Midtrans ikut mengecek tagihan selisih.
+  - [x] Pindah ke jam lebih murah: selisih HANGUS (kebijakan PM), tercatat di invoice & log, tanpa refund fiktif.
+  - [x] Invoice customer menampilkan selisih reschedule (lunas / belum) dan selisih yang hangus.
+  - [x] Slot hasil reschedule tidak bisa di-double-book walau cache kunci hilang.
+  - [x] Refund dibatasi uang yang benar-benar masuk; opsi "Saldo Deposit Member" (fitur tidak ada) dihapus.
+- [x] Check-in via scan QR / ketik kode booking (single-use, toleransi double scan, tolak kalau ada delta belum lunas).
+- [x] Invoice customer: pajak, biaya layanan, diskon membership & voucher corporate tampil benar (kartu tiket + PNG e-ticket).
+- [x] Arsitektur service modular (5 traits).
+- [~] Coach padel: kolom `coach_id` & `coach_fee` ada di skema, **belum ada UI pemilihan pelatih**.
+- [x] Checkout ditolak (bukan dianggap lunas) kalau Midtrans error.
+- [ ] QR tiket masih fallback ke layanan eksternal `api.qrserver.com` (`invoice-scripts.blade.php:824`).
+- [ ] Placeholder `'CLUB61-DEMO'` masih ada di kartu tiket (`ticket-card.blade.php:78`).
 
 ---
 
 ## MODUL 03: WELLNESS (COLD PLUNGE & SAUNA)
 
-### Status: 25% (DATABASE & SEEDER READY)
-- [x] Skema Tabel Database: `wellness_facilities`, `wellness_slots`, `wellness_bookings`, `wellness_waitlists`.
-- [x] Data Seeder Bawaan (Ice Bath / Cold Plunge & Finnish Cedarwood Sauna).
-- [ ] Endpoint API Publik:
-  - [ ] `GET /api/v1/wellness/facilities` (Daftar fasilitas & durasi).
-  - [ ] `GET /api/v1/wellness/slots?facility_id=&date=` (Jadwal sesi & sisa kuota).
-- [ ] Endpoint Pemesanan:
-  - [ ] `POST /api/v1/wellness/bookings` (Reservasi sesi & atomic headcount decrement).
-  - [ ] `POST /api/v1/wellness/waitlist` (Masuk antrean otomatis jika sesi penuh).
-- [ ] Halaman Web Customer Portal `/wellness` (Katalog sesi, pilih jam, countdown tiket).
+### Status: 35%
+- [x] Skema: `wellness_facilities`, `wellness_slots`, `wellness_bookings`, `wellness_waitlists`.
+- [x] Seeder fasilitas (Ice Bath & Finnish Sauna).
+- [x] API: `GET facilities`, `GET slots`, `POST book`, `POST cancel` (`routes/api/wellness.php`).
+- [x] `WellnessBookingService`: lock kuota, potong kuota / diskon membership.
+- [ ] **Booking berbayar tidak bisa dibayar:** status tetap `PENDING`, tidak membuat Order / Payment, tidak ada fulfillment handler di `PaymentFulfillmentRegistry`.
+- [ ] Waitlist otomatis kalau sesi penuh (tabel ada, logika belum).
+- [ ] Halaman customer `/wellness`.
+- [ ] **POS Wellness** untuk kasir / resepsionis.
+- [ ] Halaman admin **Kelola Club** masih **DUMMY** (4 kartu fasilitas hardcoded, tombol "Jadwal Maintenance" tidak berfungsi).
 
 ---
 
 ## MODUL 04: SALON & BEAUTY TREATMENT
 
-### Status: 25% (DATABASE & SEEDER READY)
-- [x] Skema Tabel Database: `salon_services`, `salon_appointments`, `salon_appointment_services`.
-- [x] Data Seeder Bawaan (Haircut, Balayage Treatment, Scalp Spa, Stylist Siti).
-- [ ] Endpoint API Publik:
-  - [ ] `GET /api/v1/salon/services` (Daftar treatment & estimasi menit).
-  - [ ] `GET /api/v1/salon/stylists` (Daftar stylist aktif).
-- [ ] Algoritma Stylist Duration Stacking:
-  - [ ] Perhitungan total durasi gabungan multi-service (misal: Potong 45m + Warna 90m = 135m).
-  - [ ] Anti-overlap timeline stylist.
-- [ ] Endpoint Pemesanan: `POST /api/v1/salon/appointments`.
-- [ ] Halaman Web Customer Portal `/salon` (Katalog treatment, pilih stylist, appointment picker).
+### Status: 15%
+- [x] Skema: `salon_services`, `salon_appointments`, `salon_appointment_services`.
+- [x] Seeder layanan & stylist.
+- [x] API katalog `GET /api/v1/salon/services`.
+- [ ] API daftar stylist.
+- [ ] Algoritma duration stacking & anti-overlap stylist.
+- [ ] API appointment + pembayaran.
+- [ ] Halaman customer `/salon` dan POS salon.
 
 ---
 
-## MODUL 05: GYM & MEMBERSHIP PASS
+## MODUL 05: MEMBERSHIP & GYM PASS
 
-### Status: 25% (DATABASE & SEEDER READY)
-- [x] Skema Tabel Database: `gym_packages`, `gym_memberships`, `gym_checkins`.
-- [x] Data Seeder Bawaan (Paket Bulanan, 10-Sessions Flexi, VIP Annual).
-- [ ] Endpoint API:
-  - [ ] `GET /api/v1/gym/packages`
-  - [ ] `POST /api/v1/gym/memberships` (Beli paket membership)
-  - [ ] `POST /api/v1/gym/checkin` (Scan QR pass di pintu masuk gym)
-- [ ] Halaman Web Customer Portal `/gym` (Beli membership & kartu member digital).
+### Status: 75%
+- [x] Skema membership (plan, user membership, benefit, saldo kuota, usage log immutable).
+- [x] Resource admin **Membership Plan** (CRUD).
+- [x] Halaman admin **Jual Membership** (penjualan di kasir, pembayaran & aktivasi).
+- [x] Halaman admin **Customer & Member VIP** (read-only, analisa kebiasaan dari data asli).
+- [x] API: plans, checkout, my-membership, my-purchases, history, `checkin-gym`.
+- [x] Fulfillment handler membership terdaftar (aktivasi otomatis setelah webhook lunas).
+- [x] Diskon / kuota membership terpakai di booking padel & wellness.
+- [x] Scheduler `membership:sync-expired` harian.
+- [x] API katalog paket gym `GET /api/v1/gym/packages` (filter plan dengan benefit GYM).
+- [~] **Pembayaran membership online di portal customer** (`customer/membership.blade.php`):
+  - [x] Order, pajak & biaya, Midtrans Snap, webhook, aktivasi otomatis sudah asli.
+  - [x] Midtrans error tidak lagi mengaktifkan membership gratis.
+  - [ ] Rincian tagihan menampilkan harga plan sebagai total, padahal server menambah pajak & biaya admin, jadi nominal di layar beda dengan yang ditagih (`membership.blade.php:546-547`).
+  - [ ] **DUMMY:** teks benefit per plan masih hardcoded per tipe plan (`membership.blade.php:~510-543`), bukan dari data benefit plan.
+  - [ ] Pilihan metode bayar cuma 2 radio; nilai `MIDTRANS_SNAP` tidak dikenali sehingga semua metode muncul di Snap.
+  - [ ] Upgrade / beli plan lain saat masih punya plan aktif belum ditangani.
+  - [ ] Membership berstatus `PENDING_PAYMENT` tidak tampil di My Club (customer tidak bisa lanjut bayar).
+- [ ] Kartu member digital / QR gate pass gym di portal customer.
+- [ ] POS Gym (check-in & jual paket di meja resepsionis).
 
 ---
 
-## MODUL 06: CAFE F&B, TABLE QR & BARISTA KOT
+## MODUL 06: CAFE F&B, TABLE QR & KITCHEN KDS
 
-### Status: 40% (DATABASE & DEMO KDS READY)
-- [x] Skema Tabel Database: `fnb_categories`, `fnb_menus`, `fnb_modifier_groups`, `fnb_modifier_options`, `raw_materials`, `recipe_boms`, `table_qr_codes`.
-- [x] Data Seeder Menu, Bahan Baku, dan BOM Resep.
-- [x] Layar Kitchen Display System (KDS) di `/kitchen`.
-- [ ] Endpoint Table QR:
-  - [ ] `GET /api/v1/fnb/menus`
-  - [ ] `POST /api/v1/fnb/orders` (Pesan via QR meja)
-- [ ] Otomasi Pengurangan Stok Bahan Baku (BOM) saat order `PAID`.
-- [ ] Halaman Web Customer Self-Order Table QR.
+### Status: 45%
+- [x] Skema: kategori, menu, modifier, bahan baku, BOM resep, `table_qr_codes`, `kitchen_tickets`.
+- [x] Halaman admin **Kelola Menu F&B** (CRUD menu, kategori, modifier, upload gambar aman).
+- [x] **POS Kasir F&B** (`/pos`): keranjang, modifier, meja / take away, nama pelanggan, nomor antrian, buka / tutup shift + rekonsiliasi, struk popup, tab Riwayat Transaksi.
+- [x] API katalog `GET /api/v1/fnb/menu`.
+- [ ] **Kitchen Display System `/kitchen` masih DUMMY:** tiket `#TKT-041` hardcoded, tombol cuma JavaScript lokal, tabel `kitchen_tickets` tidak pernah dibaca / diisi. Pesanan dari POS F&B belum masuk ke dapur.
+- [ ] **Pengurangan stok bahan baku (BOM) saat order PAID** (SKEMA SAJA).
+- [ ] **Table QR self-order** (SKEMA SAJA): meja di POS masih diketik bebas.
+- [ ] **Halaman customer `/cafe` masih kosong** (file 1 baris, tidak ada route).
+- [ ] API pemesanan F&B untuk customer / aplikasi mobile.
+- [ ] Fulfillment handler F&B di `PaymentFulfillmentRegistry` (dibutuhkan kalau F&B dibayar online).
 
 ---
 
 ## MODUL 07: MERCHANDISE RETAIL
 
-### Status: 25% (DATABASE & SEEDER READY)
-- [x] Skema Tabel Database: `merch_products`, `merch_variants`, `merch_stocks`, `merch_stock_mutations`.
-- [x] Data Seeder Produk & Varian Ukuran Apparel Club 61.
-- [ ] Endpoint API:
-  - [ ] `GET /api/v1/merch/products` (Katalog produk & stok per varian).
-  - [ ] `POST /api/v1/merch/checkout` (Pembelian merchandise).
-- [ ] Halaman Web Customer Portal `/merch`.
+### Status: 10%
+- [x] Skema: `merch_products`, `merch_variants`, `merch_stocks`, `merch_stock_mutations`.
+- [x] Seeder produk & varian ukuran.
+- [x] API katalog `GET /api/v1/merch/products`.
+- [ ] Halaman admin kelola produk & stok.
+- [ ] **POS Merchandise** (jual di kasir + mutasi stok).
+- [ ] Checkout online + fulfillment handler.
+- [ ] Halaman customer `/merch`.
 
 ---
 
 ## MODUL 08: POS FRONTDESK & SPLIT BILL
 
-### Status: 50% (DATABASE & DEMO POS READY)
-- [x] Skema Tabel Database: `orders`, `order_items`, `bill_splits`, `bill_split_items`, `payments`, `vouchers`.
-- [x] Layar POS Frontdesk Kasir di `/pos`.
-- [x] Fitur Check-In Tiket Padel terintegrasi di POS Frontdesk.
-- [ ] Fitur Split Bill:
-  - [ ] Split `EQUAL` (Bagi rata dengan pembagian sisa rupiah ganjil).
-  - [ ] Split `BY_ITEM` (Bayar sesuai makanan/minuman masing-masing).
-- [ ] Keranjang Terpadu POS Kasir (Booking Lapangan + Kafe + Raket dalam 1 struk).
+### Status: 55%
+- [x] Skema: `orders`, `order_items`, `bill_splits`, `bill_split_items`, `payments`, `vouchers`.
+- [x] POS Walk-In Padel (`/admin/book-offline-court`) dan POS Kasir F&B (`/pos`).
+- [x] Shift kasir (`pos_cashier_shifts`) dengan rekonsiliasi setoran per metode bayar.
+- [x] Role **Resepsionis** (POS walk-in + scan / input kode booking).
+- [ ] **Riwayat shift kasir:** ringkasan shift cuma muncul sekali di modal saat tutup shift, belum ada halaman daftar shift lama & laporan selisih (over / short).
+- [ ] **Split bill** EQUAL & BY_ITEM (SKEMA SAJA).
+- [ ] Keranjang terpadu (padel + kafe + raket + merch dalam 1 struk).
+- [ ] POS Wellness, Gym, Merchandise (lihat modul masing-masing).
+- [ ] Alamat di header struk POS Padel masih hardcoded "Jl. Karang Tengah Raya No. 61" (`book-offline-court.blade.php:1060,1527`). Akan diganti oleh Modul 18.
 
 ---
 
 ## MODUL 09: ENTERPRISE ROLE & PERMISSION MATRIX
 
-### Status: 100% SELESAI (ENTERPRISE GRANULAR SECURITY)
-- [x] **Integrasi Spatie Permission & Filament Shield**:
-  - [x] 5 Tabel relasional dinamis: `roles`, `permissions`, `model_has_roles`, `model_has_permissions`, `role_has_permissions`.
-  - [x] Kustomisasi Kunci Morf ULID: Kolom `model_id` pada pivot Spatie dikonfigurasi bertipe `char(26)` untuk mendukung penuh primary key ULID `users`.
-  - [x] Pembersihan Cache Otomatis: Inisialisasi `forgetCachedPermissions()` di baris paling atas seeder anti-stale data.
-- [x] **Enterprise Role & Sidebar Permission Matrix (Club 61 Matrix)**:
-  - [x] Service class terpusat `Club61PermissionMatrix.php` memetakan total 63 izin granular pada 11 kategori modul venue tanpa ikon maupun emoji.
-  - [x] Penambahan kolom `home_route` dan `description` pada tabel `roles`.
-  - [x] Model kustom `App\Models\Role` terhubung global di `config/permission.php`.
-- [x] **Resource Backoffice Kustom (`RoleResource`) di Filament**:
-  - [x] Tabel Roles: Kolom ID, SLUG, NAME, MENUS (jumlah izin aktif), HOME ROUTE (badge warna tujuan login), dan tombol aksi Edit / Hapus.
-  - [x] Form & Modal Edit Role: Input SLUG, NAME, Dropdown HOME ROUTE, serta kartu matriks 11 kategori modul dengan kotak centang sub-modul dan tombol pintas Select All / Deselect All per modul.
-  - [x] Otomatis menonaktifkan resource default Shield agar tidak terjadi duplikasi menu.
-- [x] **Dynamic Home Route Redirection**:
-  - [x] Autentikasi web `/login` langsung mengarahkan user sesuai `home_route` perannya (`/admin`, `/pos`, `/kitchen`, `/dashboard`).
-- [x] **Proteksi Navigasi Halaman Filament (`HasPageShield`)**:
-  - [x] Trait `HasPageShield` aktif pada seluruh 10 halaman admin Filament (`Analytics`, `BookingSystem`, `Dashboard`, `KelolaClub`, `KelolaKaryawan`, `KelolaPemesanan`, `KelolaTurnamen`, `Kustomer`, `Marketing`, `MasterData`).
-- [x] **Automated Test Suite**:
-  - [x] Lulus 100% (**80 passed, 365 assertions**).
+### Status: 100%
+- [x] Spatie Permission + Filament Shield, pivot ULID `char(26)`.
+- [x] `Club61PermissionMatrix` terpusat, preset permission per role (super_admin, admin, cashier, receptionist, kitchen, customer).
+- [x] Daftar izin "backdoor" (refund, reschedule, pajak, harga lapangan, kelola role, hapus user, dll.) disembunyikan dari role admin.
+- [x] Resource **Role** kustom (matriks centang per modul, home route).
+- [x] `HasPageShield` di semua halaman admin; tombol sensitif dicek di server, bukan cuma disembunyikan.
+- [x] Super admin tidak bisa diedit / dihapus oleh non-super-admin.
+- [x] Seeder akun demo (`DemoAccessSeeder`) tanpa menimpa edit role manual.
+
+---
+
+## MODUL 10: UNIFIED PAYMENT GATEWAY
+
+### Status: 80%
+- [x] `PaymentManager` + driver Midtrans & Mock (mock diblokir di production).
+- [x] Webhook Midtrans dengan validasi signature SHA512.
+- [x] `PaymentOrchestratorService::markOrderAsPaid` idempoten + fulfillment registry.
+- [x] **Rekonsiliasi Midtrans** tanpa webhook: scheduler `payment:reconcile-midtrans` tiap 5 menit, cek saat polling invoice, tombol cek manual untuk staf, auto-tutup order yang ditinggal.
+- [x] Pembayaran telat setelah expired tercatat PAID + refund PENDING.
+- [~] Fulfillment handler baru untuk **Padel** dan **Membership**. Belum untuk Wellness, Gym, Merch, F&B online.
+- [ ] **Xendit belum ada.** Dokumen lama menyebut Xendit sudah jadi, ternyata drivernya tidak ada di kode.
+- [x] Fail-closed saat Midtrans error / server key kosong (HTTP 503, tidak ada lagi fallback mock di server).
+- [ ] Endpoint `/api/v1/payments/simulate` (khusus local / testing) menandai PAID tanpa menjalankan fulfillment.
+
+---
+
+## MODUL 11: WALK-IN OFFLINE BOOKING (POS PADEL)
+
+### Status: 100%
+- [x] Pilih lapangan & jam di kasir, jam lewat disembunyikan.
+- [x] Pembayaran tunai / QRIS / transfer / EDC, metode tidak dikenal ditolak.
+- [x] Pajak & biaya layanan dari Pengaturan Biaya & Pajak.
+- [x] Shift kasir + ringkasan tutup shift.
+- [x] Struk cetak.
+
+---
+
+## MODUL 12: SPONSOR / CORPORATE ACCOUNT
+
+### Status: 90%
+- [x] Resource admin Sponsor Organization & jadwal akses sponsor.
+- [x] Dua jalur membership corporate: dibeli customer, atau diberikan admin (izin `grant_corporate_membership`).
+- [x] Pulihkan sponsor lama yang pernah dihapus (tidak error duplikat).
+- [x] Dashboard PIC corporate (`/corporate`): kelola anggota, import CSV, rilis / cabut voucher.
+- [x] Halaman admin **Sponsor Team** (pratinjau dashboard PIC, dikunci izin sendiri).
+- [~] Sebagian keputusan PM masih menunggu (lihat PRD Modul 12 §8).
+
+---
+
+## MODUL 13: MULTI-BRANCH TENANCY
+
+### Status: 0% (PRD saja)
+- [x] PRD draft `docs/PRD_MODUL_13_MULTI_BRANCH_TENANCY.md`.
+- [ ] Belum ada kolom `branch_id`, model Branch, atau scoping query di kode.
+
+---
+
+## MODUL 14: COMPANY PROFILE / KONTEN WEBSITE
+
+### Status: 100%
+- [x] Halaman admin **Kelola Konten Website** (profil, lokasi, footer, fasilitas, value props, terjemahan Inggris).
+- [x] Landing page `welcome` membaca konten dari database.
+
+---
+
+## MODUL 15: MANAJEMEN MENU F&B
+
+### Status: 100%
+- [x] CRUD kategori, menu, modifier group (relasi many-to-many), gambar via `SecureImageUploader`.
+- [ ] Catatan server: upload gambar butuh ekstensi PHP `gd` (`php8.3-gd`). Belum dicantumkan di `composer.json` (`"ext-gd": "*"`).
+
+---
+
+## MODUL 16: ACTIVITY / AUDIT LOG (URGENT)
+
+### Status: 85% (dibangun sendiri, tanpa package)
+- [x] PRD `docs/PRD_MODUL_16_ACTIVITY_AUDIT_LOG.md` (keputusan §9 pakai usulan default: simpan 24 bulan, super_admin saja, customer ikut dicatat, akses baca halaman tidak dicatat).
+- [x] Tabel `activity_logs` + model **immutable** (tidak bisa diedit / dihapus dari aplikasi, termasuk super_admin).
+- [x] Satu pintu tulis `ActivityLogger`: snapshot nama & role pelaku, IP, perangkat, halaman asal, batch per request.
+- [x] Rahasia tidak pernah disimpan (password, token, key, hash QR, payload gateway) — diganti `[disembunyikan]`.
+- [x] Otomatis: perubahan lapangan, alat sewa, menu F&B, pajak & biaya (KRITIS), voucher, paket membership, sponsor, user, role, konten website.
+- [x] Transaksi: setiap pembayaran lunas di semua modul (walk-in, booking online, F&B, membership, pelunasan kasir, webhook, rekonsiliasi Midtrans) lengkap dengan item, metode bayar, meja, antrian, kasir.
+- [x] Aksi sensitif: refund / batal (KRITIS), reschedule, check-in, selesai, retur alat, membership corporate gratis (KRITIS), perubahan izin role (KRITIS kalau izin backdoor), ganti role user.
+- [x] Shift kasir buka / tutup, ditandai kalau ada selisih setoran.
+- [x] Keamanan: login, logout, gagal login (tanpa password), lockout, reset sandi, **setiap percobaan akses tanpa izin (403)**.
+- [x] Aksi sistem (scheduler, webhook) tercatat sebagai SISTEM / WEBHOOK, bukan dibebankan ke user yang kebetulan membuka halaman.
+- [x] Panel **Log Aktivitas** (super_admin): filter tanggal, pengguna, modul, tingkat, channel, jenis aksi, pencarian; detail sebelum → sesudah; export CSV (izin terpisah, aman dari formula injection).
+- [x] Retensi otomatis `audit:prune` harian (menolak konfigurasi 0 bulan).
+- [x] Test: `tests/Feature/Audit/ActivityLogTest.php` (21 test).
+- [ ] Hash berantai (deteksi manipulasi langsung di database).
+- [ ] Alert otomatis ke super_admin (refund besar, perubahan pajak).
+- [ ] Tombol "Riwayat" per booking / menu / sponsor di halaman masing-masing.
+
+---
+
+## MODUL 17: LAPORAN KEUANGAN & RIWAYAT TRANSAKSI TERPADU (URGENT)
+
+### Status: 10%
+Sumber pendapatan yang harus masuk laporan: POS Walk-In Padel, Booking Online Padel, Membership (online & kasir), POS F&B, POS Wellness, Gym, Merchandise.
+
+PRD: [`PRD_MODUL_17_BUKU_TRANSAKSI_TERPADU.md`](PRD_MODUL_17_BUKU_TRANSAKSI_TERPADU.md) (draft 1 Okt 2026, belum dikerjakan).
+
+- [~] Halaman **Analytics & Keuangan** sudah query data asli, tapi:
+  - [ ] **Pendapatan F&B tidak dihitung sama sekali.**
+  - [ ] Wellness, Gym, Merch belum ada (modulnya belum jalan).
+  - [ ] Okupansi masih rumus tetap 4 lapangan x 18 jam; filter "ALL" sebenarnya cuma 30 hari.
+  - [ ] Belum ada pilih rentang tanggal, grafik, dan export (Excel / PDF).
+- [x] Tab Riwayat Transaksi di POS F&B (khusus F&B, 50 transaksi terakhir).
+- [ ] **Buku transaksi terpadu**: semua order & payment lintas modul dalam satu tabel, filter (modul, tanggal, metode bayar, kasir, status), klik untuk lihat detail item + pembayaran + refund.
+- [ ] **Lihat / cetak ulang invoice** untuk setiap transaksi dari panel admin (sekarang invoice cuma ada di portal customer untuk padel & membership, dan struk kasir cuma sekali tampil setelah bayar).
+- [ ] Nomor invoice resmi yang tersimpan (sekarang pakai `order_number`).
+- [ ] Laporan per modul (harian / bulanan) + rekap per metode bayar.
+- [ ] Laporan shift kasir & selisih setoran.
+- [ ] Laporan refund.
+
+---
+
+## MODUL 18: PENGATURAN INVOICE / STRUK TERPUSAT
+
+### Status: 0%
+- [ ] Panel pengaturan: logo, nama usaha, alamat, telepon, NPWP, header & footer, catatan kaki per modul.
+- [ ] Dipakai oleh semua invoice & struk (POS Padel, POS F&B, Jual Membership, invoice customer, modul lain nanti).
+- Kondisi sekarang: tabel `club_finance_settings` hanya menyimpan pajak & biaya admin; alamat struk hardcoded di blade.
+
+---
+
+## MODUL 19: REALTIME (LARAVEL REVERB)
+
+### Status: 0%
+- [ ] Belum terpasang: tidak ada `laravel/reverb`, `laravel-echo`, `config/broadcasting.php`, `routes/channels.php`, maupun event `ShouldBroadcast`.
+- Kondisi sekarang pakai polling:
+  - Monitoring Lapangan (`booking-system.blade.php`) `wire:poll.10s`.
+  - Invoice customer polling status bayar maksimal 10 kali.
+  - Notifikasi navbar customer dibangun dari data booking, status "dibaca" cuma di localStorage.
+- Kandidat pertama realtime: KDS dapur (pesanan baru dari POS F&B), monitoring lapangan, status bayar invoice, notifikasi customer.
+- Catatan server: Reverb butuh proses yang jalan terus (supervisor / systemd) + konfigurasi proxy websocket di Nginx.
+
+---
+
+## MODUL 20: HALAMAN ADMIN PENDUKUNG
+
+### Status: 0% (semua DUMMY)
+| Halaman | Kondisi | Yang dibutuhkan |
+| :--- | :--- | :--- |
+| **Dashboard** | **DUMMY**: angka "Rp 50.272.597", "132 transaksi", grafik SVG statis, daftar booking palsu | Ringkasan asli hari ini: pendapatan per modul, booking, okupansi, shift aktif |
+| **Kelola Club** | **DUMMY**: 4 kartu fasilitas hardcoded | Kelola fasilitas wellness & jadwal maintenance |
+| **Kelola Karyawan** | **DUMMY**: "Coach Budi Santoso", "Siti Hair Stylist" hardcoded, tombol Rekrut tidak jalan | Pakai `StaffProfile` / `StaffSchedule` (model sudah ada) |
+| **Kelola Turnamen** | **DUMMY**: kartu statis "Segera Hadir" | Model & alur turnamen belum ada |
+| **Marketing** | **DUMMY**: voucher CLUB61 / HAPPYHOUR hardcoded, tombol Buat Voucher tidak jalan | Pakai model `Pos/Voucher` (sudah ada) |
+
+### Bagian DUMMY di Portal Customer
+- [ ] Dashboard customer: statistik "3 Active Courts / 1000 Lux / Wellness" teks statis.
+- [ ] Dashboard customer: kartu "Upgrade to Diamond Club" hardcoded, mengarah ke WhatsApp, bukan ke `/membership`.
+- [ ] Dashboard customer: info venue & nomor "0812-6161-PADEL" statis, belum dari Konten Website.
+- [ ] Halaman `home`, `padel`, `cafe` di `resources/views/customer` kosong (file 1 baris, tidak ada route).
+- [ ] My Club: fasilitas, etiket, "privilege standards" masih teks marketing statis (boleh dibiarkan kalau memang copy tetap).
+
+---
+
+## Catatan Infrastruktur Server
+- [x] Scheduler: `padel:release-expired-slots` (tiap menit), `payment:reconcile-midtrans` (tiap 5 menit), `membership:sync-expired` (harian). Butuh cron `* * * * * php artisan schedule:run` sebagai `www-data`.
+- [x] Queue worker belum dibutuhkan (belum ada job antrian). Akan dibutuhkan saat email & Reverb aktif.
+- [ ] Daftarkan URL notifikasi Midtrans di dashboard Midtrans.
+- [ ] Setting SMTP untuk email.
+- [ ] Ekstensi PHP `gd` wajib terpasang di server.
