@@ -215,7 +215,8 @@ trait ManagesCheckoutAndPayments
                 }
             }
 
-            // Catat order_items untuk slot lapangan dan peralatan sewa (semua item_type = 'PADEL')
+            // Catat order_items: slot lapangan = PADEL, sewa alat = EQUIPMENT (dipisah supaya Buku Transaksi bisa
+            // membedakan pendapatan lapangan dan add-on — Modul 17).
             foreach ($bookings as $b) {
                 $order->items()->create([
                     'item_type' => 'PADEL',
@@ -229,7 +230,7 @@ trait ManagesCheckoutAndPayments
 
             foreach ($equipmentItems as $eqItem) {
                 $order->items()->create([
-                    'item_type' => 'PADEL',
+                    'item_type' => 'EQUIPMENT',
                     'reference_id' => $eqItem['equipment_id'],
                     'item_name' => $eqItem['name'],
                     'quantity' => $eqItem['quantity'],
@@ -1048,7 +1049,7 @@ trait ManagesCheckoutAndPayments
                     }
                 }
 
-                // Catat order_items (semua item_type = 'PADEL')
+                // Catat order_items: slot lapangan = PADEL, sewa alat = EQUIPMENT (Modul 17).
                 foreach ($bookings as $b) {
                     $order->items()->create([
                         'item_type' => 'PADEL',
@@ -1062,7 +1063,7 @@ trait ManagesCheckoutAndPayments
 
                 foreach ($equipmentItems as $eqItem) {
                     $order->items()->create([
-                        'item_type' => 'PADEL',
+                        'item_type' => 'EQUIPMENT',
                         'reference_id' => $eqItem['equipment_id'],
                         'item_name' => $eqItem['name'],
                         'quantity' => $eqItem['quantity'],

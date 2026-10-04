@@ -8,7 +8,7 @@
 | :--- | :--- |
 | **Kode Dokumen** | `PRD-MODUL-17-BUKU-TRANSAKSI-TERPADU` |
 | **Versi** | `v1.0.0-DRAFT` |
-| **Status** | **Draft, belum dikerjakan (1 Okt 2026).** Keputusan di §10 memakai usulan default sampai PM menjawab. |
+| **Status** | **Fase 1 (fondasi data) & Fase 2 (Buku Transaksi + Antrian Refund) selesai 4 Okt 2026; Fase 3 (dashboard) belum.** Keputusan di §10 memakai usulan default sampai PM menjawab. |
 | **Sumber Requirement** | Pemilik produk: "Laporan transaksi yang dipecah per POS — walk-in, booking online, add-ons, F&B, dan lainnya — yang bisa dicek detailnya. Seperti buku transaksi terpadu + bisa lihat invoice dari admin, lengkap dengan metode pembayarannya. Angka yang diambil adalah harga tanpa pajak." |
 | **Dependensi Teknis** | `PRD_MODUL_10_UNIFIED_PAYMENT_GATEWAY.md` (`PaymentOrchestratorService::markOrderAsPaid` sebagai satu-satunya pintu pelunasan), `PRD_MODUL_16_ACTIVITY_AUDIT_LOG.md` (jejak audit & export), `PRD_MODUL_09_DYNAMIC_RBAC_FILAMENT_SHIELD.md` (izin baru). Tidak ada package baru yang wajib. |
 | **Target Pengguna** | **Owner / Super Admin & Finance** (default). Kasir **tidak** melihat modul ini — kasir sudah punya Riwayat Transaksi di POS masing-masing. |
@@ -257,6 +257,8 @@ Struk yang dibuka dari sini ditandai **"SALINAN ADMIN"** (bukan "CETAK ULANG" ka
 - Perlindungan CSV injection & pencatatan export di Log Aktivitas.
 
 ### FR-06: Antrian Refund (Prasyarat)
+
+> **Lanjutan (4 Okt 2026):** kebijakan refund dua langkah (Kelola Pemesanan hanya mengajukan, uang keluar hanya dari Antrian Refund), aturan refund customer, booking hangus, dan pencatatan pembayaran bermasalah dibahas di [`PRD_MODUL_21_REFUND_NO_SHOW_PEMBAYARAN_BERMASALAH.md`](PRD_MODUL_21_REFUND_NO_SHOW_PEMBAYARAN_BERMASALAH.md) — menunggu keputusan PM.
 
 Refund `PENDING` (kelebihan bayar, uang telat masuk untuk tagihan yang sudah ditutup) saat ini **tidak bisa diproses dari mana pun**. Dibutuhkan layar kecil:
 

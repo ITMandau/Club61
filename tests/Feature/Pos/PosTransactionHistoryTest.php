@@ -83,7 +83,7 @@ class PosTransactionHistoryTest extends TestCase
             'status' => 'SUCCESS',
             'payload_log' => ['cashier_name' => 'Kasir Owner', 'qris_details' => ['provider' => 'BCA_QRIS', 'rrn' => 'RRN'.$code]],
         ]);
-        Payment::query()->toBase()->where('id', $payment->id)->update(['created_at' => $at, 'updated_at' => $at]);
+        Payment::query()->toBase()->where('id', $payment->id)->update(['created_at' => $at, 'updated_at' => $at, 'paid_at' => $at]);
 
         return $payment->fresh();
     }

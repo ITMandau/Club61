@@ -15,7 +15,11 @@ class Refund extends Model
         'refund_amount',
         'reason',
         'status',
+        'refund_method',
+        'refund_reference',
         'processed_at',
+        'processed_by_id',
+        'admin_notes',
     ];
 
     protected function casts(): array
@@ -26,6 +30,23 @@ class Refund extends Model
         ];
     }
 
+    protected static function booted(): void
+    {
+        static::saving(function (Refund $refund) {
+            if ($refund->status === 'PROCESSED' && $refund->processed_at === null) {
+                $refund->processed_at = now();
+            }
+        });
+
+        // Uang keluar masuk Buku Transaksi (Modul 17) saat refund jadi PROCESSED — di jalur mana pun (pembatalan admin,
+        // antrian refund). Di transaksi DB yang sama dengan penyimpanan refund: gagal tulis buku = refund ikut gagal.
+        static::saved(function (Refund $refund) {
+            if ($refund->status === 'PROCESSED' && ($refund->wasRecentlyCreated || $refund->wasChanged('status'))) {
+                app(\App\Services\Finance\LedgerWriter::class)->recordRefund($refund);
+            }
+        });
+    }
+
     public function order()
     {
         return $this->belongsTo(Order::class, 'order_id');
@@ -34,5 +55,10 @@ class Refund extends Model
     public function payment()
     {
         return $this->belongsTo(Payment::class, 'payment_id');
+    }
+
+    public function processedBy()
+    {
+        return $this->belongsTo(\App\Models\User::class, 'processed_by_id');
     }
 }

@@ -1479,14 +1479,14 @@ class BookOfflineCourt extends Page
         $date = $this->resolvedHistoryDate();
         $search = trim($this->historySearch);
 
-        // updated_at = saat pembayaran jadi SUCCESS. created_at tagihan selisih = saat reschedule (bisa berhari-hari
-        // sebelumnya) → pelunasan hari ini dulu tidak muncul di riwayat hari ini & jam di struk salah.
+        // paid_at = saat pembayaran jadi SUCCESS (Modul 17; dulu didekati dengan updated_at, yang ikut berubah setiap kali
+        // baris pembayaran disentuh). created_at tagihan selisih = saat reschedule (bisa berhari-hari sebelumnya).
         return \App\Models\Pos\Payment::query()
             ->with(['order.user:id,name,phone', 'order.cashier:id,name', 'order.padelBookings.court:id,name', 'order.refunds', 'order.payments'])
             ->where('status', 'SUCCESS')
             ->where('payment_gateway', 'CASHIER_POS')
             ->whereHas('order', fn ($q) => $q->whereIn('order_type', ['WALK_IN', 'ONLINE_BOOKING']))
-            ->whereBetween('updated_at', [
+            ->whereBetween('paid_at', [
                 Carbon::parse($date, 'Asia/Jakarta')->startOfDay()->setTimezone(config('app.timezone')),
                 Carbon::parse($date, 'Asia/Jakarta')->endOfDay()->setTimezone(config('app.timezone')),
             ])
@@ -1494,7 +1494,7 @@ class BookOfflineCourt extends Page
                 ->whereHas('order', fn ($o) => $o->where('order_number', 'like', "%{$search}%")
                     ->orWhereHas('user', fn ($u) => $u->where('name', 'like', "%{$search}%")->orWhere('phone', 'like', "%{$search}%"))
                     ->orWhereHas('padelBookings', fn ($b) => $b->where('booking_code', 'like', "%{$search}%")))))
-            ->latest('updated_at')
+            ->latest('paid_at')
             ->limit(100)
             ->get()
             ->map(function (\App\Models\Pos\Payment $payment) {
@@ -1503,7 +1503,7 @@ class BookOfflineCourt extends Page
 
                 return [
                     'payment_id' => $payment->id,
-                    'time' => $payment->updated_at->setTimezone('Asia/Jakarta')->format('H:i'),
+                    'time' => ($payment->paid_at ?? $payment->updated_at)->setTimezone('Asia/Jakarta')->format('H:i'),
                     'status' => $this->historyStatusLabel($order),
                     'order_number' => $order->order_number,
                     'type' => $this->transactionTypeLabel($payment, $log),
@@ -1589,7 +1589,8 @@ class BookOfflineCourt extends Page
             ->where('status', 'SUCCESS')
             // Pembayaran yang terjadi SEBELUM pembayaran ini (waktu, lalu id ULID sebagai penentu kalau sama detik).
             ->filter(fn ($p) => $p->id !== $payment->id
-                && ($p->updated_at->lt($payment->updated_at) || ($p->updated_at->eq($payment->updated_at) && strcmp($p->id, $payment->id) < 0)))
+                && (($p->paid_at ?? $p->updated_at)->lt($payment->paid_at ?? $payment->updated_at)
+                    || (($p->paid_at ?? $p->updated_at)->eq($payment->paid_at ?? $payment->updated_at) && strcmp($p->id, $payment->id) < 0)))
             ->sum('amount');
         $isSettlement = $paidBefore > 0 || $order->order_type !== 'WALK_IN';
 
@@ -1619,7 +1620,7 @@ class BookOfflineCourt extends Page
             'grand_total' => $atSale ? (float) $payment->amount : (float) $order->grand_total,
             'auto_checked_in' => false,
             // Waktu uang diterima (pembayaran jadi SUCCESS), bukan waktu tagihan dibuat.
-            'created_at' => $payment->updated_at->setTimezone('Asia/Jakarta')->format('d/m/Y H:i:s'),
+            'created_at' => ($payment->paid_at ?? $payment->updated_at)->setTimezone('Asia/Jakarta')->format('d/m/Y H:i:s'),
             'payment_meta' => $paymentMeta,
             'note' => $atSale && $wasRescheduled ? 'Jadwal di bawah adalah jadwal TERBARU (booking sudah dipindah setelah transaksi ini).' : null,
             'bookings' => $bookings->map(fn ($b) => [

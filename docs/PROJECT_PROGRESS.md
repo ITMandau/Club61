@@ -35,12 +35,13 @@ Dokumen pelacak progres (Single Source of Truth). Status di bawah ini hasil audi
 | 14 | Company Profile / Konten Website | Selesai | 100% |
 | 15 | Manajemen Menu F&B | Selesai | 100% |
 | 16 | Activity / Audit Log | Jalan (panel superadmin, transaksi, perubahan data, login) | 85% |
-| 17 | Laporan Keuangan & Riwayat Transaksi Terpadu | Belum ada (URGENT) | 10% |
+| 17 | Laporan Keuangan & Riwayat Transaksi Terpadu | Buku Transaksi + Antrian Refund jalan; dashboard (Fase 3) belum | 75% |
 | 18 | Pengaturan Invoice / Struk Terpusat | Belum ada | 0% |
 | 19 | Realtime (Laravel Reverb) | Belum terpasang, masih polling | 0% |
 | 20 | Halaman Admin Pendukung (Dashboard, Club, Karyawan, Turnamen, Marketing) | DUMMY semua | 0% |
+| 21 | Kebijakan Refund, No-Show & Pembayaran Bermasalah | PRD draft, menunggu keputusan PM | 0% |
 
-**Automated test suite:** 575 passed (2377 assertions) — termasuk regresi audit "bom waktu" 1 Okt 2026 (`tests/Feature/Padel/PaymentTimeBombRegressionTest.php`).
+**Automated test suite:** 608 passed (2591 assertions) — termasuk regresi audit "bom waktu" 1 Okt 2026 (`tests/Feature/Padel/PaymentTimeBombRegressionTest.php`).
 
 ---
 
@@ -55,7 +56,7 @@ Dokumen pelacak progres (Single Source of Truth). Status di bawah ini hasil audi
 
 ### URGENT (permintaan PM)
 - [x] Modul 16: Activity / Audit Log untuk superadmin.
-- [ ] Modul 17: Laporan keuangan per modul + tiap transaksi bisa dilacak detail & invoice-nya.
+- [~] Modul 17: Laporan keuangan per modul + tiap transaksi bisa dilacak detail & invoice-nya — Buku Transaksi & Antrian Refund jalan (4 Okt 2026); dashboard per kategori/sumber/metode (Fase 3) menyusul.
 - [ ] Modul 18: Panel pengaturan invoice untuk semua modul.
 - [ ] Rapikan pembayaran membership online di portal customer.
   - [x] Master Fasilitas Membership (menu **Fasilitas Membership**): tambah fasilitas baru (mode check-in / info saja), nama & deskripsi benefit diatur admin; paket punya deskripsi + daftar privilege + catatan per benefit. Halaman membership, My Club, teaser depan, POS Jual Membership & API `/membership/plans` (`benefit_cards`) tidak lagi memakai teks dummy (2 Okt 2026).
@@ -312,10 +313,27 @@ Dokumen pelacak progres (Single Source of Truth). Status di bawah ini hasil audi
 
 ## MODUL 17: LAPORAN KEUANGAN & RIWAYAT TRANSAKSI TERPADU (URGENT)
 
-### Status: 10%
+### Status: 75%
 Sumber pendapatan yang harus masuk laporan: POS Walk-In Padel, Booking Online Padel, Membership (online & kasir), POS F&B, POS Wellness, Gym, Merchandise.
 
-PRD: [`PRD_MODUL_17_BUKU_TRANSAKSI_TERPADU.md`](PRD_MODUL_17_BUKU_TRANSAKSI_TERPADU.md) (draft 1 Okt 2026, belum dikerjakan).
+PRD: [`PRD_MODUL_17_BUKU_TRANSAKSI_TERPADU.md`](PRD_MODUL_17_BUKU_TRANSAKSI_TERPADU.md) (draft 1 Okt 2026; pertanyaan §10 memakai usulan default).
+
+- [x] **Fase 1 — Fondasi data** (4 Okt 2026):
+  - Tabel `ledger_entries` + model immutable `LedgerEntry`: satu baris per kategori (Sewa Lapangan / Add-on Padel / Membership / F&B) per pembayaran atau refund, dengan snapshot order, customer, kasir, shift, metode & bukti bayar.
+  - `LedgerWriter` dipanggil di semua cabang `markOrderAsPaid` (lunas, kelebihan bayar, pembayaran ganda `DUPLICATE`, uang masuk untuk tagihan tertutup) dan saat refund jadi `PROCESSED` — di transaksi DB yang sama; gagal tulis buku = pelunasan ikut gagal.
+  - Pembagian diskon/pajak/biaya layanan proporsional per kategori, pelunasan selisih reschedule dari `payload_log`-nya sendiri, total baris = `payments.amount` persis (dihitung dalam sen). Transaksi `MOCK` & catatan `legacy_backfill` tidak dicatat.
+  - Item sewa alat kini `item_type = EQUIPMENT` (data lama dikonversi migration); kolom `payments.paid_at` (data lama dari `updated_at`), dipakai riwayat & struk POS Walk-In.
+  - Command `ledger:backfill {--from=} {--dry-run}` (idempoten) dan `ledger:verify {--date=} {--days=}` (terjadwal 01:15, selisih → Log Aktivitas KRITIS).
+  - Test: `tests/Feature/Finance/LedgerTest.php` (18 test).
+- [x] **Fase 2 — Halaman Buku Transaksi & Antrian Refund** (4 Okt 2026), grup menu **Keuangan**:
+  - **Buku Transaksi**: satu baris per pembayaran / refund, kartu ringkasan (penjualan bersih, biaya layanan, pajak terkumpul, refund, total uang masuk bersih + info benefit, hangus, refund menunggu), filter periode (preset WIB), sumber, kategori, metode, kasir, shift, status, pencarian (no. order / kode booking / nama / HP / RRN).
+  - Detail slide-over: pembagian per kategori, bukti bayar, riwayat pembayaran & refund order, booking terkait, log aktivitas order (+ tautan `Log Aktivitas?cari=`).
+  - Invoice **SALINAN ADMIN**: struk POS Walk-In untuk pembayaran kasir padel; invoice ringkas dari buku untuk online / membership / F&B / refund. Tercatat `ledger.invoice_viewed`.
+  - Tombol **Export** (dropdown): Excel (lembar *Transaksi* + *Rincian Kategori*) & PDF (ringkasan, rekap per kategori, daftar transaksi; maks. 1.500 baris, `barryvdh/laravel-dompdf`) lewat route `admin.buku-transaksi.export` — dikecualikan dari mode SPA panel supaya file terunduh (dulu isi XLSX tampil sebagai teks). Anti formula injection, tanpa HP/email, tercatat `ledger.exported`.
+  - **Antrian Refund**: proses (metode + nomor referensi → baris buku negatif) / tolak (alasan wajib), row lock anti diproses dua kali, Log Aktivitas KRITIS (`refund.processed` / `refund.rejected`). Kolom baru `refunds.refund_method`, `refund_reference`, `processed_by_id`, `admin_notes`.
+  - Izin backdoor (hanya super_admin): `View:BukuTransaksi`, `export_ledger`, `view_ledger_invoice`, `process_refund_queue`.
+  - Test: `tests/Feature/Finance/BukuTransaksiTest.php` (14 test).
+- [ ] **Fase 3 — Dashboard**: rincian per kategori/sumber/metode, grafik, Analytics membaca dari buku.
 
 - [~] Halaman **Analytics & Keuangan** sudah query data asli, tapi:
   - [ ] **Pendapatan F&B tidak dihitung sama sekali.**
@@ -351,6 +369,20 @@ PRD: [`PRD_MODUL_17_BUKU_TRANSAKSI_TERPADU.md`](PRD_MODUL_17_BUKU_TRANSAKSI_TERP
   - Notifikasi navbar customer dibangun dari data booking, status "dibaca" cuma di localStorage.
 - Kandidat pertama realtime: KDS dapur (pesanan baru dari POS F&B), monitoring lapangan, status bayar invoice, notifikasi customer.
 - Catatan server: Reverb butuh proses yang jalan terus (supervisor / systemd) + konfigurasi proxy websocket di Nginx.
+
+---
+
+## MODUL 21: KEBIJAKAN REFUND, NO-SHOW & PEMBAYARAN BERMASALAH
+
+### Status: 0% (menunggu keputusan PM)
+
+PRD: [`PRD_MODUL_21_REFUND_NO_SHOW_PEMBAYARAN_BERMASALAH.md`](PRD_MODUL_21_REFUND_NO_SHOW_PEMBAYARAN_BERMASALAH.md) — 18 pertanyaan untuk PM di §9.
+
+- [ ] Refund dua langkah: Kelola Pemesanan hanya mengajukan, uang keluar hanya dari Antrian Refund; pengajuan H-24 customer masuk antrian.
+- [ ] Kunci reschedule & refund biasa begitu jam main dimulai (celah: booking yang sedang berjalan masih bisa dipindah gratis / direfund penuh).
+- [ ] Aturan refund customer (potongan & batas waktu) + teks kebijakan di checkout / invoice.
+- [ ] Booking hangus: tegas atau reschedule darurat berbayar.
+- [ ] Menu Pembayaran Bermasalah (saldo customer terpotong tapi uang belum masuk) + tombol lapor di POS.
 
 ---
 

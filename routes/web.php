@@ -128,6 +128,11 @@ Route::get('/admin/log-aktivitas/export', \App\Http\Controllers\Admin\ActivityLo
     ->middleware('auth')
     ->name('admin.log-aktivitas.export');
 
+// Export Buku Transaksi (Modul 17) — route GET biasa, izin View:BukuTransaksi + export_ledger dicek di controller.
+Route::get('/admin/buku-transaksi/export', \App\Http\Controllers\Admin\LedgerExportController::class)
+    ->middleware('auth')
+    ->name('admin.buku-transaksi.export');
+
 Route::middleware('auth')->group(function () {
     Route::get('/profile',[ProfileController::class, 'edit'])->name('profile.edit');
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');

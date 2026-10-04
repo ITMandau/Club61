@@ -131,6 +131,10 @@
                                 @if (! empty($receipt['is_reprint']))
                                     <div style="font-size:0.625rem; font-weight:900; margin-top:0.25rem;">*** CETAK ULANG {{ $receipt['reprinted_at'] ?? '' }} ***</div>
                                 @endif
+                                {{-- Dibuka dari Buku Transaksi (Modul 17) — bukan cetak ulang kasir. --}}
+                                @if (! empty($receipt['admin_copy_at']))
+                                    <div style="font-size:0.625rem; font-weight:900; margin-top:0.25rem;">*** SALINAN ADMIN {{ $receipt['admin_copy_at'] }} ***</div>
+                                @endif
                             </div>
 
                             <div style="text-align:center; font-size:0.625rem; color:#4B5563; line-height:1.3;">

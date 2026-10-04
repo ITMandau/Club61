@@ -36,6 +36,11 @@ class Club61PermissionMatrix
         // Log aktivitas berisi siapa melakukan refund, perubahan izin, dan data pelanggan.
         'View:LogAktivitas',
         'export_activity_logs',
+        // Buku Transaksi (Modul 17): seluruh omzet, data customer & bukti bayar; antrian refund = mengeluarkan uang.
+        'View:BukuTransaksi',
+        'export_ledger',
+        'view_ledger_invoice',
+        'process_refund_queue',
     ];
 
     /**
@@ -293,6 +298,15 @@ class Club61PermissionMatrix
                             'View:Analytics' => 'Akses Halaman Analytics Keuangan',
                             'view_financial_reports' => 'Lihat Rincian Laporan Omset Venue',
                             'export_reports' => 'Export Laporan Keuangan (Excel / PDF)',
+                        ],
+                    ],
+                    'ledger_book' => [
+                        'label' => 'Buku Transaksi & Antrian Refund',
+                        'actions' => [
+                            'View:BukuTransaksi' => 'Akses Halaman Buku Transaksi (semua uang masuk & refund)',
+                            'export_ledger' => 'Export Buku Transaksi ke Excel / CSV',
+                            'view_ledger_invoice' => 'Lihat Invoice / Struk Salinan Admin dari Buku Transaksi',
+                            'process_refund_queue' => 'Proses / Tolak Refund yang Menunggu (Antrian Refund)',
                         ],
                     ],
                 ],

@@ -15,3 +15,5 @@ Artisan::command('inspire', function () {
 // Retensi Log Aktivitas (Modul 16) — default simpan 24 bulan, atur lewat AUDIT_RETENTION_MONTHS.
 \Illuminate\Support\Facades\Schedule::command('audit:prune')->dailyAt('02:30')->withoutOverlapping();
 
+// Modul 17: cocokkan Buku Transaksi dengan pembayaran & refund kemarin (selisih → Log Aktivitas KRITIS).
+\Illuminate\Support\Facades\Schedule::command('ledger:verify')->dailyAt('01:15')->withoutOverlapping();

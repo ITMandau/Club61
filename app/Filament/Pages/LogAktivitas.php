@@ -90,6 +90,19 @@ class LogAktivitas extends Page implements HasTable
 
     public const CSV_HEADER = ['Waktu (WIB)', 'Pengguna', 'Role', 'Jenis Pelaku', 'Modul', 'Aksi', 'Aktivitas', 'Data', 'Dari', 'Tingkat', 'IP', 'Perubahan', 'Detail'];
 
+    /**
+     * Tautan dari halaman lain (mis. detail Buku Transaksi) membuka log yang sudah tersaring: ?cari=ORD-xxx.
+     * Filter tanggal default (hari ini) dikosongkan supaya log order lama tetap terlihat.
+     */
+    public function mount(): void
+    {
+        $search = trim((string) request()->query('cari', ''));
+        if ($search !== '') {
+            $this->tableSearch = mb_substr($search, 0, 200);
+            $this->tableFilters['tanggal']['dari'] = null;
+        }
+    }
+
     public function table(Table $table): Table
     {
         return $table

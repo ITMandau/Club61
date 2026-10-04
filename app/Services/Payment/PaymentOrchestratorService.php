@@ -2,12 +2,14 @@
 
 namespace App\Services\Payment;
 
+use App\Models\Finance\LedgerEntry;
 use App\Models\Pos\Order;
 use App\Models\Pos\Payment;
 use App\Models\Pos\PosCashierShift;
 use App\Models\Pos\Refund;
 use App\Models\Pos\Voucher;
 use App\Services\Audit\ActivityLogger;
+use App\Services\Finance\LedgerWriter;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -173,6 +175,9 @@ class PaymentOrchestratorService
                 // Set order payment_status = PAID sesuai fakta finansial bahwa uang sah diterima
                 $order->update(['payment_status' => 'PAID']);
 
+                // Buku Transaksi: uang masuk yang akan dikembalikan (berpasangan dengan refund PENDING di bawah).
+                app(LedgerWriter::class)->recordPayment($payment->refresh(), LedgerEntry::TYPE_OVERPAYMENT);
+
                 // Buat entri refund resmi berstatus PENDING agar kasir/admin dapat memproses pengembalian
                 Refund::create([
                     'order_id' => $order->id,
@@ -302,6 +307,13 @@ class PaymentOrchestratorService
                 $order->update(['payment_status' => 'PARTIALLY_PAID']);
             }
 
+            // Buku Transaksi (Modul 17): dicatat di transaksi yang sama — gagal tulis buku = pelunasan ikut gagal.
+            // Seluruh nominal masuk saat order sudah lunas sebelumnya = kelebihan bayar.
+            app(LedgerWriter::class)->recordPayment(
+                $payment->refresh(),
+                $grandTotal > 0 && $paidBefore >= $grandTotal - 1 ? LedgerEntry::TYPE_OVERPAYMENT : LedgerEntry::TYPE_PAYMENT,
+            );
+
             // 4. Atomic decrement kuota voucher jika terpasang — HANYA pada pembayaran pertama order. Pelunasan
             // selisih reschedule / pembayaran tambahan dulu ikut memotong kuota voucher lagi.
             // Pakai "pernah ada pembayaran sukses", bukan "jumlahnya > 0": order 100% voucher punya pembayaran Rp0, dan
@@ -411,6 +423,8 @@ class PaymentOrchestratorService
             'payload_log' => array_merge($payloadLog, ['duplicate_of_payment_id' => $paidBill->id]),
         ], fn ($v) => $v !== null));
 
+        app(LedgerWriter::class)->recordPayment($duplicate->refresh(), LedgerEntry::TYPE_OVERPAYMENT);
+
         Refund::create([
             'order_id' => $order->id,
             'payment_id' => $duplicate->id,
@@ -455,6 +469,8 @@ class PaymentOrchestratorService
         if ($posShiftId && ! $order->pos_shift_id) {
             $order->update(['pos_shift_id' => $posShiftId]);
         }
+
+        app(LedgerWriter::class)->recordPayment($payment->refresh(), LedgerEntry::TYPE_OVERPAYMENT);
 
         // Status finansial mengikuti fakta uang masuk (refund dicatat terpisah).
         $totalPaid = (float) $order->payments()->where('status', 'SUCCESS')->sum('amount');

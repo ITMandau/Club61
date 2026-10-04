@@ -140,7 +140,7 @@ class UnifiedPaymentOrchestratorTest extends TestCase
     }
 
     /**
-     * 2. Atribusi Omzet: Sewa raket wajib memiliki item_type = 'PADEL' (Bukan 'MERCH').
+     * 2. Atribusi Omzet: Sewa raket bertipe EQUIPMENT (add-on padel, Modul 17) — bukan MERCH.
      */
     public function test_rental_equipment_attributed_to_padel_item_type(): void
     {
@@ -173,9 +173,9 @@ class UnifiedPaymentOrchestratorTest extends TestCase
         $merchItems = $order->items->where('item_type', 'MERCH');
         $this->assertCount(0, $merchItems, 'Sewa peralatan Padel tidak boleh bertipe MERCH agar tidak merusak atribusi revenue Modul 07.');
 
-        // Seluruh item wajib PADEL
-        $padelItems = $order->items->where('item_type', 'PADEL');
-        $this->assertCount(2, $padelItems); // 1 lapangan + 1 raket
+        // Modul 17: lapangan = PADEL, sewa alat = EQUIPMENT (dipisah supaya Buku Transaksi membedakan add-on).
+        $this->assertCount(1, $order->items->where('item_type', 'PADEL'));
+        $this->assertCount(1, $order->items->where('item_type', 'EQUIPMENT'));
     }
 
     /**

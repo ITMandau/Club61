@@ -297,7 +297,7 @@ class WalkInBookingTest extends TestCase
     }
 
     /**
-     * Test 6: Sewa alat lapangan tercatat dengan item_type = 'PADEL' (bukan PADEL_EQUIPMENT atau MERCH).
+     * Test 6: Sewa alat tercatat sebagai item EQUIPMENT (add-on padel, Modul 17) — bukan MERCH; lapangan tetap PADEL.
      */
     public function test_rental_equipment_attributed_to_padel_item_type(): void
     {
@@ -329,9 +329,10 @@ class WalkInBookingTest extends TestCase
 
         $order = $result['order'];
 
-        // Seluruh order_items harus memiliki item_type = 'PADEL'
-        $itemTypes = $order->items->pluck('item_type')->unique()->toArray();
-        $this->assertEquals(['PADEL'], array_values($itemTypes));
+        // Lapangan = PADEL, sewa alat = EQUIPMENT (dipisah supaya Buku Transaksi membedakan add-on).
+        $this->assertCount(1, $order->items->where('item_type', 'PADEL'));
+        $this->assertCount(2, $order->items->where('item_type', 'EQUIPMENT'));
+        $this->assertCount(0, $order->items->where('item_type', 'MERCH'));
 
         // Grand total harus mencakup lapangan + sewa alat
         $expectedEquipmentTotal = (50000.00 * 2) + (35000.00 * 1); // 135.000

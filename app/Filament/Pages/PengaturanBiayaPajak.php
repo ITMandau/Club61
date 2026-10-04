@@ -22,7 +22,7 @@ class PengaturanBiayaPajak extends Page
 
     protected static ?string $title = 'Pengaturan Biaya Layanan & Pajak Terpusat';
 
-    protected static ?int $navigationSort = 2;
+    protected static ?int $navigationSort = 4;
 
     protected string $view = 'filament.pages.pengaturan-biaya-pajak';
 
