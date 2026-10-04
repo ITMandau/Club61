@@ -10,7 +10,6 @@ use App\Models\Pos\Order;
 use App\Models\Pos\Payment;
 use App\Models\Pos\PosCashierShift;
 use App\Models\Pos\Refund;
-use App\Models\Setting\CompanyProfileSetting;
 use App\Services\Padel\PadelBookingService;
 use App\Services\Payment\PaymentOrchestratorService;
 use Illuminate\Support\Collection;
@@ -143,7 +142,6 @@ class LedgerTransactionPresenter
         }
 
         $order = Order::withTrashed()->with(['items', 'user'])->find($head->order_id);
-        $company = rescue(fn () => CompanyProfileSetting::current(), null, false);
         $log = is_array($payment?->payload_log) ? $payment->payload_log : [];
 
         return ['view' => 'filament.pages.partials.ledger-invoice', 'data' => [
@@ -156,7 +154,6 @@ class LedgerTransactionPresenter
             'schedule_before' => $log['schedule_before'] ?? null,
             'proof' => $payment ? $this->proof($payment) : [],
             'refund' => $head->refund_id ? Refund::find($head->refund_id) : null,
-            'company_address' => $company?->address_line,
             'copy_at' => $copyAt,
         ]];
     }

@@ -60,6 +60,20 @@ class CompanyProfileSetting extends Model
         });
     }
 
+    public const DEFAULT_ADDRESS = 'Gedung Indosat, Jl. Perintis Kemerdekaan No. 39, Medan, Sumatera Utara.';
+
+    /**
+     * Alamat venue untuk struk & invoice — satu sumber dengan Konten Website (diubah dari menu Konten Website).
+     * Dulu struk kasir & Z-Report menulis alamat lain secara hardcode ("Lebak Bulus"). Gagal baca DB / cache tidak boleh
+     * menggagalkan cetak struk, jadi jatuh ke alamat default.
+     */
+    public static function receiptAddress(): string
+    {
+        $address = rescue(fn () => trim((string) self::current()->address_line), '', false);
+
+        return rtrim($address !== '' ? $address : self::DEFAULT_ADDRESS, '.');
+    }
+
     /**
      * Ambil singleton record konten company profile dengan proteksi cache.
      */
@@ -80,7 +94,7 @@ class CompanyProfileSetting extends Model
                         ['icon_key' => 'wellness', 'title' => 'Wellness Suite', 'subtitle' => 'Sauna'],
                         ['icon_key' => 'lounge', 'title' => 'Social Lounge', 'subtitle' => 'Artisan Cafe & Bar'],
                     ],
-                    'address_line' => 'Gedung Indosat, Jl. Perintis Kemerdekaan No. 39, Medan, Sumatera Utara.',
+                    'address_line' => self::DEFAULT_ADDRESS,
                     'operating_hours_text' => 'Open 06:00 – 23:00',
                     'portal_domain_text' => 'portal.club61padel.com',
                 ]

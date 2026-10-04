@@ -8,8 +8,7 @@
                                 style="text-align:center; border-bottom:1px dashed #000; padding-bottom:0.75rem; margin-bottom:0.75rem;">
                                 <div style="font-weight:900; font-size:1rem; letter-spacing:0.05em;">CLUB 61 PADEL
                                     ARENA</div>
-                                <div style="font-size:0.65rem; color:#4B5563;">Jl. Karang Tengah Raya No. 61, Lebak
-                                    Bulus</div>
+                                <div style="font-size:0.65rem; color:#4B5563;">{{ \App\Models\Setting\CompanyProfileSetting::receiptAddress() }}</div>
                                 <div style="font-size:0.65rem; color:#4B5563;">Frontdesk &amp; Reservation Counter
                                 </div>
                             </div>

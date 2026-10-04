@@ -239,6 +239,25 @@ class BukuTransaksiTest extends TestCase
         $this->assertSame(2, ActivityLog::where('event', 'ledger.invoice_viewed')->count());
     }
 
+    public function test_receipts_use_the_venue_address_from_website_content(): void
+    {
+        // Dulu struk kasir & Z-Report menulis "Jl. Karang Tengah Raya No. 61, Lebak Bulus" secara hardcode.
+        \App\Models\Setting\CompanyProfileSetting::current()->update(['address_line' => 'Jl. Uji Alamat No. 61, Medan.']);
+        Cache::forget(\App\Models\Setting\CompanyProfileSetting::CACHE_KEY);
+        $walkIn = $this->paidWalkIn(withBooking: true);
+        $online = $this->paidWalkIn();
+        $this->actingAs($this->owner);
+
+        foreach ([$walkIn, $online] as $order) {
+            Livewire::test(BukuTransaksi::class)
+                ->mountTableAction('invoice', $this->groupedRow($order))
+                ->assertMountedActionModalSee('Jl. Uji Alamat No. 61, Medan')
+                ->assertMountedActionModalDontSee('Lebak Bulus');
+        }
+
+        $this->assertStringNotContainsString('Lebak Bulus', file_get_contents(resource_path('views/filament/pages/book-offline-court.blade.php')));
+    }
+
     public function test_invoice_and_export_need_their_own_permissions(): void
     {
         $this->paidWalkIn();

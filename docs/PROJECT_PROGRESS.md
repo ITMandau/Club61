@@ -41,13 +41,15 @@ Dokumen pelacak progres (Single Source of Truth). Status di bawah ini hasil audi
 | 20 | Halaman Admin Pendukung (Dashboard, Club, Karyawan, Turnamen, Marketing) | DUMMY semua | 0% |
 | 21 | Kebijakan Refund, No-Show & Pembayaran Bermasalah | PRD draft, menunggu keputusan PM | 0% |
 
-**Automated test suite:** 608 passed (2591 assertions) — termasuk regresi audit "bom waktu" 1 Okt 2026 (`tests/Feature/Padel/PaymentTimeBombRegressionTest.php`).
+**Automated test suite:** 609 passed (2596 assertions) — termasuk regresi audit "bom waktu" 1 Okt 2026 (`tests/Feature/Padel/PaymentTimeBombRegressionTest.php`).
 
 ---
 
 ## PRIORITAS SEBELUM LIVE
 
 ### KRITIS (bisa bikin rugi uang)
+- [x] **Upgrade Laravel 11.56 → 12.69.3** (4 Okt 2026): Laravel 11 tidak menerima patch keamanan lagi; celah *high* "CRLF injection pada aturan validasi `email`" (GHSA-5vg9-5847-vvmq) dan *Temporary Signed URL Path Confusion* hanya diperbaiki di 12.x. Ikut naik: `league/commonmark` 2.10.3 (DoS tabel Markdown), PHPUnit 11 (dev). `composer audit`: 0 advisory. Deploy: `composer install`.
+- [x] **Alamat di struk salah** (DIPERBAIKI 4 Okt 2026): struk POS Walk-In & Z-Report menulis "Jl. Karang Tengah Raya No. 61, Lebak Bulus" secara hardcode. Sekarang semua struk / invoice salinan admin memakai alamat dari menu **Konten Website** (`CompanyProfileSetting::receiptAddress()`).
 - [x] **KRITIS: Midtrans gagal = dianggap lunas** (DIPERBAIKI 30 Sep 2026). Dulu `MidtransService::createSnapTransaction()` menangkap semua error Midtrans (key salah, jaringan putus, request ditolak) atau server key kosong, lalu mengembalikan token palsu `is_mock=true`, sehingga booking padel langsung `PAID` dan membership online langsung aktif gratis.
   - Sekarang fail-closed: token mock hanya di environment `local` (tanpa key) / `testing`. Selain itu checkout ditolak HTTP 503 (`PaymentGatewayUnavailableException`), transaksi DB di-rollback, slot tetap `LOCKED` supaya customer bisa coba lagi, dan error dicatat `[ALERT]` di log.
   - Test: `tests/Feature/Payment/MidtransFailClosedTest.php` (7 test).

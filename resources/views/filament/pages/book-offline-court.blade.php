@@ -1676,7 +1676,7 @@
                         <div
                             style="text-align:center; border-bottom:1px dashed #000; padding-bottom:0.6rem; margin-bottom:0.6rem;">
                             <div style="font-weight:900; font-size:0.9375rem;">CLUB 61 PADEL ARENA</div>
-                            <div style="font-size:0.6rem;">Jl. Karang Tengah Raya No. 61, Lebak Bulus</div>
+                            <div style="font-size:0.6rem;">{{ \App\Models\Setting\CompanyProfileSetting::receiptAddress() }}</div>
                             <div style="font-size:0.65rem; font-weight:800; margin-top:0.25rem;">LAPORAN PENUTUPAN
                                 KASIR (Z-REPORT)</div>
                             <div style="font-size:0.6rem;">Loket: {{ $reportShiftData['counter'] }}</div>

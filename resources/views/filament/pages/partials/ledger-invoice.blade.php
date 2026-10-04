@@ -13,9 +13,7 @@
     style="background:#FFFFFF; border:1px solid #E5E7EB; padding:1.25rem; width:100%; max-width:420px; font-family:monospace; font-size:0.75rem; color:#111827; border-radius:8px;">
     <div style="text-align:center; border-bottom:1px dashed #000; padding-bottom:0.65rem; margin-bottom:0.65rem;">
         <div style="font-weight:900; font-size:1rem; letter-spacing:0.05em;">CLUB 61 PADEL ARENA</div>
-        @if ($company_address)
-            <div style="font-size:0.65rem; color:#4B5563;">{{ $company_address }}</div>
-        @endif
+        <div style="font-size:0.65rem; color:#4B5563;">{{ \App\Models\Setting\CompanyProfileSetting::receiptAddress() }}</div>
         <div style="font-size:0.7rem; font-weight:900; margin-top:0.35rem;">{{ $isRefund ? 'BUKTI REFUND' : 'INVOICE' }}</div>
     </div>
 
