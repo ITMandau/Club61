@@ -127,6 +127,37 @@ class MembershipFacilityTest extends TestCase
         $this->assertNotNull(MembershipPlan::find($plan->id));
     }
 
+    public function test_paid_quota_survives_deactivation_and_locks_the_usage_mode(): void
+    {
+        $pool = $this->pool();
+        $plan = $this->plan([['facility' => 'POOL', 'quota_type' => 'VISITS', 'quota_value' => 3]]);
+        $membership = $this->activeMembership($plan);
+
+        // Berhenti dijual: kuota yang sudah dibayar tetap bisa dipakai.
+        $pool->update(['is_active' => false]);
+        app(MembershipBalanceService::class)->recordCheckin($membership->balanceFor('POOL')->id, $this->customer->id);
+        $this->assertEquals(2, (float) $membership->balanceFor('POOL')->fresh()->remaining_quota);
+
+        // Benefit dihapus dari paket, tapi kartu member masih memakainya → mode tetap terkunci & tidak bisa dihapus.
+        MembershipPlanBenefit::where('plan_id', $plan->id)->delete();
+        $this->assertTrue($pool->fresh()->isInUse());
+        $this->actingAs(User::factory()->superAdmin()->create());
+        Livewire::test(ManageMembershipFacilities::class)->assertTableActionHidden('delete', $pool);
+
+        $this->expectException(\LogicException::class);
+        $pool->fresh()->update(['usage_mode' => MembershipFacility::MODE_INFO]);
+    }
+
+    public function test_check_in_picks_the_card_that_can_actually_be_used(): void
+    {
+        // Kartu 1 (berakhir duluan): Gym diskon saja. Kartu 2: Gym 5 sesi. Dulu kartu pertama dipilih → ditolak.
+        $this->activeMembership($this->plan([['facility' => 'GYM', 'quota_type' => 'NONE', 'discount_percent' => 10]], ['duration_days' => 10]));
+        $second = $this->activeMembership($this->plan([['facility' => 'GYM', 'quota_type' => 'VISITS', 'quota_value' => 5]], ['duration_days' => 60]));
+
+        $this->actingAs($this->customer, 'sanctum')->postJson('/api/v1/membership/checkin-gym')->assertOk();
+        $this->assertEquals(4, (float) $second->balanceFor('GYM')->fresh()->remaining_quota);
+    }
+
     public function test_used_facility_cannot_be_deleted(): void
     {
         $pool = $this->pool();

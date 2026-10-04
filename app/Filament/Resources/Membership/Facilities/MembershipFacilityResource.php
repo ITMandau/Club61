@@ -36,9 +36,9 @@ class MembershipFacilityResource extends Resource
 
     protected static ?string $pluralModelLabel = 'Fasilitas Membership';
 
-    protected static string|UnitEnum|null $navigationGroup = 'Main Menu';
+    protected static string|UnitEnum|null $navigationGroup = 'Customer & Membership';
 
-    protected static ?int $navigationSort = 6;
+    protected static ?int $navigationSort = 3;
 
     public static function canViewAny(): bool
     {
@@ -57,7 +57,7 @@ class MembershipFacilityResource extends Resource
 
     public static function canDelete(\Illuminate\Database\Eloquent\Model $record): bool
     {
-        return (bool) auth()->user()?->can('manage_membership_facilities') && ! $record->is_system;
+        return (bool) auth()->user()?->can('manage_membership_facilities') && ! $record->is_system && ! $record->isInUse();
     }
 
     public static function canDeleteAny(): bool
@@ -68,10 +68,18 @@ class MembershipFacilityResource extends Resource
     public static function form(Schema $schema): Schema
     {
         return $schema->components([
-            Grid::make(['default' => 1, 'sm' => 2])->schema([
+            // Root schema modal Filament 5 berkolom 2 — tanpa columnSpanFull grid ini hanya mengisi setengah modal.
+            Grid::make(['default' => 1, 'sm' => 2])->columnSpanFull()->schema([
+                TextInput::make('name')
+                    ->label('Nama Fasilitas')
+                    ->placeholder('Contoh: Kolam Renang')
+                    ->required()
+                    ->maxLength(100)
+                    ->columnSpanFull(),
                 TextInput::make('code')
                     ->label('Kode')
-                    ->helperText('Huruf besar / angka / garis bawah, maks. 10 karakter. Tidak bisa diubah setelah disimpan.')
+                    ->placeholder('Contoh: POOL')
+                    ->helperText('A–Z, 0–9, _ · maks. 10 karakter · tidak bisa diubah setelah disimpan.')
                     ->required()
                     ->maxLength(10)
                     ->regex('/^[A-Z0-9_]+$/')
@@ -80,14 +88,10 @@ class MembershipFacilityResource extends Resource
                     ->dehydrateStateUsing(fn (?string $state) => strtoupper(trim((string) $state)))
                     ->unique(ignoreRecord: true)
                     ->disabled(fn (?MembershipFacility $record) => $record !== null),
-                TextInput::make('name')
-                    ->label('Nama Fasilitas')
-                    ->placeholder('Contoh: Kolam Renang')
-                    ->required()
-                    ->maxLength(100),
                 TextInput::make('badge')
-                    ->label('Label Singkat (ikon kartu)')
+                    ->label('Label Singkat')
                     ->placeholder('Contoh: POOL')
+                    ->helperText('Tampil di ikon kartu benefit · maks. 8 karakter.')
                     ->required()
                     ->maxLength(8)
                     ->dehydrateStateUsing(fn (?string $state) => strtoupper(trim((string) $state))),
@@ -98,26 +102,35 @@ class MembershipFacilityResource extends Resource
                         : MembershipFacility::CUSTOM_MODES)
                     ->default(MembershipFacility::MODE_CHECK_IN)
                     ->required()
+                    ->native(false)
                     // Dikunci untuk fasilitas sistem, dan untuk fasilitas yang sudah dipakai di paket (kuota yang sudah
                     // dijual tidak boleh berubah arti, mis. dari "kunjungan" jadi "info saja").
-                    ->disabled(fn (?MembershipFacility $record) => $record !== null && ($record->is_system
-                        || \App\Models\Membership\MembershipPlanBenefit::where('facility', $record->code)->exists()))
-                    ->helperText('Fasilitas sistem (Padel, Gym, Sauna) terhubung ke booking & check-in yang sudah ada, jadi caranya dikunci. Fasilitas yang sudah dipakai di paket juga dikunci.'),
+                    ->disabled(fn (?MembershipFacility $record) => $record !== null && ($record->is_system || $record->isInUse()))
+                    ->helperText(fn (?MembershipFacility $record) => match (true) {
+                        (bool) $record?->is_system => 'Fasilitas sistem terhubung ke booking & check-in yang sudah ada, jadi caranya dikunci.',
+                        $record !== null && $record->isInUse() => 'Dikunci karena fasilitas ini sudah dipakai di paket / kartu member.',
+                        default => 'Tidak bisa diubah lagi setelah fasilitas dipakai di paket.',
+                    })
+                    ->columnSpanFull(),
                 Textarea::make('description')
                     ->label('Deskripsi untuk Customer')
+                    ->placeholder('Contoh: Akses kolam renang indoor setiap hari 06.00–21.00.')
                     ->helperText('Tampil di kartu benefit halaman membership. Bisa ditimpa per paket lewat "Catatan untuk customer".')
                     ->rows(3)
                     ->maxLength(500)
                     ->columnSpanFull(),
                 TextInput::make('sort_order')
                     ->label('Urutan Tampil')
+                    ->helperText('Angka kecil tampil lebih dulu.')
+                    ->required()
                     ->integer()
                     ->minValue(0)
                     ->maxValue(9999)
                     ->default(10),
                 Toggle::make('is_active')
-                    ->label('Aktif')
-                    ->helperText('Nonaktif = tidak bisa dipilih di paket baru & disembunyikan dari halaman penjualan.')
+                    ->label('Aktif Dijual')
+                    ->inline(false)
+                    ->helperText('Nonaktif = tidak bisa dipilih di paket baru. Kuota member lama tetap bisa dipakai.')
                     ->default(true),
             ]),
         ]);
@@ -137,7 +150,7 @@ class MembershipFacilityResource extends Resource
                 TextColumn::make('sort_order')->label('Urutan')->sortable(),
             ])
             ->recordActions([
-                EditAction::make(),
+                EditAction::make()->modalWidth('2xl'),
                 DeleteAction::make()
                     ->modalDescription('Hanya bisa dihapus kalau belum dipakai di paket atau kartu member mana pun. Kalau sudah dipakai, nonaktifkan saja.'),
             ]);

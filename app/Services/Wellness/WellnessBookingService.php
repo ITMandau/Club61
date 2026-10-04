@@ -77,7 +77,12 @@ class WellnessBookingService
 
                 $appliedBalanceId = $balance->id;
 
-                if ($balance->quota_type === 'VISITS' && (float) $balance->remaining_quota >= 1.0) {
+                if ($balance->quota_type === 'VISITS' && $balance->initial_quota === null) {
+                    // Akses UNLIMITED: menanggung 1 orang (member) tanpa memotong kuota. Dulu unlimited (sisa selalu 0)
+                    // tetap ditagih harga penuh padahal paketnya menjanjikan akses unlimited.
+                    $sessionsConsumed = 0.0;
+                    $discountAmount = $pricePerPerson;
+                } elseif ($balance->quota_type === 'VISITS' && (float) $balance->remaining_quota >= 1.0) {
                     // 1 visit covers 1 person completely
                     $sessionsConsumed = 1.0;
                     $discountAmount = $pricePerPerson;

@@ -31,11 +31,11 @@ class JualMembership extends Page
 
     protected static ?string $navigationLabel = 'POS Jual Membership';
 
-    protected static string|UnitEnum|null $navigationGroup = 'Main Menu';
+    protected static string|UnitEnum|null $navigationGroup = 'Operasional Harian';
 
     protected static ?string $title = 'POS Penjualan Membership Frontdesk';
 
-    protected static ?int $navigationSort = 5;
+    protected static ?int $navigationSort = 4;
 
     // Disembunyikan dari sidebar — sekarang diakses lewat tab "POS Jual Membership" di halaman
     // Walk-In Booking (lihat resources/views/filament/partials/pos-subnav.blade.php). Halaman &

@@ -99,6 +99,11 @@ class PaymentWebhookController extends Controller
             }
 
             $confirmedStatus = \App\Services\Payment\MidtransService::normalizeStatus((string) ($confirmed['transaction_status'] ?? ''), $confirmed['fraud_status'] ?? null);
+            // Status API sesaat masih "pending" (belum sinkron dengan notifikasi) → 503 supaya Midtrans mengirim ulang.
+            // Hanya status final yang bertentangan (expire / cancel / tidak dikenal) yang diabaikan sebagai palsu.
+            if (($confirmed['order_id'] ?? null) === $incomingOrderId && in_array($confirmedStatus, ['PENDING', 'CHALLENGE'], true)) {
+                throw new \RuntimeException("Status API Midtrans masih {$confirmedStatus} untuk [{$incomingOrderId}] — minta notifikasi dikirim ulang.");
+            }
             if (($confirmed['order_id'] ?? null) !== $incomingOrderId || $confirmedStatus !== 'PAID') {
                 Log::warning("[ALERT] Notifikasi 'lunas' DITOLAK: Status API Midtrans menyatakan {$confirmedStatus} untuk [{$incomingOrderId}] — kemungkinan notifikasi dipalsukan / diputar ulang.", [
                     'ip' => $request->ip(),
@@ -291,6 +296,8 @@ class PaymentWebhookController extends Controller
             foreach ($order->padelBookings as $booking) {
                 // Booking hasil reschedule tidak pernah ikut dibatalkan di sini (selalu sudah dibayar sebagian).
                 if (in_array($booking->status, ['PENDING_PAYMENT', 'LOCKED', 'PENDING'], true) && (int) $booking->reschedule_count === 0) {
+                    // Jam kuota member / voucher sponsor yang dipotong saat checkout dikembalikan (dulu hilang).
+                    app(\App\Services\Padel\PadelBookingService::class)->reverseBookingBenefits($booking);
                     $booking->update(['status' => 'CANCELLED']);
                 }
             }

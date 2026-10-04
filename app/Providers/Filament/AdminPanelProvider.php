@@ -41,6 +41,17 @@ class AdminPanelProvider extends PanelProvider
             // Sidebar bisa diciutkan ke samping jadi strip ikon (tombol di header sidebar);
             // status buka/ciut diingat browser per user.
             ->sidebarCollapsibleOnDesktop()
+            // Urutan grup menu sidebar (tiap grup bisa dibuka/tutup; statusnya diingat browser per user).
+            // Dashboard sengaja tanpa grup supaya selalu di paling atas.
+            ->navigationGroups([
+                'Operasional Harian',
+                'Customer & Membership',
+                'Sponsor',
+                'Keuangan',
+                'Marketing & Event',
+                'Master Data',
+                'Karyawan & Akses',
+            ])
             ->colors([
                 'primary' => Color::Amber,
             ])

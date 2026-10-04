@@ -206,14 +206,7 @@ class DatabaseSeeder extends Seeder
         CourtEquipment::create(['name' => 'Raket Nox AT10 Genius 18K', 'type' => 'RACKET', 'rental_price' => 65000.00, 'stock_quantity' => 15]);
         CourtEquipment::create(['name' => 'Bola Padel Pro (1 Can / 3 Pcs)', 'type' => 'BALL', 'rental_price' => 35000.00, 'stock_quantity' => 50]);
 
-        // 3. SEED WELLNESS FACILITIES & SLOTS
-        $coldPlunge = WellnessFacility::create([
-            'name' => 'Ice Bath / Cold Plunge',
-            'max_capacity_per_slot' => 6,
-            'duration_minutes' => 45,
-            'price_per_person' => 125000.00,
-        ]);
-
+        // 3. SEED WELLNESS FACILITY & SLOTS (Club 61 hanya punya Sauna — tidak ada Ice Bath / Cold Plunge)
         $sauna = WellnessFacility::create([
             'name' => 'Finnish Cedarwood Sauna',
             'max_capacity_per_slot' => 8,
@@ -225,15 +218,6 @@ class DatabaseSeeder extends Seeder
         $today = now()->format('Y-m-d');
         $slotTimes = ['09:00:00', '10:00:00', '11:00:00', '14:00:00', '15:00:00', '16:00:00', '19:00:00', '20:00:00'];
         foreach ($slotTimes as $st) {
-            WellnessSlot::create([
-                'facility_id' => $coldPlunge->id,
-                'session_date' => $today,
-                'start_time' => "$today $st",
-                'end_time' => date('Y-m-d H:i:s', strtotime("$today $st +45 minutes")),
-                'max_capacity' => 6,
-                'booked_count' => 0,
-                'status' => 'AVAILABLE',
-            ]);
             WellnessSlot::create([
                 'facility_id' => $sauna->id,
                 'session_date' => $today,

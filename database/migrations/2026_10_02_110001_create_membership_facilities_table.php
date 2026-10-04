@@ -39,7 +39,7 @@ return new class extends Migration
         foreach ([
             ['PADEL', 'Padel Court', 'PADEL', 'Reservasi lapangan padel Club 61.', 'PADEL_BOOKING'],
             ['GYM', 'Fitness & Gym', 'GYM', 'Akses area gym & fitness Club 61.', 'CHECK_IN'],
-            ['SAUNA', 'Sauna & Ice Bath', 'SAUNA', 'Sesi sauna & ice bath Club 61.', 'WELLNESS_BOOKING'],
+            ['SAUNA', 'Sauna', 'SAUNA', 'Sesi sauna Club 61.', 'WELLNESS_BOOKING'],
         ] as $i => [$code, $name, $badge, $description, $mode]) {
             DB::table('membership_facilities')->insert([
                 'id' => (string) Str::ulid(), 'code' => $code, 'name' => $name, 'badge' => $badge, 'description' => $description,

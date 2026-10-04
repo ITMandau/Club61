@@ -99,8 +99,14 @@ class PaymentOrchestratorService
                     return;
                 }
 
-                Log::warning("[ALERT] Pembayaran kedua untuk tagihan yang sudah lunas [{$order->order_number}] lewat sesi lain ({$transactionId}) — dicatat sebagai kelebihan bayar.");
-                $payment = null;
+                $this->recordDuplicatePayment($order, $payment, $paymentDetails, $posShiftId);
+
+                return;
+            }
+
+            // Pembayaran ganda yang sudah dicatat (status DUPLICATE) — notifikasi / rekonsiliasi berikutnya diabaikan.
+            if ($payment && $payment->status === self::DUPLICATE_STATUS) {
+                return;
             }
 
             // Uang masuk untuk tagihan yang SUDAH DITUTUP (booking dibatalkan / hangus no-show) atau untuk booking
@@ -197,6 +203,42 @@ class PaymentOrchestratorService
             }
 
             $paidBefore = (float) $order->payments()->where('status', 'SUCCESS')->sum('amount');
+            // Ada pembayaran sukses sebelumnya (termasuk Rp0 yang ditanggung voucher/kuota)? Dipakai untuk kuota voucher.
+            $hadSuccessBefore = $order->payments()->where('status', 'SUCCESS')->exists();
+
+            // Pelunasan di KASIR untuk tagihan yang pernah dibuka sebagai sesi Midtrans: transaction_id tagihan = order_id
+            // Snap. Dulu tetap dipakai, sehingga kalau customer tetap membayar di Snap setelah kasir menerima EDC,
+            // notifikasinya dianggap "duplikat" dan uangnya hilang tanpa catatan. Sekarang id kasir sendiri dipakai,
+            // id Snap disimpan sebagai sesi tagihan (→ terdeteksi pembayaran ganda), dan sesi Snap dibatalkan.
+            if ($isPosGateway && $payment) {
+                $payload = is_array($paymentUpdates['payload_log']) ? $paymentUpdates['payload_log'] : [];
+                $sessions = array_values(array_unique(array_filter(array_merge(
+                    [$payload['midtrans_order_id'] ?? null],
+                    (array) ($payload['midtrans_order_ids'] ?? []),
+                    // Id tagihan kasir (SUPP-…) bukan order_id Snap.
+                    ($payment->payment_gateway === 'MIDTRANS' || $payment->transaction_id === $order->order_number)
+                        && ! str_starts_with((string) $payment->transaction_id, 'SUPP-') ? [$payment->transaction_id] : []
+                ))));
+
+                if ($sessions !== []) {
+                    if (in_array($paymentUpdates['transaction_id'], $sessions, true)) {
+                        $paymentUpdates['transaction_id'] = 'POS-'.strtoupper($paymentGateway).'-'.strtoupper(Str::random(10));
+                    }
+                    $payload['midtrans_order_ids'] = $sessions;
+                    $paymentUpdates['payload_log'] = $payload;
+
+                    DB::afterCommit(function () use ($sessions) {
+                        $midtrans = app(\App\Services\Payment\MidtransService::class);
+                        foreach ($sessions as $session) {
+                            try {
+                                $midtrans->cancelTransaction($session);
+                            } catch (\Throwable $e) {
+                                // Best-effort: kalau tetap dibayar, tercatat sebagai pembayaran ganda + refund.
+                            }
+                        }
+                    });
+                }
+            }
 
             if ($payment) {
                 $payment->update($paymentUpdates);
@@ -262,7 +304,9 @@ class PaymentOrchestratorService
 
             // 4. Atomic decrement kuota voucher jika terpasang — HANYA pada pembayaran pertama order. Pelunasan
             // selisih reschedule / pembayaran tambahan dulu ikut memotong kuota voucher lagi.
-            if ($order->voucher_code && $paidBefore <= 0) {
+            // Pakai "pernah ada pembayaran sukses", bukan "jumlahnya > 0": order 100% voucher punya pembayaran Rp0, dan
+            // pelunasan selisih reschedule-nya dulu memotong kuota voucher untuk kedua kalinya.
+            if ($order->voucher_code && ! $hadSuccessBefore) {
                 Voucher::where('code', $order->voucher_code)
                     ->where(function ($q) {
                         $q->whereNull('quota')->orWhere('quota', '>', 0);
@@ -337,6 +381,59 @@ class PaymentOrchestratorService
         $statuses = \App\Models\Padel\PadelBooking::where('order_id', $order->id)->pluck('status');
 
         return $statuses->isNotEmpty() && $statuses->every(fn ($s) => in_array($s, $inactive, true));
+    }
+
+    /**
+     * Status pembayaran yang uangnya SUDAH masuk tapi BUKAN pelunasan order (tagihannya sudah lunas lewat sesi lain).
+     * Tidak ikut dihitung sebagai "total dibayar" order mana pun, selalu berpasangan dengan refund PENDING penuh.
+     */
+    public const DUPLICATE_STATUS = 'DUPLICATE';
+
+    /**
+     * Uang kedua untuk tagihan yang SUDAH lunas lewat sesi lain (customer ganti metode lalu VA lama tetap ditransfer,
+     * atau tetap membayar di Snap setelah kasir menerima EDC). Dicatat terpisah + refund PENDING SELURUH nominalnya.
+     * Dulu: diabaikan (uang hilang tanpa catatan), lalu sempat dihitung sebagai kelebihan bayar order — yang
+     * kurang-refund kalau order masih punya tagihan selisih yang belum dibayar.
+     */
+    private function recordDuplicatePayment(Order $order, Payment $paidBill, array $details, ?string $posShiftId): void
+    {
+        $amount = isset($details['amount']) ? (float) $details['amount'] : (float) $paidBill->amount;
+        $payloadLog = is_array($details['payload_log'] ?? null) ? $details['payload_log'] : [];
+
+        $duplicate = Payment::create(array_filter([
+            'order_id' => $order->id,
+            'payment_gateway' => strtoupper($details['payment_gateway'] ?? 'MIDTRANS'),
+            'transaction_id' => $details['transaction_id'],
+            'payment_method' => strtoupper($details['payment_method'] ?? 'QRIS'),
+            'amount' => $amount,
+            'status' => self::DUPLICATE_STATUS,
+            'pos_shift_id' => $posShiftId,
+            'payload_log' => array_merge($payloadLog, ['duplicate_of_payment_id' => $paidBill->id]),
+        ], fn ($v) => $v !== null));
+
+        Refund::create([
+            'order_id' => $order->id,
+            'payment_id' => $duplicate->id,
+            'refund_amount' => $amount,
+            'reason' => "Pembayaran ganda: tagihan sudah lunas lewat transaksi lain ({$paidBill->transaction_id}). Kembalikan seluruh nominal ke customer.",
+            'status' => 'PENDING',
+        ]);
+
+        Log::warning("[ALERT] Pembayaran ganda untuk tagihan yang sudah lunas [{$order->order_number}] lewat sesi lain ({$details['transaction_id']}) — refund PENDING dibuat.");
+
+        ActivityLogger::record(
+            module: 'FINANCE',
+            event: 'payment.overpaid',
+            description: 'PEMBAYARAN GANDA '.ActivityLogger::rupiah($amount)." pada order {$order->order_number} — tagihan sudah lunas lewat transaksi lain, refund PENDING dibuat",
+            subject: $order,
+            meta: [
+                'no_order' => $order->order_number,
+                'kelebihan' => $amount,
+                'id_transaksi' => $details['transaction_id'],
+                'tagihan_lunas_lewat' => $paidBill->transaction_id,
+            ],
+            severity: ActivityLogger::CRITICAL,
+        );
     }
 
     private function recordPaymentForClosedBill(Order $order, Payment $payment, array $details, ?string $posShiftId): void

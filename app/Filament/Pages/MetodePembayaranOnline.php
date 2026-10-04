@@ -34,9 +34,9 @@ class MetodePembayaranOnline extends Page implements HasTable
 
     protected static ?string $navigationLabel = 'Metode Pembayaran Online';
 
-    protected static string|UnitEnum|null $navigationGroup = 'Main Menu';
+    protected static string|UnitEnum|null $navigationGroup = 'Keuangan';
 
-    protected static ?int $navigationSort = 10;
+    protected static ?int $navigationSort = 3;
 
     protected static ?string $title = 'Metode Pembayaran Online';
 

@@ -24,11 +24,11 @@ class Kustomer extends Page
 
     protected static ?string $navigationLabel = 'Customer & Member VIP';
 
-    protected static string|UnitEnum|null $navigationGroup = 'Main Menu';
+    protected static string|UnitEnum|null $navigationGroup = 'Customer & Membership';
 
     protected static ?string $title = 'Data Kustomer & Live Monitoring Membership';
 
-    protected static ?int $navigationSort = 7;
+    protected static ?int $navigationSort = 1;
 
     protected string $view = 'filament.pages.kustomer';
 
@@ -199,7 +199,7 @@ class Kustomer extends Page
                 'last_played' => now()->subDays(5)->format('d M Y, 17:00 WIB (Court 2)'),
                 'next_schedule' => now()->addDays(4)->format('d M Y, 17:00 - 19:00 WIB (Court 2)'),
                 'status' => 'ACTIVE',
-                'notes' => 'Sesi sore santai + sauna & ice bath',
+                'notes' => 'Sesi sore santai + sauna',
             ],
             [
                 'name' => 'Dimas Setiawan',

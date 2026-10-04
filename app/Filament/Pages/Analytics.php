@@ -19,11 +19,11 @@ class Analytics extends Page
 
     protected static ?string $navigationLabel = 'Analytics & Keuangan';
 
-    protected static string | UnitEnum | null $navigationGroup = 'Main Menu';
+    protected static string | UnitEnum | null $navigationGroup = 'Keuangan';
 
     protected static ?string $title = 'Laporan Uang Masuk & Analytics';
 
-    protected static ?int $navigationSort = 2;
+    protected static ?int $navigationSort = 1;
 
     protected string $view = 'filament.pages.analytics';
 

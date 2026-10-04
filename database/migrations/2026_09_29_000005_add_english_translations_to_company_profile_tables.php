@@ -49,7 +49,7 @@ return new class extends Migration
     private function backfillDefaultEnglishTranslations(): void
     {
         DB::table('company_profile_settings')->where('id', 1)->update([
-            'hero_subtitle_en' => 'An internationally-standard integrated facility at Gedung Indosat Medan: {court_count} Panoramic Full-Indoor Air-Conditioned Padel Courts, plus Thermal Wellness Recovery (Sauna & 4°C Ice Bath).',
+            'hero_subtitle_en' => 'An internationally-standard integrated facility at Gedung Indosat Medan: {court_count} Panoramic Full-Indoor Air-Conditioned Padel Courts, plus Thermal Wellness Recovery (Finnish Sauna).',
         ]);
 
         $facilityTranslations = [
@@ -58,8 +58,8 @@ return new class extends Migration
                 'amenities_en' => ['Professional-grade flooring', 'Tournament-standard LED lighting', 'Panoramic glass walls'],
             ],
             'Wellness Suite' => [
-                'description_en' => 'A post-match recovery space with sauna and ice bath.',
-                'amenities_en' => ['Sauna', '4°C ice bath', 'Private changing room'],
+                'description_en' => 'A post-match recovery space with sauna.',
+                'amenities_en' => ['Sauna', 'Private changing room'],
             ],
             'Social Lounge' => [
                 'description_en' => 'A relaxed lounge and artisan cafe for before or after your game.',

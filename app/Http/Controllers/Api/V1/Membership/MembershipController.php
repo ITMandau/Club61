@@ -367,7 +367,10 @@ class MembershipController extends Controller
         }
 
         if (! $balanceId) {
-            $membership = UserMembership::where('user_id', $user->id)
+            // Member bisa punya beberapa kartu: utamakan kuota yang BISA dipakai (unlimited / masih ada sisa),
+            // yang paling cepat berakhir. Dulu kartu pertama yang ditemukan — bisa kartu diskon saja → ditolak.
+            $memberships = UserMembership::with('balances')
+                ->where('user_id', $user->id)
                 ->where('status', 'ACTIVE')
                 ->where(function ($q) {
                     $q->whereNull('end_date')->orWhere('end_date', '>=', now()->toDateString());
@@ -375,7 +378,14 @@ class MembershipController extends Controller
                 ->whereHas('balances', function ($q) use ($facility) {
                     $q->where('facility', $facility);
                 })
-                ->first();
+                ->orderByRaw('end_date IS NULL')
+                ->orderBy('end_date')
+                ->get();
+            $membership = $memberships->first(function (UserMembership $m) use ($facility) {
+                $b = $m->balanceFor($facility);
+
+                return $b && $b->quota_type === 'VISITS' && ($b->initial_quota === null || (float) $b->remaining_quota >= 1);
+            }) ?? $memberships->first();
 
             if (! $membership) {
                 return response()->json([

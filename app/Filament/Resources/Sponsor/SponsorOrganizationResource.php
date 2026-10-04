@@ -39,11 +39,11 @@ class SponsorOrganizationResource extends Resource
 
     protected static string|BackedEnum|null $navigationIcon = 'heroicon-o-building-office-2';
 
-    protected static ?string $navigationLabel = 'Kelola Sponsor ';
+    protected static ?string $navigationLabel = 'Kelola Sponsor';
 
-    protected static string|UnitEnum|null $navigationGroup = 'Main Menu';
+    protected static string|UnitEnum|null $navigationGroup = 'Sponsor';
 
-    protected static ?int $navigationSort = 6;
+    protected static ?int $navigationSort = 1;
 
     // Sengaja OVERRIDE authorization di Resource ini secara langsung (bukan lewat Model Policy)
     // — model SponsorOrganization sudah punya Gate::policy() sendiri (SponsorOrganizationPolicy)

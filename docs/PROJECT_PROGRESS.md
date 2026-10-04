@@ -40,7 +40,7 @@ Dokumen pelacak progres (Single Source of Truth). Status di bawah ini hasil audi
 | 19 | Realtime (Laravel Reverb) | Belum terpasang, masih polling | 0% |
 | 20 | Halaman Admin Pendukung (Dashboard, Club, Karyawan, Turnamen, Marketing) | DUMMY semua | 0% |
 
-**Automated test suite:** 566 passed (2352 assertions) — termasuk regresi audit "bom waktu" 1 Okt 2026 (`tests/Feature/Padel/PaymentTimeBombRegressionTest.php`).
+**Automated test suite:** 575 passed (2377 assertions) — termasuk regresi audit "bom waktu" 1 Okt 2026 (`tests/Feature/Padel/PaymentTimeBombRegressionTest.php`).
 
 ---
 
@@ -116,11 +116,11 @@ Dokumen pelacak progres (Single Source of Truth). Status di bawah ini hasil audi
 
 ---
 
-## MODUL 03: WELLNESS (COLD PLUNGE & SAUNA)
+## MODUL 03: WELLNESS (SAUNA)
 
 ### Status: 35%
 - [x] Skema: `wellness_facilities`, `wellness_slots`, `wellness_bookings`, `wellness_waitlists`.
-- [x] Seeder fasilitas (Ice Bath & Finnish Sauna).
+- [x] Seeder fasilitas (Finnish Sauna — Club 61 tidak punya Ice Bath; data Ice Bath lama dibersihkan migration `2026_10_04_100001`).
 - [x] API: `GET facilities`, `GET slots`, `POST book`, `POST cancel` (`routes/api/wellness.php`).
 - [x] `WellnessBookingService`: lock kuota, potong kuota / diskon membership.
 - [ ] **Booking berbayar tidak bisa dibayar:** status tetap `PENDING`, tidak membuat Order / Payment, tidak ada fulfillment handler di `PaymentFulfillmentRegistry`.

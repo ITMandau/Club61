@@ -16,6 +16,7 @@ class ManageMembershipFacilities extends ManageRecords
         return [
             CreateAction::make()
                 ->label('Tambah Fasilitas')
+                ->modalWidth('2xl')
                 // Fasilitas buatan admin tidak pernah jadi fasilitas sistem & hanya boleh mode CHECK_IN / INFO.
                 ->mutateFormDataUsing(function (array $data): array {
                     $data['is_system'] = false;

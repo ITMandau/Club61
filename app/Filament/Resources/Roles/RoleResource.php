@@ -29,9 +29,9 @@ class RoleResource extends Resource
 
     protected static ?string $navigationLabel = 'Roles & Hak Akses';
 
-    protected static string|\UnitEnum|null $navigationGroup = 'Main Menu';
+    protected static string|\UnitEnum|null $navigationGroup = 'Karyawan & Akses';
 
-    protected static ?int $navigationSort = 6;
+    protected static ?int $navigationSort = 3;
 
     public static function form(Schema $schema): Schema
     {

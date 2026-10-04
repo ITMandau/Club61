@@ -25,11 +25,11 @@ class BookOfflineCourt extends Page
 
     protected static ?string $navigationLabel = 'POS Walk-In Booking';
 
-    protected static string | UnitEnum | null $navigationGroup = 'Main Menu';
+    protected static string | UnitEnum | null $navigationGroup = 'Operasional Harian';
 
     protected static ?string $title = 'Walk-In Offline Booking & Frontdesk POS';
 
-    protected static ?int $navigationSort = 4;
+    protected static ?int $navigationSort = 2;
 
     protected string $view = 'filament.pages.book-offline-court';
 

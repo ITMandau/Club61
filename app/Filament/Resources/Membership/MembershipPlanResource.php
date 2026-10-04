@@ -39,9 +39,9 @@ class MembershipPlanResource extends Resource
 
     protected static ?string $navigationLabel = 'Paket Membership';
 
-    protected static string|UnitEnum|null $navigationGroup = 'Main Menu';
+    protected static string|UnitEnum|null $navigationGroup = 'Customer & Membership';
 
-    protected static ?int $navigationSort = 6;
+    protected static ?int $navigationSort = 2;
 
     // Model MembershipPlan tidak punya Gate::policy() apa pun terdaftar — tanpa override ini,
     // Filament fallback ke Gate::before-only (default ALLOW ke semua staf yang login, apapun

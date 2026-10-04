@@ -22,7 +22,7 @@ class WellnessController extends Controller
         $facilities = WellnessFacility::with('slots')->get();
         return response()->json([
             'success' => true,
-            'message' => 'Daftar fasilitas wellness (Ice Bath & Sauna).',
+            'message' => 'Daftar fasilitas wellness (Sauna).',
             'data' => $facilities,
         ]);
     }

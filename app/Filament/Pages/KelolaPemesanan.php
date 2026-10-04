@@ -25,11 +25,11 @@ class KelolaPemesanan extends Page
 
     protected static ?string $navigationLabel = 'Kelola Pemesanan';
 
-    protected static string | UnitEnum | null $navigationGroup = 'Main Menu';
+    protected static string | UnitEnum | null $navigationGroup = 'Operasional Harian';
 
     protected static ?string $title = 'Kelola Pemesanan & Tiket';
 
-    protected static ?int $navigationSort = 6;
+    protected static ?int $navigationSort = 3;
 
     protected string $view = 'filament.pages.kelola-pemesanan';
 

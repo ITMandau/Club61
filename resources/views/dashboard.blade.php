@@ -37,7 +37,7 @@
                                     CLUB 61 <span class="text-[#E5C378] font-alex font-normal text-3xl sm:text-5xl block sm:inline">Padel Court</span>
                                 </h1>
                                 <p class="text-xs sm:text-sm text-emerald-100/80 mt-2.5 font-medium leading-relaxed">
-                                    Welcome back, <span class="font-bold text-white">{{ Auth::user()->name }}</span>. Book WPT-standard panoramic padel courts at Indosat Building Medan, enjoy cedarwood sauna &amp; 4°C ice bath, and specialty cafe lounge.
+                                    Welcome back, <span class="font-bold text-white">{{ Auth::user()->name }}</span>. Book WPT-standard panoramic padel courts at Indosat Building Medan, enjoy cedarwood sauna and specialty cafe lounge.
                                 </p>
 
                                 <div class="mt-6 flex flex-wrap items-center gap-3">
@@ -65,7 +65,7 @@
                                 </div>
                                 <div class="p-3.5 rounded-2xl bg-[#D4AF37]/20 border border-[#D4AF37]/40 backdrop-blur-md">
                                     <div class="text-[10px] uppercase font-bold text-[#F5E6BE]">Wellness Suite</div>
-                                    <div class="text-sm font-black text-[#FAF5E6] mt-0.5 font-serif">Sauna &amp; Ice Bath 4°C</div>
+                                    <div class="text-sm font-black text-[#FAF5E6] mt-0.5 font-serif">Finnish Cedarwood Sauna</div>
                                     <div class="text-[10px] text-[#E5C378] font-mono mt-0.5">Complimentary for VIP Platinum</div>
                                 </div>
                             </div>
@@ -125,7 +125,7 @@
 
                             <!-- Action 3: Value Pack -->
                             <button type="button"
-                                 @click="showNotice('Value Pack Passes', 'Buy 10 Hours of Padel and receive 2 Hours complimentary Sauna & Ice Bath! Contact Concierge on WhatsApp at 0812-6161-PADEL.', 'info', 'Contact WhatsApp', () => window.open('https://wa.me/6281261617233?text=Hello%20Club%2061,%20I%20am%20interested%20in%20Value%20Pack', '_blank'))"
+                                 @click="showNotice('Value Pack Passes', 'Buy 10 Hours of Padel and receive 2 Hours complimentary Sauna! Contact Concierge on WhatsApp at 0812-6161-PADEL.', 'info', 'Contact WhatsApp', () => window.open('https://wa.me/6281261617233?text=Hello%20Club%2061,%20I%20am%20interested%20in%20Value%20Pack', '_blank'))"
                                  class="flex flex-col items-center justify-center p-4 sm:p-5 rounded-2xl bg-white/95 backdrop-blur-xl border border-[#DFC387]/80 hover:border-[#D4AF37] hover:shadow-[0_10px_25px_rgba(212,175,55,0.25)] transition-all group cursor-pointer active:scale-95">
                                 <div class="w-12 h-12 rounded-2xl flex items-center justify-center shadow-sm transition-transform group-hover:scale-110"
                                      style="background: linear-gradient(135deg, #FAF2DE 0%, #F3DFAD 100%); border: 1.5px solid #DFC387;">
@@ -342,7 +342,7 @@
                                 Upgrade to Diamond Club
                             </h3>
                             <p class="text-xs text-emerald-100/80 leading-relaxed font-medium">
-                                Enjoy 7-day advance booking priority, 25% court rental discount, and unlimited weekly sauna &amp; cold plunge access!
+                                Enjoy 7-day advance booking priority, 25% court rental discount, and unlimited weekly sauna access!
                             </p>
                             <button type="button" 
                                     @click="showNotice('VIP Membership Upgrade', 'To upgrade to Diamond Club VIP Membership, please visit our Frontdesk Concierge or contact via WhatsApp at 0812-6161-PADEL.', 'info', 'Inquire Concierge', () => window.open('https://wa.me/6281261617233?text=Hello%20Club%2061,%20I%20want%20to%20upgrade%20to%20Diamond%20Club', '_blank'))"

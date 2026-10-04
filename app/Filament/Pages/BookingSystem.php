@@ -20,11 +20,11 @@ class BookingSystem extends Page
 
     protected static ?string $navigationLabel = 'Monitoring Lapangan';
 
-    protected static string | UnitEnum | null $navigationGroup = 'Main Menu';
+    protected static string | UnitEnum | null $navigationGroup = 'Operasional Harian';
 
     protected static ?string $title = 'Monitoring Lapangan & Jadwal Padel';
 
-    protected static ?int $navigationSort = 3;
+    protected static ?int $navigationSort = 1;
 
     protected string $view = 'filament.pages.booking-system';
 

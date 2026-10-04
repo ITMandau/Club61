@@ -43,7 +43,7 @@ return new class extends Migration
             'hero_headline_line1' => 'The Sanctuary for',
             'hero_headline_highlight' => 'Padel Athletes',
             'hero_headline_line2' => 'in Medan.',
-            'hero_subtitle' => 'Fasilitas terpadu berstandar internasional di Gedung Indosat Medan: {court_count} Lapangan Padel Panoramic Full Indoor ber-AC, Thermal Wellness Recovery (Sauna & Ice Bath 4°C).',
+            'hero_subtitle' => 'Fasilitas terpadu berstandar internasional di Gedung Indosat Medan: {court_count} Lapangan Padel Panoramic Full Indoor ber-AC, Thermal Wellness Recovery (Finnish Sauna).',
             'court_count' => 3,
             'facility_cards' => json_encode([
                 ['icon_key' => 'arena', 'title' => 'Padel Arena', 'subtitle' => '+ Panoramic Courts'],

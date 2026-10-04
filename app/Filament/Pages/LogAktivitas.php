@@ -35,9 +35,9 @@ class LogAktivitas extends Page implements HasTable
 
     protected static ?string $navigationLabel = 'Log Aktivitas';
 
-    protected static string|UnitEnum|null $navigationGroup = 'Main Menu';
+    protected static string|UnitEnum|null $navigationGroup = 'Karyawan & Akses';
 
-    protected static ?int $navigationSort = 16;
+    protected static ?int $navigationSort = 4;
 
     protected static ?string $title = 'Log Aktivitas & Jejak Audit';
 

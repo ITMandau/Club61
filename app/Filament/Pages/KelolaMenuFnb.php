@@ -25,11 +25,11 @@ class KelolaMenuFnb extends Page
 
     protected static ?string $navigationLabel = 'Menu F&B';
 
-    protected static string|UnitEnum|null $navigationGroup = 'Main Menu';
+    protected static string|UnitEnum|null $navigationGroup = 'Master Data';
 
     protected static ?string $title = 'Kelola Menu F&B & Tambahan';
 
-    protected static ?int $navigationSort = 15;
+    protected static ?int $navigationSort = 3;
 
     protected string $view = 'filament.pages.kelola-menu-fnb';
 

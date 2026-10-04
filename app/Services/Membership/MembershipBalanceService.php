@@ -382,10 +382,7 @@ class MembershipBalanceService
             if ($facilities->mode($balance->facility) !== \App\Models\Membership\MembershipFacility::MODE_CHECK_IN) {
                 throw new DomainException("Fasilitas {$facilities->name($balance->facility)} tidak memakai check-in langsung.");
             }
-            $facility = $facilities->find($balance->facility);
-            if ($facility && ! $facility['is_active']) {
-                throw new DomainException("Fasilitas {$facility['name']} sedang tidak tersedia.");
-            }
+            // Fasilitas yang dinonaktifkan (berhenti dijual) TIDAK memblokir kuota yang sudah dibayar member.
             // "Tanpa kuota" = paket hanya memberi diskon, BUKAN akses gratis (dulu tetap bisa check-in tanpa bayar).
             if ($balance->quota_type !== 'VISITS') {
                 throw new DomainException("Paket Anda tidak termasuk akses masuk {$facilities->name($balance->facility)} — silakan beli tiket di kasir.");

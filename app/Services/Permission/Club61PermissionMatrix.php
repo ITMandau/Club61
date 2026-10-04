@@ -195,10 +195,10 @@ class Club61PermissionMatrix
                 'title' => '5. Wellness & Recovery Suite',
                 'submodules' => [
                     'sauna_icebath' => [
-                        'label' => 'Sauna & Ice Bath Cold Plunge',
+                        'label' => 'Sauna',
                         'actions' => [
                             'view_wellness_slots' => 'Lihat Jadwal & Slot Sesi Wellness',
-                            'book_wellness_session' => 'Reservasi Sesi Sauna / Ice Bath',
+                            'book_wellness_session' => 'Reservasi Sesi Sauna',
                             'checkin_wellness' => 'Check-in Akses Ruang Recovery',
                         ],
                     ],

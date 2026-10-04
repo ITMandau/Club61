@@ -14,11 +14,11 @@ class KelolaKaryawan extends Page
 
     protected static ?string $navigationLabel = 'Kelola Karyawan';
 
-    protected static string | UnitEnum | null $navigationGroup = 'Main Menu';
+    protected static string | UnitEnum | null $navigationGroup = 'Karyawan & Akses';
 
     protected static ?string $title = 'Kelola Karyawan & Staff';
 
-    protected static ?int $navigationSort = 7;
+    protected static ?int $navigationSort = 1;
 
     protected string $view = 'filament.pages.kelola-karyawan';
 }
