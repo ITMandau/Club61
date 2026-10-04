@@ -1,383 +1,280 @@
+{{-- Modul 17 Fase 3: semua angka uang dari Buku Transaksi (ledger_entries) — lihat App\Filament\Pages\Analytics. --}}
+@php
+    $rp = fn ($v) => \App\Filament\Pages\Analytics::rupiah($v);
+    $num = fn ($v) => number_format((float) $v, 0, ',', '.');
+    $s = $summary;
+
+    // Grafik batang: uang masuk ke atas, refund ke bawah garis nol.
+    $points = $trend['points'];
+    $count = max(1, count($points));
+    $maxIn = max(1, collect($points)->max('money_in'));
+    $maxOut = collect($points)->map(fn ($p) => abs($p['refunds']))->max() ?: 0;
+    $chartW = 760; $chartH = 220; $padL = 8; $padB = 22;
+    $plotH = $chartH - $padB - 6;
+    $upH = $maxOut > 0 ? $plotH * ($maxIn / ($maxIn + $maxOut)) : $plotH;
+    $baseY = 6 + $upH;
+    $slot = ($chartW - $padL) / $count;
+    $barW = max(2, min(28, $slot * 0.62));
+    $labelEvery = (int) ceil($count / 12);
+    $hasTrendData = collect($points)->contains(fn ($p) => $p['money_in'] != 0 || $p['refunds'] != 0);
+
+    $tables = [
+        ['title' => 'Per Kategori', 'sub' => 'Sewa lapangan, add-on, F&B, membership', 'rows' => $byCategory, 'param' => 'kategori'],
+        ['title' => 'Per Sumber / POS', 'sub' => 'Kasir walk-in, online, pelunasan selisih, F&B', 'rows' => $bySource, 'param' => 'sumber'],
+        ['title' => 'Per Metode Bayar', 'sub' => 'Untuk mencocokkan mutasi bank & settlement EDC', 'rows' => $byMethod, 'param' => 'metode'],
+    ];
+@endphp
+
 <div class="adm-wrap">
-    <!-- Header Banner -->
+    <style>
+        .an-presets { display:flex; flex-wrap:wrap; gap:0.35rem; padding:0.25rem; background:#FAF5E8; border:1px solid #DFC387; border-radius:14px; }
+        .an-presets .adm-tab-btn { font-size:0.75rem; padding:0.4rem 0.75rem; }
+        .an-dates { display:flex; flex-wrap:wrap; align-items:center; gap:0.5rem; font-size:0.75rem; color:#5C410F; font-weight:700; }
+        .an-dates input { border:1px solid #DFC387; border-radius:10px; padding:0.35rem 0.55rem; font-size:0.75rem; background:#FFFFFF; color:#1F170D; }
+        .an-grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(min(100%, 340px), 1fr)); gap:1.25rem; margin-bottom:1.5rem; }
+        .an-table { width:100%; font-size:0.78rem; border-collapse:collapse; }
+        .an-table th { text-align:left; color:#8C6418; font-weight:800; font-size:0.66rem; text-transform:uppercase; letter-spacing:0.05em; padding:0.45rem 0.5rem; border-bottom:1.5px solid #DFC387; }
+        .an-table td { padding:0.5rem; border-bottom:1px solid #FAF2DE; color:#1F170D; }
+        .an-table .num { text-align:right; font-variant-numeric:tabular-nums; white-space:nowrap; }
+        .an-table tr.link-row { cursor:pointer; }
+        .an-table tr.link-row:hover td { background:#FFFBF0; }
+        .an-table a { color:inherit; text-decoration:none; }
+        .an-note { font-size:0.75rem; color:#7A643E; line-height:1.5; }
+        .an-legend { display:flex; gap:1rem; font-size:0.7rem; color:#5C410F; font-weight:700; }
+        .an-legend i { display:inline-block; width:10px; height:10px; border-radius:3px; margin-right:0.3rem; vertical-align:-1px; }
+    </style>
+
     <div class="adm-banner">
         <div>
             <div class="adm-pill adm-pill-gold">
                 <span style="display:inline-block; width:6px; height:6px; border-radius:50%; background-color:#D4AF37;"></span>
-                <span>Financial Business Intelligence &bull; Club 61 Padel Court</span>
+                <span>Sumber angka: Buku Transaksi &bull; Club 61 Padel Court</span>
             </div>
-            <div class="adm-banner-title">
-                Laporan Uang Masuk &amp; Analisis Finansial
-            </div>
+            <div class="adm-banner-title">Laporan Uang Masuk &amp; Analisis Finansial</div>
             <div class="adm-banner-sub">
-                Rekapitulasi arus kas masuk, settlement payment gateway (Midtrans/Cash), refund kasir, dan pendapatan bersih untuk manajemen &amp; PM.
+                Semua uang masuk (padel, add-on, membership, F&amp;B) dihitung dari tanggal uang diterima (WIB), setelah refund. Angkanya sama dengan Buku Transaksi.
             </div>
         </div>
+        <a href="{{ $this->bukuUrl() }}" class="adm-pill adm-pill-gold" style="text-decoration:none;">Buka Buku Transaksi &rarr;</a>
+    </div>
 
-        <div style="display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
-            <div class="adm-tabs" style="margin-bottom: 0; padding: 0.25rem; background: #FAF5E8; border: 1px solid #DFC387; border-radius: 14px;">
-                <button type="button" wire:click="setPeriod('ALL')" class="adm-tab-btn {{ $period === 'ALL' ? 'active' : '' }}" style="font-size: 0.75rem; padding: 0.4rem 0.8rem;">
-                    Semua Waktu
+    <div style="display:flex; flex-wrap:wrap; align-items:center; gap:0.75rem; margin-bottom:1.25rem;">
+        <div class="an-presets">
+            @foreach (\App\Services\Finance\LedgerReport::PRESETS as $key => $label)
+                <button type="button" wire:click="setPreset('{{ $key }}')" class="adm-tab-btn {{ $preset === $key ? 'active' : '' }}">
+                    {{ $key === 'kustom' ? 'Pilih tanggal' : $label }}
                 </button>
-                <button type="button" wire:click="setPeriod('THIS_MONTH')" class="adm-tab-btn {{ $period === 'THIS_MONTH' ? 'active' : '' }}" style="font-size: 0.75rem; padding: 0.4rem 0.8rem;">
-                    Bulan Ini
-                </button>
-                <button type="button" wire:click="setPeriod('THIS_WEEK')" class="adm-tab-btn {{ $period === 'THIS_WEEK' ? 'active' : '' }}" style="font-size: 0.75rem; padding: 0.4rem 0.8rem;">
-                    Minggu Ini
-                </button>
-                <button type="button" wire:click="setPeriod('TODAY')" class="adm-tab-btn {{ $period === 'TODAY' ? 'active' : '' }}" style="font-size: 0.75rem; padding: 0.4rem 0.8rem;">
-                    Hari Ini
-                </button>
-            </div>
+            @endforeach
         </div>
+        @if ($preset === 'kustom')
+            <div class="an-dates">
+                <span>Dari</span><input type="date" wire:model.live="dari">
+                <span>sampai</span><input type="date" wire:model.live="sampai">
+            </div>
+        @endif
+        <span class="adm-pill adm-pill-gold" style="font-size:0.75rem;">{{ $periodLabel }}</span>
     </div>
 
-    <!-- Periode Aktif Banner -->
-    <div style="margin-bottom: 1.25rem; font-size: 0.8125rem; color: #7A643E; font-weight: 700; display: flex; align-items: center; gap: 0.5rem;">
-        <span>Menampilkan data periode:</span>
-        <span class="adm-pill adm-pill-gold" style="font-size: 0.75rem;">{{ $periodLabel }}</span>
-    </div>
-
-    <!-- 4 Main Financial KPI Cards -->
-    <div class="adm-metrics-grid" style="margin-bottom: 1.5rem;">
-        <!-- Card 1: Uang Masuk Kotor -->
+    {{-- Kartu utama --}}
+    <div class="adm-metrics-grid" style="margin-bottom:1.5rem;">
         <div class="adm-metric-card">
-            <div style="display:flex; justify-content:space-between; align-items:flex-start;">
-                <div>
-                    <div class="adm-metric-label">Total Uang Masuk Kotor (Gross)</div>
-                    <div class="adm-metric-val" style="color: #1F170D;">
-                        Rp {{ number_format($grossRevenue, 0, ',', '.') }}
-                    </div>
-                </div>
-                <span class="adm-pill adm-pill-green">Cash In</span>
-            </div>
+            <div class="adm-metric-label">Uang Diterima</div>
+            <div class="adm-metric-val" style="color:#1F170D;">{{ $rp($s['money_in']) }}</div>
             <div class="adm-metric-foot">
-                <span>{{ $totalBookings }} Transaksi Lunas / Settled</span>
-                <span style="color: #A68F63;">100% Terverifikasi</span>
+                <span>{{ $num($s['payments_count']) }} pembayaran</span>
+                @if ($s['overpayments'] > 0)
+                    <span style="color:#B45309;">termasuk kelebihan bayar {{ $rp($s['overpayments']) }}</span>
+                @endif
             </div>
         </div>
 
-        <!-- Card 2: Total Refund Dikeluarkan -->
         <div class="adm-metric-card">
-            <div style="display:flex; justify-content:space-between; align-items:flex-start;">
-                <div>
-                    <div class="adm-metric-label">Total Refund Dikeluarkan</div>
-                    <div class="adm-metric-val" style="color: #DC2626;">
-                        Rp {{ number_format($totalRefund, 0, ',', '.') }}
-                    </div>
-                </div>
-                <span class="adm-pill" style="background: #FEE2E2; color: #DC2626; border: 1px solid #FECACA; font-weight: 700;">
-                    Refund
+            <div class="adm-metric-label">Refund Dikembalikan</div>
+            <div class="adm-metric-val" style="color:#DC2626;">{{ $rp($s['refunds']) }}</div>
+            <div class="adm-metric-foot">
+                <span>{{ $num($s['refunds_count']) }} refund diproses</span>
+                <span>
+                    Menunggu: {{ $s['pending_refund_count'] }} ({{ $rp($s['pending_refund_amount']) }})
+                    @if ($canSeeRefundQueue && $s['pending_refund_count'] > 0)
+                        &middot; <a href="{{ \App\Filament\Pages\AntrianRefund::getUrl() }}" style="color:#8C6418; font-weight:800;">Antrian</a>
+                    @endif
                 </span>
             </div>
+        </div>
+
+        <div class="adm-metric-card" style="border:2px solid #D4AF37; background:linear-gradient(135deg, #FFFFFF 0%, #FFFDF7 100%);">
+            <div class="adm-metric-label" style="color:#8C6418; font-weight:800;">Total Uang Masuk (Bersih)</div>
+            <div class="adm-metric-val" style="color:#8C6418;">{{ $rp($s['money_net']) }}</div>
             <div class="adm-metric-foot">
-                <span>Pengembalian dana resmi</span>
-                <span style="color: #DC2626; font-weight: 700;">H-24 / Force Majeure</span>
+                <span>Uang diterima &minus; refund</span>
+                <span>= penjualan + layanan + pajak</span>
             </div>
         </div>
 
-        <!-- Card 3: Pendapatan Bersih (Net Revenue) -->
-        <div class="adm-metric-card" style="border: 2px solid #D4AF37; background: linear-gradient(135deg, #FFFFFF 0%, #FFFDF7 100%);">
-            <div style="display:flex; justify-content:space-between; align-items:flex-start;">
-                <div>
-                    <div class="adm-metric-label" style="color: #8C6418; font-weight: 800;">Pendapatan Bersih (Net Revenue)</div>
-                    <div class="adm-metric-val" style="color: #8C6418;">
-                        Rp {{ number_format($netRevenue, 0, ',', '.') }}
-                    </div>
-                </div>
-                <span class="adm-pill adm-pill-gold">Net Income</span>
-            </div>
-            <div class="adm-metric-foot">
-                <span>Gross dikurangi Total Refund</span>
-                <span style="color: #047857; font-weight: 800;">Arus Kas Positif</span>
-            </div>
-        </div>
-
-        <!-- Card 4: Okupansi Lapangan -->
         <div class="adm-metric-card">
-            <div style="display:flex; justify-content:space-between; align-items:flex-start;">
-                <div>
-                    <div class="adm-metric-label">Tingkat Okupansi Lapangan</div>
-                    <div class="adm-metric-val" style="color: #1F170D;">
-                        {{ $occupancyRate }}%
-                    </div>
-                </div>
-                <span class="adm-pill adm-pill-green">Lapangan</span>
-            </div>
+            <div class="adm-metric-label">Penjualan Bersih (Pendapatan)</div>
+            <div class="adm-metric-val" style="color:#1F170D;">{{ $rp($s['net']) }}</div>
             <div class="adm-metric-foot">
-                <span>{{ $totalHoursBooked }} Jam sewa terpakai</span>
-                <span style="color: #A68F63;">Kapasitas 4 Court</span>
+                <span>Pajak {{ $rp($s['tax']) }}</span>
+                <span>Layanan {{ $rp($s['service']) }}</span>
+            </div>
+        </div>
+
+        <div class="adm-metric-card">
+            <div class="adm-metric-label">Okupansi Lapangan</div>
+            <div class="adm-metric-val" style="color:#1F170D;">{{ $occupancy['rate'] }}%</div>
+            <div class="adm-metric-foot">
+                <span>{{ number_format($occupancy['hours_booked'], 1, ',', '.') }} dari {{ $num($occupancy['capacity_hours']) }} jam</span>
+                <span>{{ $occupancy['courts'] }} lapangan aktif</span>
             </div>
         </div>
     </div>
 
-    <!-- 2 Kolom Rincian Finansial -->
-    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); gap: 1.25rem; margin-bottom: 1.5rem;">
-        <!-- Kolom 1: Kanal Pembayaran (Gateway vs Cash) -->
-        <div class="adm-card" style="padding: 1.25rem;">
-            <div class="adm-card-head" style="margin-bottom: 1rem;">
-                <div>
-                    <div class="adm-card-title">Distribusi Kanal Pembayaran</div>
-                    <div class="adm-card-sub">Rekap uang masuk berdasarkan saluran transaksi</div>
-                </div>
-                <span class="adm-pill adm-pill-gold">Payment Channel</span>
-            </div>
-
-            <div style="display: flex; flex-direction: column; gap: 0.75rem;">
-                <div style="display: flex; align-items: center; justify-content: space-between; padding: 0.75rem 1rem; background: #FAF5E8; border-radius: 12px; border: 1px solid #DFC387;">
-                    <div>
-                        <div style="font-weight: 800; font-size: 0.875rem; color: #1F170D;">Tunai Kasir Frontdesk / Transfer</div>
-                        <div style="font-size: 0.6875rem; color: #7A643E;">Settlement langsung di kasir / transfer manual</div>
-                    </div>
-                    <div style="font-family: var(--font-mono, monospace); font-weight: 900; font-size: 1rem; color: #1F170D;">
-                        Rp {{ number_format($cashTotal, 0, ',', '.') }}
-                    </div>
-                </div>
-
-                <div style="display: flex; align-items: center; justify-content: space-between; padding: 0.75rem 1rem; background: #FFFDF5; border-radius: 12px; border: 1px solid #DFC387;">
-                    <div>
-                        <div style="font-weight: 800; font-size: 0.875rem; color: #1F170D;">Midtrans Gateway (QRIS, GoPay, VA)</div>
-                        <div style="font-size: 0.6875rem; color: #7A643E;">Pembayaran otomatis instant settlement online</div>
-                    </div>
-                    <div style="font-family: var(--font-mono, monospace); font-weight: 900; font-size: 1rem; color: #8C6418;">
-                        Rp {{ number_format($midtransTotal, 0, ',', '.') }}
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Kolom 2: Breakdown Lini Pendapatan -->
-        <div class="adm-card" style="padding: 1.25rem;">
-            <div class="adm-card-head" style="margin-bottom: 1rem;">
-                <div>
-                    <div class="adm-card-title">Rincian Pendapatan per Lini Layanan</div>
-                    <div class="adm-card-sub">Kontribusi sewa lapangan, add-on raket/bola, dan coach</div>
-                </div>
-                <span class="adm-pill adm-pill-gold">Revenue Mix</span>
-            </div>
-
-            <div style="display: flex; flex-direction: column; gap: 0.75rem;">
-                <div style="display: flex; align-items: center; justify-content: space-between; padding: 0.75rem 1rem; background: #FAF5E8; border-radius: 12px; border: 1px solid #DFC387;">
-                    <div>
-                        <div style="font-weight: 800; font-size: 0.875rem; color: #1F170D;">Sewa Lapangan Padel (Court Rental)</div>
-                        <div style="font-size: 0.6875rem; color: #7A643E;">Sewa slot jam 4 lapangan panoramic</div>
-                    </div>
-                    <div style="font-family: var(--font-mono, monospace); font-weight: 900; font-size: 1rem; color: #1F170D;">
-                        Rp {{ number_format($courtRevenue, 0, ',', '.') }}
-                    </div>
-                </div>
-
-                <div style="display: flex; align-items: center; justify-content: space-between; padding: 0.75rem 1rem; background: #FFFDF5; border-radius: 12px; border: 1px solid #DFC387;">
-                    <div>
-                        <div style="font-weight: 800; font-size: 0.875rem; color: #1F170D;">Sewa Alat &amp; Add-on Bola (Equipment)</div>
-                        <div style="font-size: 0.6875rem; color: #7A643E;">Sewa raket Babolat/Nox &amp; can bola padel</div>
-                    </div>
-                    <div style="font-family: var(--font-mono, monospace); font-weight: 900; font-size: 1rem; color: #8C6418;">
-                        Rp {{ number_format($equipmentRevenue, 0, ',', '.') }}
-                    </div>
-                </div>
-
-                <div style="display: flex; align-items: center; justify-content: space-between; padding: 0.75rem 1rem; background: #FFFDF5; border-radius: 12px; border: 1px solid #DFC387;">
-                    <div>
-                        <div style="font-weight: 800; font-size: 0.875rem; color: #1F170D;">Pelatih &amp; Coaching Session</div>
-                        <div style="font-size: 0.6875rem; color: #7A643E;">Sesi privat pelatih bersertifikasi WPT</div>
-                    </div>
-                    <div style="font-family: var(--font-mono, monospace); font-weight: 900; font-size: 1rem; color: #8C6418;">
-                        Rp {{ number_format($coachRevenue, 0, ',', '.') }}
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Ringkasan Membership: Pemasukan Penjualan Paket vs Nilai Benefit yang Diredeem (2 hal BEDA, sengaja dipisah) -->
-    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); gap: 1.25rem; margin-bottom: 1.5rem;">
-        <!-- Kolom 1: Pemasukan Kas dari Penjualan Membership (ini UANG RIIL) -->
-        <div class="adm-card" style="padding: 1.25rem; border: 2px solid #D4AF37;">
-            <div class="adm-card-head" style="margin-bottom: 1rem;">
-                <div>
-                    <div class="adm-card-title">Pemasukan Penjualan Paket Membership</div>
-                    <div class="adm-card-sub">Uang riil diterima saat paket dibeli (Padel/Gym/Sauna) &mdash; kanal terpisah dari sewa lapangan</div>
-                </div>
-                <span class="adm-pill adm-pill-gold">Cash In</span>
-            </div>
-
-            <div style="display: flex; flex-direction: column; gap: 0.75rem;">
-                <div style="display: flex; align-items: center; justify-content: space-between; padding: 0.75rem 1rem; background: #FAF5E8; border-radius: 12px; border: 1px solid #DFC387;">
-                    <div>
-                        <div style="font-weight: 800; font-size: 0.875rem; color: #1F170D;">Omzet Penjualan Membership</div>
-                        <div style="font-size: 0.6875rem; color: #7A643E;">Total order lunas dengan item paket membership</div>
-                    </div>
-                    <div style="font-family: var(--font-mono, monospace); font-weight: 900; font-size: 1rem; color: #1F170D;">
-                        Rp {{ number_format($membershipSalesRevenue, 0, ',', '.') }}
-                    </div>
-                </div>
-
-                <div style="display: flex; align-items: center; justify-content: space-between; padding: 0.75rem 1rem; background: #FFFDF5; border-radius: 12px; border: 1px solid #DFC387;">
-                    <div>
-                        <div style="font-weight: 800; font-size: 0.875rem; color: #1F170D;">Omzet Gabungan Venue</div>
-                        <div style="font-size: 0.6875rem; color: #7A643E;">Booking (Net Revenue) + Penjualan Membership</div>
-                    </div>
-                    <div style="font-family: var(--font-mono, monospace); font-weight: 900; font-size: 1rem; color: #8C6418;">
-                        Rp {{ number_format($combinedRevenue, 0, ',', '.') }}
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Kolom 2: Nilai Benefit yang Diredeem Member (INFORMASIONAL, BUKAN uang masuk baru) -->
-        <div class="adm-card" style="padding: 1.25rem; background: #FAFAFA;">
-            <div class="adm-card-head" style="margin-bottom: 1rem;">
-                <div>
-                    <div class="adm-card-title">Nilai Benefit Member Terpakai (Informasional)</div>
-                    <div class="adm-card-sub">Bukan pendapatan baru &mdash; uangnya sudah diakui saat paket dibeli. Ini cuma indikator utilisasi.</div>
-                </div>
-                <span class="adm-pill" style="background: #E5E7EB; color: #374151; border: 1px solid #D1D5DB; font-weight: 700;">
-                    Bukan Omzet
-                </span>
-            </div>
-
-            <div style="display: flex; flex-direction: column; gap: 0.75rem;">
-                <div style="display: flex; align-items: center; justify-content: space-between; padding: 0.75rem 1rem; background: #FFFFFF; border-radius: 12px; border: 1px solid #E5E7EB;">
-                    <div>
-                        <div style="font-weight: 800; font-size: 0.875rem; color: #1F170D;">Nilai Diskon/Kuota yang Dipakai</div>
-                        <div style="font-size: 0.6875rem; color: #7A643E;">Setara tarif reguler yang "dibayar" pakai membership</div>
-                    </div>
-                    <div style="font-family: var(--font-mono, monospace); font-weight: 900; font-size: 1rem; color: #6B7280;">
-                        Rp {{ number_format($memberBenefitRedeemedValue, 0, ',', '.') }}
-                    </div>
-                </div>
-
-                <div style="display: flex; align-items: center; justify-content: space-between; padding: 0.75rem 1rem; background: #FFFFFF; border-radius: 12px; border: 1px solid #E5E7EB;">
-                    <div>
-                        <div style="font-weight: 800; font-size: 0.875rem; color: #1F170D;">Jam Padel Terpakai via Kuota</div>
-                        <div style="font-size: 0.6875rem; color: #7A643E;">{{ $bookingsUsingMembership }} booking menggunakan benefit membership</div>
-                    </div>
-                    <div style="font-family: var(--font-mono, monospace); font-weight: 900; font-size: 1rem; color: #6B7280;">
-                        {{ number_format($memberBenefitHoursConsumed, 1) }} Jam
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Tabel 10 Mutasi Uang Masuk Terkini (Live Audit Log untuk PM) -->
-    <div class="adm-card" style="padding: 1.5rem; margin-bottom: 1.5rem;">
-        <div class="adm-card-head" style="margin-bottom: 1rem;">
+    {{-- Grafik tren --}}
+    <div class="adm-card" style="padding:1.25rem; margin-bottom:1.5rem;">
+        <div class="adm-card-head" style="margin-bottom:0.75rem;">
             <div>
-                <div class="adm-card-title">Riwayat Mutasi Uang Masuk Terkini</div>
-                <div class="adm-card-sub">Daftar transaksi reservasi berstatus lunas yang telah diterima ke rekening / kas klub</div>
+                <div class="adm-card-title">Tren Uang Masuk {{ $trend['unit'] === 'day' ? 'Harian' : 'Bulanan' }}</div>
+                <div class="adm-card-sub">Arahkan kursor ke batang untuk melihat angkanya</div>
             </div>
-            <a href="/admin/kelola-pemesanan" class="adm-pill adm-pill-gold" style="text-decoration: none;">
-                Kelola Semua Pemesanan &rarr;
-            </a>
+            <div class="an-legend">
+                <span><i style="background:#D4AF37;"></i>Uang diterima</span>
+                <span><i style="background:#F87171;"></i>Refund</span>
+            </div>
         </div>
 
-        <div style="overflow-x: auto;">
-            <table class="adm-table-static" style="width: 100%; font-size: 0.8125rem;">
-                <thead>
-                    <tr style="border-bottom: 1.5px solid #DFC387; text-align: left; color: #8C6418; font-weight: 800;">
-                        <th style="padding: 0.75rem;">WAKTU TRANSAKSI</th>
-                        <th style="padding: 0.75rem;">KODE TIKET</th>
-                        <th style="padding: 0.75rem;">MEMBER / CUSTOMER</th>
-                        <th style="padding: 0.75rem;">LAPANGAN &amp; SESI</th>
-                        <th style="padding: 0.75rem;">STATUS SETTLEMENT</th>
-                        <th style="padding: 0.75rem; text-align: right;">UANG MASUK</th>
-                    </tr>
-                </thead>
+        @if ($hasTrendData)
+            <svg viewBox="0 0 {{ $chartW }} {{ $chartH }}" style="width:100%; height:auto; display:block;" role="img" aria-label="Grafik tren uang masuk">
+                <line x1="{{ $padL }}" y1="{{ $baseY }}" x2="{{ $chartW }}" y2="{{ $baseY }}" stroke="#DFC387" stroke-width="1" />
+                @foreach ($points as $i => $p)
+                    @php
+                        $x = $padL + $slot * $i + ($slot - $barW) / 2;
+                        $hIn = $p['money_in'] > 0 ? max(1, $upH * ($p['money_in'] / $maxIn)) : 0;
+                        $hOut = ($maxOut > 0 && $p['refunds'] != 0) ? max(1, ($plotH - $upH) * (abs($p['refunds']) / $maxOut)) : 0;
+                        $tip = $p['label'].' — diterima '.$rp($p['money_in']).($p['refunds'] != 0 ? ', refund '.$rp($p['refunds']) : '').', bersih '.$rp($p['money_net']);
+                    @endphp
+                    <g>
+                        <title>{{ $tip }}</title>
+                        <rect x="{{ $x }}" y="6" width="{{ $barW }}" height="{{ $chartH - $padB - 6 }}" fill="transparent" />
+                        @if ($hIn > 0)
+                            <rect x="{{ $x }}" y="{{ $baseY - $hIn }}" width="{{ $barW }}" height="{{ $hIn }}" rx="2" fill="#D4AF37" />
+                        @endif
+                        @if ($hOut > 0)
+                            <rect x="{{ $x }}" y="{{ $baseY }}" width="{{ $barW }}" height="{{ $hOut }}" rx="2" fill="#F87171" />
+                        @endif
+                        @if ($i % $labelEvery === 0)
+                            <text x="{{ $x + $barW / 2 }}" y="{{ $chartH - 6 }}" text-anchor="middle" font-size="10" fill="#8C754E">{{ $p['label'] }}</text>
+                        @endif
+                    </g>
+                @endforeach
+            </svg>
+        @else
+            <div class="an-note" style="padding:2rem; text-align:center;">Belum ada uang masuk pada periode ini.</div>
+        @endif
+    </div>
+
+    {{-- Rincian per kategori / sumber / metode --}}
+    <div class="an-grid">
+        @foreach ($tables as $t)
+            <div class="adm-card" style="padding:1.25rem;">
+                <div class="adm-card-head" style="margin-bottom:0.75rem;">
+                    <div>
+                        <div class="adm-card-title">{{ $t['title'] }}</div>
+                        <div class="adm-card-sub">{{ $t['sub'] }} &middot; klik baris untuk lihat transaksinya</div>
+                    </div>
+                </div>
+                <div style="overflow-x:auto;">
+                    <table class="an-table">
+                        <thead>
+                            <tr>
+                                <th>{{ $t['param'] === 'metode' ? 'Metode' : ($t['param'] === 'sumber' ? 'Sumber' : 'Kategori') }}</th>
+                                <th class="num">Trx</th>
+                                <th class="num">Diterima</th>
+                                <th class="num">Refund</th>
+                                <th class="num">Bersih</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @forelse ($t['rows'] as $row)
+                                @php
+                                    $value = $t['param'] === 'metode' ? $row['method_code'] : $row['key'];
+                                    $url = $value ? $this->bukuUrl([$t['param'] => [$value]]) : $this->bukuUrl();
+                                @endphp
+                                <tr class="link-row" onclick="window.location.href='{{ $url }}'">
+                                    <td><a href="{{ $url }}" style="font-weight:800;">{{ $row['label'] }}</a></td>
+                                    <td class="num">{{ $num($row['transactions']) }}</td>
+                                    <td class="num">{{ $rp($row['money_in']) }}</td>
+                                    <td class="num" style="color:{{ $row['refunds'] != 0 ? '#DC2626' : '#A68F63' }};">{{ $row['refunds'] != 0 ? $rp($row['refunds']) : '-' }}</td>
+                                    <td class="num" style="font-weight:900;">{{ $rp($row['money_net']) }}</td>
+                                </tr>
+                            @empty
+                                <tr><td colspan="5" class="an-note" style="text-align:center; padding:1.25rem;">Belum ada transaksi.</td></tr>
+                            @endforelse
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        @endforeach
+
+        {{-- Benefit membership: informasi, bukan uang masuk --}}
+        <div class="adm-card" style="padding:1.25rem; background:#FAFAFA;">
+            <div class="adm-card-head" style="margin-bottom:0.75rem;">
+                <div>
+                    <div class="adm-card-title">Benefit Member &amp; Voucher Terpakai</div>
+                    <div class="adm-card-sub">Bukan uang masuk baru &mdash; paketnya sudah dibayar saat dibeli</div>
+                </div>
+                <span class="adm-pill" style="background:#E5E7EB; color:#374151; border:1px solid #D1D5DB; font-weight:700;">Bukan Omzet</span>
+            </div>
+            <table class="an-table">
                 <tbody>
-                    @forelse($latestTransactions as $tx)
-                        <tr style="border-bottom: 1px solid #FAF2DE;">
-                            <td style="padding: 0.75rem; color: #6B7280; font-size: 0.75rem;">
-                                {{ $tx->created_at ? $tx->created_at->format('d M Y, H:i') : '-' }} WIB
-                            </td>
-                            <td style="padding: 0.75rem; font-family: var(--font-mono, monospace); font-weight: 700; color: #8C6418;">
-                                {{ $tx->booking_code }}
-                            </td>
-                            <td style="padding: 0.75rem; font-weight: 800; color: #1F170D;">
-                                {{ $tx->user?->name ?? 'Customer' }}
-                            </td>
-                            <td style="padding: 0.75rem; color: #4B5563;">
-                                {{ $tx->court?->name ?? '-' }} ({{ $tx->booking_date->format('d M') }})
-                            </td>
-                            <td style="padding: 0.75rem;">
-                                @if($tx->status === 'PAID')
-                                    <span class="adm-pill adm-pill-green">Lunas (Paid)</span>
-                                @elseif($tx->status === 'CHECKED_IN')
-                                    <span class="adm-pill adm-pill-gold">Sedang Main</span>
-                                @elseif($tx->status === 'COMPLETED')
-                                    <span class="adm-pill" style="background: #ECFDF5; color: #065F46; border: 1px solid #A7F3D0; font-weight: 700;">Selesai</span>
-                                @elseif($tx->status === 'EXPIRED')
-                                    <span class="adm-pill" style="background: #FEF3C7; color: #92400E; border: 1px solid #FDE68A; font-weight: 700;">Expired (Hangus)</span>
-                                @else
-                                    <span class="adm-pill">{{ $tx->status }}</span>
-                                @endif
-                            </td>
-                            <td style="padding: 0.75rem; text-align: right; font-family: var(--font-mono, monospace); font-weight: 900; color: #047857; font-size: 0.875rem;">
-                                + Rp {{ number_format($tx->total_amount, 0, ',', '.') }}
-                            </td>
-                        </tr>
-                    @empty
-                        <tr>
-                            <td colspan="6" style="padding: 2rem; text-align: center; color: #8C7A58;">
-                                Belum ada transaksi masuk pada periode ini.
-                            </td>
-                        </tr>
-                    @endforelse
+                    <tr><td>Nilai kuota member / voucher sponsor dipakai (Buku Transaksi)</td><td class="num" style="font-weight:900;">{{ $rp($s['benefit']) }}</td></tr>
+                    <tr><td>Jam padel dibayar pakai kuota member</td><td class="num" style="font-weight:900;">{{ number_format($memberUsage['hours'], 1, ',', '.') }} jam</td></tr>
+                    <tr><td>Booking yang memakai benefit membership</td><td class="num" style="font-weight:900;">{{ $num($memberUsage['bookings']) }}</td></tr>
+                    <tr><td>Selisih reschedule hangus (sudah tercatat saat bayar awal)</td><td class="num" style="font-weight:900;">{{ $rp($s['forfeited']) }}</td></tr>
                 </tbody>
             </table>
         </div>
     </div>
 
-    <!-- Tabel Pengembalian Dana Terkini (Refund Log) -->
-    @if($latestRefunds->isNotEmpty())
-        <div class="adm-card" style="padding: 1.5rem;">
-            <div class="adm-card-head" style="margin-bottom: 1rem;">
-                <div>
-                    <div class="adm-card-title" style="color: #DC2626;">Riwayat Pengembalian Dana (Refund)</div>
-                    <div class="adm-card-sub">Log persetujuan refund dan pengembalian kas ke member</div>
-                </div>
-                <span class="adm-pill" style="background: #FEE2E2; color: #DC2626; border: 1px solid #FECACA; font-weight: 700;">
-                    Audit Refund
-                </span>
+    {{-- Transaksi terbaru --}}
+    <div class="adm-card" style="padding:1.25rem;">
+        <div class="adm-card-head" style="margin-bottom:0.75rem;">
+            <div>
+                <div class="adm-card-title">10 Transaksi Terbaru</div>
+                <div class="adm-card-sub">Pembayaran &amp; refund dari semua POS dan online pada periode ini</div>
             </div>
-
-            <div style="overflow-x: auto;">
-                <table class="adm-table-static" style="width: 100%; font-size: 0.8125rem;">
-                    <thead>
-                        <tr style="border-bottom: 1.5px solid #FECACA; text-align: left; color: #991B1B; font-weight: 800;">
-                            <th style="padding: 0.75rem;">WAKTU REFUND</th>
-                            <th style="padding: 0.75rem;">MEMBER</th>
-                            <th style="padding: 0.75rem;">ALASAN PEMBATALAN</th>
-                            <th style="padding: 0.75rem;">METODE</th>
-                            <th style="padding: 0.75rem; text-align: right;">NOMINAL REFUND</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        @foreach($latestRefunds as $rf)
-                            <tr style="border-bottom: 1px solid #FEF2F2;">
-                                <td style="padding: 0.75rem; color: #6B7280; font-size: 0.75rem;">
-                                    {{ \Carbon\Carbon::parse($rf->created_at)->format('d M Y, H:i') }} WIB
-                                </td>
-                                <td style="padding: 0.75rem; font-weight: 800; color: #1F170D;">
-                                    {{ $rf->customer_name ?? 'Member' }}
-                                </td>
-                                <td style="padding: 0.75rem; color: #374151; font-size: 0.75rem;">
-                                    {{ $rf->reason ?? '-' }}
-                                </td>
-                                <td style="padding: 0.75rem;">
-                                    <span class="adm-pill" style="background: #F3F4F6; color: #374151; border: 1px solid #D1D5DB; font-size: 0.6875rem;">
-                                        {{ $rf->status }}
-                                    </span>
-                                </td>
-                                <td style="padding: 0.75rem; text-align: right; font-family: var(--font-mono, monospace); font-weight: 900; color: #DC2626; font-size: 0.875rem;">
-                                    - Rp {{ number_format($rf->refund_amount, 0, ',', '.') }}
-                                </td>
-                            </tr>
-                        @endforeach
-                    </tbody>
-                </table>
-            </div>
+            <a href="{{ $this->bukuUrl() }}" class="adm-pill adm-pill-gold" style="text-decoration:none;">Lihat semua &rarr;</a>
         </div>
-    @endif
+        <div style="overflow-x:auto;">
+            <table class="an-table">
+                <thead>
+                    <tr>
+                        <th>Waktu (WIB)</th>
+                        <th>No. Order</th>
+                        <th>Sumber</th>
+                        <th>Customer</th>
+                        <th>Metode</th>
+                        <th>Status</th>
+                        <th class="num">Total</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @forelse ($latest as $row)
+                        @php $status = \App\Services\Finance\LedgerReport::statusLabel($row); @endphp
+                        <tr>
+                            <td style="white-space:nowrap; color:#6B7280;">{{ $row->occurred_at ? \Carbon\Carbon::parse($row->occurred_at)->timezone(\App\Services\Finance\LedgerReport::TIMEZONE)->format('d M Y H:i') : '-' }}</td>
+                            <td style="font-family:monospace; font-weight:700; color:#8C6418;">{{ $row->order_number ?? '-' }}</td>
+                            <td>{{ \App\Models\Finance\LedgerEntry::sourceLabel($row->source) }}</td>
+                            <td>{{ $row->customer_name ?? '-' }}</td>
+                            <td>{{ $row->payment_method_label ?? $row->payment_method ?? '-' }}</td>
+                            <td>{{ $status }}</td>
+                            <td class="num" style="font-weight:900; color:{{ (float) $row->total_amount < 0 ? '#DC2626' : '#047857' }};">{{ $rp($row->total_amount) }}</td>
+                        </tr>
+                    @empty
+                        <tr><td colspan="7" class="an-note" style="text-align:center; padding:1.5rem;">Belum ada transaksi pada periode ini.</td></tr>
+                    @endforelse
+                </tbody>
+            </table>
+        </div>
+    </div>
 </div>

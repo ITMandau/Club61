@@ -76,6 +76,16 @@ class User extends Authenticatable implements FilamentUser
         });
     }
 
+    /** Email placeholder (akun walk-in tanpa email) tidak punya kotak masuk — tidak dikirimi apa pun. */
+    public function sendPasswordResetNotification($token): void
+    {
+        if (\App\Support\PlaceholderEmail::is($this->email)) {
+            return;
+        }
+
+        $this->notify(new \App\Notifications\Auth\ResetPasswordNotification($token));
+    }
+
     public function canCancelBooking(): bool
     {
         return $this->can('cancel_padel_booking') || $this->can('cancel_refund_padel');

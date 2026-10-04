@@ -64,20 +64,56 @@
                 </div>
                 <div>
                     <h4 class="font-serif font-black text-base text-[#1F170D]">Payment Not Yet Confirmed</h4>
-                    <p class="text-xs text-[#7A643E] mt-1 leading-relaxed">
-                        This membership package hasn't been activated yet because payment settlement hasn't been confirmed. If you've already paid, please contact our concierge with your order code below.
-                    </p>
+                    <p class="text-xs text-[#7A643E] mt-1 leading-relaxed"
+                        x-text="currentTicket.can_pay_online
+                            ? 'Complete payment to activate this membership. Your package and price stay the same; you can pick another payment method.'
+                            : 'This membership package hasn\'t been activated yet because payment settlement hasn\'t been confirmed. If you\'ve already paid, please contact our concierge with your order code below.'"></p>
                 </div>
                 <div class="inline-block px-3 py-1 rounded-full text-[11px] font-mono font-bold bg-amber-200/80 text-amber-900 border border-amber-300">
                     Order: <span x-text="'#' + (currentTicket.order_number || currentTicket.membership_code)"></span>
                 </div>
-                <div class="pt-1">
-                    <a href="https://wa.me/6281261617233" target="_blank"
-                        class="w-full py-3 px-4 rounded-2xl text-[#1E160A] text-xs font-black uppercase tracking-wider shadow-md hover:brightness-105 active:scale-95 transition-all flex items-center justify-center gap-2 block"
-                        style="background: linear-gradient(180deg, #F5DE9B 0%, #D4AF37 50%, #A87D18 100%); border: 1.5px solid #FFF3CD;">
-                        Contact Concierge Support
-                    </a>
-                </div>
+
+                {{-- Pesanan online yang belum dibayar: lanjutkan bayar (order yang sama) atau batalkan untuk ganti paket. --}}
+                <template x-if="currentTicket.can_pay_online">
+                    <div class="space-y-2.5">
+                        <div class="p-3.5 rounded-2xl bg-white border border-[#DFC387] flex items-center justify-between text-left shadow-sm">
+                            <div class="flex items-center gap-3">
+                                <span class="w-8 h-8 rounded-lg bg-[#FAF8F2] border border-[#DFC387] flex items-center justify-center font-bold text-[10px] text-[#8C6418] font-mono shrink-0"
+                                    x-text="selectedMethod.badge"></span>
+                                <div>
+                                    <div class="font-bold text-xs text-[#1F170D]" x-text="selectedMethod.name"></div>
+                                    <div class="text-[10px] text-[#7A643E]" x-text="selectedMethod.note"></div>
+                                </div>
+                            </div>
+                            <button type="button" @click="showPaymentModal = true"
+                                class="text-xs font-bold text-[#8C6418] hover:text-[#5C410F] px-3 py-1.5 rounded-xl bg-[#FAF2DE] hover:bg-[#F3DFAD] border border-[#DFC387] transition-all shrink-0 cursor-pointer">
+                                Change
+                            </button>
+                        </div>
+
+                        <button type="button" @click="payMembership()" :disabled="isSubmittingPayment"
+                            class="w-full py-3.5 px-4 rounded-2xl text-[#1E160A] text-xs font-black uppercase tracking-wider shadow-md hover:brightness-105 active:scale-95 transition-all flex items-center justify-center gap-2 cursor-pointer"
+                            :class="isSubmittingPayment ? 'opacity-60 cursor-not-allowed' : ''"
+                            style="background: linear-gradient(180deg, #F5DE9B 0%, #D4AF37 50%, #A87D18 100%); border: 1.5px solid #FFF3CD;">
+                            <span x-text="isSubmittingPayment ? 'Processing Payment...' : ('Continue Payment Rp ' + formatNumber(currentTicket.grand_total))"></span>
+                        </button>
+
+                        <button type="button" @click="showCancelMembershipModal = true" :disabled="isSubmittingPayment || isCancellingMembership"
+                            class="w-full py-2.5 px-4 rounded-2xl text-rose-700 hover:text-rose-800 bg-rose-50 hover:bg-rose-100 border border-rose-200 text-xs font-bold transition-all cursor-pointer disabled:opacity-50">
+                            Cancel This Order
+                        </button>
+                    </div>
+                </template>
+
+                <template x-if="! currentTicket.can_pay_online">
+                    <div class="pt-1">
+                        <a href="https://wa.me/6281261617233" target="_blank"
+                            class="w-full py-3 px-4 rounded-2xl text-[#1E160A] text-xs font-black uppercase tracking-wider shadow-md hover:brightness-105 active:scale-95 transition-all flex items-center justify-center gap-2 block"
+                            style="background: linear-gradient(180deg, #F5DE9B 0%, #D4AF37 50%, #A87D18 100%); border: 1.5px solid #FFF3CD;">
+                            Contact Concierge Support
+                        </a>
+                    </div>
+                </template>
             </div>
         </template>
 

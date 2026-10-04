@@ -510,8 +510,38 @@
 
                 const data = await res.json();
 
+                // Masih ada pesanan paket LAIN yang belum dibayar → arahkan ke pesanan itu (lanjut bayar / batalkan).
+                if (res.status === 409 && data.data && data.data.pending_purchase) {
+                    btn.disabled = false;
+                    btnText.innerText = 'Bayar via Midtrans Snap (Cashless) →';
+                    showLuxuryNotice({
+                        title: 'Ada Pesanan Belum Dibayar',
+                        message: data.message,
+                        type: 'info',
+                        btnText: 'Lihat Pesanan Saya &rarr;',
+                        onConfirm: function() {
+                            window.location.href = '{{ route('customer.invoice') }}?membership_id=' + encodeURIComponent(data.data.pending_purchase.id);
+                        }
+                    });
+                    return;
+                }
+
                 if (!res.ok || !data.success) {
                     throw new Error(data.message || 'Gagal memproses pembayaran membership.');
+                }
+
+                // Pesanan yang sama ternyata sudah dibayar (webhook terlambat) — jangan buka pembayaran lagi.
+                if (data.data.already_paid) {
+                    showLuxuryNotice({
+                        title: 'Pembayaran Sudah Diterima',
+                        message: data.message,
+                        type: 'success',
+                        btnText: 'Buka Member Pass &rarr;',
+                        onConfirm: function() {
+                            window.location.href = '{{ route('customer.my-club') }}';
+                        }
+                    });
+                    return;
                 }
 
                 const payment = data.data.payment;

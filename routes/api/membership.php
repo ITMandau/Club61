@@ -12,6 +12,8 @@ Route::prefix('v1/membership')->group(function () {
         Route::post('/checkout', [MembershipController::class, 'checkout']);
         Route::get('/my-membership', [MembershipController::class, 'myMembership']);
         Route::get('/my-purchases', [MembershipController::class, 'myPurchases']);
+        Route::post('/purchases/{id}/pay', [MembershipController::class, 'payPurchase'])->middleware('throttle:10,1');
+        Route::post('/purchases/{id}/cancel', [MembershipController::class, 'cancelPurchase'])->middleware('throttle:10,1');
         Route::get('/history', [MembershipController::class, 'history']);
         Route::post('/checkin-gym', [MembershipController::class, 'checkinGym']);
         Route::post('/checkin', [MembershipController::class, 'checkin']);

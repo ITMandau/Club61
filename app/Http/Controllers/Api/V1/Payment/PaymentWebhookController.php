@@ -293,6 +293,9 @@ class PaymentWebhookController extends Controller
 
             $order->update(['payment_status' => 'CANCELLED']);
 
+            // Kartu membership yang menunggu pembayaran order ini ikut batal (dulu "Menunggu Pembayaran" selamanya).
+            \App\Services\Membership\MembershipOnlinePaymentService::cancelForCancelledOrder($order);
+
             foreach ($order->padelBookings as $booking) {
                 // Booking hasil reschedule tidak pernah ikut dibatalkan di sini (selalu sudah dibayar sebagian).
                 if (in_array($booking->status, ['PENDING_PAYMENT', 'LOCKED', 'PENDING'], true) && (int) $booking->reschedule_count === 0) {

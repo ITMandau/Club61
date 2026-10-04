@@ -122,6 +122,7 @@
             get amountToPay() {
                 const t = this.currentTicket;
                 if (!t) return 0;
+                if (t.type === 'MEMBERSHIP') return parseFloat(t.grand_total) || 0;
                 return parseFloat(t.has_pending_delta ? t.unpaid_delta : (t.order_grand_total ?? t.total_amount)) || 0;
             },
 
@@ -263,6 +264,134 @@
                 }
             },
 
+            // Pesanan membership online yang belum dibayar: lanjutkan bayar (order yang sama) / batalkan.
+            showCancelMembershipModal: false,
+            isCancellingMembership: false,
+            membershipPollTimer: null,
+            membershipPollId: null,
+
+            async payMembership() {
+                const t = this.currentTicket;
+                if (!t || !t.can_pay_online) return;
+                if (! this.availableMethods.length) {
+                    this.showNotice('Pembayaran Online Tidak Tersedia', 'Belum ada metode pembayaran online yang bisa dipakai untuk nominal ini. Silakan hubungi frontdesk.', 'error', 'Tutup');
+                    return;
+                }
+                if (! this.availableMethods.some(m => m.code === this.selectedMethod.code)) {
+                    const previous = this.selectedMethod.name;
+                    this.ensureSelectedMethodAvailable();
+                    this.showNotice('Metode Pembayaran Diganti', `${previous} tidak bisa dipakai untuk nominal ini. Metode diganti ke ${this.selectedMethod.name}. Periksa lagi lalu tekan bayar.`, 'info', 'Oke');
+                    return;
+                }
+
+                this.isSubmittingPayment = true;
+                try {
+                    const res = await fetch(`/api/v1/membership/purchases/${t.id}/pay`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': '{{ csrf_token() }}' },
+                        body: JSON.stringify({ payment_method: this.selectedMethod.code }),
+                    });
+                    const json = await res.json();
+                    if (!res.ok || !json.success) {
+                        this.showNotice('Pembayaran Gagal', json.message || 'Sesi pembayaran belum bisa dibuat.', 'error', 'Tutup');
+                        await this.refreshMembershipTicket(t.id);
+                        return;
+                    }
+
+                    const payment = json.data.payment || {};
+                    if (json.data.already_paid || payment.is_mock) {
+                        await this.refreshMembershipTicket(t.id);
+                        this.showNotice('Membership Aktif', json.message, 'success', 'Oke');
+                    } else if (payment.snap_token && window.snap) {
+                        window.snap.pay(payment.snap_token, {
+                            onSuccess: () => this.pollMembership(t.id),
+                            onPending: () => this.pollMembership(t.id),
+                            onError: () => this.showNotice('Payment Declined', 'Payment was declined or failed to process.', 'error', 'Close'),
+                            onClose: () => this.pollMembership(t.id),
+                        });
+                    } else if (payment.redirect_url || payment.payment_url) {
+                        window.location.href = payment.redirect_url || payment.payment_url;
+                    }
+                } catch (e) {
+                    console.error('Error membership payment:', e);
+                    this.showNotice('Network Issue', 'Encountered a problem connecting to the payment gateway.', 'error', 'Close');
+                } finally {
+                    this.isSubmittingPayment = false;
+                }
+            },
+
+            async confirmCancelMembership() {
+                const t = this.currentTicket;
+                if (!t) return;
+                this.isCancellingMembership = true;
+                try {
+                    const res = await fetch(`/api/v1/membership/purchases/${t.id}/cancel`, {
+                        method: 'POST',
+                        headers: { 'Accept': 'application/json', 'X-CSRF-TOKEN': '{{ csrf_token() }}' },
+                    });
+                    const json = await res.json();
+                    this.showCancelMembershipModal = false;
+                    await this.refreshMembershipTicket(t.id);
+                    this.showNotice(json.success ? 'Pesanan Dibatalkan' : 'Tidak Bisa Dibatalkan', json.message, json.success ? 'success' : 'error', 'Oke');
+                } catch (e) {
+                    console.error('Error cancel membership order:', e);
+                    this.showNotice('Server Error', 'An unexpected error occurred while communicating with the server.', 'error', 'Close');
+                } finally {
+                    this.isCancellingMembership = false;
+                }
+            },
+
+            /** Muat ulang daftar pembelian (ikut cek Midtrans kalau verify) lalu tampilkan lagi kartu yang sama. */
+            async refreshMembershipTicket(id, verify = false) {
+                try {
+                    const res = await fetch('/api/v1/membership/my-purchases' + (verify ? '?verify_payment=1' : ''), { headers: { 'Accept': 'application/json' } });
+                    const json = await res.json();
+                    if (json.success && json.data) {
+                        this.allMembershipPurchases = json.data;
+                        const found = json.data.find(m => m.id === id);
+                        if (found && this.isMembershipTicket && this.currentTicket && this.currentTicket.id === id) {
+                            this.setMembershipTicket(found);
+                        }
+                        return found;
+                    }
+                } catch (e) {
+                    console.error('Failed to refresh membership purchase:', e);
+                }
+                return null;
+            },
+
+            /**
+             * Cek status ke server (yang ikut menanyakan Midtrans) sampai aktif / batal — dipakai setelah jendela
+             * Midtrans DAN saat halaman dibuka dengan pesanan yang masih menunggu (customer bisa membayar VA di tab /
+             * aplikasi bank lain). Dulu cuma 3 menit setelah Snap ditutup, jadi status baru berubah setelah refresh.
+             * Tiap 5 detik di menit pertama, lalu tiap 15 detik, maks. 15 menit.
+             */
+            pollMembership(id) {
+                if (this.membershipPollTimer) clearTimeout(this.membershipPollTimer);
+                this.membershipPollId = id;
+                const startedAt = Date.now();
+                const tick = async () => {
+                    const found = await this.refreshMembershipTicket(id, true);
+                    const elapsed = Date.now() - startedAt;
+                    if (!found || found.status !== 'PENDING_PAYMENT' || elapsed > 900000) {
+                        this.membershipPollTimer = null;
+                        if (found && found.status === 'ACTIVE') {
+                            this.showNotice('Membership Aktif', 'Pembayaran diterima. Paket membership Anda sudah aktif.', 'success', 'Oke');
+                        }
+                        return;
+                    }
+                    this.membershipPollTimer = setTimeout(tick, elapsed < 60000 ? 5000 : 15000);
+                };
+                this.membershipPollTimer = setTimeout(tick, 0);
+            },
+
+            /** Pesanan online yang masih menunggu → mulai cek otomatis (sekali per kartu yang dibuka). */
+            watchPendingMembership(data) {
+                if (data && data.can_pay_online && data.status === 'PENDING_PAYMENT' && !(this.membershipPollTimer && this.membershipPollId === data.id)) {
+                    this.pollMembership(data.id);
+                }
+            },
+
             showCancelModal: false,
             isCancellingBooking: false,
 
@@ -369,6 +498,14 @@
                 await this.loadMyBookings();
                 this.isLoading = false;
 
+                // Kembali ke tab ini (mis. habis bayar VA di aplikasi bank) → langsung cek ulang pesanan membership yang menunggu.
+                document.addEventListener('visibilitychange', () => {
+                    const t = this.currentTicket;
+                    if (document.visibilityState === 'visible' && this.isMembershipTicket && t && t.can_pay_online && t.status === 'PENDING_PAYMENT') {
+                        this.pollMembership(t.id);
+                    }
+                });
+
                 window.addEventListener('popstate', async () => {
                     const params = new URLSearchParams(window.location.search);
                     const key = params.get('booking_id') || params.get('order_id') || params.get('booking_code') || params.get('id');
@@ -469,6 +606,7 @@
                 this.ticket = data;
                 this.currentTicket = data;
                 this.isMembershipTicket = true;
+                this.watchPendingMembership(data);
 
                 if (data.payment_method) {
                     const methodObj = this.getPaymentMethodObject(data.payment_method);

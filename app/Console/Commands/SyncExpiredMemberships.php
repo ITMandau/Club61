@@ -52,6 +52,10 @@ class SyncExpiredMemberships extends Command
 
         $this->info("Sinkronisasi selesai: {$expiredCount} membership telah ditandai EXPIRED.");
 
+        // Pesanan membership online yang ditinggal tanpa dibayar (> 24 jam) dibatalkan, setelah dicek ke Midtrans.
+        $abandoned = app(\App\Services\Membership\MembershipOnlinePaymentService::class)->cancelStale();
+        $this->info("{$abandoned} pesanan membership online yang tidak dibayar dibatalkan.");
+
         return Command::SUCCESS;
     }
 }

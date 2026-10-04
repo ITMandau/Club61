@@ -85,6 +85,59 @@
     </div>
 </div>
 
+<!-- Cancel Unpaid Membership Order Confirmation Modal -->
+<div x-show="showCancelMembershipModal"
+     style="display: none; z-index: 99999 !important;"
+     x-transition:enter="transition ease-out duration-200"
+     x-transition:enter-start="opacity-0"
+     x-transition:enter-end="opacity-100"
+     x-transition:leave="transition ease-in duration-150"
+     x-transition:leave-start="opacity-100"
+     x-transition:leave-end="opacity-0"
+     class="fixed inset-0 overflow-y-auto bg-black/75 backdrop-blur-md flex items-center justify-center p-4">
+
+    <div class="w-full max-w-md bg-white rounded-3xl border-2 border-[#D4AF37] shadow-2xl p-6 sm:p-7 space-y-5 animate-scaleIn text-center relative">
+        <div class="w-16 h-16 rounded-2xl bg-rose-50 border border-rose-200 text-rose-600 flex items-center justify-center mx-auto shadow-sm">
+            <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+            </svg>
+        </div>
+
+        <div class="space-y-2">
+            <h3 class="font-serif font-black text-xl text-[#1F170D]">Cancel Membership Order?</h3>
+            <p class="text-xs text-[#7A643E] leading-relaxed">
+                This unpaid order will be cancelled and its payment link closed. Do not pay any virtual account number from this order after cancelling. You can choose a package again afterwards.
+            </p>
+        </div>
+
+        <template x-if="currentTicket">
+            <div class="p-3.5 rounded-2xl bg-[#FAF8F2] border border-[#E8DCC0] text-left text-xs space-y-2">
+                <div class="flex justify-between items-center">
+                    <span class="text-[#7A643E]">Package:</span>
+                    <span class="font-bold text-[#1F170D]" x-text="currentTicket.plan_name"></span>
+                </div>
+                <div class="flex justify-between items-center pt-1 border-t border-[#DFC387]/40">
+                    <span class="text-[#7A643E]">Order:</span>
+                    <span class="font-mono font-bold text-[#8C6418]" x-text="currentTicket.order_number"></span>
+                </div>
+            </div>
+        </template>
+
+        <div class="space-y-2.5 pt-1">
+            <button type="button" @click="confirmCancelMembership()" :disabled="isCancellingMembership"
+                    class="w-full py-3.5 px-4 rounded-2xl text-xs font-black uppercase tracking-wider transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 hover:brightness-105"
+                    style="background: linear-gradient(180deg, #E11D48 0%, #BE123C 100%); color: #FFFFFF !important; border: 1px solid #FDA4AF; box-shadow: 0 4px 14px rgba(225, 29, 72, 0.35);">
+                <span style="color: #FFFFFF;" x-text="isCancellingMembership ? 'Cancelling Order...' : 'Yes, Cancel Order'"></span>
+            </button>
+            <button type="button" @click="showCancelMembershipModal = false" :disabled="isCancellingMembership"
+                    class="w-full py-3 px-4 rounded-2xl border text-xs font-bold transition-all cursor-pointer hover:brightness-95 disabled:opacity-50"
+                    style="border: 1px solid #DFC387; background-color: #FAF8F2; color: #7A5818;">
+                Keep Order
+            </button>
+        </div>
+    </div>
+</div>
+
 <!-- Custom Luxury Notice Modal -->
 <div x-show="noticeModal.show" 
      style="display: none; z-index: 99999 !important;"

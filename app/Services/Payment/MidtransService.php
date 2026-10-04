@@ -118,10 +118,7 @@ class MidtransService
             // Timeout eksplisit: panggilan ini berjalan di dalam transaksi DB yang mengunci baris booking/court —
             // Midtrans yang lambat (default 30 detik) membuat antrean lock menumpuk.
             $response = Http::withBasicAuth($this->serverKey, '')
-                ->withHeaders([
-                    'Content-Type' => 'application/json',
-                    'Accept' => 'application/json',
-                ])
+                ->withHeaders($this->snapHeaders())
                 ->timeout(10)
                 ->post($this->snapApiUrl, $payload);
         } catch (\Throwable $e) {
@@ -141,6 +138,24 @@ class MidtransService
             'redirect_url' => $data['redirect_url'] ?? null,
             'is_mock' => false,
         ];
+    }
+
+    /**
+     * Header request Snap. MIDTRANS_NOTIFICATION_URL (https) → X-Override-Notification: webhook transaksi ini dikirim ke
+     * URL tersebut, bukan ke "Payment Notification URL" dashboard (satu akun sandbox dipakai server & laptop ngrok).
+     */
+    public function snapHeaders(): array
+    {
+        $headers = ['Content-Type' => 'application/json', 'Accept' => 'application/json'];
+        $url = trim((string) config('services.midtrans.notification_url'));
+
+        // Tidak pernah berlaku di production: salah isi .env di sana akan mengirim webhook uang sungguhan ke laptop orang.
+        if ($url !== '' && ! $this->isProduction && ! app()->environment('production')
+            && str_starts_with($url, 'https://') && filter_var($url, FILTER_VALIDATE_URL)) {
+            $headers['X-Override-Notification'] = $url;
+        }
+
+        return $headers;
     }
 
     /**

@@ -675,13 +675,13 @@ class PadelAdminOverrideTest extends TestCase
         \Livewire\Livewire::test(\App\Filament\Pages\Analytics::class)
             ->assertStatus(200)
             ->assertSee('Laporan Uang Masuk &amp; Analisis Finansial', false)
-            ->assertSee('Total Uang Masuk Kotor (Gross)')
-            ->assertSee('Total Refund Dikeluarkan')
-            ->assertSee('Pendapatan Bersih (Net Revenue)')
-            ->call('setPeriod', 'THIS_MONTH')
-            ->assertSet('period', 'THIS_MONTH')
-            ->call('setPeriod', 'ALL')
-            ->assertSet('period', 'ALL');
+            ->assertSee('Uang Diterima')
+            ->assertSee('Refund Dikembalikan')
+            ->assertSee('Total Uang Masuk (Bersih)')
+            ->call('setPreset', 'bulan_ini')
+            ->assertSet('preset', 'bulan_ini')
+            ->call('setPreset', 'semua')
+            ->assertSet('preset', 'semua');
     }
 
     /**

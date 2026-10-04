@@ -8,7 +8,7 @@
 | :--- | :--- |
 | **Kode Dokumen** | `PRD-MODUL-17-BUKU-TRANSAKSI-TERPADU` |
 | **Versi** | `v1.0.0-DRAFT` |
-| **Status** | **Fase 1 (fondasi data) & Fase 2 (Buku Transaksi + Antrian Refund) selesai 4 Okt 2026; Fase 3 (dashboard) belum.** Keputusan di §10 memakai usulan default sampai PM menjawab. |
+| **Status** | **Fase 1 (fondasi data), Fase 2 (Buku Transaksi + Antrian Refund) & Fase 3 (Analytics dari buku: rincian per kategori/sumber/metode + tren harian) selesai 4 Okt 2026; Fase 4 (MDR & rekonsiliasi bank) belum.** Keputusan di §10 memakai usulan default sampai PM menjawab. |
 | **Sumber Requirement** | Pemilik produk: "Laporan transaksi yang dipecah per POS — walk-in, booking online, add-ons, F&B, dan lainnya — yang bisa dicek detailnya. Seperti buku transaksi terpadu + bisa lihat invoice dari admin, lengkap dengan metode pembayarannya. Angka yang diambil adalah harga tanpa pajak." |
 | **Dependensi Teknis** | `PRD_MODUL_10_UNIFIED_PAYMENT_GATEWAY.md` (`PaymentOrchestratorService::markOrderAsPaid` sebagai satu-satunya pintu pelunasan), `PRD_MODUL_16_ACTIVITY_AUDIT_LOG.md` (jejak audit & export), `PRD_MODUL_09_DYNAMIC_RBAC_FILAMENT_SHIELD.md` (izin baru). Tidak ada package baru yang wajib. |
 | **Target Pengguna** | **Owner / Super Admin & Finance** (default). Kasir **tidak** melihat modul ini — kasir sudah punya Riwayat Transaksi di POS masing-masing. |

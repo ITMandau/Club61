@@ -47,6 +47,29 @@ class BukuTransaksi extends Page implements HasTable
 
     protected string $view = 'filament.pages.buku-transaksi';
 
+    /**
+     * Tautan dari Analytics & Keuangan (rincian per kategori / sumber / metode) membuka tabel yang sudah tersaring:
+     * ?periode=bulan_ini&kategori=FNB&sumber=POS_FNB&metode=QRIS (&dari / &sampai untuk periode kustom).
+     */
+    public function mount(): void
+    {
+        $query = request()->query();
+        if (! array_intersect(['periode', 'kategori', 'sumber', 'metode'], array_keys($query))) {
+            return;
+        }
+
+        $preset = array_key_exists((string) ($query['periode'] ?? ''), LedgerReport::PRESETS) ? $query['periode'] : LedgerReport::DEFAULT_PRESET;
+        $date = fn ($value) => is_string($value) && preg_match('/^\d{4}-\d{2}-\d{2}$/', $value) ? $value : null;
+        $pick = fn (string $key, array $allowed) => array_values(array_intersect((array) ($query[$key] ?? []), $allowed));
+
+        $this->tableFilters = [
+            'periode' => ['preset' => $preset, 'dari' => $date($query['dari'] ?? null), 'sampai' => $date($query['sampai'] ?? null)],
+            'category' => ['values' => $pick('kategori', array_keys(LedgerEntry::CATEGORIES))],
+            'source' => ['values' => $pick('sumber', array_keys(LedgerEntry::SOURCES))],
+            'payment_method' => ['values' => array_slice(array_filter(array_map(fn ($v) => mb_substr((string) $v, 0, 50), (array) ($query['metode'] ?? []))), 0, 10)],
+        ];
+    }
+
     public function table(Table $table): Table
     {
         return $table

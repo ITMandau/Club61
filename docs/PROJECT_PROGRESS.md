@@ -35,13 +35,13 @@ Dokumen pelacak progres (Single Source of Truth). Status di bawah ini hasil audi
 | 14 | Company Profile / Konten Website | Selesai | 100% |
 | 15 | Manajemen Menu F&B | Selesai | 100% |
 | 16 | Activity / Audit Log | Jalan (panel superadmin, transaksi, perubahan data, login) | 85% |
-| 17 | Laporan Keuangan & Riwayat Transaksi Terpadu | Buku Transaksi + Antrian Refund jalan; dashboard (Fase 3) belum | 75% |
+| 17 | Laporan Keuangan & Riwayat Transaksi Terpadu | Buku Transaksi + Antrian Refund + dashboard Analytics dari buku jalan; MDR & rekonsiliasi bank (Fase 4) menyusul | 90% |
 | 18 | Pengaturan Invoice / Struk Terpusat | Belum ada | 0% |
 | 19 | Realtime (Laravel Reverb) | Belum terpasang, masih polling | 0% |
 | 20 | Halaman Admin Pendukung (Dashboard, Club, Karyawan, Turnamen, Marketing) | DUMMY semua | 0% |
 | 21 | Kebijakan Refund, No-Show & Pembayaran Bermasalah | PRD draft, menunggu keputusan PM | 0% |
 
-**Automated test suite:** 609 passed (2596 assertions) — termasuk regresi audit "bom waktu" 1 Okt 2026 (`tests/Feature/Padel/PaymentTimeBombRegressionTest.php`).
+**Automated test suite:** 634 passed (2748 assertions) — termasuk regresi audit "bom waktu" 1 Okt 2026 (`tests/Feature/Padel/PaymentTimeBombRegressionTest.php`).
 
 ---
 
@@ -58,13 +58,14 @@ Dokumen pelacak progres (Single Source of Truth). Status di bawah ini hasil audi
 
 ### URGENT (permintaan PM)
 - [x] Modul 16: Activity / Audit Log untuk superadmin.
-- [~] Modul 17: Laporan keuangan per modul + tiap transaksi bisa dilacak detail & invoice-nya — Buku Transaksi & Antrian Refund jalan (4 Okt 2026); dashboard per kategori/sumber/metode (Fase 3) menyusul.
+- [x] Modul 17: Laporan keuangan per modul + tiap transaksi bisa dilacak detail & invoice-nya — Buku Transaksi & Antrian Refund (Fase 2) dan dashboard Analytics dari buku (Fase 3) jalan (4 Okt 2026). Fase 4 (MDR Midtrans, rekonsiliasi mutasi bank) menyusul.
+  - [x] Analytics & Keuangan membaca `ledger_entries` (F&B ikut terhitung, angka = Buku Transaksi); rincian per kategori / sumber / metode bayar (klik baris → Buku Transaksi tersaring lewat `?periode=&kategori=&sumber=&metode=`); grafik tren harian (per bulan untuk rentang > 62 hari); okupansi dari jam buka lapangan aktif (dulu tetap 4 × 18 jam). Test: `tests/Feature/Finance/AnalyticsLedgerTest.php`.
 - [ ] Modul 18: Panel pengaturan invoice untuk semua modul.
 - [ ] Rapikan pembayaran membership online di portal customer.
   - [x] Master Fasilitas Membership (menu **Fasilitas Membership**): tambah fasilitas baru (mode check-in / info saja), nama & deskripsi benefit diatur admin; paket punya deskripsi + daftar privilege + catatan per benefit. Halaman membership, My Club, teaser depan, POS Jual Membership & API `/membership/plans` (`benefit_cards`) tidak lagi memakai teks dummy (2 Okt 2026).
   - [x] Check-in generik `POST /api/v1/membership/checkin`; check-in Gym unlimited dulu selalu gagal, paket "diskon saja" dulu bisa check-in gratis — keduanya diperbaiki.
-  - [ ] Lanjutkan bayar membership PENDING_PAYMENT dari My Club, cegah order pending dobel.
-- [ ] Reset sandi via email (Gmail / SMTP).
+  - [x] Lanjutkan bayar membership PENDING_PAYMENT (4 Okt 2026): tombol "Continue Payment" + ganti metode + "Cancel This Order" di halaman Invoice; checkout paket sama saat masih pending = lanjut bayar order yang sama (tidak ada order dobel), paket beda = ditolak 409 dan diarahkan ke pesanan lama. Notifikasi expire Midtrans ikut membatalkan kartu PENDING; pesanan online yang ditinggal > 24 jam dibatalkan otomatis oleh `membership:sync-expired`. API: `POST /api/v1/membership/purchases/{id}/pay` & `/cancel`, flag `can_pay_online` di `my-purchases`. Test: `tests/Feature/Membership/MembershipOnlinePaymentTest.php`.
+- [~] Reset sandi via email: kode, tampilan & email Club 61 siap (4 Okt 2026); tinggal isi SMTP di `.env` server lalu tes `php artisan mail:test`.
 - [ ] Reverb untuk update tanpa refresh.
 
 ---
@@ -78,10 +79,16 @@ Dokumen pelacak progres (Single Source of Truth). Status di bawah ini hasil audi
 - [x] Staf diblokir dari halaman portal customer (middleware `CustomerPortalOnly`).
 - [x] Staf tanpa akses Dashboard diarahkan ke halaman admin pertama yang boleh dibuka.
 - [x] Reset sandi: controller jalan, pesan generik (tidak membocorkan email terdaftar), token Sanctum dicabut setelah reset.
+- [x] Sesi web di perangkat lain otomatis keluar setelah password diganti / direset (`AuthenticateSession` di grup web; dulu hanya panel admin). Test: `tests/Feature/Auth/SessionInvalidationTest.php`.
 - [ ] **Reset sandi via email belum sampai ke user.** `MAIL_MAILER=log`, jadi link reset cuma masuk ke `storage/logs`. Perlu:
   - [ ] Setting SMTP (Gmail App Password / Mailtrap / Resend / SES) di `.env` server.
-  - [ ] Template email reset bertema Club 61 (sekarang masih email bawaan Laravel).
-  - [ ] Pengirim `MAIL_FROM_ADDRESS` masih `hello@example.com`.
+  - [x] Template email reset bertema Club 61, bahasa Indonesia (`App\Notifications\Auth\ResetPasswordNotification`).
+  - [x] Halaman Lupa / Atur Ulang Kata Sandi bergaya Club 61; bisa pakai email ATAU nomor HP.
+  - [x] Link reset memakai `APP_URL` (dulu dari header Host — bisa dibelokkan ke domain penyerang karena `trustProxies('*')`).
+  - [x] Akun walk-in dengan email placeholder (`*@walkin.club61.internal`, `mbr_*@club61.id`, `corp_*@club61.id`) tidak dikirimi email; halaman mengarahkan ke frontdesk.
+  - [x] Batas 5 permintaan/menit per IP; SMTP gagal → pesan jelas + Log Aktivitas KRITIS `auth.password_reset_mail_failed`.
+  - [x] Perintah cek SMTP: `php artisan mail:test alamat@email.com`.
+  - [ ] Pengirim `MAIL_FROM_ADDRESS` masih `hello@example.com` — isi di `.env` server.
 - [ ] **Verifikasi email tidak aktif.** Model `User` tidak mengimplementasikan `MustVerifyEmail`, jadi middleware `verified` di route portal tidak berfungsi.
 
 ---

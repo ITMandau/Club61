@@ -12,6 +12,7 @@ use App\Models\Pos\Payment;
 use App\Models\User;
 use App\Services\Finance\TaxAndFeeService;
 use App\Services\Membership\MembershipBalanceService;
+use App\Services\Membership\MembershipOnlinePaymentService;
 use App\Services\Payment\PaymentManager;
 use App\Services\Payment\PaymentOrchestratorService;
 use DomainException;
@@ -26,7 +27,8 @@ class MembershipController extends Controller
         protected MembershipBalanceService $balanceService,
         protected TaxAndFeeService $taxAndFeeService,
         protected PaymentManager $paymentManager,
-        protected PaymentOrchestratorService $orchestrator
+        protected PaymentOrchestratorService $orchestrator,
+        protected MembershipOnlinePaymentService $onlinePayments,
     ) {}
 
     /**
@@ -82,6 +84,19 @@ class MembershipController extends Controller
 
         try {
             $result = DB::transaction(function () use ($user, $plan, $validated) {
+                // Anti-race: kunci row user ini DULU sebelum cek pesanan pending / existing membership. Ini krusial
+                // khusus untuk pelanggan yang BELUM punya UserMembership sama sekali — lockForUpdate() di query
+                // existingActive di bawah tidak mengunci apa pun kalau belum ada row yang match, jadi tanpa baris
+                // ini 2 request checkout bersamaan (double-klik / 2 tab) bisa sama-sama lolos "belum ada" dan
+                // menghasilkan 2 order / 2 kartu. Locking row user memaksa request kedua menunggu commit pertama.
+                User::where('id', $user->id)->lockForUpdate()->first();
+
+                // Masih ada pesanan online yang belum dibayar → jangan buat order baru (dulu setiap klik "Bayar"
+                // menambah order + kartu PENDING). Dilanjutkan / ditolak di luar transaksi ini.
+                if ($pending = $this->onlinePayments->pendingPurchase($user)) {
+                    return ['pending' => $pending];
+                }
+
                 $orderNumber = 'ORD-MBR-' . strtoupper(Str::random(10));
                 $price = (float) $plan->price;
 
@@ -122,14 +137,6 @@ class MembershipController extends Controller
                     'subtotal' => $price,
                 ]);
 
-                // Anti-race: kunci row user ini DULU sebelum cek existing membership. Ini krusial khusus
-                // untuk pelanggan yang BELUM punya UserMembership sama sekali — lockForUpdate() di query
-                // existingActive di bawah tidak mengunci apa pun kalau belum ada row yang match, jadi tanpa
-                // baris ini 2 request checkout bersamaan (double-klik / 2 tab) bisa sama-sama lolos "belum
-                // ada yang aktif" dan menghasilkan 2 kartu ACTIVE + kuota ke-top-up dua kali padahal uang
-                // yang masuk cuma sekali. Locking row user memaksa request kedua menunggu commit pertama.
-                User::where('id', $user->id)->lockForUpdate()->first();
-
                 // Cek apakah customer sudah punya membership AKTIF (row-lock: cegah 2 kartu ganda kalau
                 // customer klik beli 2x hampir bersamaan, sama seperti guard di POS JualMembership.php).
                 $existingActive = UserMembership::where('user_id', $user->id)
@@ -159,21 +166,7 @@ class MembershipController extends Controller
                 // Item Midtrans WAJIB berjumlah sama dengan gross_amount. Dulu hanya harga paket yang dikirim padahal
                 // total sudah termasuk pajak + biaya layanan → begitu pajak membership diaktifkan, MidtransService
                 // menolak (jumlah item ≠ total) dan customer mendapat error 500.
-                $itemDetails = [[
-                    'id' => substr($plan->id, 0, 50),
-                    'price' => (int) round((float) $calc['subtotal']),
-                    'quantity' => 1,
-                    'name' => substr($plan->name, 0, 50),
-                ]];
-                if ((float) $calc['tax_amount'] > 0) {
-                    $itemDetails[] = ['id' => 'TAX-FEE', 'price' => (int) round((float) $calc['tax_amount']), 'quantity' => 1, 'name' => substr($calc['tax_name'] ?: 'Pajak', 0, 50)];
-                }
-                if ((float) $calc['admin_fee_amount'] > 0) {
-                    $itemDetails[] = ['id' => 'ADMIN-FEE', 'price' => (int) round((float) $calc['admin_fee_amount']), 'quantity' => 1, 'name' => substr($calc['admin_fee_name'] ?: 'Biaya Layanan', 0, 50)];
-                }
-                // Selisih pembulatan rupiah dititipkan ke baris terakhir supaya jumlah item = gross_amount persis.
-                $roundingDiff = (int) $grandTotal - array_sum(array_map(fn ($i) => $i['price'] * $i['quantity'], $itemDetails));
-                $itemDetails[array_key_last($itemDetails)]['price'] += $roundingDiff;
+                $itemDetails = MembershipOnlinePaymentService::itemDetails($order, $plan->name, $calc['tax_name'] ?? null, $calc['admin_fee_name'] ?? null);
 
                 // Panggil Payment Gateway Manager
                 $paymentResult = $this->paymentManager->createPayment([
@@ -222,6 +215,10 @@ class MembershipController extends Controller
                 ];
             });
 
+            if (isset($result['pending'])) {
+                return $this->continuePendingPurchase($result['pending'], $plan, $validated['payment_method'], $user);
+            }
+
             return response()->json([
                 'success' => true,
                 'message' => 'Pesanan membership berhasil dibuat.',
@@ -241,6 +238,75 @@ class MembershipController extends Controller
                 'message' => 'Pembayaran belum bisa diproses. Silakan coba lagi beberapa saat atau hubungi frontdesk.',
             ], 503);
         }
+    }
+
+    /**
+     * Checkout saat masih ada pesanan online yang belum dibayar: paket SAMA → lanjutkan bayar pesanan itu
+     * (sesi Midtrans baru, order yang sama); paket BEDA → tolak, customer memilih lanjut bayar atau batalkan dulu.
+     */
+    private function continuePendingPurchase(UserMembership $pending, MembershipPlan $plan, string $paymentMethod, User $user): JsonResponse
+    {
+        if ($pending->plan_id !== $plan->id) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Anda masih punya pesanan paket '.($pending->plan?->name ?? 'membership').' yang belum dibayar. Lanjutkan pembayarannya atau batalkan dulu sebelum memilih paket lain.',
+                'data' => ['pending_purchase' => $this->pendingSummary($pending)],
+            ], 409);
+        }
+
+        $result = $this->onlinePayments->resume($pending, $paymentMethod, $user);
+
+        return response()->json([
+            'success' => true,
+            'message' => $result['already_paid']
+                ? 'Pembayaran pesanan ini sudah kami terima. Membership Anda aktif.'
+                : 'Melanjutkan pembayaran pesanan membership Anda yang sudah ada.',
+            'data' => $result + ['resumed' => true],
+        ]);
+    }
+
+    /** Lanjutkan bayar pesanan membership online yang belum dibayar (halaman Invoice / aplikasi). */
+    public function payPurchase(string $id, Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'payment_method' => ['required', 'string', \Illuminate\Validation\Rule::in(array_keys(\App\Services\Payment\OnlinePaymentCatalog::all()))],
+        ]);
+
+        $membership = UserMembership::with(['plan', 'order'])->where('user_id', $request->user()->id)->findOrFail($id);
+        $result = $this->onlinePayments->resume($membership, $validated['payment_method'], $request->user());
+
+        return response()->json([
+            'success' => true,
+            'message' => $result['already_paid']
+                ? 'Pembayaran pesanan ini sudah kami terima. Membership Anda aktif.'
+                : 'Sesi pembayaran baru berhasil dibuat.',
+            'data' => $result,
+        ]);
+    }
+
+    /** Batalkan pesanan membership online yang belum dibayar (mis. ingin ganti paket). */
+    public function cancelPurchase(string $id, Request $request): JsonResponse
+    {
+        $membership = UserMembership::with(['plan', 'order'])->where('user_id', $request->user()->id)->findOrFail($id);
+        $this->onlinePayments->cancel($membership, $request->user());
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Pesanan membership dibatalkan. Anda bisa memilih paket lain.',
+            'data' => ['id' => $membership->id, 'status' => 'CANCELLED'],
+        ]);
+    }
+
+    private function pendingSummary(UserMembership $m): array
+    {
+        return [
+            'id' => $m->id,
+            'plan_id' => $m->plan_id,
+            'plan_name' => $m->plan?->name,
+            'order_number' => $m->order?->order_number,
+            'grand_total' => (float) ($m->order?->grand_total ?? 0),
+            'created_at' => $m->created_at,
+        ];
     }
 
     /**
@@ -275,6 +341,11 @@ class MembershipController extends Controller
     {
         $user = $request->user();
 
+        // Polling halaman invoice setelah bayar: tanya Midtrans juga, supaya kartu tetap aktif walau webhook tidak sampai.
+        if ($request->boolean('verify_payment') && ($pending = $this->onlinePayments->pendingPurchase($user)) && $pending->order) {
+            app(\App\Services\Payment\MidtransReconciliationService::class)->reconcileOrder($pending->order, cacheSeconds: 10);
+        }
+
         $purchases = UserMembership::with(['plan', 'order.payments' => fn ($q) => $q->latest()])
             ->where('user_id', $user->id)
             ->orderByDesc('created_at')
@@ -296,6 +367,9 @@ class MembershipController extends Controller
                     'order_id' => $order?->id,
                     'order_number' => $order?->order_number,
                     'payment_status' => $order?->payment_status,
+                    // Pesanan online yang belum dibayar → tombol "Lanjutkan Pembayaran" (penjualan kasir dibayar di kasir).
+                    'can_pay_online' => $m->status === 'PENDING_PAYMENT' && ! $m->sold_by_admin_id
+                        && $order?->order_type === 'MEMBERSHIP' && $order?->payment_status === 'UNPAID',
                     'payment_method' => $latestPayment?->payment_method,
                     'subtotal' => (float) ($order?->subtotal ?? $m->purchase_price_snapshot ?? 0),
                     'discount_amount' => (float) ($order?->discount_amount ?? 0),
