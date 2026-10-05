@@ -1,347 +1,233 @@
 <x-app-layout>
-    <div x-data="cartApp()" x-init="init()" class="py-6 sm:py-8 text-[#1F170D]">
-        <div class="w-full px-4 sm:px-8 lg:px-12 2xl:px-16 space-y-6">
+    @include('customer.partials.bk-style')
 
-            <!-- Top Header & Breadcrumb -->
-            <div class="flex items-center justify-between bg-white/95 backdrop-blur-xl p-5 rounded-3xl border border-[#DFC387] shadow-sm">
-                <div class="flex items-center gap-3.5">
-                    <a href="{{ route('customer.booking') }}" class="p-2.5 rounded-2xl bg-[#FAF2DE] hover:bg-[#F3DFAD] border border-[#DFC387] text-[#7A5818] transition-colors cursor-pointer" title="Back to Booking">
-                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M15 19l-7-7 7-7" />
-                        </svg>
-                    </a>
-                    <div>
-                        <h1 class="font-serif font-black text-xl sm:text-2xl text-[#1F170D]">Booking Cart</h1>
-                        <p class="text-xs text-[#7A643E]">Review your reserved match schedules and locked court slots (10-Minute Hold)</p>
+    <div x-data="cartApp()" x-init="init()" class="bk-page bk-bar-compact-only text-[#1F170D]">
+        <div class="mx-auto w-full max-w-6xl px-4 sm:px-6 lg:px-8 pt-4 sm:pt-6 space-y-4 sm:space-y-5">
+
+            {{-- Header --}}
+            <div class="flex items-center gap-3">
+                <a href="{{ route('customer.booking') }}" title="Back to Book Court"
+                   class="bk-tap w-10 h-10 shrink-0 flex items-center justify-center rounded-2xl bg-white/90 border border-[#EADBB5] text-[#7A5818] hover:bg-[#FAF2DE] transition-colors">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M15 19l-7-7 7-7" /></svg>
+                </a>
+                <div class="min-w-0">
+                    <h1 class="font-serif font-black text-xl sm:text-2xl leading-tight">Cart</h1>
+                    <p class="hidden sm:block text-xs text-[#7A643E] mt-0.5">Review your reserved slots before checkout.</p>
+                </div>
+            </div>
+
+            {{-- Slot ditahan + sisa waktu --}}
+            <div x-show="items.length > 0 && !isExpired" style="display: none;"
+                 class="rounded-2xl bg-[#183428] text-[#F5E6BE] shadow-[0_8px_24px_rgba(24,52,40,0.25)] overflow-hidden">
+                <div class="flex items-center gap-3 px-4 py-3">
+                    <span class="relative flex w-2.5 h-2.5 shrink-0">
+                        <span class="absolute inline-flex w-full h-full rounded-full bg-amber-300 opacity-75 motion-safe:animate-ping"></span>
+                        <span class="relative inline-flex w-2.5 h-2.5 rounded-full bg-amber-300"></span>
+                    </span>
+                    <div class="flex-1 min-w-0">
+                        <div class="text-sm font-bold leading-tight">Slots held for you</div>
+                        <div class="text-[11px] text-[#CFE3D6] leading-snug">Finish checkout before the timer runs out.</div>
+                    </div>
+                    <div class="shrink-0 text-right">
+                        <div class="font-black text-xl tabular-nums leading-none whitespace-nowrap" x-text="timerDisplay">--:--</div>
+                        <div class="text-[10px] uppercase tracking-wider text-[#CFE3D6] mt-0.5">left</div>
                     </div>
                 </div>
+                <div class="h-1 bg-white/10"><div class="h-full bg-amber-300 transition-[width] duration-1000 ease-linear" :style="'width:' + holdProgress + '%'"></div></div>
+            </div>
 
-                <a href="{{ route('customer.booking') }}" class="p-2 text-[#9E907B] hover:text-[#1F170D] rounded-2xl hover:bg-[#FAF2DE] transition-colors cursor-pointer" title="Close">
-                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-                    </svg>
+            {{-- Kosong --}}
+            <div x-show="items.length === 0" style="display: none;" class="bk-fade-up bg-white/90 backdrop-blur-xl rounded-3xl border border-[#EADBB5] p-8 sm:p-12 text-center space-y-3">
+                <div class="w-16 h-16 mx-auto rounded-2xl bg-[#FBF7EE] border border-[#EADBB5] flex items-center justify-center text-[#8C6418]">
+                    <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" /></svg>
+                </div>
+                <h3 class="font-serif font-black text-lg">Your cart is empty</h3>
+                <p class="text-xs text-[#7A643E] max-w-xs mx-auto">Pick a date and start time on Book Court — your slots will show up here.</p>
+                <a href="{{ route('customer.booking') }}"
+                   class="bk-tap inline-flex items-center gap-2 h-11 px-6 rounded-2xl bg-gradient-to-b from-[#F5DE9B] via-[#D4AF37] to-[#A87D18] text-[#1E160A] text-xs font-black uppercase tracking-wider shadow-[0_8px_20px_rgba(168,125,24,0.3)] active:scale-95 transition-transform">
+                    Book a Court
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M13 7l5 5m0 0l-5 5m5-5H6" /></svg>
                 </a>
             </div>
 
-            <!-- GUARDRAIL 1: Countdown Timer Banner (10-Minute Live Sync) -->
-            <div x-show="items.length > 0 && !isExpired" 
-                 class="p-4 rounded-2xl bg-gradient-to-r from-[#183428] via-[#12241C] to-[#0A1611] text-white border border-[#DFC387] shadow-md flex items-center justify-between gap-4">
-                <div class="flex items-center gap-3">
-                    <span class="w-3 h-3 rounded-full bg-amber-400 animate-ping"></span>
-                    <div>
-                        <div class="text-[10px] uppercase font-bold text-amber-300 tracking-wider">Court Slots Reserved Exclusively For You (Two-Tier Lock)</div>
-                        <div class="text-xs text-emerald-100/90 font-medium">Complete checkout before the timer expires to prevent slots from returning to public availability.</div>
-                    </div>
-                </div>
+            <div x-show="items.length > 0" style="display: none;" class="grid grid-cols-1 lg:grid-cols-12 gap-4 sm:gap-5 items-start">
 
-                <div class="flex items-center gap-2 bg-white/10 px-4 py-2 rounded-xl border border-white/20 shrink-0">
-                    <span class="text-xs text-[#DFC387] font-bold">Time Left:</span>
-                    <span class="font-mono font-black text-base text-[#FAF5E6] tracking-wider" x-text="timerDisplay">10:00</span>
-                </div>
-            </div>
-
-            <!-- Empty State -->
-            <div x-show="items.length === 0" class="bg-white/95 backdrop-blur-xl rounded-3xl border border-[#DFC387] p-12 text-center space-y-4 shadow-sm">
-                <div class="w-20 h-20 mx-auto rounded-full bg-[#FAF2DE] flex items-center justify-center text-xs font-black border border-[#DFC387] shadow-sm tracking-wider text-[#7A5818]">
-                    EMPTY
-                </div>
-                <h3 class="font-serif font-black text-xl text-[#1F170D]">Your Booking Cart is Empty</h3>
-                <p class="text-xs text-[#7A643E] max-w-sm mx-auto">You have not selected any padel court slots yet. Visit the booking page to select your match time.</p>
-                <a href="{{ route('customer.booking') }}" 
-                   class="inline-flex items-center gap-2 px-6 py-3 rounded-2xl bg-gradient-to-b from-[#F5DE9B] to-[#D4AF37] text-[#1E160A] text-xs font-black uppercase tracking-wider shadow-md hover:brightness-105 active:scale-95 transition-all cursor-pointer">
-                    <span>Find Court Schedules &rarr;</span>
-                </a>
-            </div>
-
-            <!-- Multi-Column Desktop Cart Layout -->
-            <div x-show="items.length > 0" class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-
-                <!-- Left Column: Items List (Col 8) -->
-                <div class="lg:col-span-8 space-y-4">
-                    <div class="bg-white/95 backdrop-blur-xl rounded-3xl border border-[#DFC387] shadow-[0_15px_40px_rgba(160,120,30,0.15)] p-6 space-y-5">
-                        
-                        <div class="flex items-center justify-between border-b border-[#DFC387]/50 pb-4">
-                            <div>
-                                <span class="text-xs font-bold text-[#7A5818] uppercase tracking-wider">Reserved Court Slots</span>
-                                <div class="font-serif font-black text-lg text-[#1F170D]" x-text="bookingDateFormatted"></div>
-                            </div>
-                            <span class="px-3.5 py-1.5 rounded-full text-xs font-black bg-[#FAF2DE] text-[#7A5818] border border-[#DFC387]" x-text="items.length + (items.length === 1 ? ' Slot Selected' : ' Slots Selected')"></span>
+                {{-- Daftar slot --}}
+                <section class="lg:col-span-7 xl:col-span-8 bg-white/90 backdrop-blur-xl rounded-3xl border border-[#EADBB5] shadow-[0_8px_30px_rgba(160,120,30,0.08)] p-4 sm:p-5">
+                    <div class="flex items-center justify-between gap-3 mb-1">
+                        <div class="min-w-0">
+                            <div class="text-[11px] font-extrabold uppercase tracking-wider text-[#8C6418]">Reserved slots</div>
+                            <div class="text-sm font-bold truncate" x-text="bookingDateFormatted"></div>
                         </div>
+                        <span class="shrink-0 whitespace-nowrap px-2.5 py-1 rounded-full text-[11px] font-bold bg-[#FBF7EE] text-[#7A5818] border border-[#EADBB5]"
+                              x-text="items.length + (items.length === 1 ? ' session' : ' sessions')"></span>
+                    </div>
 
-                        <!-- Items List -->
-                        <div class="divide-y divide-[#EEDBB0]/60">
-                            <template x-for="(item, index) in items" :key="index">
-                                <div class="py-4 flex items-center justify-between gap-4">
-                                    <div class="flex items-center gap-3.5">
-                                        <div class="w-12 h-12 rounded-2xl bg-[#FAF2DE] border border-[#DFC387] flex items-center justify-center text-xs font-black shrink-0 shadow-sm tracking-wider text-[#7A5818]">
-                                            COURT
-                                        </div>
-                                        <div>
-                                            <h4 class="font-serif font-black text-base text-[#1F170D]" x-text="item.court || 'Court Arena'"></h4>
-                                            <div class="flex items-center gap-2 text-xs text-[#7A643E] mt-0.5 font-mono">
-                                                <span x-text="item.time"></span>
-                                                <span>&bull;</span>
-                                                <span class="text-emerald-700 font-bold">Standard Pro WPT</span>
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    <div class="flex items-center gap-4">
-                                        <div class="text-right">
-                                            <div class="font-mono font-black text-base text-[#1F170D]" x-text="'Rp ' + formatNumber(item.price)"></div>
-                                            <span class="text-[10px] text-emerald-700 font-bold uppercase">Locked</span>
-                                        </div>
-
-                                        <button type="button" 
-                                                @click="removeItem(index)" 
-                                                class="p-2 rounded-xl text-rose-500 hover:bg-rose-50 hover:text-rose-700 transition-colors cursor-pointer" 
-                                                title="Remove Slot">
-                                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                                            </svg>
-                                        </button>
+                    <div class="divide-y divide-[#F0E4C8]">
+                        <template x-for="(item, index) in items" :key="(item.court_id || '') + (item.start_time || index)">
+                            <div class="bk-fade-up flex items-center gap-3 py-3.5">
+                                <div class="w-11 h-11 shrink-0 rounded-2xl bg-[#183428] text-[#F5E6BE] flex items-center justify-center">
+                                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><rect x="4" y="3" width="16" height="18" rx="2" stroke-width="1.8" /><path stroke-width="1.8" stroke-linecap="round" d="M4 12h16M12 3v18" /></svg>
+                                </div>
+                                <div class="flex-1 min-w-0">
+                                    <div class="font-extrabold text-sm leading-snug line-clamp-2" x-text="item.court || 'Court'"></div>
+                                    <div class="mt-0.5 flex items-center gap-1.5 text-[11px] text-[#7A643E] whitespace-nowrap">
+                                        <span class="font-semibold tabular-nums" x-text="timeRange(item)"></span>
+                                        <span x-show="item.duration_hours" class="px-1.5 py-px rounded-md bg-[#FBF7EE] border border-[#EADBB5] font-bold text-[10px] text-[#7A5818]"
+                                              x-text="item.duration_hours + (item.duration_hours === 1 ? ' hr' : ' hrs')"></span>
                                     </div>
                                 </div>
-                            </template>
-                        </div>
-
-                    </div>
-                </div>
-
-                <!-- Right Column: Sticky Summary & CTA (Col 4) -->
-                <div class="lg:col-span-4 space-y-4">
-                    <div class="bg-white/95 backdrop-blur-xl rounded-3xl border-2 border-[#D4AF37] shadow-[0_15px_40px_rgba(160,120,30,0.18)] p-6 space-y-5 sticky top-24">
-                        
-                        <h3 class="font-serif font-black text-base text-[#1F170D] border-b border-[#DFC387]/50 pb-3">Order Summary</h3>
-
-                        <div class="space-y-3 text-xs">
-                            <div class="flex justify-between text-[#5C410F]">
-                                <span>Court Subtotal</span>
-                                <span class="font-mono font-bold text-sm" x-text="'Rp ' + formatNumber(subtotal)"></span>
-                            </div>
-                            <div class="flex justify-between text-[#5C410F]">
-                                <span>Tax &amp; Service Fee</span>
-                                <span class="text-[11px] text-[#8C7A58]">Calculated at checkout</span>
-                            </div>
-                            <div class="pt-3 border-t border-[#DFC387]/60 flex justify-between items-center text-sm">
-                                <span class="font-serif font-black text-[#1F170D]">Estimated Total</span>
-                                <span class="font-mono font-black text-lg text-[#1F170D]" x-text="'Rp ' + formatNumber(subtotal)"></span>
-                            </div>
-                        </div>
-
-                        <!-- Action Buttons -->
-                        <div class="space-y-3 pt-2">
-                            <button type="button" 
-                                    :disabled="isExpired"
-                                    @click="proceedToCheckout()"
-                                    class="w-full py-4 rounded-2xl text-xs font-black uppercase tracking-widest transition-all duration-150 transform active:scale-95 shadow-lg flex items-center justify-center gap-2 cursor-pointer"
-                                    :class="isExpired ? 'opacity-50 cursor-not-allowed bg-gray-400 text-white' : ''"
-                                    style="background: linear-gradient(180deg, #F5DE9B 0%, #D4AF37 50%, #A87D18 100%); color: #1E160A; border: 1.5px solid #FFF3CD;">
-                                <span>Proceed to Checkout</span>
-                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M9 5l7 7-7 7" />
-                                </svg>
-                            </button>
-
-                            <template x-if="canCancelBooking">
-                                <button type="button" 
-                                        @click="showClearCartModal = true"
-                                        class="w-full py-2.5 text-center text-xs font-bold text-[#8A7A64] hover:text-rose-600 transition-colors cursor-pointer">
-                                    Empty All Cart Slots
+                                <div class="shrink-0 text-right">
+                                    <div class="font-black text-sm tabular-nums whitespace-nowrap" x-text="'Rp ' + formatNumber(item.price)"></div>
+                                    <div class="text-[10px] font-bold uppercase tracking-wide text-emerald-700">Held</div>
+                                </div>
+                                <button type="button" @click="removeItem(index)" title="Remove slot"
+                                        class="bk-tap w-9 h-9 shrink-0 rounded-xl flex items-center justify-center text-rose-500 hover:bg-rose-50 hover:text-rose-700 transition-colors">
+                                    <svg class="w-[18px] h-[18px]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
                                 </button>
-                            </template>
-                        </div>
-
-                        <!-- VIP Privilege Note -->
-                        <div class="p-3.5 rounded-2xl bg-[#FAF8F2] border border-[#E8DCC0] text-[11px] text-[#7A643E] leading-relaxed">
-                            <strong class="text-[#3B2B11]">VIP Guarantee:</strong> Your slots are automatically locked for {{ app(\App\Services\Padel\BookingTimeService::class)->holdMinutes() }} minutes. Complete checkout before expiration to prevent automatic release.
-                        </div>
-
+                            </div>
+                        </template>
                     </div>
-                </div>
 
-            </div>
-
-        </div>
-
-        <!-- GUARDRAIL 1 MODAL: Session Expired Pop-up -->
-        <div x-show="showExpiredModal" 
-             style="display: none; z-index: 99999 !important;"
-             class="fixed inset-0 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-            <div class="bg-white rounded-3xl border-2 border-[#D4AF37] max-w-md w-full p-6 text-center space-y-4 shadow-2xl animate-scaleIn">
-                <div class="w-16 h-16 rounded-full bg-rose-100 border border-rose-300 text-rose-600 flex items-center justify-center mx-auto text-xs font-black tracking-wider">
-                    EXPIRED
-                </div>
-                <h3 class="font-serif font-black text-xl text-[#1F170D]">Session Expired!</h3>
-                <p class="text-xs text-[#7A643E] leading-relaxed">
-                    The 10-minute hold period has ended and your reserved court slots have been returned to public availability.
-                </p>
-                <div class="pt-2">
-                    <a href="{{ route('customer.booking') }}" 
-                       @click="handleExpiredRedirect()"
-                       class="w-full py-3.5 px-4 rounded-2xl text-[#1E160A] text-xs font-black uppercase tracking-wider block shadow-md hover:brightness-105 transition-all cursor-pointer"
-                       style="background: linear-gradient(180deg, #F5DE9B 0%, #D4AF37 100%); color: #1E160A; border: 1px solid #FFF3CD;">
-                        Select New Schedule &rarr;
+                    <a href="{{ route('customer.booking') }}" class="bk-tap mt-1 flex items-center justify-center gap-1.5 h-10 rounded-2xl border border-dashed border-[#DFC387] text-xs font-bold text-[#8C6418] hover:bg-[#FBF7EE] transition-colors">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 5v14M5 12h14" /></svg>
+                        Add another slot
                     </a>
-                </div>
-            </div>
-        </div>
+                </section>
 
-        <!-- Clear Cart Confirmation Modal (Club 61 Luxury Theme) -->
-        <div x-show="showClearCartModal" 
-             style="display: none; z-index: 99999 !important;"
-             x-transition:enter="transition ease-out duration-200"
-             x-transition:enter-start="opacity-0"
-             x-transition:enter-end="opacity-100"
-             x-transition:leave="transition ease-in duration-150"
-             x-transition:leave-start="opacity-100"
-             x-transition:leave-end="opacity-0"
-             class="fixed inset-0 overflow-y-auto bg-black/75 backdrop-blur-md flex items-center justify-center p-4">
+                {{-- Ringkasan --}}
+                <aside class="lg:col-span-5 xl:col-span-4 lg:sticky lg:top-24 bg-white/90 backdrop-blur-xl rounded-3xl border border-[#E3CF9C] shadow-[0_8px_30px_rgba(160,120,30,0.10)] p-4 sm:p-5 space-y-4">
+                    <div class="text-[11px] font-extrabold uppercase tracking-wider text-[#8C6418]">Order summary</div>
 
-            <div class="w-full max-w-md bg-white rounded-3xl border-2 border-[#D4AF37] shadow-2xl p-6 sm:p-7 space-y-5 animate-scaleIn text-center relative">
-                
-                <!-- Header Alert Icon -->
-                <div class="w-16 h-16 rounded-2xl bg-rose-50 border border-rose-200 text-rose-600 flex items-center justify-center mx-auto shadow-sm">
-                    <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                    </svg>
-                </div>
-
-                <!-- Content -->
-                <div class="space-y-2">
-                    <h3 class="font-serif font-black text-xl text-[#1F170D]">Empty Booking Cart?</h3>
-                    <p class="text-xs text-[#7A643E] leading-relaxed">
-                        All court slots currently reserved in your cart will be cancelled and immediately released for other players.
-                    </p>
-                </div>
-
-                <!-- Items Preview in Cart -->
-                <template x-if="items && items.length > 0">
-                    <div class="p-3.5 rounded-2xl bg-[#FAF8F2] border border-[#E8DCC0] text-left text-xs space-y-2">
-                        <div class="flex justify-between items-center text-xs">
-                            <span class="text-[#7A643E]">Total Slots:</span>
-                            <span class="font-bold text-[#1F170D]" x-text="items.length + (items.length === 1 ? ' Court Session' : ' Court Sessions')"></span>
+                    <div class="space-y-2.5 text-xs">
+                        <div class="flex items-center justify-between gap-3 text-[#5C410F]">
+                            <span class="min-w-0">Court subtotal</span>
+                            <span class="shrink-0 font-bold tabular-nums whitespace-nowrap" x-text="'Rp ' + formatNumber(subtotal)"></span>
                         </div>
-                        <div class="flex justify-between items-center text-xs pt-1 border-t border-[#DFC387]/40">
-                            <span class="text-[#7A643E]">Total Amount:</span>
-                            <span class="font-mono font-bold text-[#8C6418]" x-text="'Rp ' + formatNumber(subtotal)"></span>
+                        <div class="flex items-center justify-between gap-3 text-[#5C410F]">
+                            <span class="min-w-0">Tax &amp; service fee</span>
+                            <span class="shrink-0 text-[11px] text-[#8C7A58] whitespace-nowrap">At checkout</span>
+                        </div>
+                        <div class="pt-3 border-t border-[#F0E4C8] flex items-center justify-between gap-3">
+                            <span class="font-bold text-sm">Estimated total</span>
+                            <span class="shrink-0 font-black text-lg tabular-nums whitespace-nowrap" x-text="'Rp ' + formatNumber(subtotal)"></span>
                         </div>
                     </div>
-                </template>
 
-                <!-- Action Buttons -->
-                <div class="space-y-2.5 pt-2">
-                    <button type="button" 
-                            @click="confirmClearAll()"
-                            :disabled="isClearingCart"
-                            class="w-full py-3.5 px-4 rounded-2xl text-xs font-black uppercase tracking-wider transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 hover:brightness-105 active:scale-98"
-                            style="background: linear-gradient(180deg, #E11D48 0%, #BE123C 100%); color: #FFFFFF !important; border: 1px solid #FDA4AF; box-shadow: 0 4px 14px rgba(225, 29, 72, 0.35);">
-                        <template x-if="!isClearingCart">
-                            <span class="flex items-center gap-1.5" style="color: #FFFFFF;">
-                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="color: #FFFFFF;">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                                </svg>
-                                <span style="color: #FFFFFF;">Yes, Empty Cart</span>
-                            </span>
-                        </template>
-                        <template x-if="isClearingCart">
-                            <span class="flex items-center gap-2" style="color: #FFFFFF;">
-                                <div class="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" style="border-color: #FFFFFF; border-top-color: transparent;"></div>
-                                <span style="color: #FFFFFF;">Releasing All Slots...</span>
-                            </span>
-                        </template>
+                    <button type="button" :disabled="isExpired" @click="proceedToCheckout()"
+                            class="bk-tap hidden lg:flex w-full h-12 rounded-2xl items-center justify-center gap-2 text-xs font-black uppercase tracking-wider transition-all bg-gradient-to-b from-[#F5DE9B] via-[#D4AF37] to-[#A87D18] text-[#1E160A] shadow-[0_8px_20px_rgba(168,125,24,0.35)] hover:brightness-105 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed">
+                        Proceed to Checkout
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M13 7l5 5m0 0l-5 5m5-5H6" /></svg>
                     </button>
 
-                    <button type="button" 
-                            @click="showClearCartModal = false"
-                            :disabled="isClearingCart"
-                            class="w-full py-3 px-4 rounded-2xl border text-xs font-bold transition-all cursor-pointer hover:brightness-95 disabled:opacity-50"
-                            style="border: 1px solid #DFC387; background-color: #FAF8F2; color: #7A5818;">
-                        Cancel
-                    </button>
-                </div>
+                    <template x-if="canCancelBooking">
+                        <button type="button" @click="clearAll()"
+                                class="bk-tap w-full h-10 rounded-2xl text-xs font-bold text-[#8A7A64] hover:text-rose-600 hover:bg-rose-50 transition-colors">
+                            Empty cart
+                        </button>
+                    </template>
 
+                    <p class="text-[11px] leading-relaxed text-[#7A643E] bg-[#FBF7EE] border border-[#F0E4C8] rounded-2xl p-3">
+                        Slots are held for {{ app(\App\Services\Padel\BookingTimeService::class)->holdMinutes() }} minutes. If the timer runs out they go back to the public schedule.
+                    </p>
+                </aside>
             </div>
         </div>
 
-        <!-- CUSTOM LUXURY NOTICE / ALERT MODAL (Club 61 Theme) -->
-        <div x-show="noticeModal.show" 
-             style="display: none; z-index: 99999 !important;"
-             x-transition:enter="transition ease-out duration-200"
-             x-transition:enter-start="opacity-0"
-             x-transition:enter-end="opacity-100"
-             x-transition:leave="transition ease-in duration-150"
-             x-transition:leave-start="opacity-100"
-             x-transition:leave-end="opacity-0"
-             class="fixed inset-0 overflow-y-auto bg-black/75 backdrop-blur-md flex items-center justify-center p-4">
-
-            <div class="w-full max-w-md bg-white rounded-3xl border-2 border-[#D4AF37] shadow-2xl p-6 sm:p-7 space-y-5 animate-scaleIn text-center relative"
-                 @click.away="handleNoticeClose()">
-                
-                <div class="w-16 h-16 rounded-2xl flex items-center justify-center mx-auto shadow-sm"
-                     :class="{
-                         'bg-[#FAF2DE] border border-[#DFC387] text-[#8C6418]': noticeModal.type === 'info' || noticeModal.type === 'gold',
-                         'bg-rose-50 border border-rose-200 text-rose-600': noticeModal.type === 'error' || noticeModal.type === 'danger',
-                         'bg-emerald-50 border border-emerald-200 text-emerald-600': noticeModal.type === 'success'
-                     }">
-                    <template x-if="noticeModal.type === 'info' || noticeModal.type === 'gold'">
-                        <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                        </svg>
-                    </template>
-                    <template x-if="noticeModal.type === 'error' || noticeModal.type === 'danger'">
-                        <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                        </svg>
-                    </template>
-                    <template x-if="noticeModal.type === 'success'">
-                        <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                        </svg>
-                    </template>
+        {{-- Bar bawah (HP & tablet) --}}
+        <div x-show="items.length > 0" style="display: none;" class="bk-bar bk-bar-compact-only fixed inset-x-0 z-30 px-3 sm:px-6 pointer-events-none">
+            <div x-ref="bar" class="mx-auto max-w-6xl pointer-events-auto bg-white/95 backdrop-blur-xl rounded-3xl border border-[#E3CF9C] shadow-[0_18px_44px_rgba(90,64,12,0.22)] p-3 sm:p-4 flex items-center gap-3">
+                <div class="flex-1 min-w-0">
+                    <div class="text-[11px] font-bold text-[#7A643E] truncate" x-text="items.length + (items.length === 1 ? ' session' : ' sessions') + ' · ' + timerDisplay + ' left'"></div>
+                    <div class="font-black text-lg sm:text-xl leading-tight tabular-nums whitespace-nowrap" x-text="'Rp ' + formatNumber(subtotal)"></div>
                 </div>
-
-                <div class="space-y-2">
-                    <h3 class="font-serif font-black text-xl text-[#1F170D]" x-text="noticeModal.title"></h3>
-                    <p class="text-xs text-[#7A643E] leading-relaxed font-medium" x-text="noticeModal.message"></p>
-                </div>
-
-                <div class="pt-2">
-                    <button type="button" 
-                            @click="handleNoticeClose()"
-                            class="w-full py-3.5 px-4 rounded-2xl text-[#1E160A] text-xs font-black uppercase tracking-wider block shadow-md hover:brightness-105 transition-all cursor-pointer active:scale-98"
-                            style="background: linear-gradient(180deg, #F5DE9B 0%, #D4AF37 50%, #A87D18 100%); color: #1E160A; border: 1px solid #FFF3CD;">
-                        <span x-text="noticeModal.buttonText || 'Got It'"></span>
-                    </button>
-                </div>
-
+                <button type="button" :disabled="isExpired" @click="proceedToCheckout()"
+                        class="bk-tap shrink-0 h-12 px-5 sm:px-7 rounded-2xl flex items-center gap-2 text-xs sm:text-sm font-black uppercase tracking-wider whitespace-nowrap bg-gradient-to-b from-[#F5DE9B] via-[#D4AF37] to-[#A87D18] text-[#1E160A] shadow-[0_8px_20px_rgba(168,125,24,0.35)] active:scale-95 transition-transform disabled:opacity-50">
+                    Checkout
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M13 7l5 5m0 0l-5 5m5-5H6" /></svg>
+                </button>
             </div>
         </div>
 
+        {{-- Waktu habis --}}
+        <div x-show="showExpiredModal" style="display: none; z-index: 99999 !important;" class="fixed inset-0 flex items-end sm:items-center justify-center sm:p-4">
+            <div class="absolute inset-0 bg-black/60 backdrop-blur-sm"></div>
+            <div x-show="showExpiredModal" x-transition:enter="transition ease-out duration-250" x-transition:enter-start="translate-y-8 opacity-0" x-transition:enter-end="translate-y-0 opacity-100"
+                 class="relative w-full sm:max-w-md bg-white rounded-t-3xl sm:rounded-3xl border-t-2 sm:border-2 border-[#D4AF37] shadow-2xl p-6 pb-[calc(1.5rem+env(safe-area-inset-bottom,0px))] sm:pb-6 text-center space-y-4">
+                <div class="w-14 h-14 mx-auto rounded-2xl bg-rose-50 border border-rose-200 text-rose-600 flex items-center justify-center">
+                    <svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                </div>
+                <div class="space-y-1.5">
+                    <h3 class="font-serif font-black text-xl">Time's up</h3>
+                    <p class="text-xs text-[#7A643E] leading-relaxed">The {{ app(\App\Services\Padel\BookingTimeService::class)->holdMinutes() }}-minute hold has ended and your slots are back on the public schedule.</p>
+                </div>
+                <a href="{{ route('customer.booking') }}" @click="handleExpiredRedirect()"
+                   class="bk-tap flex items-center justify-center w-full h-12 rounded-2xl text-xs font-black uppercase tracking-wider bg-gradient-to-b from-[#F5DE9B] via-[#D4AF37] to-[#A87D18] text-[#1E160A] shadow-md active:scale-[0.98] transition-transform">
+                    Pick a new time
+                </a>
+            </div>
+        </div>
+
+        {{-- Konfirmasi kosongkan keranjang --}}
+        <div x-show="showClearCartModal" style="display: none; z-index: 99999 !important;" class="fixed inset-0 flex items-end sm:items-center justify-center sm:p-4">
+            <div x-show="showClearCartModal" x-transition.opacity.duration.200ms @click="if (!isClearingCart) showClearCartModal = false" class="absolute inset-0 bg-black/60 backdrop-blur-sm"></div>
+            <div x-show="showClearCartModal" x-transition:enter="transition ease-out duration-250" x-transition:enter-start="translate-y-8 opacity-0" x-transition:enter-end="translate-y-0 opacity-100"
+                 class="relative w-full sm:max-w-md bg-white rounded-t-3xl sm:rounded-3xl border-t-2 sm:border-2 border-[#D4AF37] shadow-2xl p-6 pb-[calc(1.5rem+env(safe-area-inset-bottom,0px))] sm:pb-6 text-center space-y-4">
+                <div class="w-14 h-14 mx-auto rounded-2xl bg-rose-50 border border-rose-200 text-rose-600 flex items-center justify-center">
+                    <svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                </div>
+                <div class="space-y-1.5">
+                    <h3 class="font-serif font-black text-xl">Empty your cart?</h3>
+                    <p class="text-xs text-[#7A643E] leading-relaxed">All held slots will be released right away so other players can book them.</p>
+                </div>
+                <div class="rounded-2xl bg-[#FBF7EE] border border-[#F0E4C8] p-3 text-xs space-y-1.5 text-left">
+                    <div class="flex justify-between gap-3"><span class="text-[#7A643E]">Sessions</span><span class="font-bold whitespace-nowrap" x-text="items.length"></span></div>
+                    <div class="flex justify-between gap-3"><span class="text-[#7A643E]">Total</span><span class="font-bold tabular-nums whitespace-nowrap text-[#8C6418]" x-text="'Rp ' + formatNumber(subtotal)"></span></div>
+                </div>
+                <div class="grid grid-cols-2 gap-2">
+                    <button type="button" @click="showClearCartModal = false" :disabled="isClearingCart"
+                            class="bk-tap h-12 rounded-2xl border border-[#DFC387] bg-[#FBF7EE] text-[#7A5818] text-xs font-bold disabled:opacity-50">
+                        Keep slots
+                    </button>
+                    <button type="button" @click="confirmClearAll()" :disabled="isClearingCart"
+                            class="bk-tap h-12 rounded-2xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-black uppercase tracking-wider flex items-center justify-center gap-2 disabled:opacity-60 transition-colors">
+                        <span x-show="isClearingCart" class="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
+                        <span x-text="isClearingCart ? 'Releasing…' : 'Empty cart'"></span>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        {{-- Pemberitahuan --}}
+        <div x-show="noticeModal.show" style="display: none; z-index: 99999 !important;" class="fixed inset-0 flex items-end sm:items-center justify-center sm:p-4">
+            <div x-show="noticeModal.show" x-transition.opacity.duration.200ms @click="handleNoticeClose()" class="absolute inset-0 bg-black/60 backdrop-blur-sm"></div>
+            <div x-show="noticeModal.show" x-transition:enter="transition ease-out duration-250" x-transition:enter-start="translate-y-8 opacity-0" x-transition:enter-end="translate-y-0 opacity-100"
+                 class="relative w-full sm:max-w-md bg-white rounded-t-3xl sm:rounded-3xl border-t-2 sm:border-2 border-[#D4AF37] shadow-2xl p-6 pb-[calc(1.5rem+env(safe-area-inset-bottom,0px))] sm:pb-6 text-center space-y-4">
+                <div class="w-14 h-14 mx-auto rounded-2xl flex items-center justify-center"
+                     :class="noticeModal.type === 'error' || noticeModal.type === 'danger' ? 'bg-rose-50 border border-rose-200 text-rose-600' : (noticeModal.type === 'success' ? 'bg-emerald-50 border border-emerald-200 text-emerald-600' : 'bg-[#FAF2DE] border border-[#DFC387] text-[#8C6418]')">
+                    <svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                </div>
+                <div class="space-y-1.5">
+                    <h3 class="font-serif font-black text-xl" x-text="noticeModal.title"></h3>
+                    <p class="text-xs text-[#7A643E] leading-relaxed" x-text="noticeModal.message"></p>
+                </div>
+                <button type="button" @click="handleNoticeClose()"
+                        class="bk-tap w-full h-12 rounded-2xl text-xs font-black uppercase tracking-wider bg-gradient-to-b from-[#F5DE9B] via-[#D4AF37] to-[#A87D18] text-[#1E160A] shadow-md active:scale-[0.98] transition-transform">
+                    <span x-text="noticeModal.buttonText || 'Got It'"></span>
+                </button>
+            </div>
+        </div>
     </div>
 
     <script>
         function cartApp() {
             return {
                 canCancelBooking: @json(Auth::check() && Auth::user()->canCancelBooking()),
-                noticeModal: {
-                    show: false,
-                    title: '',
-                    message: '',
-                    type: 'info',
-                    buttonText: 'Got It',
-                    onClose: null,
-                },
+                holdTotalMs: @js(app(\App\Services\Padel\BookingTimeService::class)->holdMinutes()) * 60 * 1000,
+                noticeModal: { show: false, title: '', message: '', type: 'info', buttonText: 'Got It', onClose: null },
 
                 showNotice(title, message, type = 'info', buttonText = 'Got It', onClose = null) {
-                    this.noticeModal = {
-                        show: true,
-                        title,
-                        message,
-                        type,
-                        buttonText,
-                        onClose,
-                    };
+                    this.noticeModal = { show: true, title, message, type, buttonText, onClose };
                 },
 
                 handleNoticeClose() {
@@ -357,7 +243,8 @@
                 bookingDateFormatted: 'Today',
                 holdData: null,
                 expiresAtTime: null,
-                timerDisplay: '10:00',
+                remainingMs: 0,
+                timerDisplay: '--:--',
                 timerInterval: null,
                 isExpired: false,
                 showExpiredModal: false,
@@ -366,6 +253,7 @@
 
                 init() {
                     this.syncFromStorage();
+                    this.$nextTick(() => window.bkWatchBar && window.bkWatchBar(this.$root, this.$refs.bar));
 
                     // Multi-tab synchronizer: automatically syncs when other tabs mutate cart
                     window.addEventListener('storage', (e) => {
@@ -380,6 +268,11 @@
                             this.checkExpiry();
                         }
                     });
+                },
+
+                get holdProgress() {
+                    if (!this.holdTotalMs) return 0;
+                    return Math.max(0, Math.min(100, (this.remainingMs / this.holdTotalMs) * 100));
                 },
 
                 syncFromStorage() {
@@ -415,7 +308,7 @@
 
                     // Fallback kalau expires_at tidak ada: waktu tahan slot dari pengaturan admin.
                     if (!this.expiresAtTime && this.items.length > 0) {
-                        this.expiresAtTime = Date.now() + (@js(app(\App\Services\Padel\BookingTimeService::class)->holdMinutes()) * 60 * 1000);
+                        this.expiresAtTime = Date.now() + this.holdTotalMs;
                     }
 
                     // GUARDRAIL 1: Run Timer
@@ -441,8 +334,8 @@
                 async checkExpiry() {
                     if (!this.expiresAtTime) return;
 
-                    const now = Date.now();
-                    const diffMs = this.expiresAtTime - now;
+                    const diffMs = this.expiresAtTime - Date.now();
+                    this.remainingMs = Math.max(0, diffMs);
 
                     if (diffMs <= 0) {
                         this.isExpired = true;
@@ -462,8 +355,8 @@
                 async handleSessionExpired() {
                     this.showExpiredModal = true;
 
-                    const bookingIds = (this.holdData && this.holdData.bookings) 
-                        ? this.holdData.bookings.map(b => b.id) 
+                    const bookingIds = (this.holdData && this.holdData.bookings)
+                        ? this.holdData.bookings.map(b => b.id)
                         : [];
 
                     if (bookingIds.length > 0) {
@@ -482,46 +375,79 @@
                         }
                     }
 
-                    localStorage.removeItem('club61_cart');
-                    localStorage.removeItem('club61_hold_data');
-                    sessionStorage.removeItem('club61_cart');
-                    sessionStorage.removeItem('club61_hold_data');
-                    sessionStorage.removeItem('vantage_cart');
-                    sessionStorage.removeItem('vantage_hold_data');
-                    window.dispatchEvent(new CustomEvent('cart-updated'));
+                    this.clearStorage();
                 },
 
                 handleExpiredRedirect() {
                     this.handleSessionExpired();
                 },
 
+                clearStorage() {
+                    ['club61_cart', 'club61_hold_data', 'vantage_cart', 'vantage_hold_data'].forEach(k => {
+                        try { localStorage.removeItem(k); sessionStorage.removeItem(k); } catch (e) {}
+                    });
+                    window.dispatchEvent(new CustomEvent('cart-updated'));
+                },
+
                 get subtotal() {
-                    return this.items.reduce((sum, item) => sum + item.price, 0);
+                    return this.items.reduce((sum, item) => sum + (Number(item.price) || 0), 0);
+                },
+
+                timeRange(item) {
+                    if (item.start_time && item.end_time) return `${item.start_time}–${item.end_time}`;
+                    return String(item.time || '').replace(/\s*\(.*\)\s*$/, '');
+                },
+
+                // Booking hold milik item keranjang. Server mengurutkan booking per lapangan lalu jam (bukan urutan
+                // keranjang), jadi dicocokkan lewat lapangan + jam mulai; indeks hanya cadangan untuk data lama.
+                holdBookingFor(item, idx) {
+                    const bookings = (this.holdData && Array.isArray(this.holdData.bookings)) ? this.holdData.bookings : [];
+                    const fmt = new Intl.DateTimeFormat('en-GB', { timeZone: @js(config('app.timezone')), hour: '2-digit', minute: '2-digit', hour12: false });
+                    const match = bookings.find(b => {
+                        if (!b || b.court_id !== item.court_id || !b.start_time) return false;
+                        const d = new Date(b.start_time);
+                        return !isNaN(d.getTime()) && fmt.format(d) === item.start_time;
+                    });
+                    return match || bookings[idx] || null;
                 },
 
                 async removeItem(idx) {
-                    const removedItem = this.items[idx];
+                    // Booking hold-nya ikut dibuang dari data hold: kalau tidak, checkout tetap mengirim booking yang
+                    // sudah dilepas dan hapus slot berikutnya bisa melepas booking yang salah.
+                    const bookingMatch = this.holdBookingFor(this.items[idx], idx);
                     this.items.splice(idx, 1);
-                    localStorage.setItem('club61_cart', JSON.stringify(this.items));
-                    sessionStorage.setItem('club61_cart', JSON.stringify(this.items));
-                    window.dispatchEvent(new CustomEvent('cart-updated'));
+                    if (bookingMatch && this.holdData && Array.isArray(this.holdData.bookings)) {
+                        this.holdData.bookings = this.holdData.bookings.filter(b => b !== bookingMatch);
+                    }
+
+                    if (this.items.length === 0) {
+                        this.clearStorage();
+                        this.holdData = null;
+                        this.expiresAtTime = null;
+                        if (this.timerInterval) { clearInterval(this.timerInterval); this.timerInterval = null; }
+                    } else {
+                        localStorage.setItem('club61_cart', JSON.stringify(this.items));
+                        sessionStorage.setItem('club61_cart', JSON.stringify(this.items));
+                        if (this.holdData) {
+                            localStorage.setItem('club61_hold_data', JSON.stringify(this.holdData));
+                            sessionStorage.setItem('club61_hold_data', JSON.stringify(this.holdData));
+                        }
+                        window.dispatchEvent(new CustomEvent('cart-updated'));
+                    }
 
                     // Release slot on backend via API
-                    if (this.holdData && this.holdData.bookings) {
-                        const bookingMatch = this.holdData.bookings[idx];
-                        if (bookingMatch && bookingMatch.id) {
-                            try {
-                                await fetch('/api/v1/padel/release-slot', {
-                                    method: 'POST',
-                                    headers: {
-                                         'Content-Type': 'application/json',
-                                         'Accept': 'application/json',
-                                         'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
-                                    },
-                                    body: JSON.stringify({ booking_ids: [bookingMatch.id], only_locked: true })
-                                });
-                            } catch(e) {}
-                        }
+                    if (bookingMatch && bookingMatch.id) {
+                        try {
+                            await fetch('/api/v1/padel/release-slot', {
+                                method: 'POST',
+                                headers: {
+                                    'Content-Type': 'application/json',
+                                    'Accept': 'application/json',
+                                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
+                                },
+                                body: JSON.stringify({ booking_ids: [bookingMatch.id], only_locked: true })
+                            });
+                        } catch(e) {}
                     }
                 },
 
@@ -539,8 +465,8 @@
                         return;
                     }
                     this.isClearingCart = true;
-                    const bookingIds = (this.holdData && this.holdData.bookings) 
-                        ? this.holdData.bookings.map(b => b.id) 
+                    const bookingIds = (this.holdData && this.holdData.bookings)
+                        ? this.holdData.bookings.map(b => b.id)
                         : [];
 
                     if (bookingIds.length > 0) {
@@ -548,9 +474,9 @@
                             await fetch('/api/v1/padel/release-slot', {
                                 method: 'POST',
                                 headers: {
-                                     'Content-Type': 'application/json',
-                                     'Accept': 'application/json',
-                                     'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
+                                    'Content-Type': 'application/json',
+                                    'Accept': 'application/json',
+                                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
                                 },
                                 body: JSON.stringify({ booking_ids: bookingIds, only_locked: true })
                             });
@@ -565,13 +491,7 @@
                         this.timerInterval = null;
                     }
 
-                    localStorage.removeItem('club61_cart');
-                    localStorage.removeItem('club61_hold_data');
-                    sessionStorage.removeItem('club61_cart');
-                    sessionStorage.removeItem('club61_hold_data');
-                    sessionStorage.removeItem('vantage_cart');
-                    sessionStorage.removeItem('vantage_hold_data');
-                    window.dispatchEvent(new CustomEvent('cart-updated'));
+                    this.clearStorage();
 
                     this.isClearingCart = false;
                     this.showClearCartModal = false;
@@ -579,19 +499,18 @@
 
                 formatNumber(val) {
                     if (!val) return '0';
-                    return val.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+                    return Math.round(Number(val)).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ".");
                 },
 
+                // "2026-10-05" → "Mon, 5 Oct 2026" (diurai manual supaya tidak bergeser zona waktu).
                 formatDate(val) {
                     if (!val) return '-';
-                    try {
-                        const d = new Date(val);
-                        if (!isNaN(d.getTime())) {
-                            const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-                            return `${String(d.getDate()).padStart(2, '0')} ${months[d.getMonth()]} ${d.getFullYear()}`;
-                        }
-                    } catch(e) {}
-                    return String(val).substring(0, 10);
+                    const m = String(val).match(/^(\d{4})-(\d{2})-(\d{2})/);
+                    if (!m) return String(val).substring(0, 10);
+                    const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+                    const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+                    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+                    return `${days[d.getDay()]}, ${d.getDate()} ${months[d.getMonth()]} ${d.getFullYear()}`;
                 },
 
                 proceedToCheckout() {

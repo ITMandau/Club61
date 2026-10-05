@@ -109,6 +109,8 @@ class CustomerCheckoutTaxAndQuantityTest extends TestCase
         $response->assertSee('Payment Summary', false);
         // Pastikan 11% VAT hardcoded sudah tidak ada lagi
         $response->assertDontSee('11% VAT (Included)');
+        // Katalog alat hanya dari database: id contoh bawaan dulu ikut terkirim ke checkout kalau API alat gagal.
+        $response->assertDontSee('racket-01');
     }
 
     /**
