@@ -86,6 +86,11 @@ class BookOfflineCourt extends Page
     // Metode Pembayaran Kasir (100% Cashless): 'QRIS', 'DEBIT_CARD', 'CREDIT_CARD'
     public string $paymentMethod = 'QRIS';
 
+    /** Voucher promo / voucher saldo customer (Modul 21). Potongannya selalu dihitung ulang server dari kode ini. */
+    public string $voucherInput = '';
+
+    public ?string $appliedVoucherCode = null;
+
     // Rincian Pembayaran Mesin EDC (Kartu Debit & Kredit)
     public string $edcTerminal = 'EDC_BCA'; // EDC_BCA, EDC_MANDIRI, EDC_LAINNYA
     public string $edcCardType = 'DEBIT'; // DEBIT, CREDIT
@@ -554,6 +559,7 @@ class BookOfflineCourt extends Page
     protected ?float $membershipDiscountAmountCache = null;
     protected ?float $subtotalCache = null;
     protected ?array $financeCalculationCache = null;
+    protected ?array $voucherResultCache = null;
 
     public function getCourtTotalProperty(): float
     {
@@ -629,10 +635,63 @@ class BookOfflineCourt extends Page
     {
         return $this->financeCalculationCache ??= app(\App\Services\Finance\TaxAndFeeService::class)->calculate(
             subtotal: $this->subtotal,
-            discountAmount: 0,
+            discountAmount: $this->voucherDiscount,
             channel: 'POS_WALKIN',
             module: 'PADEL'
         );
+    }
+
+    /** Hasil cek voucher terpasang terhadap customer & subtotal saat ini (aturan sama dengan checkout). */
+    public function getVoucherResultProperty(): array
+    {
+        if ($this->voucherResultCache !== null) {
+            return $this->voucherResultCache;
+        }
+        if (! $this->appliedVoucherCode || $this->settleBill) {
+            return $this->voucherResultCache = ['voucher' => null, 'discount' => 0.0, 'error' => null];
+        }
+
+        $customer = $this->selectedCustomerId ? User::find($this->selectedCustomerId) : null;
+
+        return $this->voucherResultCache = app(\App\Services\Finance\VoucherService::class)
+            ->resolve($this->appliedVoucherCode, $customer, max(0, $this->courtTotal - $this->membershipDiscountAmount) + $this->equipmentTotal);
+    }
+
+    public function getVoucherDiscountProperty(): float
+    {
+        return (float) $this->voucherResult['discount'];
+    }
+
+    /** Voucher saldo milik customer terpilih yang masih bisa dipakai. */
+    public function getCustomerCreditVouchersProperty(): \Illuminate\Support\Collection
+    {
+        $customer = $this->selectedCustomerId ? User::find($this->selectedCustomerId) : null;
+
+        return $customer ? app(\App\Services\Finance\VoucherService::class)->walletFor($customer) : collect();
+    }
+
+    public function applyVoucher(?string $code = null): void
+    {
+        $code = strtoupper(trim((string) ($code ?? $this->voucherInput)));
+        if ($code === '') {
+            return;
+        }
+
+        $this->appliedVoucherCode = mb_substr($code, 0, 30);
+        $this->voucherInput = $this->appliedVoucherCode;
+        $this->voucherResultCache = null;
+        $this->financeCalculationCache = null;
+
+        if ($error = $this->voucherResult['error']) {
+            $this->appliedVoucherCode = null;
+            Notification::make()->title('Voucher Tidak Bisa Dipakai')->body($error)->warning()->send();
+        }
+    }
+
+    public function removeVoucher(): void
+    {
+        $this->appliedVoucherCode = null;
+        $this->voucherInput = '';
     }
 
     public function getTaxAmountProperty(): int
@@ -1094,6 +1153,7 @@ class BookOfflineCourt extends Page
         $this->hasPendingDraft = false;
         $this->pendingDraftSummary = null;
         $this->selectedSlots = [];
+        $this->removeVoucher();
         $this->initializeEquipmentQuantities();
         $this->walkInName = '';
         $this->walkInPhone = '';
@@ -1218,7 +1278,10 @@ class BookOfflineCourt extends Page
         $grandTotal = $this->grandTotal;
         $paymentMeta = [];
 
-        if (in_array($method, ['CASH', 'TUNAI'])) {
+        if ($this->appliedVoucherCode && $grandTotal <= 0) {
+            // Seluruh tagihan ditutup voucher: tidak ada uang masuk, jadi tidak ada bukti EDC / QRIS.
+            $method = 'VOUCHER';
+        } elseif (in_array($method, ['CASH', 'TUNAI'])) {
             Notification::make()
                 ->title('Metode Pembayaran Ditolak')
                 ->body('Pembayaran tunai (CASH) tidak diperbolehkan. Venue Club 61 beroperasi 100% Cashless — gunakan QRIS, EDC, atau Transfer.')
@@ -1330,13 +1393,18 @@ class BookOfflineCourt extends Page
                 slots: $slotsPayload,
                 bookingDate: $this->bookingDate,
                 equipments: $equipmentsPayload,
-                paymentMethod: $this->paymentMethod,
+                paymentMethod: $method === 'VOUCHER' ? 'VOUCHER' : $this->paymentMethod,
                 cashier: $cashier,
                 autoCheckIn: $this->isAutoCheckIn,
                 paymentMeta: $paymentMeta,
                 // 'NONE' kalau kasir sengaja matiin toggle benefit membership untuk transaksi ini —
                 // konsisten dengan guard yang sama dipakai di jalur online checkout.
-                membershipBalanceId: $this->useMembershipBenefit ? ($this->activeMembershipInfo['balance_id'] ?? null) : 'NONE'
+                membershipBalanceId: $this->useMembershipBenefit ? ($this->activeMembershipInfo['balance_id'] ?? null) : 'NONE',
+                // Voucher hanya dikirim kalau di layar memang berlaku — dulu voucher milik customer yang belum dipilih
+                // (mode Walk-In Cepat) tetap dipakai server walau layar tidak menampilkan potongannya.
+                voucherCode: $this->appliedVoucherCode && ! $this->voucherResult['error'] ? $this->appliedVoucherCode : null,
+                // Total yang dilihat & ditagih kasir wajib sama dengan yang dicatat server.
+                expectedGrandTotal: (float) $grandTotal,
             );
 
             // Siapkan data struk POS thermal
@@ -1349,6 +1417,8 @@ class BookOfflineCourt extends Page
                 // Pembayaran di kasir: label EDC/QRIS frontdesk, bukan label metode online.
                 'payment_method' => $service->formatPaymentMethodLabel($this->paymentMethod, ['cashier_id' => auth()->id()]),
                 'subtotal' => $result['order']->subtotal,
+                'discount_amount' => (float) $result['order']->discount_amount,
+                'voucher_code' => $result['order']->voucher_code,
                 'tax_amount' => $result['order']->tax_amount,
                 'tax_name' => $this->taxName,
                 'service_charge' => $result['order']->service_charge,
@@ -1394,6 +1464,7 @@ class BookOfflineCourt extends Page
 
             // Reset seleksi keranjang untuk transaksi berikutnya
             $this->selectedSlots = [];
+            $this->removeVoucher();
             $this->initializeEquipmentQuantities();
             $this->walkInName = '';
             $this->walkInPhone = '';
@@ -1658,6 +1729,7 @@ class BookOfflineCourt extends Page
         $this->membershipDiscountAmountCache = null;
         $this->subtotalCache = null;
         $this->financeCalculationCache = null;
+        $this->voucherResultCache = null;
 
         // Fail-safe sinkronisasi kedaluwarsa — di-throttle max 1x per 15 detik (bukan tiap render/klik).
         // Cache::add() atomic: cuma proses PERTAMA dalam window 15 detik yang benar-benar menjalankan sync,

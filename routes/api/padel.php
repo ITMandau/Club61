@@ -33,7 +33,11 @@ Route::prefix('v1/padel')->group(function () {
         Route::get('/my-bookings', [PadelBookingController::class, 'myBookings']);
         Route::get('/bookings/{id}/ticket', [PadelBookingController::class, 'ticket']);
         Route::post('/bookings/{id}/retry-payment', [PadelBookingController::class, 'retryPayment']);
-        Route::post('/bookings/{id}/refund', [PadelBookingController::class, 'refund']);
+        // Customer tidak bisa mengajukan refund sendiri (Modul 21) — pembatalan + refund diajukan staf di Kelola Pemesanan.
+
+        // Voucher promo & voucher saldo (refund yang ditolak) milik customer.
+        Route::get('/vouchers/mine', [PadelBookingController::class, 'myVouchers']);
+        Route::post('/vouchers/check', [PadelBookingController::class, 'checkVoucher'])->middleware('throttle:20,1');
 
         // 4. ENDPOINT STAF GATE & KASIR VENUE (Single-Use QR Scanner)
         Route::post('/check-in', [PadelBookingController::class, 'checkIn']);

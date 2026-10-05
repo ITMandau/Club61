@@ -72,24 +72,26 @@ class DemoRoleAccessTest extends TestCase
         }
     }
 
-    public function test_admin_does_not_see_or_run_refund_and_reschedule_but_super_admin_does(): void
+    public function test_admin_can_request_refund_but_not_reschedule_while_super_admin_does_both(): void
     {
         $booking = $this->paidBooking();
 
+        // Modul 21: mengajukan refund tidak mengeluarkan uang (disetujui di Antrian Refund), jadi admin boleh.
         $this->actingAs(User::factory()->admin()->create());
         Livewire::test(KelolaPemesanan::class)
             ->assertSee('BK-DEMO-001')
-            ->assertDontSee('Batalkan Reservasi &amp; Refund', false)
+            ->assertSee('Ajukan Pembatalan &amp; Refund', false)
             ->assertDontSee('Pindah Jadwal (Reschedule)')
             ->assertSee('Check-In Customer (Scan QR)')
             ->call('openCancelRefundModal', $booking->id)
-            ->assertSet('showCancelRefundModal', false)
+            ->assertSet('showCancelRefundModal', true)
             ->call('openRescheduleModal', $booking->id)
             ->assertSet('showRescheduleModal', false);
+        $this->assertFalse(\App\Filament\Pages\AntrianRefund::canAccess(), 'Admin tidak bisa menyetujui refund');
 
         $this->actingAs(User::factory()->superAdmin()->create());
         Livewire::test(KelolaPemesanan::class)
-            ->assertSee('Batalkan Reservasi &amp; Refund', false)
+            ->assertSee('Ajukan Pembatalan &amp; Refund', false)
             ->assertSee('Pindah Jadwal (Reschedule)')
             ->call('openCancelRefundModal', $booking->id)
             ->assertSet('showCancelRefundModal', true);

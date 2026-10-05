@@ -221,7 +221,7 @@
                     this.showNotice('Metode Pembayaran Diganti', `${previous} tidak bisa dipakai untuk nominal ini. Metode diganti ke ${this.selectedMethod.name}. Periksa lagi lalu tekan bayar.`, 'info', 'Oke');
                     return;
                 }
-                if (['EXPIRED', 'CANCELLED', 'REFUNDED'].includes(this.currentTicket.status)) {
+                if (['EXPIRED', 'CANCELLED', 'REFUNDED', 'REFUND_PENDING'].includes(this.currentTicket.status)) {
                     this.showNotice('Reservation Inactive', 'This reservation has expired or has been cancelled and can no longer be processed. Please make a new booking.', 'error', 'Close');
                     return;
                 }
@@ -269,6 +269,28 @@
              * api.qrserver.com — kode akses gate / kartu member ikut terkirim ke pihak ketiga, dan QR tidak muncul kalau
              * layanan itu down. Menunggu library termuat (script di bawah halaman) maksimal ±6 detik.
              */
+            // Modul 21: judul & keterangan tiket yang sudah tidak aktif (batal / refund / voucher saldo / hangus).
+            closedTicketTitle(t) {
+                const refund = t.refund_info || null;
+                if (t.status === 'REFUND_PENDING') return 'Refund Under Review';
+                if (t.status === 'REFUNDED') return 'Reservation Refunded';
+                if (t.status === 'CANCELLED' && refund && refund.voucher_code) return 'Converted to Credit Voucher';
+                if (t.status === 'CANCELLED') return 'Reservation Cancelled';
+                return t.total_paid > 0 ? 'Match Session Expired (No-Show)' : 'Payment Window Expired';
+            },
+
+            closedTicketMessage(t) {
+                const refund = t.refund_info || null;
+                const amount = refund ? 'Rp ' + this.formatNumber(Math.round(refund.amount)) : '';
+                if (t.status === 'REFUND_PENDING') return `This reservation has been cancelled and the court slot released. Your refund of ${amount} is being reviewed by the club.`;
+                if (t.status === 'REFUNDED') return `Your refund of ${amount} has been processed and returned by the club administration.`;
+                if (t.status === 'CANCELLED' && refund && refund.voucher_code) {
+                    return `The refund could not be returned as cash, so ${amount} was saved as credit voucher ${refund.voucher_code}` + (refund.voucher_valid_until ? ` (valid until ${refund.voucher_valid_until})` : '') + '. It appears automatically at checkout for your next booking.';
+                }
+                if (t.status === 'CANCELLED') return 'This reservation was cancelled and the slot has been returned to the schedule.';
+                return t.total_paid > 0 ? 'Your scheduled match time has passed without turnstile check-in. This ticket is now closed.' : 'The 15-minute payment window for this session has ended and the court slots have been released. Please book a new schedule.';
+            },
+
             renderQr(el, text, attempt = 0) {
                 if (!el) return;
                 text = text ? String(text) : '';

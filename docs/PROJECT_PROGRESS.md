@@ -384,18 +384,30 @@ PRD: [`PRD_MODUL_17_BUKU_TRANSAKSI_TERPADU.md`](PRD_MODUL_17_BUKU_TRANSAKSI_TERP
 
 ## MODUL 21: KEBIJAKAN REFUND, NO-SHOW & PEMBAYARAN BERMASALAH
 
-### Status: 0% (menunggu keputusan PM)
+### Status: 80% (Tahap 1 selesai 5 Okt 2026, pembayaran bermasalah ditunda)
 
-PRD: [`PRD_MODUL_21_REFUND_NO_SHOW_PEMBAYARAN_BERMASALAH.md`](PRD_MODUL_21_REFUND_NO_SHOW_PEMBAYARAN_BERMASALAH.md) — 18 pertanyaan untuk PM di §9.
+PRD: [`PRD_MODUL_21_REFUND_NO_SHOW_PEMBAYARAN_BERMASALAH.md`](PRD_MODUL_21_REFUND_NO_SHOW_PEMBAYARAN_BERMASALAH.md) — keputusan PM di §0.
 
-- [ ] Refund dua langkah: Kelola Pemesanan hanya mengajukan, uang keluar hanya dari Antrian Refund; pengajuan H-24 customer masuk antrian.
-- [ ] Kunci reschedule & refund biasa begitu jam main dimulai (celah: booking yang sedang berjalan masih bisa dipindah gratis / direfund penuh).
-- [ ] Aturan refund customer (potongan & batas waktu) + teks kebijakan di checkout / invoice.
-- [ ] Booking hangus: tegas atau reschedule darurat berbayar.
-- [ ] Menu Pembayaran Bermasalah (saldo customer terpotong tapi uang belum masuk) + tombol lapor di POS.
+- [x] Refund dua langkah: kasir / resepsionis / admin mengajukan dari Kelola Pemesanan (booking langsung batal, refund penuh tanpa potongan), superadmin menyetujui di Antrian Refund.
+- [x] Refund ditolak → uangnya jadi voucher saldo customer (+ email). Customer tidak bisa mengajukan refund sendiri.
+- [x] Kunci refund begitu jam main dimulai; reschedule paling lambat 2 jam sebelum main; booking hangus final.
+- [x] Voucher dipakai di checkout online & POS Walk-In; halaman Daftar Voucher (Keuangan).
+- [ ] Menu Pembayaran Bermasalah (saldo customer terpotong tapi uang belum masuk) — ditunda PM.
 
 ---
 
+## MODUL 22: VOUCHER SALDO & VOUCHER PROMO MARKETING
+
+### Status: 30% (fondasi jalan, menunggu arahan PM)
+
+PRD: [`PRD_MODUL_22_VOUCHER_DAN_PROMO.md`](PRD_MODUL_22_VOUCHER_DAN_PROMO.md) — 11 pertanyaan untuk PM.
+
+- [x] Tabel & mesin voucher satu untuk online dan kasir (`VoucherService`), voucher saldo dari refund ditolak, Daftar Voucher.
+- [ ] Voucher saldo **sekali pakai, sisa hangus** (keputusan PM 5 Okt 2026 — yang berjalan sekarang masih menyimpan sisa).
+- [ ] Halaman Marketing: buat / kelola kode promo nyata (sekarang tampilan contoh) + batas per akun.
+- [ ] Skema sebar promo (kode umum sosmed / kode unik / klaim ke akun / otomatis) — menunggu arahan PM.
+
+---
 ## MODUL 20: HALAMAN ADMIN PENDUKUNG
 
 ### Status: 0% (semua DUMMY)

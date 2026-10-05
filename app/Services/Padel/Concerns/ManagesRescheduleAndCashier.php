@@ -349,6 +349,12 @@ trait ManagesRescheduleAndCashier
                     : "Hanya booking yang sudah lunas yang bisa dipindah jadwalnya. Status saat ini: {$booking->status}.");
             }
 
+            // Modul 21: dikunci — jadwal yang tinggal < 2 jam lagi / sudah dimulai tidak bisa dipindah (dulu bisa,
+            // selama status masih PAID, termasuk jam main yang sedang berjalan).
+            if (now()->gte(\App\Services\Padel\PadelBookingService::rescheduleDeadline($booking))) {
+                throw new HttpException(422, 'Reschedule paling lambat '.\App\Services\Padel\PadelBookingService::RESCHEDULE_CUTOFF_HOURS.' jam sebelum jam main. Jadwal booking ini sudah tidak bisa dipindah.');
+            }
+
             $durationHours = (int) $booking->start_time->diffInHours($booking->end_time);
             if ($durationHours < 1) {
                 $durationHours = 1;
@@ -768,35 +774,36 @@ trait ManagesRescheduleAndCashier
     }
 
     /**
-     * Pembatalan & Refund Resmi oleh Kasir/Manager.
-     * Melepaskan kuncian slot lapangan, mematikan tiket QR, dan mencatat transaksi ke tabel refunds.
+     * Modul 21 — pengajuan pembatalan + refund dari Kelola Pemesanan (kasir / resepsionis / admin).
+     *
+     * Refund = customer minta uangnya kembali, jadi booking langsung batal & slotnya dilepas, kuota member / jam voucher
+     * sponsor dikembalikan, dan SELURUH uang yang sudah masuk untuk booking ini (tanpa potongan) diajukan ke Antrian
+     * Refund sebagai PENDING — booking berstatus REFUND_PENDING. Uang baru keluar saat disetujui di Antrian Refund
+     * (booking → REFUNDED); kalau ditolak, uangnya jadi voucher saldo customer (booking → CANCELLED).
+     * Booking tanpa uang masuk (ditanggung kuota member / belum dibayar) langsung CANCELLED tanpa pengajuan.
      */
-    public function adminCancelAndRefund(
-        string $bookingId,
-        float $refundAmount,
-        string $refundMethod,
-        string $reasonCategory,
-        string $notes,
-        User $adminUser
-    ): array {
-        // "Saldo deposit member" dulu jadi opsi, padahal fitur saldo tidak ada: refund tercatat PROCESSED
-        // tapi uangnya tidak pernah sampai ke customer. Hanya metode yang benar-benar mengembalikan uang.
-        if ($refundAmount > 0 && ! in_array(strtoupper($refundMethod), ['TRANSFER_MANUAL', 'TRANSFER_BANK', 'VOID_EDC', 'ORIGINAL_PAYMENT'], true)) {
-            throw new HttpException(422, 'Metode pengembalian dana tidak dikenali. Pilih Transfer Bank Manual atau Void / Refund di Mesin EDC.');
-        }
-
-        if ($refundAmount < 0) {
-            throw new HttpException(422, 'Nominal refund tidak boleh negatif.');
-        }
-
-        return DB::transaction(function () use ($bookingId, $refundAmount, $refundMethod, $reasonCategory, $notes, $adminUser) {
+    public function requestCancelAndRefund(string $bookingId, string $reasonCategory, string $notes, User $requester): array
+    {
+        return DB::transaction(function () use ($bookingId, $reasonCategory, $notes, $requester) {
             $booking = PadelBooking::with(['order', 'court'])->where('id', $bookingId)->lockForUpdate()->firstOrFail();
 
-            if (! in_array($booking->status, ['PAID', 'LOCKED', 'REFUND_PENDING'])) {
-                throw new HttpException(400, "Booking dengan status {$booking->status} tidak dapat dibatalkan.");
+            // REFUND_PENDING lama (pengajuan customer dari web, sebelum Modul 21) belum punya catatan refund — boleh
+            // diajukan ulang supaya masuk antrian.
+            $legacyCustomerRequest = $booking->status === 'REFUND_PENDING'
+                && ! Refund::where('padel_booking_id', $booking->id)->where('status', 'PENDING')->exists();
+            if (! in_array($booking->status, ['PAID', 'LOCKED'], true) && ! $legacyCustomerRequest) {
+                throw new HttpException(400, $booking->status === 'REFUND_PENDING'
+                    ? 'Refund booking ini sudah diajukan dan sedang menunggu di Antrian Refund.'
+                    : "Booking dengan status {$booking->status} tidak dapat dibatalkan.");
             }
 
-            // Release distributed cache locks
+            // Jam main yang sudah dimulai tidak bisa dibatalkan / di-refund lagi (dulu bisa selama status masih PAID).
+            // Pengecualian: pengajuan lama customer (minimal H-24) yang belum pernah masuk antrian — tanpa ini booking itu
+            // tertahan REFUND_PENDING selamanya setelah jam mainnya lewat.
+            if (! $legacyCustomerRequest && $booking->start_time->lte(now())) {
+                throw new HttpException(422, 'Jam main booking ini sudah dimulai atau lewat, jadi tidak bisa dibatalkan / di-refund.');
+            }
+
             $currLock = $booking->start_time->copy();
             $endLock = $booking->end_time->copy();
             while ($currLock->lt($endLock)) {
@@ -804,40 +811,28 @@ trait ManagesRescheduleAndCashier
                 $currLock->addHour();
             }
 
-            $newStatus = $refundAmount > 0 ? 'REFUNDED' : 'CANCELLED';
+            $refundAmount = 0.0;
+            $hadOrder = (bool) $booking->order_id;
+            $hasAnyPaymentRecord = $hadOrder && Payment::where('order_id', $booking->order_id)->exists();
+            // Data legacy: booking PAID dari sebelum ada tabel payments. Hanya untuk kasus ini nominal memakai nilai booking.
+            $isLegacyPaid = $booking->status === 'PAID' && (! $hadOrder || ! $hasAnyPaymentRecord) && (float) $booking->total_amount > 0;
 
-            if ($refundAmount > 0) {
-                $hadOrder = (bool) $booking->order_id;
+            if ($isLegacyPaid || $hasAnyPaymentRecord) {
                 $order = $this->ensureBookingOrder($booking);
                 $order = \App\Models\Pos\Order::whereKey($order->id)->lockForUpdate()->firstOrFail();
                 $booking->setRelation('order', $order);
 
-                $hasAnyPaymentRecord = Payment::where('order_id', $order->id)->exists();
-                // Data legacy: booking PAID dari sebelum ada tabel payments (tanpa order / tanpa satu pun catatan
-                // pembayaran). Hanya untuk kasus ini batas refund memakai nilai booking.
-                $isLegacyPaid = $booking->status === 'PAID' && (! $hadOrder || ! $hasAnyPaymentRecord);
+                // Bagian BOOKING INI dari uang yang benar-benar masuk (dikurangi refund lain) — tanpa potongan.
+                $refundAmount = $isLegacyPaid ? (float) $booking->total_amount : $this->refundableAmountForBooking($booking);
+            }
 
-                // Batas refund = bagian BOOKING INI dari uang yang benar-benar masuk (dikurangi refund sebelumnya).
-                // Dulu per order: membatalkan 1 dari 2 lapangan bisa di-refund senilai 2 lapangan, dan keranjang
-                // LOCKED yang belum dibayar sama sekali bisa di-refund penuh (cap jatuh ke grand_total).
-                $maxRefund = $isLegacyPaid ? (float) $booking->total_amount : $this->refundableAmountForBooking($booking);
-                if ($maxRefund <= 0) {
-                    throw new HttpException(422, 'Belum ada pembayaran yang masuk untuk booking ini, jadi tidak ada yang bisa di-refund. Batalkan tanpa refund (nominal 0).');
-                }
-                if ($refundAmount > $maxRefund + 0.5) {
-                    throw new HttpException(422, 'Nominal refund (Rp ' . number_format($refundAmount, 0, ',', '.') . ') tidak boleh melebihi pembayaran booking ini (Rp ' . number_format($maxRefund, 0, ',', '.') . ').');
-                }
-
-                $origPayment = Payment::where('order_id', $order->id)
-                    ->where('status', 'SUCCESS')
-                    ->latest()
-                    ->first();
-
+            if ($refundAmount > 0) {
+                $origPayment = Payment::where('order_id', $booking->order_id)->where('status', 'SUCCESS')->latest()->first();
                 if (! $origPayment) {
-                    // Fallback pembukuan KHUSUS data legacy (lihat $isLegacyPaid): tabel refunds wajib menunjuk ke
-                    // satu payment. Ditandai legacy_backfill supaya tidak terbaca sebagai omzet baru.
+                    // Fallback pembukuan KHUSUS data legacy: tabel refunds wajib menunjuk ke satu payment. Ditandai
+                    // legacy_backfill supaya tidak terbaca sebagai omzet baru.
                     $origPayment = Payment::create([
-                        'order_id' => $order->id,
+                        'order_id' => $booking->order_id,
                         'payment_gateway' => 'TRANSFER_MANUAL',
                         'transaction_id' => 'INIT-' . strtoupper(Str::random(10)),
                         'amount' => (float) $booking->total_amount,
@@ -848,43 +843,22 @@ trait ManagesRescheduleAndCashier
                 }
 
                 Refund::create([
-                    'order_id' => $order->id,
+                    'order_id' => $booking->order_id,
                     'payment_id' => $origPayment->id,
+                    'padel_booking_id' => $booking->id,
+                    'requested_by_id' => $requester->id,
                     'refund_amount' => $refundAmount,
-                    'reason' => "[{$refundMethod}] [{$reasonCategory}] {$notes}",
-                    'status' => 'PROCESSED',
-                    'processed_at' => now(),
+                    'reason' => "Pembatalan booking {$booking->booking_code}: [{$reasonCategory}] {$notes}",
+                    'status' => 'PENDING',
                 ]);
             }
 
-            if ($booking->membership_balance_id && (float) $booking->member_hours_consumed > 0) {
-                app(\App\Services\Membership\MembershipBalanceService::class)->adjustQuota(
-                    balanceId: $booking->membership_balance_id,
-                    changeType: 'REVERSAL',
-                    quantity: (float) $booking->member_hours_consumed,
-                    notes: "Reversal pembatalan booking Padel {$booking->booking_code}: [{$reasonCategory}] {$notes}",
-                    relatedType: PadelBooking::class,
-                    relatedId: $booking->id,
-                    performedBy: $adminUser->id
-                );
-                $booking->member_hours_consumed = 0.00;
-            }
-
-            if ($booking->sponsor_member_voucher_id && (float) $booking->sponsor_hours_consumed > 0) {
-                $sponsorVoucher = \App\Models\Sponsor\SponsorMemberVoucher::where('id', $booking->sponsor_member_voucher_id)
-                    ->lockForUpdate()
-                    ->first();
-                if ($sponsorVoucher) {
-                    $sponsorVoucher->hours_used = max(0, (float) $sponsorVoucher->hours_used - (float) $booking->sponsor_hours_consumed);
-                    $sponsorVoucher->save();
-                }
-                $booking->sponsor_hours_consumed = 0.00;
-            }
+            $this->reverseBookingBenefits($booking);
 
             $booking->update([
-                'status' => $newStatus,
+                'status' => $refundAmount > 0 ? 'REFUND_PENDING' : 'CANCELLED',
                 'qr_code_hash' => null,
-                'cancel_reason' => "[{$reasonCategory}] {$notes} (Diproses oleh: {$adminUser->name})",
+                'cancel_reason' => "[{$reasonCategory}] {$notes} (Diajukan oleh: {$requester->name})",
             ]);
 
             // Tagihan selisih reschedule yang belum dibayar ikut ditutup (nominalnya keluar dari total order, sesi
@@ -892,22 +866,27 @@ trait ManagesRescheduleAndCashier
             // uangnya diam-diam jadi omzet.
             $this->closeRescheduleBills($booking, 'BOOKING_CANCELLED_BY_ADMIN');
 
-            // Keranjang yang belum dibayar sama sekali (tagihan checkout level order) & semua booking-nya batal:
-            // tutup juga tagihannya supaya pembayaran telat terdeteksi sebagai refund.
             if ($booking->order_id && PadelBooking::where('order_id', $booking->order_id)->whereIn('status', ['PAID', 'LOCKED', 'CHECKED_IN', 'PENDING_PAYMENT', 'PENDING'])->doesntExist()) {
+                // Keranjang yang belum dibayar sama sekali: tutup tagihannya supaya pembayaran telat terdeteksi sebagai refund.
                 foreach (Payment::where('order_id', $booking->order_id)->where('status', 'PENDING')->get() as $pending) {
                     $log = $this->billPayload($pending);
                     $log['closed_by'] = 'BOOKING_CANCELLED_BY_ADMIN';
                     $pending->update(['status' => 'FAILED', 'payload_log' => $log]);
                 }
+
+                // Bagian yang dibayar pakai voucher saldo kembali ke saldonya (bagian tunainya lewat refund di atas).
+                $order = \App\Models\Pos\Order::whereKey($booking->order_id)->lockForUpdate()->first();
+                if ($order) {
+                    app(\App\Services\Finance\VoucherService::class)->restoreCreditForCancelledOrder($order);
+                }
             }
 
             \App\Services\Audit\ActivityLogger::record(
                 module: 'PADEL',
-                event: $refundAmount > 0 ? 'booking.refunded' : 'booking.cancelled',
+                event: $refundAmount > 0 ? 'booking.refund_requested' : 'booking.cancelled',
                 description: $refundAmount > 0
-                    ? 'Refund '.\App\Services\Audit\ActivityLogger::rupiah($refundAmount)." untuk booking {$booking->booking_code} via {$refundMethod}"
-                    : "Membatalkan booking {$booking->booking_code} tanpa refund",
+                    ? "Membatalkan booking {$booking->booking_code} & mengajukan refund ".\App\Services\Audit\ActivityLogger::rupiah($refundAmount).' ke Antrian Refund'
+                    : "Membatalkan booking {$booking->booking_code} (tidak ada uang yang perlu dikembalikan)",
                 subject: $booking,
                 meta: array_filter([
                     'kode_booking' => $booking->booking_code,
@@ -915,17 +894,19 @@ trait ManagesRescheduleAndCashier
                     'lapangan' => $booking->court?->name,
                     'jadwal' => $booking->booking_date->format('d M Y').' '.$booking->start_time->format('H:i').'-'.$booking->end_time->format('H:i'),
                     'nominal_refund' => $refundAmount > 0 ? $refundAmount : null,
-                    'metode_refund' => $refundAmount > 0 ? $refundMethod : null,
                     'kategori_alasan' => $reasonCategory,
                     'catatan' => $notes,
                 ], fn ($v) => $v !== null && $v !== ''),
                 severity: \App\Services\Audit\ActivityLogger::CRITICAL,
-                causer: $adminUser,
+                causer: $requester,
             );
 
             return [
                 'success' => true,
-                'message' => 'Reservasi berhasil dibatalkan dan diproses refund.',
+                'refund_amount' => $refundAmount,
+                'message' => $refundAmount > 0
+                    ? 'Booking dibatalkan. Refund Rp '.number_format($refundAmount, 0, ',', '.').' menunggu persetujuan di Antrian Refund.'
+                    : 'Booking dibatalkan. Tidak ada uang yang perlu dikembalikan.',
                 'booking' => $booking->fresh(['court', 'order']),
             ];
         });
@@ -1045,9 +1026,14 @@ trait ManagesRescheduleAndCashier
     }
 
     /**
-     * Batas refund untuk SATU booking = bagian booking ini dari uang yang benar-benar masuk (dikurangi refund
-     * sebelumnya). Order berisi beberapa booking dibagi proporsional nilai lapangan yang sudah dibayar; booking
-     * terakhir yang masih aktif mendapat seluruh sisanya (termasuk sewa alat level order).
+     * Refund untuk SATU booking = bagian booking ini dari uang yang benar-benar dibayar untuk order-nya, dikurangi refund
+     * yang sudah pernah diajukan untuk booking ini, dan tidak pernah melebihi uang order yang belum dikembalikan.
+     *
+     * Bagian dihitung tetap dari SEMUA booking di order (proporsional nilai lapangan yang sudah dibayar) — termasuk yang
+     * sudah dimainkan, hangus, atau dibatalkan. Dulu hanya booking yang masih aktif yang dibagi, sehingga booking terakhir
+     * mendapat SELURUH sisa uang order: kalau saudaranya sudah dimainkan atau refund-nya ditolak (jadi voucher), booking
+     * terakhir di-refund senilai dua lapangan. Kelebihan bayar (di atas total order) bukan bagian booking — itu refund
+     * tersendiri.
      */
     public function refundableAmountForBooking(PadelBooking $booking): float
     {
@@ -1057,26 +1043,30 @@ trait ManagesRescheduleAndCashier
         }
 
         $paid = (float) Payment::where('order_id', $order->id)->where('status', 'SUCCESS')->sum('amount');
-        $refunded = (float) Refund::where('order_id', $order->id)->whereIn('status', ['PENDING', 'APPROVED', 'PROCESSED'])->sum('refund_amount');
-        $remaining = max(0.0, round($paid - $refunded, 2));
+        $refunds = Refund::where('order_id', $order->id)->with('voucher:id,refund_id')->get(['id', 'padel_booking_id', 'refund_amount', 'status']);
+
+        // Uang order yang sudah dikembalikan / sedang diajukan / sudah dijadikan voucher saldo.
+        $allocated = (float) $refunds
+            ->filter(fn (Refund $r) => in_array($r->status, ['PENDING', 'APPROVED', 'PROCESSED'], true) || ($r->status === 'REJECTED' && $r->voucher))
+            ->sum('refund_amount');
+        $remaining = max(0.0, round($paid - $allocated, 2));
         if ($remaining <= 0) {
             return 0.0;
         }
 
-        $active = PadelBooking::where('order_id', $order->id)
-            ->whereIn('status', ['PAID', 'LOCKED', 'REFUND_PENDING', 'CHECKED_IN'])
-            ->get();
-        if ($active->count() <= 1) {
-            return $remaining;
+        $bookings = PadelBooking::where('order_id', $order->id)->get();
+        if (! $bookings->contains('id', $booking->id)) {
+            $bookings->push($booking);
         }
 
+        $base = (float) $order->grand_total > 0 ? min($paid, (float) $order->grand_total) : $paid;
         $value = fn (PadelBooking $b) => max(0.0, (float) $b->court_fee - $this->unpaidCourtDeltaFor($b));
-        $total = $active->sum($value);
-        if ($total <= 0) {
-            return round($remaining / $active->count(), 2);
-        }
+        $total = $bookings->sum($value);
+        $share = $total > 0 ? $base * $value($booking) / $total : $base / max(1, $bookings->count());
 
-        return round($remaining * $value($booking) / $total, 2);
+        $alreadyRequested = (float) $refunds->where('padel_booking_id', $booking->id)->sum('refund_amount');
+
+        return round(max(0.0, min($share - $alreadyRequested, $remaining)), 2);
     }
 
     /** Bagian tarif lapangan dari tagihan selisih booking ini yang BELUM dibayar (court_fee sudah menghitungnya). */

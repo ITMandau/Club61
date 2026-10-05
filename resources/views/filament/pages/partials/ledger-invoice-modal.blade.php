@@ -4,7 +4,9 @@
             const html = this.$refs.doc.innerHTML;
             const w = window.open('', '_blank', 'width=480,height=720');
             if (! w) { return; }
-            w.document.write('<!doctype html><html><head><meta charset=\'utf-8\'><title>Salinan Admin</title><style>body{margin:16px;font-family:monospace;} *{-webkit-print-color-adjust:exact;print-color-adjust:exact;}</style></head><body>' + html + '</body></html>');
+            // Dicetak di printer thermal 58mm yang sama dengan struk kasir (App\\Support\\ReceiptPaper).
+            const css = @js(\App\Support\ReceiptPaper::printCss(['#ledger-receipt']));
+            w.document.write('<!doctype html><html><head><meta charset=\'utf-8\'><title>Salinan Admin</title><style>body{margin:16px;font-family:monospace;}' + css + '</style></head><body><div id=\'ledger-receipt\'>' + html + '</div></body></html>');
             w.document.close();
             w.focus();
             w.onload = () => { w.print(); };

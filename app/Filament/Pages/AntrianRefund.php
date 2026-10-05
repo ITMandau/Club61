@@ -9,6 +9,7 @@ use BackedEnum;
 use Filament\Actions\Action;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
+use Filament\Forms\Components\Toggle;
 use Filament\Forms\Components\TextInput;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
@@ -23,6 +24,8 @@ use UnitEnum;
 /**
  * Modul 17 FR-06 — Antrian Refund: refund PENDING (kelebihan bayar, pembayaran ganda, uang masuk untuk tagihan yang
  * sudah ditutup) dulu tidak bisa diproses dari mana pun. Hanya untuk pemegang izin process_refund_queue.
+ * Modul 21: pengajuan pembatalan + refund dari Kelola Pemesanan (kasir / resepsionis / admin) juga disetujui di sini;
+ * yang ditolak otomatis jadi voucher saldo customer.
  */
 class AntrianRefund extends Page implements HasTable
 {
@@ -60,7 +63,7 @@ class AntrianRefund extends Page implements HasTable
     public function table(Table $table): Table
     {
         return $table
-            ->query(Refund::query()->with(['order.user:id,name', 'payment', 'processedBy:id,name']))
+            ->query(Refund::query()->with(['order.user:id,name', 'payment', 'processedBy:id,name', 'requestedBy:id,name', 'booking:id,booking_code', 'voucher:id,refund_id,code,balance']))
             ->defaultSort('created_at', 'desc')
             ->paginated([25, 50])
             ->emptyStateHeading('Tidak ada refund pada filter ini')
@@ -71,10 +74,11 @@ class AntrianRefund extends Page implements HasTable
                     ->fontFamily('mono')
                     ->weight('bold')
                     ->searchable()
-                    ->description(fn (Refund $r) => $r->order?->user?->name ?? $r->order?->customer_name),
+                    ->description(fn (Refund $r) => trim(($r->order?->user?->name ?? $r->order?->customer_name ?? '').($r->booking ? ' · '.$r->booking->booking_code : ''), ' ·')),
                 TextColumn::make('refund_amount')->label('Nominal')->alignEnd()->weight('bold')
                     ->formatStateUsing(fn ($state) => BukuTransaksi::rupiah($state)),
-                TextColumn::make('reason')->label('Alasan')->wrap()->limit(140),
+                TextColumn::make('reason')->label('Alasan')->wrap()->limit(140)
+                    ->description(fn (Refund $r) => $r->requestedBy ? 'Diajukan oleh '.$r->requestedBy->name : 'Otomatis dari sistem'),
                 TextColumn::make('payment.payment_method')
                     ->label('Dibayar via')
                     ->description(fn (Refund $r) => $r->payment?->transaction_id)
@@ -88,7 +92,7 @@ class AntrianRefund extends Page implements HasTable
                         'REJECTED' => 'danger',
                         default => 'gray',
                     })
-                    ->description(fn (Refund $r) => $r->status === 'PENDING' ? null : trim(($r->refund_method ?? '').' '.($r->refund_reference ? '· '.$r->refund_reference : '').' '.($r->processedBy ? '· '.$r->processedBy->name : ''))),
+                    ->description(fn (Refund $r) => $r->status === 'PENDING' ? null : trim(($r->refund_method ?? '').' '.($r->refund_reference ? '· '.$r->refund_reference : '').' '.($r->voucher ? 'Jadi voucher '.$r->voucher->code : '').' '.($r->processedBy ? '· '.$r->processedBy->name : ''))),
             ])
             ->filters([
                 SelectFilter::make('status')
@@ -123,22 +127,31 @@ class AntrianRefund extends Page implements HasTable
                     ->visible(fn (Refund $r) => $r->status === 'PENDING')
                     ->authorize(fn () => auth()->user()?->can('process_refund_queue') ?? false)
                     ->modalHeading(fn (Refund $r) => 'Tolak refund '.BukuTransaksi::rupiah($r->refund_amount))
-                    ->modalDescription('Refund yang ditolak tidak mengubah Buku Transaksi. Alasan wajib diisi dan tercatat di Log Aktivitas (kritis).')
+                    ->modalDescription('Tidak ada uang keluar & Buku Transaksi tidak berubah. Booking tetap batal. Uangnya dijadikan voucher saldo atas nama customer (bisa dipakai untuk booking berikutnya). Alasan wajib diisi dan tercatat di Log Aktivitas (kritis).')
                     ->modalSubmitActionLabel('Tolak refund')
                     ->schema([
                         Textarea::make('reason')->label('Alasan penolakan')->required()->minLength(5)->maxLength(1000)->rows(3),
+                        Toggle::make('issue_voucher')
+                            ->label('Jadikan voucher saldo untuk customer')
+                            ->helperText('Matikan hanya kalau uangnya memang bukan milik customer (mis. sudah dikembalikan di luar sistem / data ganda).')
+                            ->default(true),
                     ])
                     ->action(function (Refund $record, array $data) {
-                        $this->runQueueAction(fn () => app(RefundQueueService::class)->reject($record, auth()->user(), $data['reason']), 'Refund ditolak.');
+                        $issue = (bool) ($data['issue_voucher'] ?? true);
+                        $this->runQueueAction(
+                            fn () => app(RefundQueueService::class)->reject($record, auth()->user(), $data['reason'], $issue),
+                            'Refund ditolak.',
+                            fn (Refund $r) => $r->voucher ? 'Voucher saldo '.$r->voucher->code.' senilai '.BukuTransaksi::rupiah($r->voucher->balance).' diterbitkan untuk customer.' : null,
+                        );
                     }),
             ]);
     }
 
-    private function runQueueAction(\Closure $callback, string $success): void
+    private function runQueueAction(\Closure $callback, string $success, ?\Closure $body = null): void
     {
         try {
-            $callback();
-            Notification::make()->title($success)->success()->send();
+            $result = $callback();
+            Notification::make()->title($success)->body($body ? $body($result) : null)->success()->send();
         } catch (HttpException $e) {
             Notification::make()->title($e->getMessage())->danger()->send();
         }

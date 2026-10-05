@@ -13,13 +13,8 @@
         .pos-terminal-card { background: #FFFFFF; border: 1.5px solid #DFC387; border-radius: 14px; display: flex; flex-direction: column; overflow: hidden; min-height: 0; }
         .pos-terminal-header { padding: 0.75rem 1.2rem; background: linear-gradient(135deg, #FAF5E8 0%, #F5E8C7 100%); border-bottom: 1.5px solid #DFC387; display: flex; justify-content: space-between; align-items: center; flex-shrink: 0; flex-wrap: wrap; gap: 0.5rem; }
         .pos-terminal-body { flex: 1; overflow-y: auto; padding: 1.2rem 1.4rem; display: flex; flex-direction: column; gap: 1.1rem; }
-        @media print {
-            body * { visibility: hidden; }
-            #printable-membership-receipt, #printable-membership-receipt * { visibility: visible; }
-            #printable-membership-receipt { position: absolute; left: 0; top: 0; width: 78mm; max-width: 78mm; border: none !important; box-shadow: none !important; padding: 5mm !important; }
-            #printable-membership-receipt .no-print { display: none !important; }
-        }
     </style>
+    @include('pos.partials.receipt-print-style', ['selectors' => ['#printable-membership-receipt']])
 
     @include('filament.partials.pos-subnav', ['activePos' => 'membership'])
     @include('filament.partials.pos-history-tabs', ['isHistory' => $posStep === 'history', 'canShowHistory' => $this->canShowHistoryTab])

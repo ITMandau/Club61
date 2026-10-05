@@ -7,7 +7,6 @@ use App\Models\Pos\Order;
 use App\Models\Pos\Payment;
 use App\Models\Pos\PosCashierShift;
 use App\Models\Pos\Refund;
-use App\Models\Pos\Voucher;
 use App\Services\Audit\ActivityLogger;
 use App\Services\Finance\LedgerWriter;
 use Illuminate\Support\Facades\Cache;
@@ -319,14 +318,9 @@ class PaymentOrchestratorService
             // Pakai "pernah ada pembayaran sukses", bukan "jumlahnya > 0": order 100% voucher punya pembayaran Rp0, dan
             // pelunasan selisih reschedule-nya dulu memotong kuota voucher untuk kedua kalinya.
             if ($order->voucher_code && ! $hadSuccessBefore) {
-                Voucher::where('code', $order->voucher_code)
-                    ->where(function ($q) {
-                        $q->whereNull('quota')->orWhere('quota', '>', 0);
-                    })
-                    ->decrement('quota');
-
-                Voucher::where('code', $order->voucher_code)->increment('used_count');
+                app(\App\Services\Finance\VoucherService::class)->consume($order);
             }
+
 
             // 5. Delegasi pemenuhan domain secara dinamis via registry
             $itemsByType = $order->items->groupBy('item_type');

@@ -123,53 +123,11 @@ trait ManagesCheckoutAndPayments
                 $primaryBooking->increment('total_amount', $equipmentTotal);
             }
 
-            // Validasi Voucher Diskon berbasis Database
-            $discountAmount = 0;
-            $appliedVoucherCode = null;
-            if ($voucherCode) {
-                $code = strtoupper(trim($voucherCode));
-                // lockForUpdate() men-serialize baris voucher ini antar checkout yang konkuren.
-                // Kuota (kolom `quota`) sendiri baru benar-benar dipotong permanen saat pembayaran
-                // lunas (lihat PaymentOrchestratorService::markOrderAsPaid) — dipertahankan seperti
-                // itu karena jalur lain (settle tunai POS, dsb.) juga bergantung ke situ. Tapi kalau
-                // eligibility DI SINI cuma dicek terhadap `quota` yang belum berkurang itu, order
-                // yang statusnya masih UNPAID/PENDING_PAYMENT (belum lunas) tidak ikut kehitung —
-                // jadi kalau kuota tinggal 1, checkout paralel/berurutan yang sama-sama belum bayar
-                // bisa semua lolos dapat diskon sebelum salah satunya lunas duluan. Makanya di sini
-                // kita hitung juga order yang SUDAH mengklaim kode ini tapi belum lunas ("reserved
-                // in-flight"), dan kurangi itu dari quota yang tersisa sebelum memutuskan eligible.
-                $voucher = \App\Models\Pos\Voucher::where('code', $code)
-                    ->where('is_active', true)
-                    ->where(function ($q) {
-                        $q->whereNull('valid_until')->orWhere('valid_until', '>=', now());
-                    })
-                    ->lockForUpdate()
-                    ->first();
-
-                if ($voucher) {
-                    $orderAmount = $courtTotal + $equipmentTotal;
-                    $minOrder = (float) ($voucher->min_order_amount ?? 0);
-
-                    $hasQuota = true;
-                    if ($voucher->quota !== null) {
-                        $reservedInFlight = Order::where('voucher_code', $voucher->code)
-                            ->whereIn('payment_status', ['UNPAID', 'PENDING_PAYMENT', 'PARTIALLY_PAID'])
-                            ->count();
-                        $hasQuota = ($voucher->quota - $reservedInFlight) > 0;
-                    }
-
-                    if ($orderAmount >= $minOrder && $hasQuota) {
-                        if ($voucher->discount_type === 'PERCENT') {
-                            $calc = $orderAmount * ((float) $voucher->discount_value / 100);
-                            $discountAmount = $voucher->max_discount_amount ? min($calc, (float) $voucher->max_discount_amount) : $calc;
-                        } else {
-                            $discountAmount = (float) $voucher->discount_value;
-                        }
-                        $discountAmount = min($discountAmount, $orderAmount);
-                        $appliedVoucherCode = $voucher->code;
-                    }
-                }
-            }
+            // Voucher promo / voucher saldo (VoucherService: aturan sama dengan kasir). Kode tidak valid diabaikan —
+            // halaman checkout sudah memvalidasinya lebih dulu lewat /vouchers/check.
+            $voucherResult = app(\App\Services\Finance\VoucherService::class)->resolve($voucherCode, $user, $courtTotal + $equipmentTotal, lock: true);
+            $discountAmount = $voucherResult['discount'];
+            $appliedVoucherCode = $voucherResult['voucher']?->code;
 
             // Hitung Pajak & Biaya Admin via Mesin Terpusat TaxAndFeeService (Tunduk pada Menu Pengaturan Biaya & Pajak)
             $financeCalc = app(\App\Services\Finance\TaxAndFeeService::class)->calculate(
@@ -931,7 +889,9 @@ trait ManagesCheckoutAndPayments
         User $cashier,
         bool $autoCheckIn = false,
         array $paymentMeta = [],
-        ?string $membershipBalanceId = null
+        ?string $membershipBalanceId = null,
+        ?string $voucherCode = null,
+        ?float $expectedGrandTotal = null
     ): array {
         // 100% Cashless: pembayaran tunai tidak diperbolehkan sama sekali di loket walk-in.
         if (in_array(strtoupper($paymentMethod), ['CASH', 'TUNAI'])) {
@@ -946,7 +906,7 @@ trait ManagesCheckoutAndPayments
         // ditahan. Dulu slot tetap terkunci selama waktu tahan (sampai 30 menit) dan kasir yang mencoba ulang mendapat
         // "slot sedang di-hold pemain lain".
         try {
-            return DB::transaction(function () use ($customer, $bookingIds, $equipments, $paymentMethod, $cashier, $autoCheckIn, $paymentMeta, $membershipBalanceId) {
+            return DB::transaction(function () use ($customer, $bookingIds, $equipments, $paymentMethod, $cashier, $autoCheckIn, $paymentMeta, $membershipBalanceId, $voucherCode, $expectedGrandTotal) {
                 $bookings = PadelBooking::with('court')
                     ->whereIn('id', $bookingIds)
                     ->where('user_id', $customer->id)
@@ -1009,14 +969,35 @@ trait ManagesCheckoutAndPayments
                     }
                 }
 
+                // Voucher promo / saldo: di kasir kode yang tidak valid DITOLAK (kasir melihat potongannya di layar).
+                $voucherResult = app(\App\Services\Finance\VoucherService::class)->resolve($voucherCode, $customer, $courtTotal + $equipmentTotal, lock: true);
+                if ($voucherResult['error']) {
+                    throw new HttpException(422, $voucherResult['error']);
+                }
+
                 $walkInFinanceCalc = app(\App\Services\Finance\TaxAndFeeService::class)->calculate(
                     subtotal: $courtTotal + $equipmentTotal,
-                    discountAmount: 0,
+                    discountAmount: $voucherResult['discount'],
                     channel: 'POS_WALKIN',
                     module: 'PADEL'
                 );
 
                 $grandTotal = $walkInFinanceCalc['grand_total'];
+
+                // Kasir menagih (EDC / QRIS) sebesar total di layarnya. Kalau server menghitung lain (voucher / kuota member /
+                // tarif berubah di tengah jalan), batalkan — jangan sampai uang yang ditagih beda dengan yang dicatat.
+                if ($expectedGrandTotal !== null && abs((float) $grandTotal - $expectedGrandTotal) > 1) {
+                    throw new HttpException(409, 'Total tagihan berubah dari Rp '.number_format($expectedGrandTotal, 0, ',', '.').' menjadi Rp '.number_format((float) $grandTotal, 0, ',', '.').'. Periksa lagi rincian di layar sebelum menagih customer.');
+                }
+
+                // 'VOUCHER' hanya untuk tagihan yang seluruhnya ditutup voucher (tanpa uang masuk = tanpa bukti bayar).
+                $coveredByVoucher = $voucherResult['voucher'] && $grandTotal <= 0;
+                if (strtoupper($paymentMethod) === 'VOUCHER' && ! $coveredByVoucher) {
+                    throw new HttpException(422, 'Voucher tidak menutup seluruh tagihan. Pilih metode pembayaran untuk sisa tagihan.');
+                }
+                if ($coveredByVoucher) {
+                    $paymentMethod = 'VOUCHER';
+                }
 
                 // Buat Order resmi dengan order_type = 'WALK_IN' dan cashier_id terisi
                 $order = Order::create([
@@ -1025,8 +1006,8 @@ trait ManagesCheckoutAndPayments
                     'cashier_id' => $cashier->id,
                     'order_type' => 'WALK_IN',
                     'subtotal' => $walkInFinanceCalc['subtotal'],
-                    'discount_amount' => 0.00,
-                    'voucher_code' => null,
+                    'discount_amount' => $walkInFinanceCalc['discount_amount'],
+                    'voucher_code' => $voucherResult['voucher']?->code,
                     'tax_amount' => $walkInFinanceCalc['tax_amount'],
                     'service_charge' => $walkInFinanceCalc['admin_fee_amount'],
                     'grand_total' => $grandTotal,
@@ -1111,7 +1092,12 @@ trait ManagesCheckoutAndPayments
                 }
 
                 // Satu RRN / approval code hanya boleh melunasi satu transaksi (dulu walk-in tidak pernah dicek).
-                \App\Services\Pos\PosPaymentProof::assertProofNotReused($payloadLog);
+                if (! $coveredByVoucher) {
+                    \App\Services\Pos\PosPaymentProof::assertProofNotReused($payloadLog);
+                } else {
+                    $payloadLog['covered_by'] = 'VOUCHER';
+                    $payloadLog['voucher_code'] = $voucherResult['voucher']->code;
+                }
 
                 // Eksekusi pelunasan langsung via PaymentOrchestratorService sebagai single writer
                 $orchestrator = app(\App\Services\Payment\PaymentOrchestratorService::class);

@@ -41,6 +41,8 @@ class Club61PermissionMatrix
         'export_ledger',
         'view_ledger_invoice',
         'process_refund_queue',
+        // Daftar Voucher: saldo voucher customer = uang customer yang masih disimpan klub.
+        'View:DaftarVoucher',
     ];
 
     /**
@@ -69,6 +71,8 @@ class Club61PermissionMatrix
                 'process_fnb_order',
                 'open_pos_shift',
                 'close_pos_shift',
+                'View:KelolaPemesanan',
+                'request_refund_padel',
             ],
             'receptionist' => [
                 'View:BookOfflineCourt',
@@ -83,6 +87,7 @@ class Club61PermissionMatrix
                 'view_padel_bookings',
                 'checkin_padel_ticket',
                 'print_padel_invoice',
+                'request_refund_padel',
             ],
             'kitchen' => [
                 'view_kitchen_kds',
@@ -124,6 +129,7 @@ class Club61PermissionMatrix
                             'view_padel_bookings' => 'Lihat Daftar Pemesanan Lapangan',
                             'checkin_padel_ticket' => 'Check-in Tiket Pemesan Lapangan',
                             'reschedule_padel_booking' => 'Reschedule Jadwal Pemesanan',
+                            'request_refund_padel' => 'Ajukan Pembatalan & Refund (masuk Antrian Refund)',
                             'cancel_refund_padel' => 'Batalkan & Refund Pemesanan (Admin / Staf)',
                             'cancel_padel_booking' => 'Batalkan Pesanan Lapangan (Tombol Batal)',
                             'print_padel_invoice' => 'Cetak Invoice & Bukti Pembayaran',
@@ -307,6 +313,7 @@ class Club61PermissionMatrix
                             'export_ledger' => 'Export Buku Transaksi ke Excel / CSV',
                             'view_ledger_invoice' => 'Lihat Invoice / Struk Salinan Admin dari Buku Transaksi',
                             'process_refund_queue' => 'Proses / Tolak Refund yang Menunggu (Antrian Refund)',
+                            'View:DaftarVoucher' => 'Akses Halaman Daftar Voucher (semua voucher & saldo customer)',
                         ],
                     ],
                 ],

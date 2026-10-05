@@ -214,33 +214,30 @@ class PaymentTimeBombRegressionTest extends TestCase
         $booking = PadelBooking::create(['booking_code' => 'BK-CART', 'order_id' => $order->id, 'user_id' => $this->customer->id, 'court_id' => $this->court->id, 'booking_date' => $this->date, 'start_time' => $startAt, 'end_time' => $startAt->copy()->addHour(), 'court_fee' => 200000, 'total_amount' => 200000, 'status' => 'LOCKED']);
         Payment::create(['order_id' => $order->id, 'payment_gateway' => 'MIDTRANS', 'transaction_id' => 'ORD-CART', 'amount' => 206000, 'payment_method' => 'QRIS', 'status' => 'PENDING']);
 
-        try {
-            $this->service->adminCancelAndRefund($booking->id, 206000, 'TRANSFER_MANUAL', 'SALAH_BAYAR', 'tes', $this->admin);
-            $this->fail('Refund keranjang yang belum dibayar harus ditolak');
-        } catch (HttpException $e) {
-            $this->assertStringContainsString('Belum ada pembayaran', $e->getMessage());
-        }
+        // Belum ada uang masuk → dibatalkan tanpa pengajuan refund (dan tanpa pembayaran palsu).
+        $result = $this->service->requestCancelAndRefund($booking->id, 'SALAH_BAYAR', 'tes', $this->admin);
 
+        $this->assertSame(0.0, $result['refund_amount']);
         $this->assertSame(0, Payment::where('order_id', $order->id)->where('status', 'SUCCESS')->count());
         $this->assertSame(0, Refund::count());
-        $this->assertSame('LOCKED', $booking->fresh()->status);
+        $this->assertSame('CANCELLED', $booking->fresh()->status);
+        $this->assertSame('FAILED', Payment::where('order_id', $order->id)->sole()->status, 'tagihan keranjang ikut ditutup');
     }
 
     public function test_refund_cap_is_per_booking_not_per_order(): void
     {
         [, [$a, $b]] = $this->paidOrder(['10:00', '13:00']);
 
-        try {
-            $this->service->adminCancelAndRefund($a->id, 400000, 'TRANSFER_MANUAL', 'SALAH_BAYAR', 'tes', $this->admin);
-            $this->fail('Refund 2 lapangan untuk 1 booking harus ditolak');
-        } catch (HttpException $e) {
-            $this->assertStringContainsString('Rp 200.000', $e->getMessage());
-        }
-
-        $this->service->adminCancelAndRefund($a->id, 200000, 'TRANSFER_MANUAL', 'SALAH_BAYAR', 'tes', $this->admin);
-        $this->assertSame('REFUNDED', $a->fresh()->status);
+        // Membatalkan 1 dari 2 lapangan hanya mengajukan bagian lapangan itu, bukan seluruh order.
+        $result = $this->service->requestCancelAndRefund($a->id, 'SALAH_BAYAR', 'tes', $this->admin);
+        $this->assertEqualsWithDelta(200000, $result['refund_amount'], 0.01);
+        $this->assertSame('REFUND_PENDING', $a->fresh()->status);
         $this->assertSame('PAID', $b->fresh()->status);
         $this->assertEqualsWithDelta(200000, $this->service->refundableAmountForBooking($b->fresh('order')), 0.01);
+
+        // Lapangan kedua mendapat sisa uangnya, bukan dipotong lagi oleh pengajuan pertama.
+        $second = $this->service->requestCancelAndRefund($b->id, 'SALAH_BAYAR', 'tes', $this->admin);
+        $this->assertEqualsWithDelta(200000, $second['refund_amount'], 0.01);
     }
 
     public function test_cancelled_booking_closes_its_bill_and_a_late_online_payment_becomes_a_refund(): void
@@ -250,7 +247,9 @@ class PaymentTimeBombRegressionTest extends TestCase
         $sessionId = $this->openOnlineDeltaSession($booking);
         $this->assertEquals(300000, (float) $order->fresh()->grand_total);
 
-        $this->service->adminCancelAndRefund($booking->id, 0, 'TRANSFER_MANUAL', 'PERMINTAAN_CUSTOMER', 'batal', $this->admin);
+        $this->service->requestCancelAndRefund($booking->id, 'PERMINTAAN_CUSTOMER', 'batal', $this->admin);
+        $requested = Refund::where('padel_booking_id', $booking->id)->sole();
+        $this->assertEquals(200000, (float) $requested->refund_amount, 'yang diajukan hanya uang yang sudah masuk');
 
         $bill = Payment::where('order_id', $order->id)->where('payload_log->type', 'RESCHEDULE_PRICE_DELTA')->sole();
         $this->assertSame('FAILED', $bill->status);
@@ -259,8 +258,8 @@ class PaymentTimeBombRegressionTest extends TestCase
         // Customer tetap membayar sesi Snap yang masih terbuka.
         $this->webhook($sessionId, 'settlement', '100000.00', '200');
 
-        $this->assertSame('CANCELLED', $booking->fresh()->status);
-        $refund = Refund::where('order_id', $order->id)->sole();
+        $this->assertSame('REFUND_PENDING', $booking->fresh()->status);
+        $refund = Refund::where('order_id', $order->id)->whereNull('padel_booking_id')->sole();
         $this->assertSame('PENDING', $refund->status);
         $this->assertEquals(100000, (float) $refund->refund_amount);
     }

@@ -12,6 +12,8 @@ class Refund extends Model
     protected $fillable = [
         'order_id',
         'payment_id',
+        'padel_booking_id',
+        'requested_by_id',
         'refund_amount',
         'reason',
         'status',
@@ -60,5 +62,22 @@ class Refund extends Model
     public function processedBy()
     {
         return $this->belongsTo(\App\Models\User::class, 'processed_by_id');
+    }
+
+    /** Booking yang dibatalkan lewat pengajuan refund (Kelola Pemesanan); null untuk refund otomatis sistem. */
+    public function booking()
+    {
+        return $this->belongsTo(\App\Models\Padel\PadelBooking::class, 'padel_booking_id');
+    }
+
+    public function requestedBy()
+    {
+        return $this->belongsTo(\App\Models\User::class, 'requested_by_id');
+    }
+
+    /** Voucher saldo yang diterbitkan saat refund ini ditolak. */
+    public function voucher()
+    {
+        return $this->hasOne(Voucher::class, 'refund_id');
     }
 }

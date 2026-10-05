@@ -335,13 +335,18 @@ class LedgerTest extends TestCase
         $this->assertCount(2, LedgerEntry::where('refund_id', $refund->id)->get());
     }
 
-    public function test_admin_cancel_with_refund_writes_refund_rows_in_the_same_transaction(): void
+    public function test_refund_request_writes_refund_rows_only_when_approved(): void
     {
         $booking = $this->paidOnlineBooking('10:00');
         $grand = (float) $booking->order->grand_total;
 
-        app(PadelBookingService::class)->adminCancelAndRefund($booking->id, $grand, 'TRANSFER_BANK', 'CUSTOMER_REQUEST', 'Batal', $this->admin);
+        app(PadelBookingService::class)->requestCancelAndRefund($booking->id, 'CUSTOMER_REQUEST', 'Batal', $this->admin);
+        $this->assertSame(0, LedgerEntry::where('order_id', $booking->order_id)->where('entry_type', 'REFUND')->count(), 'pengajuan belum mengeluarkan uang');
 
+        $refund = \App\Models\Pos\Refund::where('padel_booking_id', $booking->id)->sole();
+        app(\App\Services\Finance\RefundQueueService::class)->process($refund, User::factory()->superAdmin()->create(), 'TRANSFER_BANK', 'TRF-001');
+
+        $this->assertSame('REFUNDED', $booking->fresh()->status);
         $this->assertEquals(-$grand, (float) LedgerEntry::where('order_id', $booking->order_id)->where('entry_type', 'REFUND')->sum('total_amount'));
         $this->assertEquals(0, (float) LedgerEntry::where('order_id', $booking->order_id)->sum('total_amount'));
     }

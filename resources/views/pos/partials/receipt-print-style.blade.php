@@ -1,0 +1,2 @@
+{{-- Cetak struk thermal (ukuran dari App\Support\ReceiptPaper). Pakai: @include('pos.partials.receipt-print-style', ['selectors' => ['#id-struk']]) --}}
+<style>{!! \App\Support\ReceiptPaper::printCss($selectors) !!}</style>

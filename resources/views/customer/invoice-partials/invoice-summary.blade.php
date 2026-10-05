@@ -48,7 +48,7 @@
         </template>
         <div class="flex justify-between items-center gap-3">
             <span>Settlement Status:</span>
-            <span :class="(ticket.status === 'PAID' || ticket.status === 'CHECKED_IN') ? 'text-emerald-700' : ((ticket.status === 'EXPIRED' || ticket.status === 'CANCELLED' || ticket.status === 'REFUNDED') ? 'text-rose-700' : 'text-amber-700')"
+            <span :class="(ticket.status === 'PAID' || ticket.status === 'CHECKED_IN') ? 'text-emerald-700' : ((ticket.status === 'EXPIRED' || ticket.status === 'CANCELLED' || ticket.status === 'REFUNDED' || ticket.status === 'REFUND_PENDING') ? 'text-rose-700' : 'text-amber-700')"
                   class="font-mono font-bold whitespace-nowrap text-right" 
                   x-text="ticket.status"></span>
         </div>
@@ -105,7 +105,7 @@
                 <span class="w-6 h-6 rounded-md bg-white border border-[#DFC387] flex items-center justify-center font-bold text-[9px] text-[#8C6418] font-mono shrink-0" x-text="selectedMethod.badge"></span>
                 <span class="text-xs font-bold text-[#1F170D]" x-text="selectedMethod.code === 'CASH' ? 'Method: Cash on Arrival (Frontdesk)' : 'Method: ' + selectedMethod.name"></span>
             </div>
-            <span :class="(ticket.status === 'PAID' || ticket.status === 'CHECKED_IN') ? 'bg-emerald-100 text-emerald-800' : ((ticket.status === 'EXPIRED' || ticket.status === 'CANCELLED' || ticket.status === 'REFUNDED') ? 'bg-rose-100 text-rose-800' : 'bg-amber-100 text-amber-800')"
+            <span :class="(ticket.status === 'PAID' || ticket.status === 'CHECKED_IN') ? 'bg-emerald-100 text-emerald-800' : ((ticket.status === 'EXPIRED' || ticket.status === 'CANCELLED' || ticket.status === 'REFUNDED' || ticket.status === 'REFUND_PENDING') ? 'bg-rose-100 text-rose-800' : 'bg-amber-100 text-amber-800')"
                   class="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full"
                   x-text="ticket.status">
             </span>

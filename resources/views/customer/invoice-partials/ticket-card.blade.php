@@ -122,7 +122,7 @@
 
         <!-- Expired, Cancelled, or Refunded View -->
         <template
-            x-if="currentTicket.status === 'EXPIRED' || currentTicket.status === 'CANCELLED' || currentTicket.status === 'REFUNDED'">
+            x-if="['EXPIRED', 'CANCELLED', 'REFUNDED', 'REFUND_PENDING'].includes(currentTicket.status)">
             <div
                 class="max-w-md mx-auto p-6 sm:p-7 rounded-3xl border-2 border-dashed border-rose-300 bg-rose-50/70 text-center space-y-4">
                 <div
@@ -134,10 +134,10 @@
                 </div>
                 <div>
                     <h4 class="font-serif font-black text-base text-[#1F170D]"
-                        x-text="currentTicket.status === 'CANCELLED' ? 'Reservation Cancelled' : (currentTicket.status === 'REFUNDED' ? 'Reservation Refunded' : (currentTicket.total_paid > 0 ? 'Match Session Expired (No-Show)' : 'Payment Window Expired'))">
+                        x-text="closedTicketTitle(currentTicket)">
                     </h4>
                     <p class="text-xs text-[#7A643E] mt-1.5 leading-relaxed"
-                        x-text="currentTicket.status === 'CANCELLED' ? 'This reservation was cancelled and the slot has been returned to the schedule.' : (currentTicket.status === 'REFUNDED' ? 'This booking has been officially refunded by the club administration.' : (currentTicket.total_paid > 0 ? 'Your scheduled match time has passed without turnstile check-in. This ticket is now closed.' : 'The 15-minute payment window for this session has ended and the court slots have been released. Please book a new schedule.'))">
+                        x-text="closedTicketMessage(currentTicket)">
                     </p>
                 </div>
                 <div
@@ -161,7 +161,7 @@
 
         <!-- Unpaid State (PENDING_PAYMENT / LOCKED) -->
         <template
-            x-if="currentTicket.status !== 'PAID' && currentTicket.status !== 'CHECKED_IN' && currentTicket.status !== 'EXPIRED' && currentTicket.status !== 'CANCELLED' && currentTicket.status !== 'REFUNDED'">
+            x-if="! ['PAID', 'CHECKED_IN', 'EXPIRED', 'CANCELLED', 'REFUNDED', 'REFUND_PENDING'].includes(currentTicket.status)">
             <div
                 class="max-w-md mx-auto p-5 sm:p-6 rounded-3xl border-2 border-dashed border-amber-300 bg-amber-50/70 text-center space-y-4">
                 <div

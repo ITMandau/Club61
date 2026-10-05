@@ -7,15 +7,40 @@
 | Metadata Dokumen | Spesifikasi |
 | :--- | :--- |
 | **Kode Dokumen** | `PRD-MODUL-21-REFUND-NOSHOW-PEMBAYARAN-BERMASALAH` |
-| **Versi** | `v0.1.0-DRAFT` |
-| **Status** | **Draft, menunggu keputusan PM (4 Okt 2026).** Belum dikerjakan. Angka di dokumen ini (persen potongan, batas jam, biaya) adalah **usulan**, bukan keputusan. Daftar pertanyaan ada di §9. |
+| **Versi** | `v0.2.0` |
+| **Status** | **Keputusan PM 5 Okt 2026 (lihat §0). Tahap 1 (refund dua langkah + voucher saldo + kunci jadwal) SELESAI.** Skema D (pembayaran bermasalah) ditunda. Bagian §3–§9 di bawah adalah draft awal untuk arsip; bila bertentangan, §0 yang berlaku. |
 | **Sumber Requirement** | PM: "Skema refund dibuat lebih sulit supaya customer berpikir dua kali." Owner: pembatalan dari Kelola Pemesanan cukup jadi **pengajuan** yang disetujui di Antrian Refund; kasus yang paling sering terjadi adalah **saldo customer sudah terpotong tapi pembayaran belum masuk ke sistem** (Midtrans maupun kasir); customer yang tidak datang (no-show) dan memaksa minta ganti jadwal. |
 | **Dependensi Teknis** | `PRD_MODUL_17_BUKU_TRANSAKSI_TERPADU.md` (Buku Transaksi & Antrian Refund — satu-satunya tempat uang keluar dicatat), `PRD_MODUL_10_UNIFIED_PAYMENT_GATEWAY.md` (pelunasan & rekonsiliasi Midtrans), `PRD_MODUL_11_WALK_IN_OFFLINE_BOOKING.md` (POS kasir), `PRD_MODUL_16_ACTIVITY_AUDIT_LOG.md` (jejak audit). |
 | **Prinsip Utama** | **UANG MASUK HANYA LEWAT POS KASIR / MIDTRANS**, **UANG KELUAR HANYA LEWAT ANTRIAN REFUND**, **REFUND BUKAN HAK OTOMATIS**, **SETIAP PENGECUALIAN BERBAYAR / BERIZIN & TERCATAT**, **UANG YANG BELUM TERKONFIRMASI TIDAK MASUK BUKU**. |
 
 ---
 
-## 1. Kondisi Sekarang (per 4 Okt 2026)
+## 0. Keputusan PM (5 Okt 2026) & Yang Sudah Dikerjakan
+
+| # | Keputusan | Implementasi |
+| :--- | :--- | :--- |
+| 1 | Refund = customer minta **uangnya kembali**, bukan pindah jadwal. Pengajuan langsung membatalkan booking & melepas slot. | `PadelBookingService::requestCancelAndRefund` — booking `REFUND_PENDING`, QR mati, slot lepas, kuota member / jam voucher sponsor dikembalikan, refund `PENDING` di Antrian Refund (`refunds.padel_booking_id`, `requested_by_id`). |
+| 2 | Yang mengajukan: kasir / resepsionis (juga admin). Yang menyetujui: superadmin / manager di **Antrian Refund**. Pengaju boleh menyetujui sendiri kalau punya izinnya. | Izin baru `request_refund_padel` (preset admin, cashier, receptionist; cashier juga diberi `View:KelolaPemesanan` di preset). Persetujuan tetap `process_refund_queue`. |
+| 3 | **Tidak ada potongan / aturan H-sekian.** | Nominal = seluruh uang yang sudah masuk untuk booking itu (tidak bisa diketik staf). Booking yang ditanggung kuota / belum dibayar langsung `CANCELLED` tanpa pengajuan. |
+| 4 | Disetujui → uang dikembalikan. | `RefundQueueService::process` → booking `REFUNDED`, baris refund negatif di Buku Transaksi. |
+| 5 | **Ditolak → uangnya jadi voucher** dan dikirim ke akun customer. | `RefundQueueService::reject` → booking `CANCELLED`, voucher saldo `KR-XXXXXXXX` (tipe `CREDIT`, milik customer itu, berlaku 6 bulan, bisa dipakai sebagian berkali-kali) + email ke customer. Toggle "Jadikan voucher" bisa dimatikan untuk data ganda / uang yang sudah dikembalikan di luar sistem. |
+| 6 | Customer **tidak bisa** mengajukan refund sendiri. | Endpoint `POST /api/v1/padel/bookings/{id}/refund` dihapus. |
+| 7 | Booking hangus tidak bisa di-reschedule apa pun alasannya (Opsi 1). Reschedule biasa paling lambat **2 jam** sebelum main. | `PadelBookingService::RESCHEDULE_CUTOFF_HOURS = 2`. Refund juga dikunci begitu jam main dimulai. |
+| 8 | Pembayaran bermasalah (§6) — nanti. | Belum dikerjakan. |
+
+**Voucher saldo** (`App\Services\Finance\VoucherService`):
+
+> **Akan berubah:** PM (5 Okt 2026) memutuskan voucher saldo **sekali pakai, sisa nilainya hangus**. Yang berjalan sekarang masih menyimpan sisa saldo. Rencana perubahan & skema promo marketing ada di `PRD_MODUL_22_VOUCHER_DAN_PROMO.md`.
+
+- Dipakai di checkout online (kolom voucher sekarang dicek ke server lewat `POST /api/v1/padel/vouchers/check`; voucher milik customer tampil otomatis, `GET /api/v1/padel/vouchers/mine`) dan di **POS Walk-In** (kolom voucher + daftar voucher customer terpilih; tagihan yang seluruhnya ditutup voucher lunas dengan metode `VOUCHER` tanpa bukti EDC/QRIS).
+- Hanya pemilik voucher yang bisa memakainya. Saldo yang sedang dipakai order belum dibayar ikut "dipesan" sehingga tidak bisa dipakai dua kali.
+- Pembukuan: uangnya sudah tercatat saat pembayaran awal; saat dipakai tercatat sebagai potongan (diskon) order, jadi tidak dihitung dua kali.
+- Booking yang dibayar sebagian dengan voucher lalu dibatalkan: bagian tunai diajukan refund, bagian voucher kembali ke saldo (saat semua booking di order itu batal).
+- Customer melihat voucher di halaman My Club dan status refund di tiket (`refund_info`).
+- **Daftar Voucher** (menu Keuangan, izin `View:DaftarVoucher` — default superadmin): semua voucher saldo & kode promo dalam satu tabel (cari kode / nama / HP pemilik, filter jenis & status aktif / habis / kedaluwarsa / nonaktif), ringkasan sisa saldo aktif (uang customer yang masih disimpan klub), total terbit, terpakai & hangus, riwayat pemakaian per voucher, dan tombol Nonaktifkan (izin `process_refund_queue`, alasan wajib, Log Aktivitas).
+
+---
+## 1. Kondisi Sebelum Modul 21 (per 4 Okt 2026)
 
 | Jalur | Siapa | Yang terjadi sekarang | Masalah |
 | :--- | :--- | :--- | :--- |

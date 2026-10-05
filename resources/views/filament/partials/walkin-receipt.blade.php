@@ -76,6 +76,14 @@
                                     @endforeach
                                 @endif
 
+                                @if (!empty($receipt['discount_amount']) && $receipt['discount_amount'] > 0)
+                                    <div
+                                        style="display:flex; justify-content:space-between; font-size:0.65rem; margin-top:0.35rem; color:#047857;">
+                                        <span>Voucher {{ $receipt['voucher_code'] ?? '' }}</span>
+                                        <span>- Rp
+                                            {{ number_format($receipt['discount_amount'], 0, ',', '.') }}</span>
+                                    </div>
+                                @endif
                                 @if (!empty($receipt['tax_amount']) && $receipt['tax_amount'] > 0)
                                     <div
                                         style="display:flex; justify-content:space-between; font-size:0.65rem; margin-top:0.35rem; color:#4B5563;">

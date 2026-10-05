@@ -682,7 +682,8 @@ class CashierShiftTest extends TestCase
                 'start_time' => '17:00:00',
                 'end_time' => '18:00:00',
                 'time_label' => '17:00 - 18:00',
-                'price' => 250000.00,
+                // Harga sesuai tarif prime court (dulu 250.000 — beda dengan yang dihitung server, kini ditolak).
+                'price' => 300000.00,
             ],
         ];
 

@@ -73,6 +73,7 @@
                 $allPlans = \App\Models\Membership\MembershipPlan::with('benefits')->where('is_active', true)->get();
 
                 $facilityService = app(\App\Services\Membership\MembershipFacilityService::class);
+                $creditVouchers = app(\App\Services\Finance\VoucherService::class)->walletFor(Auth::user());
             @endphp
 
             @if($activeMbr)
@@ -194,8 +195,29 @@
                 </div>
             @endif
 
-            <!-- Membership Plans Catalog -->
-            <div class="space-y-4">
+            <!-- Voucher saldo (refund yang dijadikan voucher) -->
+            @if ($creditVouchers->isNotEmpty())
+                <div class="p-5 rounded-3xl bg-emerald-50/80 border border-emerald-200 shadow-sm space-y-3">
+                    <div>
+                        <h3 class="font-serif font-extrabold text-lg text-[#1F170D]">My Credit Vouchers</h3>
+                        <p class="text-xs text-[#7A643E]">Saldo dari refund yang dialihkan ke voucher. Bisa dipakai sebagian untuk booking padel berikutnya &mdash; muncul otomatis di halaman checkout, atau sebutkan kodenya di kasir.</p>
+                    </div>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                        @foreach ($creditVouchers as $v)
+                            <div class="p-4 rounded-2xl bg-white border border-emerald-200">
+                                <div class="text-sm font-mono font-black text-emerald-900">{{ $v['code'] }}</div>
+                                <div class="text-lg font-black text-[#1F170D]">Rp {{ number_format($v['balance'], 0, ',', '.') }}</div>
+                                <div class="text-[11px] text-[#7A643E]">
+                                    dari Rp {{ number_format($v['initial'], 0, ',', '.') }}
+                                    @if ($v['valid_until']) &middot; berlaku s/d {{ $v['valid_until'] }} @endif
+                                </div>
+                            </div>
+                        @endforeach
+                    </div>
+                </div>
+            @endif
+
+            <!-- Membership Plans Catalog -->            <div class="space-y-4">
                 <div class="flex items-center justify-between px-1">
                     <div>
                         <h3 class="font-serif font-extrabold text-lg text-[#1F170D]">Paket Keanggotaan Club 61</h3>

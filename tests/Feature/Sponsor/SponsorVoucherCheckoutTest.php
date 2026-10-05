@@ -326,13 +326,11 @@ class SponsorVoucherCheckoutTest extends TestCase
         $admin = User::factory()->admin()->create();
         $padelService = app(PadelBookingService::class);
 
-        $padelService->adminCancelAndRefund(
+        $padelService->requestCancelAndRefund(
             bookingId: $booking->id,
-            refundAmount: 0,
-            refundMethod: 'ORIGINAL_PAYMENT',
             reasonCategory: 'CUSTOMER_REQUEST',
             notes: 'Batal tanding hujan',
-            adminUser: $admin
+            requester: $admin
         );
 
         $voucher->refresh();

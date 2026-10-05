@@ -310,12 +310,12 @@
 
                         <!-- Promo Code Input -->
                         <div class="space-y-2">
-                            <label class="text-[11px] font-bold text-[#7A5818] uppercase tracking-wider block">Discount Promo Code</label>
+                            <label class="text-[11px] font-bold text-[#7A5818] uppercase tracking-wider block">Voucher / Promo Code</label>
                             <div class="flex gap-2">
                                 <input type="text" x-model="promoCode" :disabled="promoApplied"
-                                    placeholder="HEMAT10 / CLUB61"
+                                    placeholder="Enter voucher code" maxlength="30" @keydown.enter.prevent="applyPromo()"
                                     class="flex-1 px-3.5 py-2.5 rounded-xl border border-[#DFC387] text-xs font-mono uppercase focus:ring-1 focus:ring-[#D4AF37] focus:outline-none bg-white">
-                                <button type="button" x-show="!promoApplied" @click="applyPromo()"
+                                <button type="button" x-show="!promoApplied" @click="applyPromo()" :disabled="isCheckingPromo"
                                     class="px-4 py-2.5 rounded-xl bg-[#FAF2DE] hover:bg-[#F3DFAD] border border-[#DFC387] text-[#7A5818] text-xs font-bold transition-colors cursor-pointer">
                                     Apply
                                 </button>
@@ -325,8 +325,25 @@
                                 </button>
                             </div>
                             <div x-show="promoApplied" class="text-[10px] text-emerald-700 font-bold">
-                                Promo Code Applied: Saved Rp 40,000
+                                <span x-text="'Voucher ' + (promoVoucher ? promoVoucher.code : '') + ' applied: saved Rp ' + formatNumber(promoDiscount)"></span>
+                                <span x-show="promoApplied && promoDiscount <= 0" class="block text-rose-600">This voucher does not apply to the current total.</span>
                             </div>
+                            <!-- Voucher saldo milik customer (refund yang dijadikan voucher) -->
+                            <template x-if="myVouchers.length > 0 && !promoApplied">
+                                <div class="space-y-1.5">
+                                    <div class="text-[10px] font-bold text-[#7A5818] uppercase tracking-wider">Your credit vouchers</div>
+                                    <template x-for="v in myVouchers" :key="v.code">
+                                        <div class="flex items-center justify-between gap-2 px-3 py-2 rounded-xl bg-emerald-50 border border-emerald-200">
+                                            <div class="min-w-0">
+                                                <div class="text-xs font-mono font-bold text-emerald-900" x-text="v.code"></div>
+                                                <div class="text-[10px] text-emerald-800" x-text="'Balance Rp ' + formatNumber(Math.round(v.available)) + (v.valid_until ? ' · valid until ' + v.valid_until : '')"></div>
+                                            </div>
+                                            <button type="button" @click="promoCode = v.code; applyPromo()" :disabled="isCheckingPromo || v.available <= 0"
+                                                class="px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-[11px] font-bold cursor-pointer disabled:opacity-50">Use</button>
+                                        </div>
+                                    </template>
+                                </div>
+                            </template>
                         </div>
 
                         <!-- Price Breakdown List -->
@@ -881,7 +898,10 @@
                 showPaymentSuccessModal: false,
                 promoCode: '',
                 promoApplied: false,
-                promoDiscount: 0,
+                // Hasil cek server (/vouchers/check); potongannya dihitung ulang dari total terkini (getter promoDiscount).
+                promoVoucher: null,
+                isCheckingPromo: false,
+                myVouchers: [],
                 selectedAddOns: [],
                 availableAddOns: [{
                         id: 'racket-01',
@@ -968,6 +988,17 @@
                     this.fetchEquipments();
                     this.fetchFinanceSettings();
                     this.fetchMembershipBenefitPreview();
+                    this.fetchMyVouchers();
+                },
+
+                async fetchMyVouchers() {
+                    try {
+                        const res = await fetch('/api/v1/padel/vouchers/mine', { headers: { 'Accept': 'application/json' } });
+                        const json = await res.json();
+                        this.myVouchers = (json.success && Array.isArray(json.data)) ? json.data : [];
+                    } catch (e) {
+                        this.myVouchers = [];
+                    }
                 },
 
                 /**
@@ -1140,6 +1171,28 @@
                     return Math.max(0, courtAfterSponsorVoucher + this.addonsTotal - this.promoDiscount);
                 },
 
+                // Dasar potongan voucher = sama dengan server: sewa lapangan setelah benefit member & sponsor + add-on.
+                get voucherBase() {
+                    const courtAfterMembership = Math.max(0, this.subtotal - this.membershipDiscountAmount);
+                    return Math.max(0, courtAfterMembership - this.sponsorVoucherDiscountAmount) + this.addonsTotal;
+                },
+
+                get promoDiscount() {
+                    const v = this.promoVoucher;
+                    const base = this.voucherBase;
+                    if (!this.promoApplied || !v || base <= 0 || base < (v.min_order || 0)) return 0;
+                    let discount = 0;
+                    if (v.type === 'CREDIT') {
+                        discount = v.available_balance || 0;
+                    } else if (v.type === 'PERCENT') {
+                        discount = base * (v.value || 0) / 100;
+                        if (v.max_discount) discount = Math.min(discount, v.max_discount);
+                    } else {
+                        discount = v.value || 0;
+                    }
+                    return Math.round(Math.min(discount, base));
+                },
+
                 get isTaxApplicable() {
                     if (!this.financeSettings || !this.financeSettings.is_tax_enabled) return false;
                     const ch = (this.financeSettings.tax_channels || 'ALL').toUpperCase();
@@ -1249,20 +1302,38 @@
                     }
                 },
 
-                applyPromo() {
-                    const code = this.promoCode.trim().toUpperCase();
-                    if (code === 'HEMAT10' || code === 'VANTAGE20' || code === 'CLUB61' || code === 'GOLDVIP') {
-                        this.promoApplied = true;
-                        this.promoDiscount = 40000;
-                    } else {
-                        this.showNotice('Invalid Promo Code',
-                            'The promo code entered is invalid. Try: HEMAT10 or CLUB61', 'error', 'Close');
+                async applyPromo() {
+                    const code = (this.promoCode || '').trim().toUpperCase();
+                    if (!code || this.isCheckingPromo) return;
+                    this.isCheckingPromo = true;
+                    try {
+                        const res = await fetch('/api/v1/padel/vouchers/check', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'Accept': 'application/json',
+                                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
+                            },
+                            body: JSON.stringify({ code, amount: this.voucherBase }),
+                        });
+                        const json = await res.json().catch(() => ({}));
+                        if (res.ok && json.success) {
+                            this.promoCode = json.data.code;
+                            this.promoVoucher = json.data;
+                            this.promoApplied = true;
+                        } else {
+                            this.showNotice('Voucher Not Applied', json.message || 'The voucher code is invalid or cannot be used for this booking.', 'error', 'Close');
+                        }
+                    } catch (e) {
+                        this.showNotice('Voucher Check Failed', 'Could not check the voucher right now. Please try again.', 'error', 'Close');
+                    } finally {
+                        this.isCheckingPromo = false;
                     }
                 },
 
                 removePromo() {
                     this.promoApplied = false;
-                    this.promoDiscount = 0;
+                    this.promoVoucher = null;
                     this.promoCode = '';
                 },
 

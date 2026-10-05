@@ -371,7 +371,7 @@ class FinanceTaxAndFeeTest extends TestCase
     /**
      * Test 7: Refund guard menolak nominal yang melebihi order grand_total.
      */
-    public function test_admin_cancel_and_refund_rejects_exceeding_amount(): void
+    public function test_refund_request_is_the_full_amount_paid_without_a_cut(): void
     {
         $dateStr = now()->addDays(5)->format('Y-m-d');
         $booking = PadelBooking::create([
@@ -398,18 +398,16 @@ class FinanceTaxAndFeeTest extends TestCase
         ]);
         $booking->update(['order_id' => $order->id]);
 
-        $this->expectException(\Symfony\Component\HttpKernel\Exception\HttpException::class);
-        $this->expectExceptionMessage('tidak boleh melebihi pembayaran booking ini');
-
-        // Mencoba me-refund 250.000 (melebihi grand_total 220.000)
-        $this->bookingService->adminCancelAndRefund(
+        // Modul 21: tidak ada potongan & nominal tidak bisa diketik staf — seluruh pembayaran (termasuk pajak) diajukan.
+        $result = $this->bookingService->requestCancelAndRefund(
             bookingId: $booking->id,
-            refundAmount: 250000.00,
-            refundMethod: 'TRANSFER_MANUAL',
             reasonCategory: 'SALAH_BAYAR',
-            notes: 'Test kelebihan refund',
-            adminUser: $this->adminUser
+            notes: 'Test refund penuh',
+            requester: $this->adminUser
         );
+
+        $this->assertEqualsWithDelta(220000, $result['refund_amount'], 0.01);
+        $this->assertDatabaseHas('refunds', ['padel_booking_id' => $booking->id, 'refund_amount' => 220000.00, 'status' => 'PENDING']);
     }
 
     /**

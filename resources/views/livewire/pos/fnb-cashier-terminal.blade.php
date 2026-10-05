@@ -31,12 +31,8 @@
         .fnbpos-status-refunded, .fnbpos-status-cancelled { background: #FEE2E2; color: #991B1B; border: 1px solid #FCA5A5; }
         .fnbpos-history-table th { text-align: left; padding: 0.6rem 0.75rem; font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.04em; color: #5C410F; background: #FAF5E8; white-space: nowrap; }
         .fnbpos-history-table td { padding: 0.6rem 0.75rem; font-size: 0.75rem; border-top: 1px solid #F3E8CE; vertical-align: middle; }
-        @media print {
-            body * { visibility: hidden; }
-            #fnbpos-receipt, #fnbpos-receipt * { visibility: visible; }
-            #fnbpos-receipt { position: absolute; left: 0; top: 0; width: 100%; }
-        }
     </style>
+    @include('pos.partials.receipt-print-style', ['selectors' => ['#fnbpos-receipt']])
 
     @if($errorMessage)
         <div class="fixed top-4 right-4 z-[10000] max-w-sm p-4 rounded-xl shadow-2xl" style="background: #FEE2E2; border: 1.5px solid #FCA5A5; color: #991B1B;">
