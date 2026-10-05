@@ -75,6 +75,10 @@ class BukuTransaksi extends Page implements HasTable
         return $table
             ->query(fn () => LedgerReport::grouped(LedgerEntry::query()))
             ->defaultSort(fn (Builder $query) => LedgerReport::orderNewestFirst($query))
+            // Query ini GROUP BY per pembayaran: Filament secara bawaan menambah ORDER BY ledger_entries.id, yang ditolak
+            // MySQL ONLY_FULL_GROUP_BY (error 500 di server; MariaDB lokal tidak menolaknya). Urutan sudah pasti lewat
+            // MAX(occurred_at) + MIN(id) di orderNewestFirst().
+            ->defaultKeySort(false)
             // Pencarian lewat fungsi yang sama dengan export & kartu ringkasan.
             ->searchUsing(fn (Builder $query, string $search) => LedgerReport::applySearch($query, $search))
             ->searchPlaceholder('No. order, kode booking, nama / HP customer, RRN')

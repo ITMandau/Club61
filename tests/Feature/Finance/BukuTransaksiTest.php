@@ -144,6 +144,30 @@ class BukuTransaksiTest extends TestCase
         $this->assertSame(1, $summary['payments_count']);
     }
 
+    public function test_grouped_table_never_orders_by_a_column_outside_the_group_by(): void
+    {
+        // Regresi error 500 di server (MySQL ONLY_FULL_GROUP_BY): Filament menambah ORDER BY ledger_entries.id ke query
+        // GROUP BY per pembayaran. SQLite / MariaDB lokal tidak menolaknya, jadi yang diperiksa SQL-nya.
+        $this->paidWalkIn();
+        $this->actingAs($this->owner);
+
+        $component = Livewire::test(BukuTransaksi::class);
+        foreach ([null, 'asc', 'desc'] as $direction) {
+            if ($direction) {
+                $component->call('sortTable', 'occurred_at', $direction);
+            }
+            $orders = collect($component->instance()->getFilteredSortedTableQuery()->getQuery()->orders)
+                ->map(fn (array $order) => $order['column'] ?? $order['sql'] ?? '')
+                ->all();
+
+            $this->assertNotEmpty($orders);
+            foreach ($orders as $expression) {
+                $this->assertMatchesRegularExpression('/^(MAX|MIN)\(/', (string) $expression, 'Urutan harus agregat: '.$expression);
+            }
+        }
+        $component->assertCountTableRecords(1);
+    }
+
     public function test_refund_shows_as_its_own_row_and_reduces_the_net_total(): void
     {
         $order = $this->paidWalkIn();

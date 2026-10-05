@@ -408,6 +408,20 @@ PRD: [`PRD_MODUL_22_VOUCHER_DAN_PROMO.md`](PRD_MODUL_22_VOUCHER_DAN_PROMO.md) â€
 - [ ] Skema sebar promo (kode umum sosmed / kode unik / klaim ke akun / otomatis) â€” menunggu arahan PM.
 
 ---
+
+## MODUL 23: STRUKTUR PORTAL CUSTOMER (MEMBERSHIP, MY CLUB, PROFILE, VOUCHER SAYA)
+
+### Status: 0% (PRD disetujui arahnya, belum dikerjakan)
+
+PRD: [`PRD_MODUL_23_STRUKTUR_PORTAL_CUSTOMER.md`](PRD_MODUL_23_STRUKTUR_PORTAL_CUSTOMER.md)
+
+- [ ] Navigasi: tab Membership menggantikan Profile di navigasi bawah HP; menu Membership di navbar desktop; Profile + Voucher Saya + Logout di dropdown akun.
+- [ ] My Club jadi profil klub (compro): baris status member + 3 paket paling laku + "Lihat semua paket"; kartu member, voucher & katalog lengkap dipindah.
+- [ ] Profile: kartu membership aktif (QR + kuota), menu Voucher Saya, pengaturan akun dirapikan.
+- [ ] Voucher Saya gaya Shopee (voucher saldo + voucher jam corporate, tab Tersedia / Riwayat) + endpoint riwayat voucher saldo.
+- [ ] Pindahkan link lama (`/my-club#corporate-vouchers`, redirect setelah beli membership, kartu Upgrade di Home).
+
+---
 ## MODUL 20: HALAMAN ADMIN PENDUKUNG
 
 ### Status: 0% (semua DUMMY)
