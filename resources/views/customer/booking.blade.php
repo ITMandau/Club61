@@ -2,7 +2,7 @@
     @include('customer.partials.bk-style')
 
     <div x-data="bookingCourtApp()" x-init="init()" class="bk-page text-[#1F170D]">
-        <div class="mx-auto w-full max-w-6xl px-4 sm:px-6 lg:px-8 pt-4 sm:pt-6 space-y-4 sm:space-y-5">
+        <div class="w-full px-4 sm:px-8 lg:px-12 2xl:px-16 pt-4 sm:pt-6 space-y-4 sm:space-y-5">
 
             {{-- Header --}}
             <div class="flex items-center justify-between gap-3">
@@ -23,8 +23,10 @@
                 </div>
             </div>
 
+            {{-- Tanggal & durasi: bersebelahan di layar lebar supaya tombol durasi tidak melar selebar layar --}}
+            <div class="flex flex-col lg:flex-row gap-4 sm:gap-5">
             {{-- 1. Tanggal --}}
-            <section class="bg-white/90 backdrop-blur-xl rounded-3xl border border-[#EADBB5] shadow-[0_8px_30px_rgba(160,120,30,0.08)] p-3 sm:p-4">
+            <section class="lg:flex-1 min-w-0 bg-white/90 backdrop-blur-xl rounded-3xl border border-[#EADBB5] shadow-[0_8px_30px_rgba(160,120,30,0.08)] p-3 sm:p-4">
                 <div class="flex items-center justify-between px-1 mb-2.5">
                     <div class="text-[11px] font-extrabold uppercase tracking-wider text-[#8C6418]">Date</div>
                     <button type="button" @click="openCalendarPicker()" title="Pick any date (up to 2 months ahead)"
@@ -51,7 +53,7 @@
             </section>
 
             {{-- 2. Durasi --}}
-            <section class="bg-white/90 backdrop-blur-xl rounded-3xl border border-[#EADBB5] shadow-[0_8px_30px_rgba(160,120,30,0.08)] p-3 sm:p-4">
+            <section class="lg:w-[400px] lg:shrink-0 flex flex-col justify-between bg-white/90 backdrop-blur-xl rounded-3xl border border-[#EADBB5] shadow-[0_8px_30px_rgba(160,120,30,0.08)] p-3 sm:p-4">
                 <div class="flex items-center justify-between px-1 mb-2.5">
                     <div class="text-[11px] font-extrabold uppercase tracking-wider text-[#8C6418]">Duration</div>
                     <div class="hidden sm:block text-[11px] text-[#7A643E]">Tap a start time — the next hours follow</div>
@@ -67,6 +69,7 @@
                     </template>
                 </div>
             </section>
+            </div>
 
             {{-- 3. Lapangan + tampilan --}}
             <section class="space-y-3">
@@ -114,7 +117,7 @@
 
             {{-- Loading --}}
             <div x-show="isLoading" class="bg-white/90 rounded-3xl border border-[#EADBB5] p-4">
-                <div class="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-6 gap-2">
+                <div class="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-6 2xl:grid-cols-8 gap-2">
                     <template x-for="i in 12" :key="i"><div class="bk-skeleton h-[58px] rounded-2xl"></div></template>
                 </div>
             </div>
@@ -137,7 +140,7 @@
                             <span class="text-[11px] text-[#A08C66]" x-text="group.range"></span>
                             <span class="flex-1 h-px bg-[#F0E4C8]"></span>
                         </div>
-                        <div class="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-6 gap-2">
+                        <div class="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-6 2xl:grid-cols-8 gap-2">
                             <template x-for="item in group.items" :key="item.slot.local_start">
                                 <div>
                                     <template x-if="item.slot.status === 'AVAILABLE'">
@@ -217,8 +220,8 @@
         </div>
 
         {{-- Ringkasan & lanjut (menempel di atas navigasi bawah) --}}
-        <div class="bk-bar fixed inset-x-0 z-30 px-3 sm:px-6 pointer-events-none">
-            <div x-ref="bar" class="mx-auto max-w-6xl pointer-events-auto bg-white/95 backdrop-blur-xl rounded-3xl border border-[#E3CF9C] shadow-[0_18px_44px_rgba(90,64,12,0.22)] p-3 sm:p-4 flex items-center gap-3">
+        <div class="bk-bar fixed inset-x-0 z-30 px-3 sm:px-8 lg:px-12 2xl:px-16 pointer-events-none">
+            <div x-ref="bar" class="w-full pointer-events-auto bg-white/95 backdrop-blur-xl rounded-3xl border border-[#E3CF9C] shadow-[0_18px_44px_rgba(90,64,12,0.22)] p-3 sm:p-4 flex items-center gap-3">
                 <div class="flex-1 min-w-0">
                     <template x-if="selectedSlots.length === 0">
                         <div>

@@ -835,13 +835,21 @@
                 return Math.round(val).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ".");
             },
 
+            // Tanggal & jam selalu dalam zona waktu venue (bukan zona waktu HP customer): jadwal 19:00 WIB tetap
+            // tampil 19:00 walau HP disetel ke zona lain.
+            appTimezone: @js(config('app.timezone')),
+
             formatDate(val) {
                 if (!val) return '-';
+                const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+                const plain = String(val).match(/^(\d{4})-(\d{2})-(\d{2})$/);
+                if (plain) return `${plain[3]} ${months[Number(plain[2]) - 1]} ${plain[1]}`;
                 try {
                     const d = new Date(val);
                     if (!isNaN(d.getTime())) {
-                        const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-                        return `${String(d.getDate()).padStart(2, '0')} ${months[d.getMonth()]} ${d.getFullYear()}`;
+                        const parts = Object.fromEntries(new Intl.DateTimeFormat('en-GB', { timeZone: this.appTimezone, day: '2-digit', month: 'short', year: 'numeric' })
+                            .formatToParts(d).map(p => [p.type, p.value]));
+                        return `${parts.day} ${parts.month} ${parts.year}`;
                     }
                 } catch(e) {}
                 return String(val).substring(0, 10);
@@ -852,10 +860,32 @@
                 try {
                     const d = new Date(isoString);
                     if (!isNaN(d.getTime())) {
-                        return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+                        return new Intl.DateTimeFormat('en-GB', { timeZone: this.appTimezone, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(d);
                     }
                 } catch(e) {}
                 return isoString.substring(11, 16) || isoString;
+            },
+
+            // Label status yang ramah dibaca (bukan kode mentah seperti PENDING_PAYMENT).
+            statusLabel(status) {
+                const map = {
+                    PAID: 'Paid', CONFIRMED: 'Confirmed', CHECKED_IN: 'Checked in', COMPLETED: 'Completed', ACTIVE: 'Active',
+                    PENDING: 'Awaiting payment', PENDING_PAYMENT: 'Awaiting payment', UNPAID: 'Unpaid', PARTIALLY_PAID: 'Partly paid',
+                    LOCKED: 'In checkout', EXPIRED: 'Expired', CANCELLED: 'Cancelled', REFUND_PENDING: 'Refund pending', REFUNDED: 'Refunded',
+                };
+                return map[status] || (status ? String(status).replace(/_/g, ' ').toLowerCase().replace(/^\w/, c => c.toUpperCase()) : '-');
+            },
+
+            // 'ok' = lunas / aktif, 'bad' = tutup / batal, 'wait' = menunggu.
+            statusTone(status) {
+                if (['PAID', 'CONFIRMED', 'CHECKED_IN', 'COMPLETED', 'ACTIVE'].includes(status)) return 'ok';
+                if (['EXPIRED', 'CANCELLED', 'REFUNDED', 'REFUND_PENDING'].includes(status)) return 'bad';
+                return 'wait';
+            },
+
+            statusPillClass(status) {
+                const tone = this.statusTone(status);
+                return tone === 'ok' ? 'bg-emerald-100 text-emerald-800 border-emerald-200' : (tone === 'bad' ? 'bg-rose-100 text-rose-800 border-rose-200' : 'bg-amber-100 text-amber-900 border-amber-200');
             },
 
             /**

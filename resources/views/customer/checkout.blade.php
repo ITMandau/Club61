@@ -2,7 +2,7 @@
     @include('customer.partials.bk-style')
 
     <div x-data="checkoutApp()" x-init="init()" class="bk-page bk-bar-compact-only text-[#1F170D]">
-        <div class="mx-auto w-full max-w-6xl px-4 sm:px-6 lg:px-8 pt-4 sm:pt-6 space-y-4 sm:space-y-5">
+        <div class="w-full px-4 sm:px-8 lg:px-12 2xl:px-16 pt-4 sm:pt-6 space-y-4 sm:space-y-5">
 
             {{-- Header --}}
             <div class="flex items-center justify-between gap-3">
@@ -331,8 +331,8 @@
         </div>
 
         {{-- Bar bawah (HP & tablet) --}}
-        <div x-show="bookingItems.length > 0" style="display: none;" class="bk-bar bk-bar-compact-only fixed inset-x-0 z-30 px-3 sm:px-6 pointer-events-none">
-            <div x-ref="bar" class="mx-auto max-w-6xl pointer-events-auto bg-white/95 backdrop-blur-xl rounded-3xl border border-[#E3CF9C] shadow-[0_18px_44px_rgba(90,64,12,0.22)] p-3 sm:p-4 flex items-center gap-3">
+        <div x-show="bookingItems.length > 0" style="display: none;" class="bk-bar bk-bar-compact-only fixed inset-x-0 z-30 px-3 sm:px-8 lg:px-12 2xl:px-16 pointer-events-none">
+            <div x-ref="bar" class="w-full pointer-events-auto bg-white/95 backdrop-blur-xl rounded-3xl border border-[#E3CF9C] shadow-[0_18px_44px_rgba(90,64,12,0.22)] p-3 sm:p-4 flex items-center gap-3">
                 <div class="flex-1 min-w-0">
                     <div class="text-[11px] font-bold text-[#7A643E] truncate" x-text="grandTotal > 0 ? (selectedMethod.name || 'Choose a payment method') : 'Fully covered'"></div>
                     <div class="font-black text-lg sm:text-xl leading-tight tabular-nums whitespace-nowrap" x-text="'Rp ' + formatNumber(grandTotal)"></div>
