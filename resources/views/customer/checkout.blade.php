@@ -1411,9 +1411,17 @@
                                         );
                                     }
                                 });
-                            } else {
-                                // Sandbox Mock Simulator / Cash
+                            } else if (data.is_mock || !data.snap_token) {
+                                // Simulator lokal / total Rp0 ditanggung kuota-voucher: sudah lunas di server.
                                 this.showPaymentSuccessModal = true;
+                            } else if (data.redirect_url || data.payment_url) {
+                                // Popup Snap tidak termuat (client key kosong / snap.js diblokir) → halaman pembayaran Midtrans.
+                                // Dulu jatuh ke cabang simulator di atas: customer melihat "pembayaran berhasil" padahal belum bayar.
+                                window.location.href = data.redirect_url || data.payment_url;
+                            } else {
+                                this.showNotice('Payment Not Started', 'The payment window could not be opened. Continue payment from the Invoice page.', 'error', 'View Invoice Page', () => {
+                                    this.clearSessionAndRedirect(this.createdBookingId, this.createdOrderId);
+                                });
                             }
                         } else {
                             this.showNotice('Payment Failed', json.message || 'Failed to process payment.',
@@ -1504,9 +1512,7 @@
 
     @push('scripts')
         @if (config('services.payment.driver', 'midtrans') === 'midtrans')
-            <script
-                src="{{ config('services.midtrans.is_production') ? 'https://app.midtrans.com/snap/snap.js' : 'https://app.sandbox.midtrans.com/snap/snap.js' }}"
-                data-client-key="{{ config('services.midtrans.client_key', 'SB-Mid-client-demo-61') }}"></script>
+            @include('customer.partials.midtrans-snap')
         @endif
     @endpush
 </x-app-layout>

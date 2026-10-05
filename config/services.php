@@ -37,7 +37,8 @@ return [
 
     'midtrans' => [
         'server_key' => env('MIDTRANS_SERVER_KEY'),
-        'client_key' => env('MIDTRANS_CLIENT_KEY', 'SB-Mid-client-demo-61'),
+        // Tanpa nilai cadangan: key palsu 'SB-Mid-client-demo-61' dulu membuat popup bayar gagal tanpa penjelasan.
+        'client_key' => env('MIDTRANS_CLIENT_KEY'),
         'is_production' => env('MIDTRANS_IS_PRODUCTION', false),
         // Opsional: URL webhook per transaksi (header X-Override-Notification) — untuk laptop developer lewat ngrok
         // yang memakai akun sandbox yang sama dengan server. Kosong = pakai "Payment Notification URL" di dashboard.

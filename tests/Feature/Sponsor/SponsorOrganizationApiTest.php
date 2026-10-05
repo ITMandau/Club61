@@ -544,15 +544,17 @@ class SponsorOrganizationApiTest extends TestCase
             'file' => UploadedFile::fake()->createWithContent('roster.csv', "name,phone,hours\nBudi Santoso,081234500097,10\n"),
         ])->assertStatus(200)->assertJsonPath('data.vouchers_issued', 1);
 
-        \Carbon\Carbon::setTestNow('2026-10-05');
+        // Bulan berbeda, tapi voucher September (berlaku s/d 5 Okt) masih aktif. Waktu tetap dibekukan sampai assertion
+        // selesai — dulu di-reset ke jam asli sehingga test gagal sejak 5 Okt 2026 (voucher September sudah lewat).
+        \Carbon\Carbon::setTestNow('2026-10-01');
         $this->actingAs($pic)->post('/api/v1/sponsor/organization/members/import-csv', [
             'file' => UploadedFile::fake()->createWithContent('roster.csv', "name,phone,hours\nBudi Santoso,081234500097,8\n"),
         ])->assertStatus(200)->assertJsonPath('data.vouchers_issued', 1);
-        \Carbon\Carbon::setTestNow();
 
         $member = SponsorOrganizationMember::whereHas('user', fn ($q) => $q->where('phone', '081234500097'))->first();
         $this->assertEquals(2, $member->vouchers()->count(), 'Periode (bulan) berbeda harus tetap bikin voucher terpisah.');
         $this->assertEquals(18.0, $member->totalRemainingHours());
+        \Carbon\Carbon::setTestNow();
     }
 
     public function test_csv_correction_below_hours_used_fails_gracefully_without_breaking_import(): void

@@ -70,7 +70,7 @@ class LedgerAnalytics
      *
      * @return array{unit: 'day'|'month', points: list<array{key: string, label: string, money_in: float, refunds: float, money_net: float}>}
      */
-    public static function trend(Builder $base, ?string $from, ?string $until): array
+    public static function trend(Builder $base, ?string $from, ?string $until, int $maxDailyPoints = self::MAX_DAILY_POINTS): array
     {
         $today = Carbon::now(LedgerReport::TIMEZONE)->startOfDay();
         $first = (clone $base)->min('occurred_at');
@@ -80,7 +80,7 @@ class LedgerAnalytics
             $end = $start->copy();
         }
 
-        $unit = $start->diffInDays($end) + 1 > self::MAX_DAILY_POINTS ? 'month' : 'day';
+        $unit = $start->diffInDays($end) + 1 > $maxDailyPoints ? 'month' : 'day';
         $bucket = self::localBucketExpression($unit);
 
         $sums = (clone $base)->toBase()

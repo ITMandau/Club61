@@ -4,13 +4,12 @@ namespace App\Filament\Pages;
 
 use App\Models\Finance\LedgerEntry;
 use App\Models\Padel\PadelBooking;
-use App\Models\Padel\PadelCourt;
 use App\Services\Finance\LedgerAnalytics;
 use App\Services\Finance\LedgerReport;
+use App\Services\Padel\CourtOccupancy;
 use App\Services\Padel\PadelBookingService;
 use BackedEnum;
 use BezhanSalleh\FilamentShield\Traits\HasPageShield;
-use Carbon\Carbon;
 use Filament\Pages\Page;
 use Livewire\Attributes\Locked;
 use UnitEnum;
@@ -36,10 +35,22 @@ class Analytics extends Page
 
     protected string $view = 'filament.pages.analytics';
 
-    /** Status booking yang memakai slot lapangan (okupansi). */
-    private const OCCUPYING_STATUSES = ['PAID', 'CHECKED_IN', 'COMPLETED', 'EXPIRED'];
-
     /** Hanya diubah lewat setPreset() — nilai kiriman browser yang diubah manual ditolak Livewire. */
+    /**
+     * Lini layanan di kartu "Rincian Pendapatan" (kode = kategori Buku Transaksi). `soon` = modulnya belum ada,
+     * ditandai "Menyusul" selama belum ada transaksi. Coaching belum punya kategori sendiri di buku.
+     */
+    public const SERVICE_LINES = [
+        'SEWA_LAPANGAN' => ['label' => 'Sewa Lapangan Padel (Court Rental)', 'sub' => 'Sewa slot jam lapangan padel', 'soon' => false],
+        'ADDON_PADEL' => ['label' => 'Sewa Alat & Add-on Bola (Equipment)', 'sub' => 'Sewa raket, bola & perlengkapan padel', 'soon' => false],
+        'FNB' => ['label' => 'Food & Beverage (F&B)', 'sub' => 'Penjualan kafe / bar dari POS F&B', 'soon' => false],
+        'WELLNESS' => ['label' => 'Wellness & Sauna', 'sub' => 'Akses sauna di luar paket membership', 'soon' => true],
+        'COACHING' => ['label' => 'Pelatih & Coaching Session', 'sub' => 'Sesi privat / kelas bersama pelatih', 'soon' => true],
+    ];
+
+    /** Sumber uang yang dibayar online lewat Midtrans; sumber lain = dibayar di kasir. */
+    public const ONLINE_SOURCES = ['ONLINE_PADEL', 'RESCHEDULE_DELTA_ONLINE', 'ONLINE_MEMBERSHIP'];
+
     #[Locked]
     public string $preset = LedgerReport::DEFAULT_PRESET;
 
@@ -91,15 +102,18 @@ class Analytics extends Page
         $base = LedgerReport::applyDateRange(LedgerEntry::query(), $from, $until);
 
         $latest = LedgerReport::orderNewestFirst(LedgerReport::grouped(clone $base))->limit(10)->get();
+        $byCategory = collect(LedgerAnalytics::breakdown($base, 'category'))->keyBy('key');
+        $summary = LedgerReport::summary(clone $base, $from, $until);
+        $membership = (float) ($byCategory['MEMBERSHIP']['money_net'] ?? 0);
 
         return [
             'periodLabel' => BukuTransaksi::periodLabel($this->preset, ...$this->customDates()),
-            'summary' => LedgerReport::summary(clone $base, $from, $until),
-            'byCategory' => LedgerAnalytics::breakdown($base, 'category'),
-            'bySource' => LedgerAnalytics::breakdown($base, 'source'),
+            'summary' => $summary,
+            'channels' => $this->channels(LedgerAnalytics::breakdown($base, 'source')),
             'byMethod' => LedgerAnalytics::breakdown($base, 'method'),
-            'trend' => LedgerAnalytics::trend($base, $from, $until),
-            'occupancy' => $this->occupancy($from, $until),
+            'serviceLines' => $this->serviceLines($byCategory->all()),
+            'membership' => ['sales' => $membership, 'others' => $summary['money_net'] - $membership],
+            'occupancy' => CourtOccupancy::calculate($from, $until),
             'memberUsage' => $this->memberUsage($from, $until),
             'latest' => $latest,
             'canSeeRefundQueue' => AntrianRefund::canAccess(),
@@ -107,47 +121,66 @@ class Analytics extends Page
     }
 
     /**
-     * Okupansi = jam terpakai ÷ (jam buka lapangan aktif × jumlah hari). Dulu kapasitas ditulis tetap 4 lapangan × 18 jam
-     * dan "semua waktu" dianggap 30 hari.
+     * Uang masuk bersih per kanal: kasir (semua POS) vs online (Midtrans).
      *
-     * @return array{rate: float, hours_booked: float, capacity_hours: float, courts: int}
+     * @param  list<array<string, mixed>>  $bySource
+     * @return array{cashier: array{money_net: float, transactions: int}, online: array{money_net: float, transactions: int}}
      */
-    private function occupancy(?string $from, ?string $until): array
+    private function channels(array $bySource): array
     {
-        $bookings = PadelBooking::query()->whereIn('status', self::OCCUPYING_STATUSES)
-            ->when($from, fn ($q) => $q->whereDate('booking_date', '>=', $from))
-            ->when($until, fn ($q) => $q->whereDate('booking_date', '<=', $until));
-
-        $hoursBooked = 0.0;
-        foreach ((clone $bookings)->get(['start_time', 'end_time']) as $b) {
-            $hoursBooked += max(0, $b->start_time->diffInMinutes($b->end_time)) / 60;
+        $channels = ['cashier' => ['money_net' => 0.0, 'transactions' => 0], 'online' => ['money_net' => 0.0, 'transactions' => 0]];
+        foreach ($bySource as $row) {
+            $key = in_array($row['key'], self::ONLINE_SOURCES, true) ? 'online' : 'cashier';
+            $channels[$key]['money_net'] += $row['money_net'];
+            $channels[$key]['transactions'] += $row['transactions'];
         }
 
-        $start = $from ?? (clone $bookings)->min('booking_date');
-        $end = $until ?? Carbon::now(LedgerReport::TIMEZONE)->toDateString();
-        $days = $start ? max(1, (int) Carbon::parse($start)->startOfDay()->diffInDays(Carbon::parse($end)->startOfDay()) + 1) : 1;
+        return $channels;
+    }
 
-        $courts = PadelCourt::query()->where('is_active', true)->get(['open_time', 'close_time']);
-        $hoursPerDay = $courts->sum(function (PadelCourt $court) {
-            $open = Carbon::createFromTimeString($court->open_time ?: '06:00');
-            $close = Carbon::createFromTimeString(in_array($court->close_time, [null, '', '00:00', '24:00'], true) ? '23:59' : $court->close_time);
+    /**
+     * Baris "Rincian Pendapatan per Lini Layanan": lini tetap + "Lainnya" (gym, merchandise, salon, dll.) bila ada.
+     * Membership punya kartu sendiri. Jumlah semua baris + membership = Pendapatan Bersih.
+     *
+     * @param  array<string, array<string, mixed>>  $byCategory
+     * @return list<array{code: string, label: string, sub: string, money_net: float, transactions: int, soon: bool, filter: list<string>}>
+     */
+    private function serviceLines(array $byCategory): array
+    {
+        $lines = [];
+        foreach (self::SERVICE_LINES as $code => $line) {
+            $row = $byCategory[$code] ?? null;
+            $lines[] = [
+                'code' => $code,
+                'label' => $line['label'],
+                'sub' => $line['sub'],
+                'money_net' => (float) ($row['money_net'] ?? 0),
+                'transactions' => (int) ($row['transactions'] ?? 0),
+                'soon' => $line['soon'] && $row === null,
+                'filter' => array_key_exists($code, LedgerEntry::CATEGORIES) ? [$code] : [],
+            ];
+        }
 
-            return max(0, $open->diffInMinutes($close) + ($close->format('H:i') === '23:59' ? 1 : 0)) / 60;
-        });
-        $capacity = $hoursPerDay * $days;
+        $others = collect($byCategory)->except([...array_keys(self::SERVICE_LINES), 'MEMBERSHIP']);
+        if ($others->isNotEmpty()) {
+            $lines[] = [
+                'code' => 'LAINNYA',
+                'label' => 'Lainnya ('.$others->pluck('label')->implode(', ').')',
+                'sub' => 'Penjualan di luar lini utama',
+                'money_net' => (float) $others->sum('money_net'),
+                'transactions' => (int) $others->sum('transactions'),
+                'soon' => false,
+                'filter' => $others->keys()->all(),
+            ];
+        }
 
-        return [
-            'rate' => $capacity > 0 ? round($hoursBooked / $capacity * 100, 1) : 0.0,
-            'hours_booked' => round($hoursBooked, 1),
-            'capacity_hours' => round($capacity, 1),
-            'courts' => $courts->count(),
-        ];
+        return $lines;
     }
 
     /** Pemakaian kuota membership di lapangan (informasi utilisasi — bukan uang masuk baru). */
     private function memberUsage(?string $from, ?string $until): array
     {
-        $row = PadelBooking::query()->whereIn('status', self::OCCUPYING_STATUSES)
+        $row = PadelBooking::query()->whereIn('status', CourtOccupancy::OCCUPYING_STATUSES)
             ->when($from, fn ($q) => $q->whereDate('booking_date', '>=', $from))
             ->when($until, fn ($q) => $q->whereDate('booking_date', '<=', $until))
             ->toBase()

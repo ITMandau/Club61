@@ -74,9 +74,16 @@
         <template x-if="currentTicket.status === 'PAID' || currentTicket.status === 'CHECKED_IN'">
             <div class="w-full">
                 <div class="p-4 bg-white rounded-3xl border-2 border-dashed border-[#DFC387] inline-block shadow-inner">
-                    <img :src="'https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=' + encodeURIComponent(currentTicket
-                        .qr_code_hash || 'CLUB61-DEMO')"
-                        alt="QR Check-in" class="w-44 h-44 sm:w-48 sm:h-48 mx-auto rounded-xl" />
+                    {{-- QR dibuat di browser (renderQr) — kode akses gate tidak pernah dikirim ke layanan QR luar. --}}
+                    <template x-if="currentTicket.qr_code_hash">
+                        <div x-effect="renderQr($el, currentTicket.qr_code_hash)" role="img" aria-label="QR Check-in"
+                            class="w-44 h-44 sm:w-48 sm:h-48 mx-auto rounded-xl overflow-hidden bg-white"></div>
+                    </template>
+                    <template x-if="!currentTicket.qr_code_hash">
+                        <div class="w-44 h-44 sm:w-48 sm:h-48 mx-auto rounded-xl bg-[#FAF8F2] border border-[#DFC387] flex items-center justify-center p-4 text-center text-[11px] font-bold text-[#8C6418] leading-snug">
+                            QR code not available yet. Show your booking code to frontdesk staff.
+                        </div>
+                    </template>
                     <div class="mt-3 font-mono font-black text-xs text-[#8C6418] tracking-widest break-all"
                         x-text="currentTicket.qr_code_hash || currentTicket.booking_code"></div>
                 </div>

@@ -18,7 +18,7 @@ class MidtransService
     public function __construct()
     {
         $this->serverKey = config('services.midtrans.server_key') ?? '';
-        $this->clientKey = config('services.midtrans.client_key') ?? 'SB-Mid-client-demo-61';
+        $this->clientKey = (string) config('services.midtrans.client_key');
         $this->isProduction = (bool) config('services.midtrans.is_production', false);
 
         $this->snapApiUrl = $this->isProduction

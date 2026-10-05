@@ -141,7 +141,7 @@ class AnalyticsLedgerTest extends TestCase
         Livewire::test(Analytics::class)
             ->assertOk()
             ->assertSet('preset', 'bulan_ini')
-            ->assertSee('Total Uang Masuk (Bersih)')
+            ->assertSee('Pendapatan Bersih (Net Revenue)')
             ->assertSee('Rp 1.830.000')
             ->assertSee('POS F&amp;B', false)
             ->assertSee('ORD-FNB-001')
@@ -156,6 +156,39 @@ class AnalyticsLedgerTest extends TestCase
             ->set("dari", "bukan-tanggal")
             ->set("sampai", "2026-10-31")
             ->assertOk();
+    }
+
+    public function test_page_splits_channels_service_lines_and_membership_without_trend_chart(): void
+    {
+        $this->seedMonth();
+        $this->row('2026-10-08 10:00', 'MERCH', 'LAINNYA', 75000);
+        $this->actingAs($this->owner);
+
+        Livewire::test(Analytics::class)
+            ->assertViewHas('channels', fn ($c) => $c['cashier']['money_net'] === 405000.0   // lapangan 220rb + F&B 110rb + merch 75rb
+                && $c['online']['money_net'] === 1500000.0)
+            ->assertViewHas('serviceLines', function (array $lines) {
+                $lines = collect($lines)->keyBy('code');
+
+                return $lines['SEWA_LAPANGAN']['money_net'] === 220000.0
+                    && $lines['FNB']['money_net'] === 110000.0
+                    && $lines['WELLNESS']['soon'] && $lines['COACHING']['soon'] && ! $lines['FNB']['soon']
+                    && $lines['COACHING']['filter'] === []
+                    && $lines['LAINNYA']['money_net'] === 75000.0
+                    && $lines['LAINNYA']['filter'] === ['MERCH']
+                    && ! $lines->has('MEMBERSHIP');
+            })
+            // Lini layanan + membership = Pendapatan Bersih.
+            ->assertViewHas('membership', fn ($m) => $m['sales'] === 1500000.0 && $m['others'] === 405000.0)
+            ->assertSee('Distribusi Kanal Pembayaran')
+            ->assertSee('Food &amp; Beverage (F&amp;B)', false)
+            ->assertSee('Wellness &amp; Sauna', false)
+            ->assertSee('Pelatih &amp; Coaching Session', false)
+            ->assertSee('Menyusul')
+            ->assertSee('Lainnya (Merchandise)')
+            ->assertSee('Omzet Penjualan Membership')
+            ->assertSee('Rp 1.905.000')
+            ->assertDontSee('Tren Uang Masuk');
     }
 
     public function test_preset_cannot_be_changed_directly_from_the_browser(): void
@@ -199,6 +232,6 @@ class AnalyticsLedgerTest extends TestCase
         Livewire::test(Analytics::class)
             ->call('setPreset', 'hari_ini')
             ->assertSee('20%')
-            ->assertSee('1 lapangan aktif');
+            ->assertSee('Kapasitas 1 Court');
     }
 }

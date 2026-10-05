@@ -38,8 +38,9 @@
         <template x-if="currentTicket.status === 'ACTIVE' && currentTicket.qr_pass_hash">
             <div class="w-full">
                 <div class="p-4 bg-white rounded-3xl border-2 border-dashed border-[#DFC387] inline-block shadow-inner">
-                    <img :src="'https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=' + encodeURIComponent(currentTicket.qr_pass_hash)"
-                        alt="Membership Card QR" class="w-44 h-44 sm:w-48 sm:h-48 mx-auto rounded-xl" />
+                    {{-- QR dibuat di browser (renderQr) — kode kartu member tidak pernah dikirim ke layanan QR luar. --}}
+                    <div x-effect="renderQr($el, currentTicket.qr_pass_hash)" role="img" aria-label="Membership Card QR"
+                        class="w-44 h-44 sm:w-48 sm:h-48 mx-auto rounded-xl overflow-hidden bg-white"></div>
                     <div class="mt-3 font-mono font-black text-xs text-[#8C6418] tracking-widest break-all"
                         x-text="currentTicket.qr_pass_hash"></div>
                 </div>

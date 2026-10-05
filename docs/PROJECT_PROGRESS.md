@@ -54,12 +54,13 @@ Dokumen pelacak progres (Single Source of Truth). Status di bawah ini hasil audi
   - Sekarang fail-closed: token mock hanya di environment `local` (tanpa key) / `testing`. Selain itu checkout ditolak HTTP 503 (`PaymentGatewayUnavailableException`), transaksi DB di-rollback, slot tetap `LOCKED` supaya customer bisa coba lagi, dan error dicatat `[ALERT]` di log.
   - Test: `tests/Feature/Payment/MidtransFailClosedTest.php` (7 test).
   - Catatan: driver `mock` via config `PAYMENT_DRIVER=mock` masih bisa dipakai di server non-production. Pastikan server sandbox / production memakai `PAYMENT_DRIVER=midtrans`.
-- [ ] Client key cadangan `'SB-Mid-client-demo-61'` masih dipakai kalau config kosong (`checkout.blade.php:1528`, `invoice-scripts.blade.php:1012`).
+- [x] Client key cadangan `'SB-Mid-client-demo-61'` dihapus (4 Okt 2026): `snap.js` hanya dimuat dengan `MIDTRANS_CLIENT_KEY` asli (`customer/partials/midtrans-snap.blade.php`); tanpa key, customer diarahkan ke halaman bayar Midtrans (`redirect_url`). Checkout padel dulu menampilkan "pembayaran berhasil" kalau popup Snap tidak termuat — sekarang diarahkan ke halaman bayar.
 
 ### URGENT (permintaan PM)
 - [x] Modul 16: Activity / Audit Log untuk superadmin.
 - [x] Modul 17: Laporan keuangan per modul + tiap transaksi bisa dilacak detail & invoice-nya — Buku Transaksi & Antrian Refund (Fase 2) dan dashboard Analytics dari buku (Fase 3) jalan (4 Okt 2026). Fase 4 (MDR Midtrans, rekonsiliasi mutasi bank) menyusul.
   - [x] Analytics & Keuangan membaca `ledger_entries` (F&B ikut terhitung, angka = Buku Transaksi); rincian per kategori / sumber / metode bayar (klik baris → Buku Transaksi tersaring lewat `?periode=&kategori=&sumber=&metode=`); grafik tren harian (per bulan untuk rentang > 62 hari); okupansi dari jam buka lapangan aktif (dulu tetap 4 × 18 jam). Test: `tests/Feature/Finance/AnalyticsLedgerTest.php`.
+  - [x] Dashboard admin memakai data asli (4 Okt 2026) — dulu seluruh isinya contoh mati ("Rp 50.272.597", "132 Bookings", booking "PXDL"). Isi: uang masuk hari ini vs kemarin & bulan ini (dari Buku Transaksi, hanya untuk yang boleh membuka Analytics), booking & okupansi hari ini, customer baru bulan ini vs bulan lalu, member aktif, daftar "Perlu Ditindaklanjuti" (tagihan kasir, refund, booking menunggu bayar), grafik uang masuk 7/30/90 hari, jadwal lapangan hari ini + pencarian. Okupansi Dashboard & Analytics satu rumus (`App\Services\Padel\CourtOccupancy`). Test: `tests/Feature/Finance/AdminDashboardTest.php`.
 - [ ] Modul 18: Panel pengaturan invoice untuk semua modul.
 - [ ] Rapikan pembayaran membership online di portal customer.
   - [x] Master Fasilitas Membership (menu **Fasilitas Membership**): tambah fasilitas baru (mode check-in / info saja), nama & deskripsi benefit diatur admin; paket punya deskripsi + daftar privilege + catatan per benefit. Halaman membership, My Club, teaser depan, POS Jual Membership & API `/membership/plans` (`benefit_cards`) tidak lagi memakai teks dummy (2 Okt 2026).
@@ -121,8 +122,8 @@ Dokumen pelacak progres (Single Source of Truth). Status di bawah ini hasil audi
 - [x] Arsitektur service modular (5 traits).
 - [~] Coach padel: kolom `coach_id` & `coach_fee` ada di skema, **belum ada UI pemilihan pelatih**.
 - [x] Checkout ditolak (bukan dianggap lunas) kalau Midtrans error.
-- [ ] QR tiket masih fallback ke layanan eksternal `api.qrserver.com` (`invoice-scripts.blade.php:824`).
-- [ ] Placeholder `'CLUB61-DEMO'` masih ada di kartu tiket (`ticket-card.blade.php:78`).
+- [x] QR e-tiket & kartu member dibuat di browser dengan `public/js/qrcode.min.js` (4 Okt 2026); `api.qrserver.com` (ikut menerima kode akses gate) & CDN qrcodejs tidak dipakai lagi.
+- [x] Placeholder `'CLUB61-DEMO'` / `'CLUB61-PASS'` dihapus: tiket tanpa kode QR menampilkan "QR belum tersedia". Halaman `/membership` tanpa paket aktif tidak lagi error 500. Test: `tests/Feature/Payment/CustomerPaymentScriptsTest.php`.
 
 ---
 

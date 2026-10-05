@@ -30,6 +30,17 @@
         $initialPlan = $plansData->get($selectedPlanId) ?? $plansData->first();
     @endphp
 
+    {{-- Belum ada paket aktif (semua dinonaktifkan admin): dulu halaman ini error 500 karena $initialPlan kosong. --}}
+    @if (! $initialPlan)
+        <div class="py-10 px-4">
+            <div class="max-w-lg mx-auto bg-white/95 p-8 rounded-3xl border border-[#DFC387] shadow-sm text-center space-y-3">
+                <h1 class="font-serif font-black text-xl text-[#1F170D]">Paket membership belum tersedia</h1>
+                <p class="text-sm text-[#7A643E]">Saat ini belum ada paket yang bisa dibeli online. Silakan cek lagi nanti atau hubungi frontdesk Club 61.</p>
+                <a href="{{ route('customer.my-club') }}" class="inline-block px-5 py-2.5 rounded-2xl bg-[#FAF2DE] border border-[#DFC387] text-[#7A5818] font-bold text-xs">Kembali ke My Club</a>
+            </div>
+        </div>
+    @else
+
     <div class="py-6 sm:py-8 text-[#1F170D]">
         <div class="w-full px-4 sm:px-8 lg:px-12 2xl:px-16 space-y-6">
 
@@ -334,7 +345,7 @@
     </div>
 
     <!-- Midtrans Snap Script Integration -->
-    <script src="{{ config('services.midtrans.is_production') ? 'https://app.midtrans.com/snap/snap.js' : 'https://app.sandbox.midtrans.com/snap/snap.js' }}" data-client-key="{{ config('services.midtrans.client_key') }}"></script>
+    @include('customer.partials.midtrans-snap')
 
     <script>
         const plansMap = @json($plansData);
@@ -605,8 +616,8 @@
                 }
 
                 // 3. Fallback Payment URL
-                if (payment && payment.payment_url) {
-                    window.location.href = payment.payment_url;
+                if (payment && (payment.redirect_url || payment.payment_url)) {
+                    window.location.href = payment.redirect_url || payment.payment_url;
                     return;
                 }
 
@@ -633,4 +644,5 @@
             }
         }
     </script>
+    @endif
 </x-app-layout>

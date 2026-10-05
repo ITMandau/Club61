@@ -251,7 +251,7 @@
                             await this.loadTicket(this.currentTicket.id);
                         } else if (json.snap_token) {
                             this.lastSnapToken = json.snap_token;
-                            this.openSnap(json.snap_token);
+                            this.openSnap(json.snap_token, json.redirect_url);
                         }
                     } else {
                         this.showNotice('Payment Failed', json.message || 'Failed to process payment session.', 'error', 'Close');
@@ -262,6 +262,34 @@
                 } finally {
                     this.isSubmittingPayment = false;
                 }
+            },
+
+            /**
+             * Gambar QR di elemen ini dari teks (qrcodejs lokal, public/js/qrcode.min.js). Dulu gambar diminta ke
+             * api.qrserver.com — kode akses gate / kartu member ikut terkirim ke pihak ketiga, dan QR tidak muncul kalau
+             * layanan itu down. Menunggu library termuat (script di bawah halaman) maksimal ±6 detik.
+             */
+            renderQr(el, text, attempt = 0) {
+                if (!el) return;
+                text = text ? String(text) : '';
+                if (attempt === 0) el._qrWanted = text;
+                if (el._qrWanted !== text) return; // teks sudah berganti selama menunggu library
+                if (el._qrDrawn === text) return;
+
+                if (!text) {
+                    el.innerHTML = '';
+                    el._qrDrawn = '';
+                    return;
+                }
+                if (!window.QRCode) {
+                    if (attempt < 40) setTimeout(() => this.renderQr(el, text, attempt + 1), 150);
+                    return;
+                }
+
+                el.innerHTML = '';
+                new QRCode(el, { text, width: 220, height: 220, colorDark: '#000000', colorLight: '#ffffff', correctLevel: QRCode.CorrectLevel.H });
+                el.querySelectorAll('img, canvas').forEach(node => { node.style.width = '100%'; node.style.height = '100%'; });
+                el._qrDrawn = text;
             },
 
             // Pesanan membership online yang belum dibayar: lanjutkan bayar (order yang sama) / batalkan.
@@ -455,7 +483,7 @@
                 }
             },
 
-            openSnap(token) {
+            openSnap(token, redirectUrl = null) {
                 if (window.snap) {
                     window.snap.pay(token, {
                         onSuccess: async (result) => {
@@ -471,6 +499,9 @@
                             this.startAutoPolling(this.currentTicket.id);
                         }
                     });
+                } else if (redirectUrl) {
+                    // Popup Snap tidak termuat (client key kosong / snap.js diblokir) → halaman pembayaran Midtrans.
+                    window.location.href = redirectUrl;
                 } else {
                     this.showNotice('Loading Gateway', 'Midtrans payment gateway component is loading. Please try again shortly.', 'info', 'Close');
                 }
@@ -981,10 +1012,12 @@
 
                 drawRoundRect(qrBoxX, qrSectionY, qrBoxW, qrBoxH, 20, true, true, '#FFFFFF', '#DFC387', 2);
 
-                const qrText = this.currentTicket.qr_code_hash || this.currentTicket.booking_code || this.currentTicket.id || 'CLUB61-PASS';
+                // QR hanya dari kode akses asli — dulu jatuh ke kode booking / teks 'CLUB61-PASS' yang pasti ditolak gate.
+                const qrText = this.currentTicket.qr_code_hash || '';
+                const codeLabel = this.currentTicket.qr_code_hash || this.currentTicket.booking_code || '';
                 let qrLoaded = false;
 
-                if (window.QRCode) {
+                if (qrText && window.QRCode) {
                     try {
                         const qrDiv = document.createElement('div');
                         qrDiv.style.display = 'none';
@@ -1007,40 +1040,22 @@
                     } catch(e) {}
                 }
 
-                if (!qrLoaded) {
-                    try {
-                        const img = new Image();
-                        img.crossOrigin = 'anonymous';
-                        await new Promise((resolve) => {
-                            img.onload = () => {
-                                try {
-                                    ctx.drawImage(img, qrBoxX + 30, qrSectionY + 30, 220, 220);
-                                    qrLoaded = true;
-                                } catch(e) {}
-                                resolve();
-                            };
-                            img.onerror = () => resolve();
-                            setTimeout(resolve, 2500);
-                            img.src = `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(qrText)}`;
-                        });
-                    } catch(e) {}
-                }
-
+                // Tidak ada cadangan layanan QR luar (dulu api.qrserver.com — kode akses gate terkirim ke pihak ketiga).
                 if (!qrLoaded) {
                     drawRoundRect(qrBoxX + 30, qrSectionY + 30, 220, 220, 12, true, true, '#FAF8F2', '#DFC387', 1);
                     ctx.fillStyle = '#8C6418';
                     ctx.font = 'bold 14px monospace';
                     ctx.textAlign = 'center';
-                    ctx.fillText('[ QR CODE PASS ]', width / 2, qrSectionY + 130);
+                    ctx.fillText('QR NOT AVAILABLE', width / 2, qrSectionY + 130);
                     ctx.font = '11px sans-serif';
-                    ctx.fillText(qrText.substring(0, 24), width / 2, qrSectionY + 155);
+                    ctx.fillText('Show booking code at frontdesk', width / 2, qrSectionY + 155);
                     ctx.textAlign = 'left';
                 }
 
                 ctx.fillStyle = '#8C6418';
                 ctx.font = 'bold 14px monospace';
                 ctx.textAlign = 'center';
-                ctx.fillText(qrText, width / 2, qrSectionY + qrBoxH + 28);
+                ctx.fillText(codeLabel, width / 2, qrSectionY + qrBoxH + 28);
 
                 ctx.fillStyle = '#7A643E';
                 ctx.font = '12px sans-serif';
@@ -1206,7 +1221,7 @@
 </script>
 
 @push('scripts')
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-    <script src="{{ config('services.midtrans.is_production') ? 'https://app.midtrans.com/snap/snap.js' : 'https://app.sandbox.midtrans.com/snap/snap.js' }}" 
-            data-client-key="{{ config('services.midtrans.client_key', 'SB-Mid-client-demo-61') }}"></script>
+    {{-- qrcodejs dari server sendiri — QR tetap muncul walau CDN luar diblokir / sinyal venue jelek. --}}
+    <script src="{{ asset('js/qrcode.min.js') }}"></script>
+    @include('customer.partials.midtrans-snap')
 @endpush
