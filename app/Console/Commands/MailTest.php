@@ -6,11 +6,13 @@ use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Mail;
 
 /**
- * Cek pengaturan SMTP di server tanpa harus memicu "Lupa Kata Sandi". Kata sandi SMTP tidak pernah ditampilkan.
+ * Cek pengaturan SMTP di server tanpa harus memicu "Lupa Kata Sandi" / pembayaran. Kata sandi SMTP tidak pernah ditampilkan.
+ * Akun utama (noreply@): php artisan mail:test alamat@email.com
+ * Akun billing (invoice): php artisan mail:test alamat@email.com --mailer=billing
  */
 class MailTest extends Command
 {
-    protected $signature = 'mail:test {to : Alamat email penerima tes}';
+    protected $signature = 'mail:test {to : Alamat email penerima tes} {--mailer= : Akun pengirim: kosong = utama (noreply), billing = invoice}';
 
     protected $description = 'Kirim satu email tes untuk memastikan pengaturan MAIL_* di .env sudah benar';
 
@@ -24,28 +26,34 @@ class MailTest extends Command
             return self::FAILURE;
         }
 
-        $mailer = (string) config('mail.default');
+        $mailer = (string) ($this->option('mailer') ?: config('mail.default'));
         $config = (array) config("mail.mailers.{$mailer}", []);
+        if ($config === []) {
+            $this->error("Mailer \"{$mailer}\" tidak ada di config/mail.php.");
+
+            return self::FAILURE;
+        }
 
         $this->table(['Pengaturan', 'Nilai'], [
-            ['MAIL_MAILER', $mailer],
-            ['MAIL_HOST', $config['host'] ?? '-'],
-            ['MAIL_PORT', $config['port'] ?? '-'],
-            ['MAIL_SCHEME / ENCRYPTION', $config['scheme'] ?? $config['encryption'] ?? '-'],
-            ['MAIL_USERNAME', $config['username'] ?? '-'],
-            ['MAIL_FROM_ADDRESS', config('mail.from.address')],
-            ['MAIL_FROM_NAME', config('mail.from.name')],
+            ['Mailer', $mailer],
+            ['Transport', $config['transport'] ?? '-'],
+            ['Host', $config['host'] ?? '-'],
+            ['Port', $config['port'] ?? '-'],
+            ['Encryption', $config['scheme'] ?? $config['encryption'] ?? '-'],
+            ['Username', $config['username'] ?? '-'],
+            ['Pengirim (From)', $config['from']['address'] ?? config('mail.from.address')],
+            ['Balasan ke (Reply-To)', config('mail.reply_to.address') ?: '-'],
             ['APP_URL (dipakai di link email)', config('app.url')],
         ]);
 
-        if (in_array($mailer, ['log', 'array'], true)) {
-            $this->warn("MAIL_MAILER={$mailer}: email TIDAK benar-benar dikirim (cuma ditulis ke log). Ganti ke smtp untuk production.");
+        if (in_array($config['transport'] ?? null, ['log', 'array'], true)) {
+            $this->warn("Transport {$config['transport']}: email TIDAK benar-benar dikirim (cuma ditulis ke log). Set MAIL_MAILER=smtp untuk production.");
         }
 
         try {
-            Mail::raw(
-                "Email tes dari aplikasi Club 61.\n\nKalau email ini sampai, pengaturan SMTP sudah benar dan email \"Lupa Kata Sandi\" bisa terkirim ke customer.",
-                fn ($message) => $message->to($to)->subject('Tes Email Club 61'),
+            Mail::mailer($mailer)->raw(
+                "Email tes dari aplikasi Club 61 (akun {$mailer}).\n\nKalau email ini sampai, pengaturan SMTP akun ini sudah benar.",
+                fn ($message) => $message->to($to)->subject("Tes Email Club 61 ({$mailer})"),
             );
         } catch (\Throwable $e) {
             $this->error('Gagal mengirim: '.$e->getMessage());

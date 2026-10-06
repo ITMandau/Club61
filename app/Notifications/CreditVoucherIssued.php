@@ -25,7 +25,9 @@ class CreditVoucherIssued extends Notification
         $amount = 'Rp '.number_format((float) $this->voucher->balance, 0, ',', '.');
         $until = $this->voucher->valid_until?->timezone(LedgerReport::TIMEZONE)->translatedFormat('d F Y');
 
+        // Urusan uang customer → dikirim dari billing@ (lihat config/mail.php).
         return (new MailMessage)
+            ->mailer('billing')
             ->subject("Voucher saldo {$amount} dari Club 61")
             ->greeting('Halo '.($notifiable->name ?? 'Member').',')
             ->line("Pengajuan refund untuk pesanan Anda tidak dapat dikembalikan dalam bentuk uang. Sebagai gantinya, dana Anda sebesar {$amount} kami simpan sebagai voucher saldo di akun Club 61 Anda.")

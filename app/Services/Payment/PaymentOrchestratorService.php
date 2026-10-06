@@ -9,6 +9,7 @@ use App\Models\Pos\PosCashierShift;
 use App\Models\Pos\Refund;
 use App\Services\Audit\ActivityLogger;
 use App\Services\Finance\LedgerWriter;
+use App\Services\Mail\OrderInvoiceMailer;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -301,7 +302,15 @@ class PaymentOrchestratorService
             }
 
             if ($totalPaid >= $grandTotal) {
+                $justPaid = $order->payment_status !== 'PAID';
                 $order->update(['payment_status' => 'PAID']);
+
+                // Invoice PDF ke email customer (booking online & membership) — setelah commit, supaya email tidak
+                // terkirim untuk pelunasan yang di-rollback dan gagal kirim email tidak menggagalkan pelunasan.
+                if ($justPaid && app(OrderInvoiceMailer::class)->shouldSend($order)) {
+                    $orderId = $order->id;
+                    DB::afterCommit(fn () => app(OrderInvoiceMailer::class)->send($orderId));
+                }
             } elseif ($totalPaid > 0) {
                 $order->update(['payment_status' => 'PARTIALLY_PAID']);
             }

@@ -36,7 +36,10 @@ class ReceiptPaperSizeTest extends TestCase
         // Teks (bukan gambar): gambar yang disekala Chrome jadi blur & belang di printer thermal.
         $this->assertStringContainsString('window.club61PrintBrowser(el);', $script);
         $this->assertStringNotContainsString('toDataURL', $script);
-        $this->assertStringContainsString("probe.textContent = 'M'.repeat(32);", $script);
+        // PC: 28 kolom (huruf lebih besar dari 32 kolom font printer).
+        $this->assertSame(28, ReceiptPaper::PC_COLUMNS);
+        $this->assertStringContainsString("probe.textContent = 'M'.repeat(28);", $script);
+        $this->assertStringContainsString('window.club61ReceiptLayout(el, 28)', $script);
         $this->assertStringContainsString('data-club61-receipt-print', view('pos.partials.receipt-print-style', ['selectors' => ['#struk']])->render());
 
         // Livewire menyisipkan script-nya sebelum tag penutup body PERTAMA di respons. Tag head/body/html di dalam
@@ -54,7 +57,7 @@ class ReceiptPaperSizeTest extends TestCase
         $this->assertStringContainsString("localStorage.getItem('club61_print_mode')", $script);
         // Gaya struk POS: 32 kolom font A, tebal (ESC E) & dobel tinggi (GS !) untuk judul dan TOTAL.
         $this->assertSame(32, ReceiptPaper::COLUMNS);
-        $this->assertStringContainsString('const COLS = 32;', $script);
+        $this->assertStringContainsString('const COLS = columns || 32;', $script);
         $this->assertStringContainsString('out.push(ESC, 0x61, align[l.align] || 0, ESC, 0x45, l.bold ? 1 : 0, GS, 0x21, l.big ? 0x01 : 0x00);', $script);
         $this->assertStringContainsString("/^total\\b/i.test(l.left)", $script);
     }
