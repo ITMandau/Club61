@@ -142,6 +142,55 @@ class OrderInvoiceEmailTest extends TestCase
         $this->assertNull($order->fresh()->invoice_emailed_at);
     }
 
+    public function test_invoice_send_command_explains_why_and_resends_a_failed_invoice(): void
+    {
+        $order = $this->onlineBookingOrder();
+        $order->update(['payment_status' => 'PAID']);
+
+        // Akun customer tanpa email valid → alasan ditampilkan, tidak dikirim.
+        $this->customer->forceFill(['email' => 'bukan-email'])->save();
+        $this->artisan('invoice:send', ['order' => $order->order_number, '--check' => true])
+            ->expectsOutputToContain('tidak punya email yang valid')
+            ->assertSuccessful();
+
+        $this->customer->forceFill(['email' => 'andi@club61.test'])->save();
+        Mail::fake();
+        $this->artisan('invoice:send', ['order' => $order->order_number])
+            ->expectsOutputToContain('Invoice terkirim ke andi@club61.test')
+            ->assertSuccessful();
+        Mail::assertSent(OrderInvoiceMail::class, 1);
+
+        // Sudah terkirim → butuh --force.
+        $this->artisan('invoice:send', ['order' => $order->order_number])->expectsOutputToContain('--force')->assertSuccessful();
+        $this->artisan('invoice:send', ['order' => $order->order_number, '--force' => true])->assertSuccessful();
+        Mail::assertSent(OrderInvoiceMail::class, 2);
+    }
+
+    public function test_logo_file_is_embedded_in_the_email_and_pdf_when_present(): void
+    {
+        $logo = public_path(OrderInvoiceMailer::LOGO_FILE);
+        $existed = is_file($logo);
+        if (! $existed) {
+            @mkdir(dirname($logo), 0777, true);
+            copy(public_path('images/club61-logo.png'), $logo);
+        }
+
+        try {
+            $order = $this->onlineBookingOrder();
+            $this->pay($order);
+            $invoice = app(OrderInvoiceMailer::class)->invoiceData($order->fresh(['user', 'items', 'payments']));
+
+            Mail::mailer('billing')->to('andi@club61.test')->send(new OrderInvoiceMail($invoice));
+            $message = Mail::mailer('billing')->getSymfonyTransport()->messages()->last()->getOriginalMessage();
+            $this->assertStringContainsString('cid:', $message->getHtmlBody());
+            $this->assertStringContainsString('data:image/png;base64,', view('emails.invoice.pdf', ['invoice' => $invoice])->render());
+        } finally {
+            if (! $existed) {
+                @unlink($logo);
+            }
+        }
+    }
+
     public function test_billing_mailer_follows_the_local_transport_and_replies_go_to_info(): void
     {
         // Test & lokal: MAIL_MAILER bukan smtp → billing tidak pernah mengirim email sungguhan.

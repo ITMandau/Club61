@@ -23,6 +23,19 @@ class OrderInvoiceMailer
     /** Booking lapangan online & membership (online maupun dijual di kasir). Walk-in & F&B cukup struk kasir. */
     public const ORDER_TYPES = ['ONLINE_BOOKING', 'MEMBERSHIP'];
 
+    /** Pesan error SMTP terakhir dari send() (ditampilkan perintah invoice:send). */
+    public ?string $lastError = null;
+
+    /** Logo di email & PDF invoice. Ganti file ini untuk ganti logo; kalau tidak ada, header tampil teks "CLUB 61". */
+    public const LOGO_FILE = 'images/brand/invoice-logo.png';
+
+    public static function logoPath(): ?string
+    {
+        $path = public_path(self::LOGO_FILE);
+
+        return is_file($path) ? $path : null;
+    }
+
     public function shouldSend(Order $order): bool
     {
         return in_array($order->order_type, self::ORDER_TYPES, true) && $order->user_id !== null;
@@ -51,6 +64,7 @@ class OrderInvoiceMailer
 
             return true;
         } catch (\Throwable $e) {
+            $this->lastError = $e->getMessage();
             Order::whereKey($order->id)->update(['invoice_emailed_at' => null]);
             Log::error('Invoice email gagal dikirim', ['order_number' => $order->order_number, 'error' => $e->getMessage()]);
 

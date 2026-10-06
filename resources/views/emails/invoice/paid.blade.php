@@ -13,10 +13,17 @@
         <td align="center">
             <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px; background:#FFFFFF; border:2px solid #D4AF37; border-radius:16px;">
                 <tr>
-                    <td style="background:#1F170D; border-radius:14px 14px 0 0; padding:20px 24px; text-align:center;">
-                        <div style="font-size:20px; font-weight:bold; letter-spacing:4px; color:#FFFFFF;">CLUB 61</div>
-                        <div style="font-size:10px; letter-spacing:4px; color:#F5E2B5; margin-top:2px;">PADEL COURT</div>
-                    </td>
+                    @if($logo = \App\Services\Mail\OrderInvoiceMailer::logoPath())
+                        {{-- Logo ditanam di email (bukan link) — tetap tampil walau gambar dari internet diblokir klien email. --}}
+                        <td style="background:#FFFFFF; border-radius:14px 14px 0 0; border-bottom:3px solid #D4AF37; padding:18px 24px; text-align:center;">
+                            <img src="{{ isset($message) ? $message->embed($logo) : asset(\App\Services\Mail\OrderInvoiceMailer::LOGO_FILE) }}" alt="Club 61" style="display:inline-block; max-width:180px; max-height:72px; height:auto; border:0;">
+                        </td>
+                    @else
+                        <td style="background:#1F170D; border-radius:14px 14px 0 0; padding:20px 24px; text-align:center;">
+                            <div style="font-size:20px; font-weight:bold; letter-spacing:4px; color:#FFFFFF;">CLUB 61</div>
+                            <div style="font-size:10px; letter-spacing:4px; color:#F5E2B5; margin-top:2px;">PADEL COURT</div>
+                        </td>
+                    @endif
                 </tr>
                 <tr>
                     <td style="padding:26px 24px 6px;">

@@ -31,7 +31,11 @@
     <table class="head">
         <tr>
             <td>
-                <div class="brand">CLUB 61</div>
+                @if($logo = \App\Services\Mail\OrderInvoiceMailer::logoPath())
+                    <img src="data:image/png;base64,{{ base64_encode(file_get_contents($logo)) }}" alt="Club 61" style="max-height:44px; max-width:150px; margin-bottom:4px;"><br>
+                @else
+                    <div class="brand">CLUB 61</div>
+                @endif
                 <div class="muted">{{ $invoice['company_address'] }}</div>
             </td>
             <td class="title">
