@@ -70,6 +70,8 @@ class PosCashierShift extends Model
         'MANDIRI_QRIS' => 'QRIS Bank Mandiri',
         'GOPAY' => 'GoPay / Midtrans QRIS',
         'GOPAY_QRIS' => 'GoPay / Midtrans QRIS',
+        // QR dinamis dari layar kasir — uangnya masuk saldo Midtrans, dicek di dashboard Midtrans.
+        'MIDTRANS_QRIS' => 'QRIS Otomatis (Kasir)',
         'OVO' => 'OVO',
         'SHOPEEPAY' => 'ShopeePay',
         'DANA' => 'DANA',
@@ -94,11 +96,18 @@ class PosCashierShift extends Model
             $log = $payment->payload_log ?? [];
             $method = strtoupper((string) $payment->payment_method);
 
-            if (in_array($method, ['QRIS', 'QRIS_STATIS'], true)) {
+            $posOnline = isset($log['pos_qris']) ? strtoupper((string) ($log['pos_qris']['method'] ?? 'QRIS')) : null;
+
+            if ($posOnline !== null && $posOnline !== 'QRIS') {
+                // Bayar Otomatis non-QRIS dari kasir (mis. VA): dicek di dashboard pembayaran online, bukan mutasi bank.
+                $key = 'AUTO_'.preg_replace('/[^A-Z0-9_]/', '_', $posOnline);
+                $label = \App\Services\Pos\PosMidtransQrisService::labelFor($log);
+                $source = 'Dashboard pembayaran online';
+            } elseif (in_array($method, ['QRIS', 'QRIS_STATIS'], true)) {
                 $provider = strtoupper((string) ($log['qris_details']['provider'] ?? $log['qris_provider'] ?? 'LAINNYA'));
                 $key = 'QRIS_'.$provider;
                 $label = 'QRIS — '.(self::QRIS_PROVIDER_LABELS[$provider] ?? $provider);
-                $source = 'Mutasi / dashboard QRIS';
+                $source = $provider === 'MIDTRANS_QRIS' ? 'Dashboard pembayaran online' : 'Mutasi / dashboard QRIS';
             } elseif (in_array($method, ['DEBIT_CARD', 'CREDIT_CARD', 'DEBIT', 'CREDIT', 'EDC_BCA', 'EDC_MANDIRI'], true)) {
                 $edc = $log['edc_details'] ?? $log;
                 $terminal = strtoupper((string) ($edc['terminal'] ?? (in_array($method, ['EDC_BCA', 'EDC_MANDIRI'], true) ? $method : 'EDC_LAINNYA')));
@@ -174,6 +183,18 @@ class PosCashierShift extends Model
 
         return $prefix . $sequence;
     }
+
+    /**
+     * Pembayaran "Bayar Otomatis" (QR / VA di layar kasir) yang masih menunggu customer. Shift tidak boleh ditutup selama
+     * masih ada: kalau dibayar setelah shift ditutup, uangnya masuk ke shift yang sudah direkap (setoran tidak cocok).
+     * Pembayaran online customer tidak pernah punya pos_shift_id, jadi cukup PENDING di shift ini.
+     */
+    public function pendingAutoPaymentCount(): int
+    {
+        return $this->payments()->where('status', 'PENDING')->count();
+    }
+
+    public const PENDING_AUTO_PAYMENT_MESSAGE = 'Masih ada pembayaran Bayar Otomatis (QR / VA) yang menunggu customer. Selesaikan atau batalkan dulu sebelum menutup shift.';
 
     public function calculateSummary(): array
     {

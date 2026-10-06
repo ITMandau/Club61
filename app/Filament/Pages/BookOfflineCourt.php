@@ -105,6 +105,19 @@ class BookOfflineCourt extends Page
     public string $qrisRrn = '';
     public string $qrisSenderName = '';
 
+    /** MIDTRANS = QR dinamis Midtrans tampil di layar (utama); MANUAL = QRIS statis + input RRN (cadangan). */
+    public string $qrisMode = 'MIDTRANS';
+
+    /** Metode "Bayar Otomatis" pilihan kasir (QRIS / VA yang dicentang "Tampil di Kasir"). Divalidasi ulang di server. */
+    public string $posOnlineMethod = 'QRIS';
+
+    /**
+     * QR Midtrans yang sedang menunggu dibayar customer (popup QR + polling). Dikunci: id tagihan tidak boleh diganti
+     * dari browser (bisa dipakai untuk membatalkan tagihan orang lain).
+     */
+    #[\Livewire\Attributes\Locked]
+    public ?array $pendingQris = null;
+
     // Auto-Recovery Draf Transaksi POS
     public bool $hasPendingDraft = false;
     public ?array $pendingDraftSummary = null;
@@ -135,6 +148,8 @@ class BookOfflineCourt extends Page
         $this->bookingDate = now()->format('Y-m-d');
         $this->initializeEquipmentQuantities();
         $this->checkPendingDraft();
+        // Bayar Otomatis yang masih menunggu (halaman sempat di-refresh / tertutup) → popup dilanjutkan.
+        $this->pendingQris = app(\App\Services\Pos\PosMidtransQrisService::class)->resumeFor('PADEL_FRONTDESK', 'WALK_IN_OFFLINE', auth()->id());
 
         if ($this->settleRequest) {
             $this->startSettlement($this->settleRequest);
@@ -817,6 +832,12 @@ class BookOfflineCourt extends Page
             return;
         }
 
+        if ($shift->pendingAutoPaymentCount() > 0) {
+            Notification::make()->title('Shift Belum Bisa Ditutup')->body(PosCashierShift::PENDING_AUTO_PAYMENT_MESSAGE)->warning()->send();
+
+            return;
+        }
+
         $summary = $shift->calculateSummary();
         $this->closingShiftSummary = $summary;
         $this->closingNotes = '';
@@ -836,6 +857,13 @@ class BookOfflineCourt extends Page
 
         if (! $shift) {
             $this->showCloseShiftModal = false;
+            return;
+        }
+
+        if ($shift->pendingAutoPaymentCount() > 0) {
+            $this->showCloseShiftModal = false;
+            Notification::make()->title('Shift Belum Bisa Ditutup')->body(PosCashierShift::PENDING_AUTO_PAYMENT_MESSAGE)->warning()->send();
+
             return;
         }
 
@@ -1193,6 +1221,13 @@ class BookOfflineCourt extends Page
 
     public function submitWalkInBooking(PadelBookingService $service): void
     {
+        // Masih ada Bayar Otomatis yang menunggu customer → selesaikan / batalkan dulu (popup tetap tampil).
+        if ($this->pendingQris) {
+            Notification::make()->title('Masih Menunggu Pembayaran')->body('Selesaikan atau batalkan pembayaran otomatis sebelumnya dulu.')->warning()->send();
+
+            return;
+        }
+
         if ($this->settleBill) {
             $this->submitSettlement($service);
 
@@ -1333,6 +1368,10 @@ class BookOfflineCourt extends Page
                 'trace_number' => $traceNumber,
                 'charged_amount' => (float) $grandTotal,
             ];
+        } elseif (in_array($method, ['QRIS_STATIS', 'QRIS']) && $this->qrisMode === 'MIDTRANS' && \App\Services\Pos\PosMidtransQrisService::resolveMethod($this->posOnlineMethod, (float) $grandTotal) !== null) {
+            // QR Midtrans: tidak ada bukti yang diketik kasir — lunas dikonfirmasi Midtrans.
+            $method = 'QRIS_MIDTRANS';
+            $paymentMeta = ['qris_provider' => \App\Services\Pos\PosMidtransQrisService::PROVIDER, 'pos_online_method' => $this->posOnlineMethod];
         } elseif (in_array($method, ['QRIS_STATIS', 'QRIS'])) {
             $rrn = trim($this->qrisRrn);
 
@@ -1393,7 +1432,7 @@ class BookOfflineCourt extends Page
                 slots: $slotsPayload,
                 bookingDate: $this->bookingDate,
                 equipments: $equipmentsPayload,
-                paymentMethod: $method === 'VOUCHER' ? 'VOUCHER' : $this->paymentMethod,
+                paymentMethod: in_array($method, ['VOUCHER', 'QRIS_MIDTRANS'], true) ? $method : $this->paymentMethod,
                 cashier: $cashier,
                 autoCheckIn: $this->isAutoCheckIn,
                 paymentMeta: $paymentMeta,
@@ -1406,6 +1445,17 @@ class BookOfflineCourt extends Page
                 // Total yang dilihat & ditagih kasir wajib sama dengan yang dicatat server.
                 expectedGrandTotal: (float) $grandTotal,
             );
+
+            // QR Midtrans: order & slot sudah ditahan, tinggal tunggu customer scan. Struk keluar setelah lunas.
+            if (! empty($result['pending_qris'])) {
+                $this->pendingQris = $result['pending_qris'];
+                Cache::forget($this->getDraftCacheKey());
+                $this->hasPendingDraft = false;
+                $this->pendingDraftSummary = null;
+                $this->resetWalkInCart();
+
+                return;
+            }
 
             // Siapkan data struk POS thermal
             $this->completedOrderData = [
@@ -1463,15 +1513,7 @@ class BookOfflineCourt extends Page
                 ->send();
 
             // Reset seleksi keranjang untuk transaksi berikutnya
-            $this->selectedSlots = [];
-            $this->removeVoucher();
-            $this->initializeEquipmentQuantities();
-            $this->walkInName = '';
-            $this->walkInPhone = '';
-            $this->walkInEmail = '';
-            $this->selectedCustomerId = null;
-            $this->selectedCustomerName = null;
-            $this->selectedCustomerPhone = null;
+            $this->resetWalkInCart();
 
         } catch (SlotConflictException $e) {
             Notification::make()
@@ -1487,6 +1529,117 @@ class BookOfflineCourt extends Page
                 ->danger()
                 ->send();
         }
+    }
+
+    /** Kosongkan keranjang & data customer untuk transaksi berikutnya. */
+    protected function resetWalkInCart(): void
+    {
+        $this->selectedSlots = [];
+        $this->removeVoucher();
+        $this->initializeEquipmentQuantities();
+        $this->walkInName = '';
+        $this->walkInPhone = '';
+        $this->walkInEmail = '';
+        $this->selectedCustomerId = null;
+        $this->selectedCustomerName = null;
+        $this->selectedCustomerPhone = null;
+        $this->qrisRrn = '';
+        $this->qrisSenderName = '';
+    }
+
+    // ===================== QRIS MIDTRANS (QR DI LAYAR KASIR) =====================
+
+    /** Tagihan QR yang sedang ditampilkan — milik loket ini & dibuat dari layar kasir. */
+    protected function pendingQrisPayment(): ?\App\Models\Pos\Payment
+    {
+        $id = $this->pendingQris['payment_id'] ?? null;
+        $payment = $id ? \App\Models\Pos\Payment::find($id) : null;
+
+        return $payment && ($payment->payload_log['counter'] ?? null) === 'PADEL_FRONTDESK' && isset($payment->payload_log['pos_qris'])
+            ? $payment
+            : null;
+    }
+
+    /** Dipanggil wire:poll popup QR: lunas → struk; kedaluwarsa / batal → beri tahu kasir. */
+    public function pollPendingQris(): void
+    {
+        $payment = $this->pendingQrisPayment();
+        if (! $payment) {
+            $this->pendingQris = null;
+
+            return;
+        }
+
+        $status = app(\App\Services\Pos\PosMidtransQrisService::class)->status($payment->id);
+
+        if ($status === \App\Services\Pos\PosMidtransQrisService::PAID) {
+            $this->completePendingQris($payment->fresh());
+        } elseif ($status !== \App\Services\Pos\PosMidtransQrisService::PENDING) {
+            $this->pendingQris = null;
+            $this->posStep = 'selection';
+            Notification::make()
+                ->title($status === \App\Services\Pos\PosMidtransQrisService::EXPIRED ? 'QR Kedaluwarsa' : 'QR Dibatalkan')
+                ->body('Pembayaran QRIS tidak diterima. Pesanan dibatalkan dan slot lapangan dilepas.')
+                ->warning()
+                ->send();
+        }
+    }
+
+    public function cancelPendingQris(): void
+    {
+        abort_unless(auth()->user()?->can('process_walkin_booking'), 403);
+        $payment = $this->pendingQrisPayment();
+        if (! $payment) {
+            $this->pendingQris = null;
+
+            return;
+        }
+
+        $status = app(\App\Services\Pos\PosMidtransQrisService::class)->cancel($payment->id);
+
+        if ($status === \App\Services\Pos\PosMidtransQrisService::PAID) {
+            // Customer ternyata sudah bayar tepat sebelum dibatalkan — uang sudah masuk, transaksi diteruskan.
+            $this->completePendingQris($payment->fresh());
+
+            return;
+        }
+
+        $this->pendingQris = null;
+        $this->posStep = 'selection';
+        Notification::make()->title('QR Dibatalkan')->body('Pesanan dibatalkan dan slot lapangan dilepas.')->success()->send();
+    }
+
+    /** Hanya di laptop developer tanpa server key Midtrans (QR mock). */
+    public function simulatePendingQrisPaid(): void
+    {
+        $payment = $this->pendingQrisPayment();
+        abort_unless($payment && ($this->pendingQris['is_mock'] ?? false) && ! app()->environment('production'), 403);
+
+        app(\App\Services\Pos\PosMidtransQrisService::class)->simulatePaid($payment->id);
+        $this->pollPendingQris();
+    }
+
+    protected function completePendingQris(\App\Models\Pos\Payment $payment): void
+    {
+        $autoCheckIn = (bool) ($payment->payload_log['auto_check_in'] ?? false);
+        if ($autoCheckIn) {
+            PadelBooking::where('order_id', $payment->order_id)->where('status', 'PAID')->update(['status' => 'CHECKED_IN', 'checked_in_at' => now()]);
+        }
+
+        $this->completedOrderData = $this->buildWalkInReceipt($payment);
+        $this->completedOrderData['auto_checked_in'] = $autoCheckIn;
+        $this->pendingQris = null;
+        $this->posStep = 'receipt';
+        $this->showSuccessModal = false;
+
+        Notification::make()
+            ->title('Pembayaran QRIS Diterima')
+            ->body("Order #{$payment->order?->order_number} lunas dan e-tiket telah aktif.")
+            ->success()
+            ->send();
+
+        // Lunas lewat Bayar Otomatis → struk langsung dicetak (tanpa tekan Cetak Struk).
+        $this->dispatch('club61-auto-print', selector: '#printable-pos-receipt', key: $payment->order_id);
     }
 
     public function closeSuccessModal(): void
@@ -1555,7 +1708,7 @@ class BookOfflineCourt extends Page
         return \App\Models\Pos\Payment::query()
             ->with(['order.user:id,name,phone', 'order.cashier:id,name', 'order.padelBookings.court:id,name', 'order.refunds', 'order.payments'])
             ->where('status', 'SUCCESS')
-            ->where('payment_gateway', 'CASHIER_POS')
+            ->where(fn ($q) => $q->where('payment_gateway', 'CASHIER_POS')->orWhereNotNull('pos_shift_id')) // + QR Midtrans dari layar kasir
             ->whereHas('order', fn ($q) => $q->whereIn('order_type', ['WALK_IN', 'ONLINE_BOOKING']))
             ->whereBetween('paid_at', [
                 Carbon::parse($date, 'Asia/Jakarta')->startOfDay()->setTimezone(config('app.timezone')),
@@ -1626,7 +1779,7 @@ class BookOfflineCourt extends Page
 
         $payment = \App\Models\Pos\Payment::query()
             ->where('status', 'SUCCESS')
-            ->where('payment_gateway', 'CASHIER_POS')
+            ->where(fn ($q) => $q->where('payment_gateway', 'CASHIER_POS')->orWhereNotNull('pos_shift_id')) // + QR Midtrans dari layar kasir
             ->whereHas('order', fn ($q) => $q->whereIn('order_type', ['WALK_IN', 'ONLINE_BOOKING']))
             ->findOrFail($paymentId);
 

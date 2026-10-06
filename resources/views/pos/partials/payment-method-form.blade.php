@@ -274,6 +274,11 @@
                                 </div>
                             </div>
 
+                            @if($qrisMidtrans ?? false)
+                                @include('pos.partials.qris-mode-toggle')
+                            @endif
+
+                            @if(! (($qrisMidtrans ?? false) && $qrisMode === 'MIDTRANS' && \App\Services\Pos\PosMidtransQrisService::resolveMethod($posOnlineMethod, (float) $grandTotal) !== null))
                             <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.85rem;">
                                 <div>
                                     <label
@@ -309,5 +314,6 @@
                                     placeholder="Contoh: Budi Santoso / BCA Mobile" class="pos-input"
                                     style="background:#FFFFFF;" autocomplete="off">
                             </div>
+                            @endif
                         </div>
                     @endif

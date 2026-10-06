@@ -70,7 +70,7 @@ class MembershipSaleIntegrityTest extends TestCase
             ->set('walkInPhone', $phone)
             ->call('selectPlan', $this->plan->id)
             ->set('paymentMethod', 'QRIS')
-            ->set('qrisRrn', $rrn);
+            ->set('qrisMode', 'MANUAL')->set('qrisRrn', $rrn);
     }
 
     public function test_cashier_with_permission_and_open_frontdesk_shift_can_sell_and_payment_is_in_shift(): void
@@ -183,7 +183,7 @@ class MembershipSaleIntegrityTest extends TestCase
         $page->call('submitSale')
             ->call('selectPlan', $this->plan->id)
             ->set('walkInPhone', '081255550001')
-            ->set('qrisRrn', 'RRNINTEG02')
+            ->set('qrisMode', 'MANUAL')->set('qrisRrn', 'RRNINTEG02')
             ->call('submitSale');
 
         $this->assertSame(1, Order::where('order_type', 'MEMBERSHIP')->count());

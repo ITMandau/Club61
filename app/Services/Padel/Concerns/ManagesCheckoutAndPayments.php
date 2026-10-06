@@ -772,6 +772,11 @@ trait ManagesCheckoutAndPayments
      */
     public function formatPaymentMethodLabel(?string $method, ?array $payload = null): string
     {
+        // 0. "Bayar Otomatis" yang ditampilkan di layar kasir (bukan checkout online customer).
+        if ($posLabel = \App\Services\Pos\PosMidtransQrisService::labelFor($payload)) {
+            return $posLabel;
+        }
+
         // 1. Metode yang BENAR-BENAR dipakai customer menurut Midtrans (webhook / rekonsiliasi).
         if (!empty($payload['payment_type'])) {
             $pt = strtolower((string) $payload['payment_type']);
@@ -1088,6 +1093,28 @@ trait ManagesCheckoutAndPayments
                         'provider' => $paymentMeta['qris_provider'] ?? 'BCA_QRIS',
                         'rrn' => $paymentMeta['qris_rrn'] ?? null,
                         'sender_name' => $paymentMeta['qris_sender_name'] ?? null,
+                    ];
+                }
+
+                // Bayar Otomatis di layar kasir: order & slot ditahan sampai batas bayar, popup QR / VA ditampilkan, dan
+                // pelunasannya datang dari Midtrans (webhook / cek status) — bukan langsung lunas di sini.
+                if (strtoupper($paymentMethod) === 'QRIS_MIDTRANS' && ! $coveredByVoucher) {
+                    PadelBooking::where('order_id', $order->id)->update(['expires_at' => app(\App\Services\Padel\BookingTimeService::class)->paymentExpiresAt()]);
+                    $payloadLog['payment_method'] = 'QRIS';
+                    $payloadLog['auto_check_in'] = $autoCheckIn;
+
+                    $pending = app(\App\Services\Pos\PosMidtransQrisService::class)->open($order, 'PADEL_FRONTDESK', $cashier, $payloadLog, (string) ($paymentMeta['pos_online_method'] ?? 'QRIS'));
+
+                    return [
+                        'success' => true,
+                        'message' => 'Menunggu customer membayar lewat QRIS.',
+                        'order' => $order->fresh(['items', 'payments']),
+                        'bookings' => PadelBooking::with(['court', 'equipments.equipment'])->where('order_id', $order->id)->get(),
+                        'grand_total' => (float) $grandTotal,
+                        'payment_method' => 'QRIS',
+                        'customer' => $customer->fresh(),
+                        'auto_checked_in' => false,
+                        'pending_qris' => $pending,
                     ];
                 }
 

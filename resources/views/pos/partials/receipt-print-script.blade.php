@@ -294,5 +294,22 @@
                 window.club61PrintBrowser(el);
             }
         };
+
+        // Bayar Otomatis lunas → server mengirim 'club61-auto-print' { selector, key }. Tunggu struknya tampil, cetak sekali per order.
+        window.addEventListener('club61-auto-print', (event) => {
+            const detail = event.detail || {};
+            if (! detail.selector) { return; }
+            window.club61AutoPrinted = window.club61AutoPrinted || {};
+            if (detail.key && window.club61AutoPrinted[detail.key]) { return; }
+            if (detail.key) { window.club61AutoPrinted[detail.key] = true; }
+
+            let tries = 0;
+            const attempt = () => {
+                const el = [...document.querySelectorAll(detail.selector)].find((node) => node.getClientRects().length > 0);
+                if (el) { window.club61PrintReceipt(el); return; }
+                if (++tries < 30) { setTimeout(attempt, 100); }
+            };
+            setTimeout(attempt, 150);
+        });
     }
 </script>

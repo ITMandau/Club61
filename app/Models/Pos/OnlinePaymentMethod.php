@@ -14,12 +14,13 @@ class OnlinePaymentMethod extends Model
 {
     use HasUlids;
 
-    protected $fillable = ['code', 'label', 'description', 'badge', 'is_active', 'sort_order', 'min_amount', 'max_amount'];
+    protected $fillable = ['code', 'label', 'description', 'badge', 'is_active', 'show_at_pos', 'sort_order', 'min_amount', 'max_amount'];
 
     protected function casts(): array
     {
         return [
             'is_active' => 'boolean',
+            'show_at_pos' => 'boolean',
             'sort_order' => 'integer',
             'min_amount' => 'decimal:2',
             'max_amount' => 'decimal:2',

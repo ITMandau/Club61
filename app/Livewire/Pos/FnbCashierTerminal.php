@@ -68,6 +68,16 @@ class FnbCashierTerminal extends Component
 
     public string $qrisSenderName = '';
 
+    /** MIDTRANS = QR dinamis Midtrans tampil di layar (utama); MANUAL = QRIS statis + input RRN (cadangan). */
+    public string $qrisMode = 'MIDTRANS';
+
+    /** Metode "Bayar Otomatis" pilihan kasir (QRIS / VA yang dicentang "Tampil di Kasir"). Divalidasi ulang di server. */
+    public string $posOnlineMethod = 'QRIS';
+
+    /** QR Midtrans yang menunggu dibayar (popup + polling). Dikunci: id tagihan tidak boleh diganti dari browser. */
+    #[\Livewire\Attributes\Locked]
+    public ?array $pendingQris = null;
+
     public bool $showOpenShiftModal = false;
 
     public bool $showCloseShiftModal = false;
@@ -98,6 +108,9 @@ class FnbCashierTerminal extends Component
     public function mount(): void
     {
         abort_unless(auth()->user() && auth()->user()->isStaff() && auth()->user()->can('access_pos_terminal'), 403, 'Akses Ditolak: Hanya staf kasir atau admin yang dapat mengakses terminal POS.');
+
+        // Bayar Otomatis yang masih menunggu (halaman sempat di-refresh / tertutup) → popup dilanjutkan.
+        $this->pendingQris = app(\App\Services\Pos\PosMidtransQrisService::class)->resumeFor(self::COUNTER, 'FNB_POS', auth()->id());
     }
 
     public function getCategoriesProperty()
@@ -274,6 +287,12 @@ class FnbCashierTerminal extends Component
             return;
         }
 
+        if ($shift->pendingAutoPaymentCount() > 0) {
+            $this->errorMessage = PosCashierShift::PENDING_AUTO_PAYMENT_MESSAGE;
+
+            return;
+        }
+
         $this->closingShiftSummary = $shift->calculateSummary();
         $this->closingBreakdown = $shift->settlementBreakdown();
         $this->settlementInputs = collect($this->closingBreakdown)->mapWithKeys(fn (array $row) => [$row['key'] => ''])->all();
@@ -310,6 +329,10 @@ class FnbCashierTerminal extends Component
 
             if (! $shift) {
                 return ['status' => 'NO_SHIFT'];
+            }
+
+            if ($shift->pendingAutoPaymentCount() > 0) {
+                return ['status' => 'PENDING_AUTO'];
             }
 
             $breakdown = $shift->settlementBreakdown();
@@ -378,6 +401,13 @@ class FnbCashierTerminal extends Component
 
         if ($result['status'] === 'NO_SHIFT') {
             $this->showCloseShiftModal = false;
+
+            return;
+        }
+
+        if ($result['status'] === 'PENDING_AUTO') {
+            $this->showCloseShiftModal = false;
+            $this->errorMessage = PosCashierShift::PENDING_AUTO_PAYMENT_MESSAGE;
 
             return;
         }
@@ -483,6 +513,13 @@ class FnbCashierTerminal extends Component
     {
         $this->errorMessage = null;
 
+        // Masih ada Bayar Otomatis yang menunggu customer → selesaikan / batalkan dulu (popup tetap tampil).
+        if ($this->pendingQris) {
+            $this->errorMessage = 'Selesaikan atau batalkan pembayaran otomatis sebelumnya dulu.';
+
+            return;
+        }
+
         abort_unless(
             auth()->user() && auth()->user()->can('process_fnb_order'),
             403,
@@ -545,6 +582,10 @@ class FnbCashierTerminal extends Component
                 'approval_code' => $approvalCode,
                 'trace_number' => $traceNumber,
             ];
+        } elseif (in_array($method, ['QRIS_STATIS', 'QRIS'], true) && $this->qrisMode === 'MIDTRANS' && \App\Services\Pos\PosMidtransQrisService::resolveMethod($this->posOnlineMethod, (float) $this->grandTotal) !== null) {
+            // QR Midtrans: tidak ada bukti yang diketik kasir — lunas dikonfirmasi Midtrans.
+            $method = 'QRIS_MIDTRANS';
+            $paymentMeta = ['pos_online_method' => $this->posOnlineMethod];
         } elseif (in_array($method, ['QRIS_STATIS', 'QRIS'], true)) {
             $rrn = trim($this->qrisRrn);
 
@@ -578,12 +619,20 @@ class FnbCashierTerminal extends Component
                 orderType: $this->orderType,
                 tableNumber: $this->orderType === 'DINE_IN' ? (trim($this->tableNumber) ?: null) : null,
                 cashier: auth()->user(),
-                paymentMethod: $this->paymentMethod,
+                paymentMethod: $method === 'QRIS_MIDTRANS' ? $method : $this->paymentMethod,
                 paymentMeta: $paymentMeta,
                 customerName: trim($this->customerName) ?: null,
             );
         } catch (\Throwable $e) {
             $this->errorMessage = $e->getMessage();
+
+            return;
+        }
+
+        // QR Midtrans: order menunggu customer scan. Struk keluar setelah lunas (pollPendingQris).
+        if (! empty($result['pending_qris'])) {
+            $this->pendingQris = $result['pending_qris'];
+            $this->resetFnbCart();
 
             return;
         }
@@ -614,6 +663,13 @@ class FnbCashierTerminal extends Component
             'created_at' => $order->created_at->setTimezone('Asia/Jakarta')->format('d/m/Y H:i'),
         ];
 
+        $this->resetFnbCart();
+        $this->posStep = 'selection';
+        $this->showReceiptModal = true;
+    }
+
+    protected function resetFnbCart(): void
+    {
         $this->cart = [];
         $this->tableNumber = '';
         $this->customerName = '';
@@ -622,8 +678,84 @@ class FnbCashierTerminal extends Component
         $this->edcTraceNumber = '';
         $this->qrisRrn = '';
         $this->qrisSenderName = '';
+    }
+
+    // ===================== QRIS MIDTRANS (QR DI LAYAR KASIR) =====================
+
+    /** Tagihan QR yang sedang ditampilkan — milik loket F&B & dibuat dari layar kasir. */
+    protected function pendingQrisPayment(): ?\App\Models\Pos\Payment
+    {
+        $id = $this->pendingQris['payment_id'] ?? null;
+        $payment = $id ? \App\Models\Pos\Payment::find($id) : null;
+
+        return $payment && ($payment->payload_log['counter'] ?? null) === self::COUNTER && isset($payment->payload_log['pos_qris'])
+            ? $payment
+            : null;
+    }
+
+    public function pollPendingQris(): void
+    {
+        $payment = $this->pendingQrisPayment();
+        if (! $payment) {
+            $this->pendingQris = null;
+
+            return;
+        }
+
+        $status = app(\App\Services\Pos\PosMidtransQrisService::class)->status($payment->id);
+
+        if ($status === \App\Services\Pos\PosMidtransQrisService::PAID) {
+            $this->completePendingQris($payment);
+        } elseif ($status !== \App\Services\Pos\PosMidtransQrisService::PENDING) {
+            $this->pendingQris = null;
+            $this->posStep = 'selection';
+            $this->errorMessage = $status === \App\Services\Pos\PosMidtransQrisService::EXPIRED
+                ? 'QR kedaluwarsa — pembayaran tidak diterima, pesanan dibatalkan.'
+                : 'QR dibatalkan — pesanan dibatalkan.';
+        }
+    }
+
+    public function cancelPendingQris(): void
+    {
+        abort_unless(auth()->user()?->can('process_fnb_order'), 403);
+        $payment = $this->pendingQrisPayment();
+        if (! $payment) {
+            $this->pendingQris = null;
+
+            return;
+        }
+
+        if (app(\App\Services\Pos\PosMidtransQrisService::class)->cancel($payment->id) === \App\Services\Pos\PosMidtransQrisService::PAID) {
+            // Customer ternyata sudah bayar tepat sebelum dibatalkan — uang sudah masuk, transaksi diteruskan.
+            $this->completePendingQris($payment);
+
+            return;
+        }
+
+        $this->pendingQris = null;
+        $this->posStep = 'selection';
+    }
+
+    /** Hanya di laptop developer tanpa server key Midtrans (QR mock). */
+    public function simulatePendingQrisPaid(): void
+    {
+        $payment = $this->pendingQrisPayment();
+        abort_unless($payment && ($this->pendingQris['is_mock'] ?? false) && ! app()->environment('production'), 403);
+
+        app(\App\Services\Pos\PosMidtransQrisService::class)->simulatePaid($payment->id);
+        $this->pollPendingQris();
+    }
+
+    protected function completePendingQris(\App\Models\Pos\Payment $payment): void
+    {
+        $order = \App\Models\Pos\Order::with(['items', 'payments', 'cashier'])->findOrFail($payment->order_id);
+
+        $this->completedOrderData = $this->receiptDataFor($order);
+        $this->pendingQris = null;
         $this->posStep = 'selection';
         $this->showReceiptModal = true;
+        // Lunas lewat Bayar Otomatis → struk langsung dicetak (tanpa tekan Cetak Struk).
+        $this->dispatch('club61-auto-print', selector: '#fnbpos-receipt', key: $order->id);
     }
 
     /** Buka kembali struk transaksi lama dari daftar riwayat (rekonstruksi dari data tersimpan). */
@@ -636,7 +768,25 @@ class FnbCashierTerminal extends Component
             ->with(['items', 'payments', 'cashier'])
             ->findOrFail($orderId);
 
-        $payment = $order->payments->first();
+        $this->completedOrderData = $this->receiptDataFor($order);
+        $this->showReceiptModal = true;
+    }
+
+    /** Label metode bayar di Riwayat (QR Midtrans dari layar kasir dibedakan dari QRIS manual). */
+    public function paymentLabelFor(?\App\Models\Pos\Payment $payment): string
+    {
+        if (! $payment) {
+            return '-';
+        }
+
+        return \App\Services\Pos\PosMidtransQrisService::labelFor($payment->payload_log)
+            ?? $this->formatPaymentMethodLabel($payment->payment_method);
+    }
+
+    /** Data struk dari order tersimpan (cetak ulang dari Riwayat & struk setelah QR Midtrans lunas). */
+    protected function receiptDataFor(\App\Models\Pos\Order $order): array
+    {
+        $payment = $order->payments->firstWhere('status', 'SUCCESS') ?? $order->payments->first();
         $method = $payment?->payment_method ?? 'UNKNOWN';
         $log = $payment?->payload_log ?? [];
         $paymentMeta = [];
@@ -658,8 +808,9 @@ class FnbCashierTerminal extends Component
             ];
         }
 
-        $this->completedOrderData = [
+        return [
             'order_number' => $order->order_number,
+            'payment_status' => $order->payment_status,
             'queue_number' => $order->queue_number,
             'order_type' => $order->order_type,
             'table_number' => $order->table_number,
@@ -676,13 +827,11 @@ class FnbCashierTerminal extends Component
             'service_charge' => (float) $order->service_charge,
             'grand_total' => (float) $order->grand_total,
             'payment_method' => $method,
-            'payment_method_label' => $this->formatPaymentMethodLabel($method),
+            'payment_method_label' => \App\Services\Pos\PosMidtransQrisService::labelFor($log) ?? $this->formatPaymentMethodLabel($method),
             'payment_meta' => $paymentMeta,
             'cashier_name' => $order->cashier?->name ?? '-',
             'created_at' => $order->created_at->setTimezone('Asia/Jakarta')->format('d/m/Y H:i'),
         ];
-
-        $this->showReceiptModal = true;
     }
 
     /**

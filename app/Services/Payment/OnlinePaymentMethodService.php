@@ -44,6 +44,29 @@ class OnlinePaymentMethodService
     }
 
     /**
+     * Metode untuk "Bayar Otomatis" di layar kasir (POS Walk-In, F&B, Jual Membership): aktif, dicentang "Tampil di
+     * Kasir" di menu Metode Pembayaran Online, dan masuk batas nominal tagihan.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    public function forPos(?float $amount = null): array
+    {
+        return array_values(array_filter($this->available($amount), fn (array $m) => $m['show_at_pos'] ?? false));
+    }
+
+    /** Validasi metode "Bayar Otomatis" pilihan kasir (server — pilihan di layar bisa direkayasa). */
+    public function assertPosSelectable(string $code, float $amount): string
+    {
+        $code = $this->assertSelectable($code, $amount);
+
+        if (! ($this->all()[$code]['show_at_pos'] ?? false)) {
+            throw new HttpException(422, 'Metode '.$this->all()[$code]['label'].' tidak diaktifkan untuk kasir. Aktifkan "Tampil di Kasir" di menu Metode Pembayaran Online, atau pilih metode lain.');
+        }
+
+        return $code;
+    }
+
+    /**
      * Data untuk halaman checkout (Alpine/JS): semua metode AKTIF beserta batas nominalnya — halaman menyaring
      * sendiri sesuai total tagihan yang bisa berubah (voucher, add-on), server tetap memvalidasi ulang.
      *
@@ -155,6 +178,7 @@ class OnlinePaymentMethodService
                     'description' => $m->description,
                     'badge' => $m->badge,
                     'is_active' => (bool) $m->is_active,
+                    'show_at_pos' => (bool) ($m->show_at_pos ?? false),
                     'sort_order' => (int) $m->sort_order,
                     'min_amount' => $m->min_amount !== null ? (float) $m->min_amount : null,
                     'max_amount' => $m->max_amount !== null ? (float) $m->max_amount : null,
@@ -176,6 +200,7 @@ class OnlinePaymentMethodService
                 'badge' => $setting['badge'] ?? $catalog['badge'],
                 'group' => $catalog['group'],
                 'is_active' => $setting['is_active'] ?? $catalog['default_active'],
+                'show_at_pos' => $setting['show_at_pos'] ?? ($code === 'QRIS'),
                 'sort_order' => $setting['sort_order'] ?? (1000 + $index),
                 'min_amount' => $setting ? $setting['min_amount'] : $catalog['default_min'],
                 'max_amount' => $setting ? $setting['max_amount'] : $catalog['default_max'],

@@ -1032,7 +1032,7 @@
                             Tagihan lunas penuh dengan voucher {{ $appliedVoucherCode }} &mdash; tidak perlu EDC / QRIS. Langsung selesaikan transaksi.
                         </div>
                     @else
-                        @include("pos.partials.payment-method-form", ["grandTotal" => $this->grandTotal])
+                        @include("pos.partials.payment-method-form", ["grandTotal" => $this->grandTotal, "qrisMidtrans" => true])
                     @endif
 
                     {{-- Action Buttons --}}
@@ -1475,6 +1475,9 @@
 
     </div>{{-- end pos-main --}}
     @endif
+
+    {{-- QR Midtrans menunggu dibayar customer --}}
+    @include('pos.partials.midtrans-qris-modal', ['pendingQris' => $pendingQris, 'pollAction' => 'pollPendingQris', 'cancelAction' => 'cancelPendingQris', 'simulateAction' => 'simulatePendingQrisPaid'])
 
     {{-- ============================
      MODAL SUKSES – STRUK POS

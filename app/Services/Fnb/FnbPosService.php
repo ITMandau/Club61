@@ -123,6 +123,17 @@ class FnbPosService
                 'payment_method' => $method,
             ];
 
+            // Bayar Otomatis di layar kasir: order menunggu bayar, popup QR / VA tampil, lunas terkonfirmasi otomatis.
+            if ($method === 'QRIS_MIDTRANS') {
+                $payloadLog['payment_method'] = 'QRIS';
+
+                return [
+                    'order' => $order->fresh(['items', 'payments']),
+                    'finance' => $finance,
+                    'pending_qris' => app(\App\Services\Pos\PosMidtransQrisService::class)->open($order, 'FNB_COUNTER', $cashier, $payloadLog, (string) ($paymentMeta['pos_online_method'] ?? 'QRIS')),
+                ];
+            }
+
             if (in_array($method, ['QRIS', 'QRIS_STATIS'], true)) {
                 $payloadLog['qris_details'] = [
                     'provider' => $paymentMeta['qris_provider'] ?? 'BCA_QRIS',

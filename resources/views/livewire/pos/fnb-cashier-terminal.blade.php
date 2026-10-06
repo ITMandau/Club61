@@ -193,7 +193,7 @@
                 </div>
 
                 <div class="flex-1 overflow-y-auto p-5 flex flex-col gap-4">
-                    @include("pos.partials.payment-method-form", ["grandTotal" => $this->grandTotal])
+                    @include("pos.partials.payment-method-form", ["grandTotal" => $this->grandTotal, "qrisMidtrans" => true])
 
                     <div style="display:flex; justify-content:space-between; align-items:center; gap:0.75rem; margin-top:0.5rem;">
                         <button type="button" wire:click="backToSelection" style="padding:0.7rem 1.2rem; border-radius:10px; border:1.5px solid #DFC387; background:#FFFFFF; color:#1F170D; font-weight:800; font-size:0.8125rem; cursor:pointer;">&larr; Kembali ke Menu</button>
@@ -287,7 +287,7 @@
                                         'CANCELLED' => 'fnbpos-status-cancelled',
                                         default => 'fnbpos-status-unpaid',
                                     };
-                                    $payment = $order->payments->first();
+                                    $payment = $order->payments->firstWhere('status', 'SUCCESS') ?? $order->payments->first();
                                 @endphp
                                 <tr wire:key="history-row-{{ $order->id }}">
                                     <td class="font-mono font-black text-[#8C6418]">{{ $order->queue_number ? str_pad((string) $order->queue_number, 3, '0', STR_PAD_LEFT) : '—' }}</td>
@@ -296,7 +296,7 @@
                                     <td class="fnbpos-cell-clip" title="{{ $order->cashier?->name }}">{{ $order->cashier?->name ?? '-' }}</td>
                                     <td>{{ $order->order_type === 'DINE_IN' ? 'Dine-In' : 'Bawa Pulang' }}{{ $order->table_number ? ' - '.$order->table_number : '' }}</td>
                                     <td class="fnbpos-cell-clip" title="{{ $order->customer_name }}">{{ $order->customer_name ?: '—' }}</td>
-                                    <td class="fnbpos-cell-clip" title="{{ $payment ? $this->formatPaymentMethodLabel($payment->payment_method) : '' }}">{{ $payment ? $this->formatPaymentMethodLabel($payment->payment_method) : '-' }}</td>
+                                    <td class="fnbpos-cell-clip" title="{{ $this->paymentLabelFor($payment) }}">{{ $this->paymentLabelFor($payment) }}</td>
                                     <td class="font-mono font-bold text-right">Rp {{ number_format($order->grand_total, 0, ',', '.') }}</td>
                                     <td><span class="fnbpos-status-badge {{ $statusClass }}">{{ $order->payment_status }}</span></td>
                                     <td><button type="button" wire:click="viewOrderReceipt('{{ $order->id }}')" class="text-[11px] font-bold text-[#8C6418] underline">Lihat Struk</button></td>
@@ -312,6 +312,9 @@
     @endif
     </div>
 
+    {{-- QR Midtrans menunggu dibayar customer --}}
+    @include('pos.partials.midtrans-qris-modal', ['pendingQris' => $pendingQris, 'pollAction' => 'pollPendingQris', 'cancelAction' => 'cancelPendingQris', 'simulateAction' => 'simulatePendingQrisPaid'])
+
     @if($showReceiptModal && $completedOrderData)
         {{-- ================= POPUP: STRUK PEMBAYARAN SUKSES ================= --}}
         @php
@@ -320,7 +323,7 @@
                 'BCA_QRIS' => 'QRIS BCA Frontdesk', 'MANDIRI_QRIS' => 'QRIS Bank Mandiri',
                 'GOPAY' => 'GoPay / Midtrans QRIS', 'GOPAY_QRIS' => 'GoPay / Midtrans QRIS',
                 'OVO' => 'OVO', 'SHOPEEPAY' => 'ShopeePay', 'DANA' => 'DANA',
-                'LIVIN' => 'Livin Mandiri', 'LAINNYA' => 'QRIS Lainnya / Bank Lain',
+                'LIVIN' => 'Livin Mandiri', 'LAINNYA' => 'QRIS Lainnya / Bank Lain', 'MIDTRANS_QRIS' => 'QRIS Otomatis (Kasir)',
             ];
         @endphp
         {{-- Klik di luar popup / tombol Esc juga menutup. --}}
@@ -328,7 +331,20 @@
             <div class="fnbpos-modal-dialog" style="max-width:400px; padding:1.25rem; gap:0.85rem;">
                 <div style="display:flex; justify-content:space-between; align-items:flex-start;">
                     <div>
-                        <span style="font-size:0.6875rem; font-weight:900; color:#8C6418; text-transform:uppercase; letter-spacing:0.06em; background:#FAF5E8; border:1px solid #DFC387; border-radius:4px; padding:0.1rem 0.5rem;">Transaksi Lunas</span>
+                        {{-- Status mengikuti order — dulu selalu "Transaksi Lunas" walau order batal / belum dibayar. --}}
+                        @switch($completedOrderData['payment_status'] ?? 'PAID')
+                            @case('PAID')
+                                <span style="font-size:0.6875rem; font-weight:900; color:#8C6418; text-transform:uppercase; letter-spacing:0.06em; background:#FAF5E8; border:1px solid #DFC387; border-radius:4px; padding:0.1rem 0.5rem;">Transaksi Lunas</span>
+                                @break
+                            @case('CANCELLED')
+                                <span style="font-size:0.6875rem; font-weight:900; color:#991B1B; text-transform:uppercase; letter-spacing:0.06em; background:#FEE2E2; border:1px solid #FCA5A5; border-radius:4px; padding:0.1rem 0.5rem;">Dibatalkan — tidak dibayar</span>
+                                @break
+                            @case('REFUNDED')
+                                <span style="font-size:0.6875rem; font-weight:900; color:#991B1B; text-transform:uppercase; letter-spacing:0.06em; background:#FEE2E2; border:1px solid #FCA5A5; border-radius:4px; padding:0.1rem 0.5rem;">Sudah Direfund</span>
+                                @break
+                            @default
+                                <span style="font-size:0.6875rem; font-weight:900; color:#92400E; text-transform:uppercase; letter-spacing:0.06em; background:#FEF3C7; border:1px solid #FCD34D; border-radius:4px; padding:0.1rem 0.5rem;">Belum Dibayar</span>
+                        @endswitch
                         <div class="font-serif font-black text-lg text-[#1F170D] mt-1.5">Struk Pembayaran F&amp;B</div>
                     </div>
                     <button type="button" wire:click="closeReceiptModal" aria-label="Tutup" style="background:none; border:none; font-size:1.5rem; color:#78350F; cursor:pointer; line-height:1; padding:0.25rem 0.5rem;">&times;</button>
@@ -358,12 +374,14 @@
                     <div class="flex justify-between font-bold text-base border-t border-gray-400 pt-2.5 mt-1"><span>TOTAL</span><span>Rp {{ number_format($completedOrderData['grand_total'], 0, ',', '.') }}</span></div>
 
                     <div class="border-t border-dashed border-gray-400 my-2.5"></div>
-                    <div class="text-center font-bold text-[#8C6418]">LUNAS &bull; {{ $completedOrderData['payment_method_label'] ?? $completedOrderData['payment_method'] }}</div>
+                    <div class="text-center font-bold text-[#8C6418]">{{ match($completedOrderData['payment_status'] ?? 'PAID') { 'PAID' => 'LUNAS', 'CANCELLED' => 'DIBATALKAN', 'REFUNDED' => 'DIREFUND', default => 'BELUM DIBAYAR' } }} &bull; {{ $completedOrderData['payment_method_label'] ?? $completedOrderData['payment_method'] }}</div>
 
                     @if(!empty($meta['qris_provider']) || !empty($meta['qris_rrn']))
                         <div class="text-xs text-[#4B5563] space-y-1 pt-1.5">
                             <div class="flex justify-between"><span>Provider QRIS</span><span class="font-bold">{{ $qrisProviderLabels[$meta['qris_provider']] ?? $meta['qris_provider'] }}</span></div>
-                            <div class="flex justify-between"><span>RRN</span><span class="font-bold">{{ $meta['qris_rrn'] }}</span></div>
+                            @if(! empty($meta['qris_rrn']))
+                                <div class="flex justify-between"><span>RRN</span><span class="font-bold">{{ $meta['qris_rrn'] }}</span></div>
+                            @endif
                             @if(!empty($meta['qris_sender_name']))
                                 <div class="flex justify-between"><span>Pengirim</span><span class="font-bold">{{ $meta['qris_sender_name'] }}</span></div>
                             @endif
@@ -379,7 +397,10 @@
                 </div>
 
                 <div class="flex gap-3">
-                    <button type="button" onclick="club61PrintReceipt('#fnbpos-receipt')" class="fnbpos-pay-btn flex-1">Cetak Struk</button>
+                    {{-- Struk hanya dicetak untuk transaksi lunas. --}}
+                    @if(($completedOrderData['payment_status'] ?? 'PAID') === 'PAID')
+                        <button type="button" onclick="club61PrintReceipt('#fnbpos-receipt')" class="fnbpos-pay-btn flex-1">Cetak Struk</button>
+                    @endif
                     <button type="button" wire:click="{{ $posStep === 'history' ? 'closeReceiptModal' : 'startNewTransaction' }}" class="fnbpos-pay-btn active flex-1">{{ $posStep === 'history' ? 'Tutup' : 'Transaksi Baru' }}</button>
                 </div>
             </div>

@@ -138,6 +138,7 @@ class JualMembershipTest extends TestCase
             ->set('walkInName', 'Pembeli QRIS')
             ->set('walkInPhone', '081211113333')
             ->set('paymentMethod', 'QRIS')
+            ->set('qrisMode', 'MANUAL')
             ->call('submitSale');
 
         $this->assertEquals(0, Order::where('order_type', 'MEMBERSHIP')->count());
@@ -152,7 +153,7 @@ class JualMembershipTest extends TestCase
             ->set('walkInPhone', '081211114444')
             ->set('paymentMethod', 'QRIS')
             ->set('qrisProvider', 'GOPAY_QRIS')
-            ->set('qrisRrn', '998877665544')
+            ->set('qrisMode', 'MANUAL')->set('qrisRrn', '998877665544')
             ->set('qrisSenderName', 'Budi Santoso')
             ->call('submitSale');
 

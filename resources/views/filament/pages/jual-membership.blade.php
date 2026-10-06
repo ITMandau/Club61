@@ -380,6 +380,9 @@
                             </div>
                         </div>
 
+                        @include('pos.partials.qris-mode-toggle', ['grandTotal' => $this->grandTotal])
+
+                        @if($qrisMode !== 'MIDTRANS' || \App\Services\Pos\PosMidtransQrisService::resolveMethod($posOnlineMethod, (float) $this->grandTotal) === null)
                         <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.85rem;">
                             <div>
                                 <label style="display:block; font-size:0.75rem; font-weight:800; color:#1F170D; margin-bottom:0.3rem;">Penyedia / Acquirer QRIS *</label>
@@ -404,6 +407,7 @@
                             <label style="display:block; font-size:0.75rem; font-weight:800; color:#1F170D; margin-bottom:0.3rem;">Nama Pengirim di Resi QRIS (Opsional)</label>
                             <input type="text" wire:model="qrisSenderName" placeholder="Contoh: Budi Santoso / BCA Mobile" class="pos-input" style="background:#FFFFFF;" autocomplete="off">
                         </div>
+                        @endif
                     </div>
                 @endif
 
@@ -532,6 +536,9 @@
     @endif
 
     <!-- Success Modal & Thermal Struk -->
+    {{-- QR Midtrans menunggu dibayar customer --}}
+    @include('pos.partials.midtrans-qris-modal', ['pendingQris' => $pendingQris, 'pollAction' => 'pollPendingQris', 'cancelAction' => 'cancelPendingQris', 'simulateAction' => 'simulatePendingQrisPaid'])
+
     @if ($showSuccessModal && $completedMembershipData)
         <div
             style="position: fixed; inset: 0; background: rgba(0,0,0,0.6); display: flex; align-items: center; justify-content: center; z-index: 1000; padding: 1rem;">

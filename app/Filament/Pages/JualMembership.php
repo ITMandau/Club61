@@ -88,6 +88,16 @@ class JualMembership extends Page
     public string $qrisRrn = '';
     public string $qrisSenderName = '';
 
+    /** MIDTRANS = QR dinamis Midtrans tampil di layar (utama); MANUAL = QRIS statis + input RRN (cadangan). */
+    public string $qrisMode = 'MIDTRANS';
+
+    /** Metode "Bayar Otomatis" pilihan kasir (QRIS / VA yang dicentang "Tampil di Kasir"). Divalidasi ulang di server. */
+    public string $posOnlineMethod = 'QRIS';
+
+    /** QR Midtrans yang menunggu dibayar (popup + polling). Dikunci: id tagihan tidak boleh diganti dari browser. */
+    #[\Livewire\Attributes\Locked]
+    public ?array $pendingQris = null;
+
     // Modal Sukses & Struk
     public bool $showSuccessModal = false;
     public ?array $completedMembershipData = null;
@@ -250,8 +260,21 @@ class JualMembership extends Page
         $this->posStep = 'selection';
     }
 
+    public function mount(): void
+    {
+        // Bayar Otomatis yang masih menunggu (halaman sempat di-refresh / tertutup) → popup dilanjutkan.
+        $this->pendingQris = app(\App\Services\Pos\PosMidtransQrisService::class)->resumeFor(self::COUNTER, 'MEMBERSHIP_POS', auth()->id());
+    }
+
     public function submitSale(): void
     {
+        // Masih ada Bayar Otomatis yang menunggu customer → selesaikan / batalkan dulu (popup tetap tampil).
+        if ($this->pendingQris) {
+            Notification::make()->title('Masih Menunggu Pembayaran')->body('Selesaikan atau batalkan pembayaran otomatis sebelumnya dulu.')->warning()->send();
+
+            return;
+        }
+
         // 0. Guard izin di SERVER — tombol di UI bukan pengaman (request Livewire bisa direkayasa).
         if (! auth()->user()?->can('sell_membership')) {
             ActivityLogger::accessDenied('mencoba menjual membership di POS Jual Membership tanpa izin [sell_membership]');
@@ -287,6 +310,10 @@ class JualMembership extends Page
             return;
         }
 
+        // QR Midtrans di layar kasir: tidak ada bukti yang diketik kasir — lunas dikonfirmasi Midtrans.
+        $useQr = in_array($method, ['QRIS', 'QRIS_STATIS'], true) && $this->qrisMode === 'MIDTRANS'
+            && \App\Services\Pos\PosMidtransQrisService::resolveMethod($this->posOnlineMethod, (float) $this->grandTotal) !== null;
+
         // 2. Bukti bayar divalidasi helper yang SAMA dengan POS Walk-In / pelunasan tagihan: metode tak dikenal
         // (mis. 'GRATIS' hasil rekayasa request) ditolak, dan satu RRN / approval code EDC hanya boleh
         // melunasi satu transaksi.
@@ -312,7 +339,7 @@ class JualMembership extends Page
 
         try {
             try {
-                $proofPayload = PosPaymentProof::validate($proofMethod, $proofInput, $grandTotal);
+                $proofPayload = $useQr ? [] : PosPaymentProof::validate($proofMethod, $proofInput, $grandTotal);
             } catch (\Symfony\Component\HttpKernel\Exception\HttpException $e) {
                 Notification::make()->title('Bukti Pembayaran Tidak Valid')->body($e->getMessage())->danger()->send();
 
@@ -322,7 +349,7 @@ class JualMembership extends Page
             $balanceService = app(MembershipBalanceService::class);
             $orchestrator = app(PaymentOrchestratorService::class);
 
-            $receipt = DB::transaction(function () use ($balanceService, $orchestrator, $cashier, $plan, $method, $proofPayload, $grandTotal, $financeCalculation) {
+            $receipt = DB::transaction(function () use ($balanceService, $orchestrator, $cashier, $plan, $method, $proofPayload, $grandTotal, $financeCalculation, $useQr) {
                 // 1. Resolve customer
                 if ($this->selectedCustomerId) {
                     $customer = User::findOrFail($this->selectedCustomerId);
@@ -409,6 +436,9 @@ class JualMembership extends Page
                     $membershipOptions['status'] = 'PENDING_PAYMENT';
                     $membershipOptions['renewal_of_id'] = $existingActive->id;
                     $balanceService->purchasePlan($customer, $plan, $membershipOptions);
+                } elseif ($existingActive && $useQr) {
+                    // Upgrade langsung menguras kuota kartu lama (tidak bisa dibalik kalau QR batal / kedaluwarsa).
+                    throw new \DomainException('Upgrade ke paket lain belum bisa dibayar dengan QR Midtrans karena kartu lama langsung dialihkan. Gunakan Kartu Debit/Kredit (EDC) atau QRIS Manual.');
                 } elseif ($existingActive) {
                     // 3b. Paket BEDA sementara kartu lama masih aktif -> UPGRADE. Sisa kuota lama di-rollover
                     // (ROLLOVER_OUT/ROLLOVER_IN, bukan hangus diam-diam), kartu lama ditandai UPGRADED.
@@ -429,6 +459,13 @@ class JualMembership extends Page
                     'source' => 'MEMBERSHIP_POS',
                     'payment_method' => $method,
                 ], $proofPayload);
+
+                // QR Midtrans: kartu tetap PENDING_PAYMENT sampai Midtrans mengonfirmasi (lalu aktif lewat fulfillment).
+                if ($useQr) {
+                    $payloadLog['payment_method'] = 'QRIS';
+
+                    return ['pending_qris' => app(\App\Services\Pos\PosMidtransQrisService::class)->open($order, self::COUNTER, $cashier, $payloadLog, $this->posOnlineMethod)];
+                }
 
                 // 5. Mark Order As Paid (eksekusi pelunasan kasir) di shift meja frontdesk.
                 $orchestrator->markOrderAsPaid($order, [
@@ -471,6 +508,14 @@ class JualMembership extends Page
             $lock->release();
         }
 
+        // QR Midtrans: tunggu customer scan, struk keluar setelah lunas (pollPendingQris).
+        if (isset($receipt['pending_qris'])) {
+            $this->clearCart();
+            $this->pendingQris = $receipt['pending_qris'];
+
+            return;
+        }
+
         // 7. Keranjang & bukti bayar langsung dikosongkan — yang tersisa cuma data struk. Submit ulang (klik
         // ganda / request susulan) tidak punya paket lagi untuk diproses.
         $this->clearCart();
@@ -482,6 +527,97 @@ class JualMembership extends Page
             ->title('Membership berhasil diterbitkan dan langsung aktif!')
             ->success()
             ->send();
+    }
+
+    // ===================== QRIS MIDTRANS (QR DI LAYAR KASIR) =====================
+
+    /** Tagihan QR yang sedang ditampilkan — milik loket ini & dibuat dari layar Jual Membership. */
+    protected function pendingQrisPayment(): ?Payment
+    {
+        $id = $this->pendingQris['payment_id'] ?? null;
+        $payment = $id ? Payment::with('order')->find($id) : null;
+
+        return $payment && ($payment->payload_log['counter'] ?? null) === self::COUNTER
+            && ($payment->payload_log['source'] ?? null) === 'MEMBERSHIP_POS' && isset($payment->payload_log['pos_qris'])
+            ? $payment
+            : null;
+    }
+
+    public function pollPendingQris(): void
+    {
+        $payment = $this->pendingQrisPayment();
+        if (! $payment) {
+            $this->pendingQris = null;
+
+            return;
+        }
+
+        $status = app(\App\Services\Pos\PosMidtransQrisService::class)->status($payment->id);
+
+        if ($status === \App\Services\Pos\PosMidtransQrisService::PAID) {
+            $this->completePendingQris($payment);
+        } elseif ($status !== \App\Services\Pos\PosMidtransQrisService::PENDING) {
+            $this->pendingQris = null;
+            Notification::make()
+                ->title($status === \App\Services\Pos\PosMidtransQrisService::EXPIRED ? 'QR Kedaluwarsa' : 'QR Dibatalkan')
+                ->body('Pembayaran QRIS tidak diterima. Penjualan membership dibatalkan.')
+                ->warning()
+                ->send();
+        }
+    }
+
+    public function cancelPendingQris(): void
+    {
+        abort_unless(auth()->user()?->can('sell_membership'), 403);
+        $payment = $this->pendingQrisPayment();
+        if (! $payment) {
+            $this->pendingQris = null;
+
+            return;
+        }
+
+        if (app(\App\Services\Pos\PosMidtransQrisService::class)->cancel($payment->id) === \App\Services\Pos\PosMidtransQrisService::PAID) {
+            // Customer ternyata sudah bayar tepat sebelum dibatalkan — uang sudah masuk, transaksi diteruskan.
+            $this->completePendingQris($payment);
+
+            return;
+        }
+
+        $this->pendingQris = null;
+        Notification::make()->title('QR Dibatalkan')->body('Penjualan membership dibatalkan.')->success()->send();
+    }
+
+    /** Hanya di laptop developer tanpa server key Midtrans (QR mock). */
+    public function simulatePendingQrisPaid(): void
+    {
+        $payment = $this->pendingQrisPayment();
+        abort_unless($payment && ($this->pendingQris['is_mock'] ?? false) && ! app()->environment('production'), 403);
+
+        app(\App\Services\Pos\PosMidtransQrisService::class)->simulatePaid($payment->id);
+        $this->pollPendingQris();
+    }
+
+    protected function completePendingQris(Payment $payment): void
+    {
+        $payment = $payment->fresh();
+        $receipt = $this->buildMembershipReceipt(Order::with(['user', 'cashier', 'items', 'payments'])->findOrFail($payment->order_id));
+
+        // Sama dengan penjualan EDC/QRIS manual: isi struk dibekukan untuk cetak ulang dari Riwayat.
+        $payment->update([
+            'payload_log' => array_merge($payment->payload_log ?? [], [
+                'receipt_snapshot' => array_intersect_key($receipt, array_flip(self::RECEIPT_SNAPSHOT_KEYS)),
+            ]),
+        ]);
+
+        $this->pendingQris = null;
+        $this->completedMembershipData = $receipt;
+        $this->receiptFromHistory = false;
+        $this->showSuccessModal = true;
+
+        Notification::make()->title('Pembayaran QRIS diterima — membership aktif!')->success()->send();
+
+        // Lunas lewat Bayar Otomatis → struk langsung dicetak (tanpa tekan Cetak Struk).
+        $this->dispatch('club61-auto-print', selector: '#printable-membership-receipt', key: $payment->order_id);
     }
 
     // ===================== RIWAYAT TRANSAKSI & CETAK ULANG STRUK =====================
@@ -556,7 +692,7 @@ class JualMembership extends Page
         return Order::query()
             ->with(['user:id,name,phone', 'cashier:id,name', 'items', 'payments', 'refunds'])
             ->where('order_type', 'MEMBERSHIP')
-            ->whereHas('payments', fn ($q) => $q->where('status', 'SUCCESS')->where('payment_gateway', 'CASHIER_POS'))
+            ->whereHas('payments', fn ($q) => $q->where('status', 'SUCCESS')->where(fn ($g) => $g->where('payment_gateway', 'CASHIER_POS')->orWhereNotNull('pos_shift_id'))) // + QR Midtrans dari layar kasir
             ->whereBetween('created_at', [
                 \Carbon\Carbon::parse($date, 'Asia/Jakarta')->startOfDay()->setTimezone(config('app.timezone')),
                 \Carbon\Carbon::parse($date, 'Asia/Jakarta')->endOfDay()->setTimezone(config('app.timezone')),
@@ -608,7 +744,7 @@ class JualMembership extends Page
 
         $order = Order::query()
             ->where('order_type', 'MEMBERSHIP')
-            ->whereHas('payments', fn ($q) => $q->where('status', 'SUCCESS')->where('payment_gateway', 'CASHIER_POS'))
+            ->whereHas('payments', fn ($q) => $q->where('status', 'SUCCESS')->where(fn ($g) => $g->where('payment_gateway', 'CASHIER_POS')->orWhereNotNull('pos_shift_id'))) // + QR Midtrans dari layar kasir
             ->with(['user', 'cashier', 'items', 'payments'])
             ->findOrFail($orderId);
 
@@ -649,7 +785,7 @@ class JualMembership extends Page
         $common = [
             'order_number' => $order->order_number,
             'cashier_name' => $log['cashier_name'] ?? $order->cashier?->name ?? '-',
-            'payment_method' => $this->paymentMethodLabel((string) $payment?->payment_method),
+            'payment_method' => \App\Services\Pos\PosMidtransQrisService::labelFor($payment?->payload_log) ?? $this->paymentMethodLabel((string) $payment?->payment_method),
             'payment_meta' => $paymentMeta,
             'created_at' => $order->created_at->setTimezone('Asia/Jakarta')->format('d/m/Y H:i'),
             'is_reprint' => $reprint,

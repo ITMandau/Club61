@@ -169,7 +169,7 @@ class FnbPosCheckoutTest extends TestCase
             ->call('proceedToPayment')
             ->assertSet('posStep', 'payment')
             ->call('setPaymentMethod', 'QRIS')
-            ->set('qrisRrn', '123456789012')
+            ->set('qrisMode', 'MANUAL')->set('qrisRrn', '123456789012')
             ->call('submitFnbCheckout')
             ->assertSet('posStep', 'selection')
             ->assertSet('showReceiptModal', true)
@@ -257,7 +257,7 @@ class FnbPosCheckoutTest extends TestCase
             ->call('addToCart', $this->toast->id)
             ->call('proceedToPayment')
             ->call('setPaymentMethod', 'QRIS')
-            ->set('qrisRrn', '123456789012');
+            ->set('qrisMode', 'MANUAL')->set('qrisRrn', '123456789012');
 
         $this->latte->update(['is_available' => false]);
 
@@ -277,7 +277,7 @@ class FnbPosCheckoutTest extends TestCase
             ->call('addToCart', $this->latte->id)
             ->call('proceedToPayment')
             ->call('setPaymentMethod', 'QRIS')
-            ->set('qrisRrn', '123456789012');
+            ->set('qrisMode', 'MANUAL')->set('qrisRrn', '123456789012');
 
         $this->latte->update(['is_available' => false]);
 
@@ -299,7 +299,7 @@ class FnbPosCheckoutTest extends TestCase
             ->call('addToCart', $this->latte->id)
             ->call('proceedToPayment')
             ->call('setPaymentMethod', 'QRIS')
-            ->set('qrisRrn', '123456789012')
+            ->set('qrisMode', 'MANUAL')->set('qrisRrn', '123456789012')
             ->call('submitFnbCheckout');
 
         // Livewire menyerap HttpException 403 dari abort_unless() di level request, jadi yang
@@ -321,7 +321,7 @@ class FnbPosCheckoutTest extends TestCase
             ->call('addToCart', $this->latte->id)
             ->call('proceedToPayment')
             ->call('setPaymentMethod', 'QRIS')
-            ->set('qrisRrn', '123456789012')
+            ->set('qrisMode', 'MANUAL')->set('qrisRrn', '123456789012')
             ->call('submitFnbCheckout');
 
         $order = Order::firstOrFail();
@@ -379,7 +379,7 @@ class FnbPosCheckoutTest extends TestCase
             ->call('addToCart', $this->latte->id)
             ->call('proceedToPayment')
             ->call('setPaymentMethod', 'QRIS')
-            ->set('qrisRrn', '123456789012')
+            ->set('qrisMode', 'MANUAL')->set('qrisRrn', '123456789012')
             ->call('submitFnbCheckout');
 
         $order = Order::where('customer_name', 'Siti Aminah')->firstOrFail();
@@ -416,6 +416,9 @@ class FnbPosCheckoutTest extends TestCase
             ->call('proceedToPayment')
             ->assertSee('KARTU DEBIT')
             ->assertSee('KARTU KREDIT')
+            // Bayar Otomatis = pilihan utama; QRIS manual (RRN) tetap ada sebagai cadangan.
+            ->assertSee('Bayar Otomatis')
+            ->set('qrisMode', 'MANUAL')
             ->assertSee('Retrieval Reference Number')
             ->call('setPaymentMethod', 'DEBIT_CARD')
             ->assertSee('Pembayaran Kartu Debit (Debit Card)')
@@ -456,7 +459,7 @@ class FnbPosCheckoutTest extends TestCase
             ->call('proceedToPayment')
             ->call('setPaymentMethod', 'QRIS')
             ->set('qrisProvider', 'GOPAY')
-            ->set('qrisRrn', '123456789012')
+            ->set('qrisMode', 'MANUAL')->set('qrisRrn', '123456789012')
             ->set('qrisSenderName', 'Budi Santoso')
             ->call('submitFnbCheckout')
             ->assertSet('showReceiptModal', true)
@@ -472,7 +475,8 @@ class FnbPosCheckoutTest extends TestCase
         $component = Livewire::test(FnbCashierTerminal::class)
             ->call('addToCart', $this->latte->id)
             ->call('proceedToPayment')
-            ->call('setPaymentMethod', $method);
+            ->call('setPaymentMethod', $method)
+            ->set('qrisMode', 'MANUAL'); // QRIS di skenario closing = QRIS manual (RRN)
 
         foreach ($fields as $name => $value) {
             $component->set($name, $value);
@@ -578,7 +582,7 @@ class FnbPosCheckoutTest extends TestCase
             ->call('addToCart', $this->latte->id)
             ->call('proceedToPayment')
             ->call('setPaymentMethod', 'QRIS')
-            ->set('qrisRrn', '123456789012')
+            ->set('qrisMode', 'MANUAL')->set('qrisRrn', '123456789012')
             ->call('submitFnbCheckout');
 
         $order = Order::firstOrFail();

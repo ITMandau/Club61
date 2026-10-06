@@ -86,7 +86,6 @@ class MidtransService
                 'gross_amount' => $grossAmount,
             ],
             'item_details' => $itemDetails,
-            'customer_details' => $customerDetails,
             // Batas bayar dari pengaturan admin (BookingTimeService) — SAMA dengan batas pelepasan slot. Bayar ulang
             // mengirim sisa waktunya sendiri (`expiry_minutes`) supaya ganti metode tidak memperpanjang batas bayar.
             // Nilai di sini mengalahkan pengaturan "Payment Expiry" di dashboard Midtrans.
@@ -96,6 +95,11 @@ class MidtransService
                 'duration' => max(1, (int) ($params['expiry_minutes'] ?? app(\App\Services\Padel\BookingTimeService::class)->paymentWindowMinutes())),
             ],
         ];
+
+        // Order tanpa data customer (F&B kasir): customer_details kosong terkirim sebagai [] (bukan objek) dan ditolak.
+        if (! empty($customerDetails)) {
+            $payload['customer_details'] = $customerDetails;
+        }
 
         if (!empty($params['payment_method'])) {
             // Pemetaan dari katalog resmi (OnlinePaymentCatalog) — satu sumber dengan halaman checkout & validasi.
