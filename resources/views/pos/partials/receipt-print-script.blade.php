@@ -164,6 +164,48 @@
                 binary += String.fromCharCode.apply(null, bytes.slice(i, i + 4096));
             }
             window.location.href = 'rawbt:base64,' + btoa(binary);
+
+            // RawBT terbuka = halaman kehilangan fokus. Kalau tidak (aplikasi RawBT belum terpasang, aplikasi Flutter belum
+            // meneruskan link rawbt:, atau Chrome PC dalam mode emulasi Android), kasir diberi tahu — tidak gagal diam-diam.
+            let launched = false;
+            const mark = () => { launched = true; };
+            window.addEventListener('blur', mark, { once: true });
+            document.addEventListener('visibilitychange', mark, { once: true });
+            setTimeout(() => {
+                window.removeEventListener('blur', mark);
+                document.removeEventListener('visibilitychange', mark);
+                if (! launched && document.visibilityState === 'visible') { window.club61RawBtMissing(el); }
+            }, 2000);
+        };
+
+        window.club61RawBtMissing = function (el) {
+            const old = document.getElementById('club61-rawbt-missing');
+            if (old) { old.remove(); }
+            const box = document.createElement('div');
+            box.id = 'club61-rawbt-missing';
+            box.setAttribute('role', 'alert');
+            box.style.cssText = 'position:fixed;left:50%;bottom:1.5rem;transform:translateX(-50%);z-index:100000;max-width:min(92vw,420px);'
+                + 'background:#FFFFFF;border:1.5px solid #FCA5A5;border-radius:14px;box-shadow:0 12px 30px rgba(0,0,0,0.25);padding:0.9rem 1rem;'
+                + 'font:600 13px/1.45 system-ui,sans-serif;color:#7F1D1D;';
+            const msg = document.createElement('div');
+            msg.textContent = 'Aplikasi RawBT tidak terbuka. Pastikan RawBT terpasang & printer sudah dipilih di RawBT.';
+            const actions = document.createElement('div');
+            actions.style.cssText = 'display:flex;gap:0.5rem;justify-content:flex-end;margin-top:0.6rem;';
+            const button = (label, primary, onClick) => {
+                const b = document.createElement('button');
+                b.type = 'button';
+                b.textContent = label;
+                b.style.cssText = 'padding:0.45rem 0.8rem;border-radius:9px;font-weight:700;font-size:12px;cursor:pointer;'
+                    + (primary ? 'background:#7F1D1D;color:#FFFFFF;border:none;' : 'background:#FFFFFF;color:#7F1D1D;border:1px solid #FCA5A5;');
+                b.addEventListener('click', onClick);
+                return b;
+            };
+            actions.appendChild(button('Tutup', false, () => box.remove()));
+            actions.appendChild(button('Cetak lewat browser', true, () => { box.remove(); window.club61PrintBrowser(el); }));
+            box.appendChild(msg);
+            box.appendChild(actions);
+            document.body.appendChild(box);
+            setTimeout(() => box.remove(), 15000);
         };
 
         /**

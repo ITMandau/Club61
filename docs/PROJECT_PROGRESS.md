@@ -422,6 +422,20 @@ PRD: [`PRD_MODUL_23_STRUKTUR_PORTAL_CUSTOMER.md`](PRD_MODUL_23_STRUKTUR_PORTAL_C
 - [ ] Pindahkan link lama (`/my-club#corporate-vouchers`, redirect setelah beli membership, kartu Upgrade di Home).
 
 ---
+
+## MODUL 24: COACHING (BOOKING SESI COACH, SETORAN LAPANGAN & PAYOUT COACH)
+
+### Status: 0% (PRD draft, menunggu jawaban PM)
+
+PRD: [`PRD_MODUL_24_COACHING.md`](PRD_MODUL_24_COACHING.md)
+
+- [ ] Data coach partner (profil, harga sesi, jadwal tersedia, rekening, akun login) + migrasi `padel_bookings.coach_id` ke tabel `coaches`.
+- [ ] Booking coaching customer & mode Coaching di POS Walk-In (lapangan + jadwal coach dikunci bersamaan, maks 2 murid).
+- [ ] Buku Transaksi: setoran lapangan = pendapatan Club, bagian coach = utang ke coach; baris Coaching di Analytics.
+- [ ] Payout coach per periode + export.
+- [ ] Portal coach (jadwal, check-in murid, pendapatan).
+
+---
 ## MODUL 20: HALAMAN ADMIN PENDUKUNG
 
 ### Status: 0% (semua DUMMY)

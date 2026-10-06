@@ -125,6 +125,15 @@ class FnbCashierTerminal extends Component
         $this->resetPage();
     }
 
+    /** Bawa Pulang tidak punya meja — nomor meja yang sempat diisi dibuang supaya tidak ikut tercatat. */
+    public function setOrderType(string $type): void
+    {
+        $this->orderType = $type === 'TAKE_AWAY' ? 'TAKE_AWAY' : 'DINE_IN';
+        if ($this->orderType === 'TAKE_AWAY') {
+            $this->tableNumber = '';
+        }
+    }
+
     public function getActiveShiftProperty(): ?PosCashierShift
     {
         return PosCashierShift::getActiveShift(self::COUNTER);
@@ -567,7 +576,7 @@ class FnbCashierTerminal extends Component
             $result = $service->checkout(
                 items: $itemsPayload,
                 orderType: $this->orderType,
-                tableNumber: trim($this->tableNumber) ?: null,
+                tableNumber: $this->orderType === 'DINE_IN' ? (trim($this->tableNumber) ?: null) : null,
                 cashier: auth()->user(),
                 paymentMethod: $this->paymentMethod,
                 paymentMeta: $paymentMeta,
@@ -734,6 +743,22 @@ class FnbCashierTerminal extends Component
             'QRIS', 'QRIS_STATIS' => 'QRIS Kasir Frontdesk',
             default => $method,
         };
+    }
+
+    /**
+     * Tutup popup struk (tombol ×, klik di luar popup, atau Esc). Dari tab Riwayat tetap di Riwayat; setelah
+     * pembayaran lanjut ke transaksi baru.
+     */
+    public function closeReceiptModal(): void
+    {
+        if ($this->posStep === 'history') {
+            $this->showReceiptModal = false;
+            $this->completedOrderData = null;
+
+            return;
+        }
+
+        $this->startNewTransaction();
     }
 
     public function startNewTransaction(): void

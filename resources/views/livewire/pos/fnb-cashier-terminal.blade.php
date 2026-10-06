@@ -18,9 +18,12 @@
         .fnbpos-page-btn { padding: 0.5rem 1rem; border-radius: 10px; font-size: 0.75rem; font-weight: 800; border: 1.5px solid #DFC387; background: rgba(255,255,255,0.95); color: #5C410F; cursor: pointer; }
         .fnbpos-page-btn:disabled { opacity: 0.4; cursor: not-allowed; }
         .fnbpos-cart-item { padding: 0.75rem; border-radius: 12px; background: rgba(255,255,255,0.95); border: 1.5px solid #DFC387; }
-        .fnbpos-qty-btn { width: 22px; height: 22px; border-radius: 6px; display: inline-flex; align-items: center; justify-content: center; font-weight: 900; cursor: pointer; background: #FAF2DE; border: 1px solid #D9BE84; color: #7A5818; }
+        .fnbpos-qty-btn { width: 32px; height: 32px; border-radius: 8px; font-size: 1rem; display: inline-flex; align-items: center; justify-content: center; font-weight: 900; cursor: pointer; user-select: none; background: #FAF2DE; border: 1px solid #D9BE84; color: #7A5818; }
         .fnbpos-pay-btn { padding: 0.85rem; border-radius: 14px; font-weight: 800; font-size: 0.8125rem; text-align: center; cursor: pointer; border: 1.5px solid #DFC387; background: rgba(255,255,255,0.95); color: #5C410F; }
         .fnbpos-pay-btn.active { background: linear-gradient(180deg, #F0DB9D 0%, #D4AF37 35%, #B38622 100%); border-color: #FBF0CE; color: #281A05; }
+        /* Tombol tipe pesanan (Dine-In / Bawa Pulang) — satu ketukan di tablet. */
+        .fnbpos-type-btn { padding: 0.6rem 0.5rem; border-radius: 9px; font-size: 0.75rem; font-weight: 800; white-space: nowrap; cursor: pointer; border: 1.5px solid #DFC387; background: #FAF9F6; color: #5C410F; transition: all 0.15s ease; }
+        .fnbpos-type-btn.active { background: linear-gradient(180deg, #F0DB9D 0%, #D4AF37 35%, #B38622 100%); border-color: #FBF0CE; color: #281A05; }
         .fnbpos-input { width: 100%; padding: 0.65rem 0.85rem; border-radius: 9px; border: 1.5px solid #DFC387; font-size: 0.8125rem; background: #FAF9F6; outline: none; }
         .fnbpos-modal-backdrop { position: fixed; inset: 0; background: rgba(15,23,42,0.65); backdrop-filter: blur(6px); z-index: 9999; display: flex; align-items: center; justify-content: center; padding: 1.5rem; }
         .fnbpos-modal-dialog { background: #FFFFFF; border: 2px solid #D4AF37; border-radius: 20px; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.35); width: 100%; max-width: 480px; padding: 1.75rem; display: flex; flex-direction: column; gap: 1rem; max-height: 90vh; overflow-y: auto; }
@@ -30,7 +33,9 @@
         .fnbpos-status-unpaid { background: #FEF3C7; color: #92400E; border: 1px solid #FCD34D; }
         .fnbpos-status-refunded, .fnbpos-status-cancelled { background: #FEE2E2; color: #991B1B; border: 1px solid #FCA5A5; }
         .fnbpos-history-table th { text-align: left; padding: 0.6rem 0.75rem; font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.04em; color: #5C410F; background: #FAF5E8; white-space: nowrap; }
-        .fnbpos-history-table td { padding: 0.6rem 0.75rem; font-size: 0.75rem; border-top: 1px solid #F3E8CE; vertical-align: middle; }
+        /* Riwayat: satu baris per sel (tidak turun ke bawah); teks panjang dipotong "…" — lengkapnya di tooltip. */
+        .fnbpos-history-table td { padding: 0.6rem 0.75rem; font-size: 0.75rem; border-top: 1px solid #F3E8CE; vertical-align: middle; white-space: nowrap; }
+        .fnbpos-history-table td.fnbpos-cell-clip { max-width: 9rem; overflow: hidden; text-overflow: ellipsis; }
     </style>
     @include('pos.partials.receipt-print-style', ['selectors' => ['#fnbpos-receipt']])
 
@@ -110,7 +115,7 @@
             @endif
         </section>
 
-        <aside class="w-full sm:w-96 lg:w-[420px] flex flex-col justify-between shrink-0 shadow-2xl border-l border-[#D4AF37]/50" style="background: rgba(255,255,255,0.94); backdrop-filter: blur(20px);">
+        <aside class="w-full sm:w-72 lg:w-80 xl:w-96 flex flex-col justify-between shrink-0 shadow-2xl border-l border-[#D4AF37]/50" style="background: rgba(255,255,255,0.94); backdrop-filter: blur(20px);">
             <div class="p-4 border-b border-[#DFC387]/60 bg-white/80">
                 <div class="flex items-center justify-between mb-2.5">
                     <span class="text-xs font-bold uppercase tracking-wider text-[#7A5818]">Pesanan Baru</span>
@@ -121,14 +126,17 @@
                     @endif
                 </div>
 
+                {{-- Tipe pesanan: satu ketukan (bukan dropdown). Bawa Pulang tidak punya meja — kolom meja disembunyikan. --}}
                 <div class="grid grid-cols-2 gap-2 mb-2">
-                    <select wire:model="orderType" class="fnbpos-input">
-                        <option value="DINE_IN">Dine-In (Meja)</option>
-                        <option value="TAKE_AWAY">Bawa Pulang</option>
-                    </select>
-                    <input type="text" wire:model="tableNumber" placeholder="No. Meja (opsional)" class="fnbpos-input">
+                    <button type="button" wire:click="setOrderType('DINE_IN')" class="fnbpos-type-btn {{ $orderType === 'DINE_IN' ? 'active' : '' }}">Dine-In</button>
+                    <button type="button" wire:click="setOrderType('TAKE_AWAY')" class="fnbpos-type-btn {{ $orderType === 'TAKE_AWAY' ? 'active' : '' }}">Take Away</button>
                 </div>
-                <input type="text" wire:model="customerName" placeholder="Nama Pelanggan (opsional)" class="fnbpos-input">
+                <div class="flex gap-2">
+                    @if($orderType === 'DINE_IN')
+                        <input type="text" wire:model="tableNumber" placeholder="No. Meja" class="fnbpos-input" style="width: 6.5rem; flex-shrink: 0;">
+                    @endif
+                    <input type="text" wire:model="customerName" placeholder="{{ $orderType === 'TAKE_AWAY' ? 'Nama Pelanggan (untuk dipanggil)' : 'Nama Pelanggan' }}" class="fnbpos-input min-w-0">
+                </div>
 
                 <div class="flex items-center justify-end mt-2">
                     @if($this->activeShift)
@@ -144,9 +152,9 @@
                             <div class="text-xs font-bold text-[#1F170D]">{{ $item['name'] }}</div>
                             <div class="text-[10px] text-[#7A5818] font-mono font-medium">Rp {{ number_format($item['price'], 0, ',', '.') }} x {{ $item['quantity'] }}</div>
                         </div>
-                        <div class="flex items-center gap-1.5">
+                        <div class="flex items-center gap-2">
                             <span wire:click="decrementCartItem('{{ $menuId }}')" class="fnbpos-qty-btn">-</span>
-                            <span class="text-xs font-bold w-4 text-center">{{ $item['quantity'] }}</span>
+                            <span class="text-sm font-bold w-6 text-center">{{ $item['quantity'] }}</span>
                             <span wire:click="incrementCartItem('{{ $menuId }}')" class="fnbpos-qty-btn">+</span>
                         </div>
                     </div>
@@ -198,7 +206,7 @@
             </div>
         </section>
 
-        <aside class="w-full sm:w-96 lg:w-[420px] flex flex-col shrink-0 shadow-2xl border-l border-[#D4AF37]/50" style="background: rgba(255,255,255,0.94);">
+        <aside class="w-full sm:w-72 lg:w-80 xl:w-96 flex flex-col shrink-0 shadow-2xl border-l border-[#D4AF37]/50" style="background: rgba(255,255,255,0.94);">
             <div class="p-4 border-b border-[#DFC387]/60 bg-white/80 flex items-center justify-between">
                 <div>
                     <span style="font-size:0.625rem; font-weight:900; color:#8C6418; text-transform:uppercase; border:1px solid #DFC387; border-radius:4px; padding:0.1rem 0.45rem;">Langkah 2 dari 2</span>
@@ -254,7 +262,8 @@
                 @if($history->isEmpty())
                     <div class="text-xs text-center py-16 text-[#9CA3AF]">Belum ada transaksi F&amp;B yang tercatat.</div>
                 @else
-                    <table class="fnbpos-history-table w-full border-collapse rounded-xl overflow-hidden" style="background:#FFFFFF; border:1.5px solid #DFC387;">
+                    <div class="overflow-x-auto rounded-xl" style="border:1.5px solid #DFC387;">
+                    <table class="fnbpos-history-table w-full border-collapse" style="background:#FFFFFF;">
                         <thead>
                             <tr>
                                 <th>No. Antrian</th>
@@ -284,10 +293,10 @@
                                     <td class="font-mono font-black text-[#8C6418]">{{ $order->queue_number ? str_pad((string) $order->queue_number, 3, '0', STR_PAD_LEFT) : '—' }}</td>
                                     <td class="font-mono font-bold text-[#1F170D]">{{ $order->order_number }}</td>
                                     <td class="font-mono">{{ $order->created_at->setTimezone('Asia/Jakarta')->format('d/m/Y H:i') }}</td>
-                                    <td>{{ $order->cashier?->name ?? '-' }}</td>
+                                    <td class="fnbpos-cell-clip" title="{{ $order->cashier?->name }}">{{ $order->cashier?->name ?? '-' }}</td>
                                     <td>{{ $order->order_type === 'DINE_IN' ? 'Dine-In' : 'Bawa Pulang' }}{{ $order->table_number ? ' - '.$order->table_number : '' }}</td>
-                                    <td>{{ $order->customer_name ?: '—' }}</td>
-                                    <td>{{ $payment ? $this->formatPaymentMethodLabel($payment->payment_method) : '-' }}</td>
+                                    <td class="fnbpos-cell-clip" title="{{ $order->customer_name }}">{{ $order->customer_name ?: '—' }}</td>
+                                    <td class="fnbpos-cell-clip" title="{{ $payment ? $this->formatPaymentMethodLabel($payment->payment_method) : '' }}">{{ $payment ? $this->formatPaymentMethodLabel($payment->payment_method) : '-' }}</td>
                                     <td class="font-mono font-bold text-right">Rp {{ number_format($order->grand_total, 0, ',', '.') }}</td>
                                     <td><span class="fnbpos-status-badge {{ $statusClass }}">{{ $order->payment_status }}</span></td>
                                     <td><button type="button" wire:click="viewOrderReceipt('{{ $order->id }}')" class="text-[11px] font-bold text-[#8C6418] underline">Lihat Struk</button></td>
@@ -295,6 +304,7 @@
                             @endforeach
                         </tbody>
                     </table>
+                    </div>
                 @endif
                 @endif
             </div>
@@ -313,17 +323,18 @@
                 'LIVIN' => 'Livin Mandiri', 'LAINNYA' => 'QRIS Lainnya / Bank Lain',
             ];
         @endphp
-        <div class="fnbpos-modal-backdrop">
-            <div class="fnbpos-modal-dialog" style="max-width:520px;">
+        {{-- Klik di luar popup / tombol Esc juga menutup. --}}
+        <div class="fnbpos-modal-backdrop" wire:click.self="closeReceiptModal" x-data x-on:keydown.escape.window="$wire.closeReceiptModal()">
+            <div class="fnbpos-modal-dialog" style="max-width:400px; padding:1.25rem; gap:0.85rem;">
                 <div style="display:flex; justify-content:space-between; align-items:flex-start;">
                     <div>
                         <span style="font-size:0.6875rem; font-weight:900; color:#8C6418; text-transform:uppercase; letter-spacing:0.06em; background:#FAF5E8; border:1px solid #DFC387; border-radius:4px; padding:0.1rem 0.5rem;">Transaksi Lunas</span>
-                        <div class="font-serif font-black text-xl text-[#1F170D] mt-1.5">Struk Pembayaran F&amp;B</div>
+                        <div class="font-serif font-black text-lg text-[#1F170D] mt-1.5">Struk Pembayaran F&amp;B</div>
                     </div>
-                    <button type="button" wire:click="startNewTransaction" style="background:none; border:none; font-size:1.5rem; color:#78350F; cursor:pointer; line-height:1;">&times;</button>
+                    <button type="button" wire:click="closeReceiptModal" aria-label="Tutup" style="background:none; border:none; font-size:1.5rem; color:#78350F; cursor:pointer; line-height:1; padding:0.25rem 0.5rem;">&times;</button>
                 </div>
 
-                <div id="fnbpos-receipt" class="w-full bg-white rounded-2xl border-2 border-[#D4AF37] p-6 font-mono text-sm space-y-2.5">
+                <div id="fnbpos-receipt" class="w-full bg-white rounded-2xl border-2 border-[#D4AF37] p-4 font-mono text-xs space-y-2">
                     <div class="text-center font-serif font-black text-lg border-b border-dashed border-gray-400 pb-1 mb-1">CLUB 61 F&amp;B</div>
                     <div class="text-center pb-2.5 mb-1.5 border-b border-dashed border-gray-400">
                         <div class="text-[10px] uppercase tracking-widest text-gray-500 font-bold">Nomor Antrian</div>
@@ -368,8 +379,8 @@
                 </div>
 
                 <div class="flex gap-3">
-                    <button type="button" onclick="club61PrintReceipt('#fnbpos-receipt')" class="fnbpos-pay-btn">Cetak Struk</button>
-                    <button type="button" wire:click="startNewTransaction" class="fnbpos-pay-btn active">Transaksi Baru</button>
+                    <button type="button" onclick="club61PrintReceipt('#fnbpos-receipt')" class="fnbpos-pay-btn flex-1">Cetak Struk</button>
+                    <button type="button" wire:click="{{ $posStep === 'history' ? 'closeReceiptModal' : 'startNewTransaction' }}" class="fnbpos-pay-btn active flex-1">{{ $posStep === 'history' ? 'Tutup' : 'Transaksi Baru' }}</button>
                 </div>
             </div>
         </div>
