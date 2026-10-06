@@ -25,6 +25,7 @@ use UnitEnum;
 
 class JualMembership extends Page
 {
+    use \App\Livewire\Concerns\AutoPrintsReceipts;
     use HasPageShield;
 
     protected static string|BackedEnum|null $navigationIcon = 'heroicon-o-credit-card';
@@ -616,8 +617,8 @@ class JualMembership extends Page
 
         Notification::make()->title('Pembayaran QRIS diterima — membership aktif!')->success()->send();
 
-        // Lunas lewat Bayar Otomatis → struk langsung dicetak (tanpa tekan Cetak Struk).
-        $this->dispatch('club61-auto-print', selector: '#printable-membership-receipt', key: $payment->order_id);
+        // Lunas lewat Bayar Otomatis → struk langsung dicetak di aplikasi Club61 (tanpa buka modal / tekan Cetak Struk).
+        $this->queueAutoPrint($payment->order_id, 'pos.receipts.membership', ['receipt' => $receipt], 'closeReceipt');
     }
 
     // ===================== RIWAYAT TRANSAKSI & CETAK ULANG STRUK =====================

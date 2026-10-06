@@ -19,6 +19,7 @@ use UnitEnum;
 
 class BookOfflineCourt extends Page
 {
+    use \App\Livewire\Concerns\AutoPrintsReceipts;
     use HasPageShield;
 
     protected static string | BackedEnum | null $navigationIcon = 'heroicon-o-building-storefront';
@@ -1638,8 +1639,8 @@ class BookOfflineCourt extends Page
             ->success()
             ->send();
 
-        // Lunas lewat Bayar Otomatis → struk langsung dicetak (tanpa tekan Cetak Struk).
-        $this->dispatch('club61-auto-print', selector: '#printable-pos-receipt', key: $payment->order_id);
+        // Lunas lewat Bayar Otomatis → struk langsung dicetak di aplikasi Club61 (tanpa buka modal / tekan Cetak Struk).
+        $this->queueAutoPrint($payment->order_id, 'filament.partials.walkin-receipt', ['receipt' => $this->completedOrderData], 'startNewTransaction');
     }
 
     public function closeSuccessModal(): void

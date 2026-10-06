@@ -175,7 +175,7 @@ class MidtransQrisPosTest extends TestCase
             ->assertSet('pendingQris', null)
             ->assertSet('posStep', 'receipt')
             ->assertSet('completedOrderData.order_number', $pending['order_number'])
-            ->assertDispatched('club61-auto-print', selector: '#printable-pos-receipt');
+            ->assertDispatched('club61-auto-print', fn ($event, $params) => $params['next'] === 'startNewTransaction' && str_contains($params['html'], 'printable-pos-receipt') && str_contains($params['html'], $pending['order_number']));
 
         // Tampil di Riwayat kasir walau gateway-nya MIDTRANS.
         $component->set('posStep', 'history');
@@ -211,7 +211,15 @@ class MidtransQrisPosTest extends TestCase
             ->assertSet('showReceiptModal', true)
             ->assertSet('completedOrderData.order_number', $pending['order_number'])
             ->assertSet('completedOrderData.payment_method_label', 'QRIS Otomatis (Kasir)')
-            ->assertDispatched('club61-auto-print', selector: '#fnbpos-receipt');
+            ->assertDispatched('club61-auto-print', fn ($event, $params) => $params['key'] === $pending['order_id'] && $params['next'] === 'startNewTransaction' && str_contains($params['html'], 'fnbpos-receipt') && str_contains($params['html'], $pending['order_number']));
+
+        // Sekali per order (orders.receipt_printed_at): layar ini mengklaim cetak sekali; klaim ulang, layar/tab lain,
+        // atau halaman yang di-refresh tidak mencetak lagi.
+        $this->assertSame(true, $component->call('claimAutoPrint', $pending['order_id'])->effects['returns'][0] ?? null);
+        $this->assertNotNull(Order::find($pending['order_id'])->receipt_printed_at);
+        $this->assertSame(false, $component->call('claimAutoPrint', $pending['order_id'])->effects['returns'][0] ?? null);
+        $otherTab = Livewire::test(\App\Livewire\Pos\FnbCashierTerminal::class);
+        $this->assertSame(false, $otherTab->call('claimAutoPrint', $pending['order_id'])->effects['returns'][0] ?? null);
 
         // Batal.
         $second = Livewire::test(\App\Livewire\Pos\FnbCashierTerminal::class)
@@ -251,7 +259,7 @@ class MidtransQrisPosTest extends TestCase
             ->assertSet('pendingQris', null)
             ->assertSet('showSuccessModal', true)
             ->assertSee('Gold QR')
-            ->assertDispatched('club61-auto-print', selector: '#printable-membership-receipt');
+            ->assertDispatched('club61-auto-print', fn ($event, $params) => $params['next'] === 'closeReceipt' && str_contains($params['html'], 'printable-membership-receipt') && ! str_contains($params['html'], 'Cetak Struk'));
 
         $this->assertSame('ACTIVE', $membership->fresh()->status);
         $this->assertSame($this->shift->id, Payment::find($pending['payment_id'])->pos_shift_id);

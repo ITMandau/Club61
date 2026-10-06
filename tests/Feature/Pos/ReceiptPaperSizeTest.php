@@ -85,7 +85,7 @@ class ReceiptPaperSizeTest extends TestCase
 
         $views = [
             'filament/pages/book-offline-court.blade.php' => ["club61PrintReceipt('#printable-pos-receipt')", "club61PrintReceipt('#printable-z-report')"],
-            'filament/pages/jual-membership.blade.php' => ["club61PrintReceipt('#printable-membership-receipt')"],
+            'pos/receipts/membership.blade.php' => ["club61PrintReceipt('#printable-membership-receipt')"],
             'livewire/pos/fnb-cashier-terminal.blade.php' => ["club61PrintReceipt('#fnbpos-receipt')", "@include('pos.partials.receipt-print-style'"],
             'filament/pages/partials/ledger-invoice-modal.blade.php' => ['window.club61PrintReceipt(this.$refs.doc)'],
         ];

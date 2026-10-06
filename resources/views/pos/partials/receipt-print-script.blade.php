@@ -7,12 +7,19 @@
     - Selain Android (PC kasir): baris yang sama dicetak sebagai teks (bukan gambar) lewat iframe tersembunyi, kertas
       58mm x tinggi struk. Teks tetap tajam walaupun Chrome menyekala halaman; gambar yang diperbesar/dikecilkan Chrome
       jadi blur & belang.
+    - Aplikasi Android Club61 (window.Club61Print): selalu RawBT; aplikasinya menangkap link itu dan mencetak langsung ke
+      printer Bluetooth. Hanya di sini struk Bayar Otomatis dicetak otomatis begitu lunas (event 'club61-auto-print').
     - Paksa salah satu cara di perangkat tertentu: localStorage.setItem('club61_print_mode', 'rawbt' | 'browser').
 --}}
 @php($paper = \App\Support\ReceiptPaper::class)
 <script>
     if (! window.club61PrintReceipt) {
+        // Aplikasi Android Club61 (WebView) menyediakan window.Club61Print dan menangkap link RawBT dari navigasi halaman
+        // utama → langsung dicetak ke printer Bluetooth 58mm tanpa popup.
+        window.club61InApp = function () { return typeof window.Club61Print !== 'undefined'; };
+
         window.club61PrintMode = function () {
+            if (window.club61InApp()) { return 'rawbt'; }
             try {
                 const forced = localStorage.getItem('club61_print_mode');
                 if (forced === 'rawbt' || forced === 'browser') { return forced; }
@@ -163,7 +170,10 @@
             for (let i = 0; i < bytes.length; i += 4096) {
                 binary += String.fromCharCode.apply(null, bytes.slice(i, i + 4096));
             }
+            // Navigasi halaman utama (bukan window.open / iframe / fetch): hanya ini yang ditangkap aplikasi Club61 & RawBT.
             window.location.href = 'rawbt:base64,' + btoa(binary);
+            // Di aplikasi Club61 link ditangkap aplikasinya sendiri (halaman tidak kehilangan fokus) — tidak perlu cek RawBT.
+            if (window.club61InApp()) { return; }
 
             // RawBT terbuka = halaman kehilangan fokus. Kalau tidak (aplikasi RawBT belum terpasang, aplikasi Flutter belum
             // meneruskan link rawbt:, atau Chrome PC dalam mode emulasi Android), kasir diberi tahu — tidak gagal diam-diam.
@@ -295,21 +305,55 @@
             }
         };
 
-        // Bayar Otomatis lunas → server mengirim 'club61-auto-print' { selector, key }. Tunggu struknya tampil, cetak sekali per order.
-        window.addEventListener('club61-auto-print', (event) => {
-            const detail = event.detail || {};
-            if (! detail.selector) { return; }
-            window.club61AutoPrinted = window.club61AutoPrinted || {};
-            if (detail.key && window.club61AutoPrinted[detail.key]) { return; }
-            if (detail.key) { window.club61AutoPrinted[detail.key] = true; }
+        /** Struk dari HTML (partial yang sama dengan modal) → cetak tanpa membuka modal. Dirender di luar layar karena
+         *  pembaca struk memakai tampilan yang sudah dirender (getComputedStyle). */
+        window.club61PrintReceiptHtml = function (html) {
+            const host = document.createElement('div');
+            host.setAttribute('aria-hidden', 'true');
+            host.style.cssText = 'position:fixed;left:-10000px;top:0;width:420px;pointer-events:none;';
+            host.innerHTML = html;
+            document.body.appendChild(host);
+            window.club61PrintReceipt(host.querySelector('[id^="printable-"], #fnbpos-receipt') || host.firstElementChild);
+            setTimeout(() => host.remove(), 20000);
+        };
 
-            let tries = 0;
-            const attempt = () => {
-                const el = [...document.querySelectorAll(detail.selector)].find((node) => node.getClientRects().length > 0);
-                if (el) { window.club61PrintReceipt(el); return; }
-                if (++tries < 30) { setTimeout(attempt, 100); }
-            };
-            setTimeout(attempt, 150);
+        window.club61Toast = function (message) {
+            const box = document.createElement('div');
+            box.setAttribute('role', 'status');
+            box.style.cssText = 'position:fixed;left:50%;bottom:1.5rem;transform:translateX(-50%);z-index:100000;max-width:min(92vw,420px);'
+                + 'background:#065F46;color:#FFFFFF;border-radius:12px;box-shadow:0 12px 30px rgba(0,0,0,0.25);padding:0.75rem 1.1rem;'
+                + 'font:700 14px/1.4 system-ui,sans-serif;text-align:center;';
+            box.textContent = message;
+            document.body.appendChild(box);
+            setTimeout(() => box.remove(), 3500);
+        };
+
+        /**
+         * Bayar Otomatis lunas (dipastikan server: webhook / cek status Midtrans) → server mengirim 'club61-auto-print'
+         * { key: order id, wireId, html: struk, next } HANYA ke layar kasir yang membuat transaksinya
+         * (App\Livewire\Concerns\AutoPrintsReceipts). Hanya di aplikasi Club61; sekali per order: penanda di server
+         * (orders.receipt_printed_at lewat claimAutoPrint) + localStorage. Refresh / buka ulang order tidak mencetak lagi.
+         */
+        window.addEventListener('club61-auto-print', async (event) => {
+            const detail = event.detail || {};
+            if (! detail.key || ! detail.html || ! window.club61InApp()) { return; }
+
+            const mark = 'club61_auto_printed_' + detail.key;
+            try { if (localStorage.getItem(mark)) { return; } } catch (e) {}
+
+            // Livewire.find() mengembalikan $wire komponen kasirnya.
+            const wire = window.Livewire && window.Livewire.find(detail.wireId);
+            if (! wire) { return; }
+
+            let claimed = false;
+            try { claimed = await wire.claimAutoPrint(detail.key); } catch (e) { claimed = false; }
+            if (! claimed) { return; }
+            try { localStorage.setItem(mark, String(Date.now())); } catch (e) {}
+
+            window.club61PrintReceiptHtml(detail.html);
+            window.club61Toast('Pembayaran lunas — struk dicetak');
+            // Siapkan layar untuk transaksi berikutnya (alur yang sama dengan tombol Transaksi Baru / Selesai).
+            if (detail.next) { setTimeout(() => wire.call(detail.next), 400); }
         });
     }
 </script>

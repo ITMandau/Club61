@@ -23,6 +23,7 @@ use Livewire\WithPagination;
  */
 class FnbCashierTerminal extends Component
 {
+    use \App\Livewire\Concerns\AutoPrintsReceipts;
     use WithPagination;
 
     private const COUNTER = 'FNB_COUNTER';
@@ -754,8 +755,8 @@ class FnbCashierTerminal extends Component
         $this->pendingQris = null;
         $this->posStep = 'selection';
         $this->showReceiptModal = true;
-        // Lunas lewat Bayar Otomatis → struk langsung dicetak (tanpa tekan Cetak Struk).
-        $this->dispatch('club61-auto-print', selector: '#fnbpos-receipt', key: $order->id);
+        // Lunas lewat Bayar Otomatis → struk langsung dicetak di aplikasi Club61 (tanpa buka modal / tekan Cetak Struk).
+        $this->queueAutoPrint($order->id, 'pos.receipts.fnb', ['receipt' => $this->completedOrderData], 'startNewTransaction');
     }
 
     /** Buka kembali struk transaksi lama dari daftar riwayat (rekonstruksi dari data tersimpan). */
