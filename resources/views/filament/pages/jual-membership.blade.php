@@ -640,7 +640,7 @@
                 @endif
 
                 <div class="no-print" style="display: flex; gap: 0.5rem;">
-                    <button type="button" onclick="window.print()"
+                    <button type="button" onclick="club61PrintReceipt('#printable-membership-receipt')"
                         style="flex: 1; background: #FAF5E8; border: 1.5px solid #DFC387; color: #7A5818; padding: 0.6rem; border-radius: 8px; font-weight: 800; font-size: 0.75rem; cursor: pointer;">
                         Cetak Struk
                     </button>

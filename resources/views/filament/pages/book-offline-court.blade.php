@@ -1063,7 +1063,7 @@
                             Pembayaran POS &amp; E-Tiket Walk-In</div>
                     </div>
                     <div style="display:flex; gap:0.5rem;">
-                        <button type="button" onclick="window.print()"
+                        <button type="button" onclick="club61PrintReceipt('#printable-pos-receipt')"
                             style="padding:0.4rem 0.85rem; font-size:0.75rem; font-weight:800; border:1.5px solid #DFC387; background:#FFFFFF; border-radius:8px; cursor:pointer; color:#1F170D;">
                             Cetak Struk
                         </button>
@@ -1516,7 +1516,7 @@
 
                 <div
                     style="background:#FAF5E8; border-top:1px solid #DFC387; padding:0.65rem 1.1rem; display:flex; justify-content:flex-end; gap:0.5rem;">
-                    <button type="button" onclick="window.print()"
+                    <button type="button" onclick="club61PrintReceipt('#printable-pos-receipt')"
                         style="padding:0.4rem 0.85rem; font-size:0.8125rem; font-weight:800; border:1.5px solid #DFC387; background:#FFFFFF; border-radius:7px; cursor:pointer; color:#1F170D;">
                         Cetak Struk
                     </button>
@@ -1794,7 +1794,7 @@
 
                 <div
                     style="background:#FAF5E8; border-top:1px solid #DFC387; padding:0.65rem 1.1rem; display:flex; justify-content:flex-end; gap:0.5rem; flex-shrink:0;">
-                    <button type="button" onclick="window.print()"
+                    <button type="button" onclick="club61PrintReceipt('#printable-z-report')"
                         style="padding:0.4rem 0.85rem; font-size:0.8125rem; font-weight:800; border:1.5px solid #DFC387; background:#FFFFFF; border-radius:7px; cursor:pointer; color:#1F170D;">
                         Cetak Z-Report
                     </button>

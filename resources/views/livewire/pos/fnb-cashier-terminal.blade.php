@@ -368,7 +368,7 @@
                 </div>
 
                 <div class="flex gap-3">
-                    <button type="button" onclick="window.print()" class="fnbpos-pay-btn">Cetak Struk</button>
+                    <button type="button" onclick="club61PrintReceipt('#fnbpos-receipt')" class="fnbpos-pay-btn">Cetak Struk</button>
                     <button type="button" wire:click="startNewTransaction" class="fnbpos-pay-btn active">Transaksi Baru</button>
                 </div>
             </div>

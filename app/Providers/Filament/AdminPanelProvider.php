@@ -81,6 +81,11 @@ class AdminPanelProvider extends PanelProvider
                 'panels::body.end',
                 fn () => view('filament.sidebar-auto-collapse')
             )
+            // Cetak struk thermal 58mm: club61PrintReceipt() dipakai semua tombol cetak struk di panel.
+            ->renderHook(
+                'panels::body.end',
+                fn () => view('pos.partials.receipt-print-script')
+            )
             // Dialog konfirmasi Club61 (pengganti popup bawaan browser / wire:confirm).
             ->renderHook(
                 'panels::body.end',

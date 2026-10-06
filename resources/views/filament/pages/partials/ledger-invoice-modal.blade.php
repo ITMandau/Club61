@@ -1,16 +1,9 @@
-{{-- Pembungkus invoice salinan admin di Buku Transaksi: isi struk + tombol cetak (jendela cetak terpisah). --}}
+{{-- Pembungkus invoice salinan admin di Buku Transaksi: isi struk + tombol cetak.
+     Dicetak di printer thermal 58mm yang sama dengan struk kasir lewat club61PrintReceipt() (App\Support\ReceiptPaper).
+     Dulu dibuka di jendela baru dan print() bisa terpanggil dua kali (onload + timeout). --}}
 <div x-data="{
         print() {
-            const html = this.$refs.doc.innerHTML;
-            const w = window.open('', '_blank', 'width=480,height=720');
-            if (! w) { return; }
-            // Dicetak di printer thermal 58mm yang sama dengan struk kasir (App\\Support\\ReceiptPaper).
-            const css = @js(\App\Support\ReceiptPaper::printCss(['#ledger-receipt']));
-            w.document.write('<!doctype html><html><head><meta charset=\'utf-8\'><title>Salinan Admin</title><style>body{margin:16px;font-family:monospace;}' + css + '</style></head><body><div id=\'ledger-receipt\'>' + html + '</div></body></html>');
-            w.document.close();
-            w.focus();
-            w.onload = () => { w.print(); };
-            setTimeout(() => { try { w.print(); } catch (e) {} }, 400);
+            if (window.club61PrintReceipt) { window.club61PrintReceipt(this.$refs.doc); } else { window.print(); }
         }
     }" style="display:flex; flex-direction:column; align-items:center; gap:0.75rem;">
     <div x-ref="doc" style="width:100%; display:flex; justify-content:center;">
