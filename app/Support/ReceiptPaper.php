@@ -15,13 +15,22 @@ final class ReceiptPaper
     public const PRINT_MM = 48;
 
     /** Ukuran huruf dasar saat dicetak — gaya struk memakai rem, jadi semua ukuran ikut mengecil proporsional. */
-    public const BASE_FONT_PX = 14;
+    public const BASE_FONT_PX = 13;
+
+    /** Font struk (cetak browser & gambar RawBT). Android tidak punya Segoe UI → jatuh ke Roboto yang mirip. */
+    public const FONT_STACK = "'Segoe UI', Roboto, Arial, sans-serif";
+
+    /** Ruang kosong kiri & kanan di dalam area cetak (mm). */
+    public const SIDE_PADDING_MM = 1.5;
 
     /**
-     * Jumlah huruf per baris saat dicetak lewat RawBT (ESC/POS, font A 12 dot × 384 dot kepala print 58mm). Dipakai
-     * tablet / HP Android — di sana struk dikirim sebagai perintah printer, bukan dicetak lewat browser.
+     * Cetak lewat RawBT (tablet / HP Android): struk digambar ke kanvas lalu dikirim sebagai gambar ESC/POS (raster),
+     * supaya hasilnya sama dengan cetak dari PC (font, tebal, ukuran) — bukan huruf bawaan printer yang kaku.
+     * Kepala print 58mm = 384 titik pada 203 dpi.
      */
-    public const ESC_POS_COLUMNS = 32;
+    public const RASTER_DOTS = 384;
+
+    public const RASTER_DPI = 203;
 
     /** Tinggi kertas minimal (mm) supaya struk sangat pendek tetap terpotong rapi. */
     public const MIN_LENGTH_MM = 40;
@@ -37,14 +46,16 @@ final class ReceiptPaper
     {
         $print = self::PRINT_MM;
         $font = self::BASE_FONT_PX;
+        $family = self::FONT_STACK;
+        $side = self::SIDE_PADDING_MM;
 
         return <<<CSS
 html { font-size: {$font}px !important; }
 html, body { margin: 0 !important; padding: 0 !important; background: #FFFFFF !important; }
 #club61-receipt-root {
-    width: {$print}mm !important; max-width: {$print}mm !important; margin: 0 !important; padding: 1mm 1.5mm 0 !important;
+    width: {$print}mm !important; max-width: {$print}mm !important; margin: 0 !important; padding: 1mm {$side}mm 0 !important;
     box-sizing: border-box !important; background: #FFFFFF !important; color: #000000 !important;
-    font-family: Arial, Helvetica, sans-serif !important; line-height: 1.45 !important; letter-spacing: 0.02em !important;
+    font-family: {$family} !important; line-height: 1.45 !important; letter-spacing: 0.02em !important;
     -webkit-print-color-adjust: exact; print-color-adjust: exact;
 }
 #club61-receipt-root > * {
@@ -96,6 +107,8 @@ CSS;
         $media = implode(', ', array_map(fn (string $s) => "{$s} img, {$s} svg, {$s} canvas", $selectors));
         $print = self::PRINT_MM;
         $font = self::BASE_FONT_PX;
+        $family = self::FONT_STACK;
+        $side = self::SIDE_PADDING_MM;
 
         return <<<CSS
 @media print {

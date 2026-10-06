@@ -32,8 +32,8 @@ class ReceiptPaperSizeTest extends TestCase
         // Thermal hitam/putih: teks tebal hitam (teks tipis dicetak belang), nominal tidak terpotong ke baris bawah,
         // bingkai & padding kartu layar tidak ikut dicetak.
         $this->assertStringContainsString('-webkit-text-stroke', $frame);
-        $this->assertStringContainsString('font-family: Arial, Helvetica, sans-serif', $frame);
-        $this->assertStringContainsString('html { font-size: 14px !important; }', $frame);
+        $this->assertStringContainsString("font-family: 'Segoe UI', Roboto, Arial, sans-serif", $frame);
+        $this->assertStringContainsString('html { font-size: 13px !important; }', $frame);
         $this->assertStringContainsString('flex-wrap: wrap !important', $frame);
         $this->assertStringContainsString('white-space: nowrap !important', $frame);
         $this->assertStringContainsString('#club61-receipt-root [id^="printable-"], #club61-receipt-root #fnbpos-receipt', $frame);
@@ -58,13 +58,16 @@ class ReceiptPaperSizeTest extends TestCase
     {
         $script = view('pos.partials.receipt-print-script')->render();
 
-        // Tablet / HP Android (termasuk aplikasi Flutter WebView): struk → ESC/POS → aplikasi RawBT → printer.
+        // Tablet / HP Android (termasuk aplikasi Flutter WebView): struk → gambar ESC/POS → aplikasi RawBT → printer.
         $this->assertStringContainsString("/Android/i.test(navigator.userAgent) ? 'rawbt' : 'browser'", $script);
         $this->assertStringContainsString("window.location.href = 'rawbt:base64,' + btoa(binary);", $script);
         $this->assertStringContainsString("localStorage.getItem('club61_print_mode')", $script);
-        // 32 kolom = font A printer 58mm (MP-58C).
-        $this->assertSame(32, ReceiptPaper::ESC_POS_COLUMNS);
-        $this->assertStringContainsString('cols = cols || 32;', $script);
+        // Gambar selebar kepala print 58mm (384 titik, 203 dpi), font & ukuran sama dengan cetak dari PC.
+        $this->assertSame(384, ReceiptPaper::RASTER_DOTS);
+        $this->assertStringContainsString('const W = 384;', $script);
+        $this->assertStringContainsString('const bodyPx = 13 * 0.75 * (dpi / 96);', $script);
+        $this->assertStringContainsString('out.push(GS, 0x76, 0x30, 0x00', $script);
+        $this->assertStringContainsString("Segoe UI", $script);
     }
 
     public function test_pos_page_keeps_the_print_script_intact_after_livewire_injects_its_assets(): void
