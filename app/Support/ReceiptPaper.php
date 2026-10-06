@@ -17,15 +17,15 @@ final class ReceiptPaper
     /** Ukuran huruf dasar saat dicetak — gaya struk memakai rem, jadi semua ukuran ikut mengecil proporsional. */
     public const BASE_FONT_PX = 13;
 
-    /** Font struk (cetak browser & gambar RawBT). Android tidak punya Segoe UI → jatuh ke Roboto yang mirip. */
+    /** Font gambar struk. Android tidak punya Segoe UI → jatuh ke Roboto yang mirip. */
     public const FONT_STACK = "'Segoe UI', Roboto, Arial, sans-serif";
 
     /** Ruang kosong kiri & kanan di dalam area cetak (mm). */
     public const SIDE_PADDING_MM = 1.5;
 
     /**
-     * Cetak lewat RawBT (tablet / HP Android): struk digambar ke kanvas lalu dikirim sebagai gambar ESC/POS (raster),
-     * supaya hasilnya sama dengan cetak dari PC (font, tebal, ukuran) — bukan huruf bawaan printer yang kaku.
+     * Struk digambar ke kanvas hitam-putih selebar kepala print, lalu gambar itu yang dicetak: lewat RawBT sebagai ESC/POS
+     * (tablet / HP Android) dan lewat Chrome (PC kasir) — hasil keduanya sama dan hitam pekat.
      * Kepala print 58mm = 384 titik pada 203 dpi.
      */
     public const RASTER_DOTS = 384;
@@ -37,62 +37,6 @@ final class ReceiptPaper
 
     /** Ruang kosong di bawah struk (mm) sebelum dipotong. */
     public const BOTTOM_FEED_MM = 4;
-
-    /**
-     * Gaya struk di dalam jendela cetak khusus (iframe dari club61PrintReceipt). Struk dibungkus #club61-receipt-root,
-     * jadi berlaku untuk struk apa pun.
-     */
-    public static function frameCss(): string
-    {
-        $print = self::PRINT_MM;
-        $font = self::BASE_FONT_PX;
-        $family = self::FONT_STACK;
-        $side = self::SIDE_PADDING_MM;
-
-        return <<<CSS
-html { font-size: {$font}px !important; }
-html, body { margin: 0 !important; padding: 0 !important; background: #FFFFFF !important; }
-#club61-receipt-root {
-    width: {$print}mm !important; max-width: {$print}mm !important; margin: 0 !important; padding: 1mm {$side}mm 0 !important;
-    box-sizing: border-box !important; background: #FFFFFF !important; color: #000000 !important;
-    font-family: {$family} !important; line-height: 1.45 !important; letter-spacing: 0.02em !important;
-    -webkit-print-color-adjust: exact; print-color-adjust: exact;
-}
-#club61-receipt-root > * {
-    width: 100% !important; max-width: 100% !important; min-width: 0 !important; margin: 0 !important; padding: 0 !important;
-    border: none !important; border-radius: 0 !important; box-shadow: none !important;
-}
-/* Printer thermal hanya hitam/putih: teks abu-abu dicetak sebagai titik-titik (belang), jadi semua teks hitam dengan
-   garis huruf sedikit ditebalkan. Tidak semua dipaksa bold (huruf jadi rapat / mepet) — judul & total tetap bold dari
-   desain struknya. */
-#club61-receipt-root * {
-    color: #000000 !important; background: transparent !important; box-shadow: none !important;
-    font-family: inherit !important; border-color: #000000 !important; line-height: inherit !important;
-    -webkit-text-stroke: 0.15px #000000; max-width: 100% !important; overflow-wrap: break-word;
-}
-/* font-weight 800/900 di Windows memakai Arial Black (gemuk & kotak) — cukup bold biasa. */
-#club61-receipt-root [style*="font-weight:900"], #club61-receipt-root [style*="font-weight: 900"],
-#club61-receipt-root [style*="font-weight:800"], #club61-receipt-root [style*="font-weight: 800"],
-#club61-receipt-root .font-black, #club61-receipt-root .font-extrabold { font-weight: 700 !important; }
-/* Kartu struk di layar (bingkai, sudut bulat, padding) tidak ikut dicetak — padding-nya memakan lebar kertas. */
-#club61-receipt-root [id^="printable-"], #club61-receipt-root #fnbpos-receipt {
-    width: 100% !important; max-width: 100% !important; margin: 0 !important; padding: 0 !important;
-    border: none !important; border-radius: 0 !important; box-shadow: none !important;
-}
-/* Baris label-nominal: nominal ("Rp 500.000") tidak pernah dipotong ke baris bawah, label yang mengalah. */
-/* Kalau label + nominal tidak muat sebaris, nominal pindah ke baris berikutnya (rata kanan) — label tetap utuh,
-   tidak terpotong di tengah kata seperti "TOTAL / BAYAR". */
-#club61-receipt-root [style*="space-between"], #club61-receipt-root .justify-between {
-    flex-wrap: wrap !important; column-gap: 1.5mm !important; row-gap: 0 !important; gap: 0 1.5mm !important;
-}
-#club61-receipt-root [style*="space-between"] > :first-child, #club61-receipt-root .justify-between > :first-child { min-width: 0 !important; flex: 1 1 auto !important; }
-#club61-receipt-root [style*="space-between"] > :last-child:not(:first-child), #club61-receipt-root .justify-between > :last-child:not(:first-child) {
-    white-space: nowrap !important; flex: 0 0 auto !important; margin-left: auto !important; text-align: right !important;
-}
-#club61-receipt-root img, #club61-receipt-root svg, #club61-receipt-root canvas { max-width: 100% !important; height: auto !important; }
-#club61-receipt-root .no-print { display: none !important; }
-CSS;
-    }
 
     /**
      * CSS @media print untuk elemen struk dengan selector tertentu — cadangan kalau dicetak lewat Ctrl+P. Tombol cetak

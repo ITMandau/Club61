@@ -25,28 +25,19 @@ class ReceiptPaperSizeTest extends TestCase
         $this->assertStringContainsString('@page { margin: 0; }', $css);
         $this->assertStringContainsString('width: 48mm !important', $css);
         $this->assertStringNotContainsString('78mm', $css);
-
-        $frame = ReceiptPaper::frameCss();
-        $this->assertStringContainsString('width: 48mm !important', $frame);
-        $this->assertStringContainsString('#club61-receipt-root .no-print { display: none !important; }', $frame);
-        // Thermal hitam/putih: teks tebal hitam (teks tipis dicetak belang), nominal tidak terpotong ke baris bawah,
-        // bingkai & padding kartu layar tidak ikut dicetak.
-        $this->assertStringContainsString('-webkit-text-stroke', $frame);
-        $this->assertStringContainsString("font-family: 'Segoe UI', Roboto, Arial, sans-serif", $frame);
-        $this->assertStringContainsString('html { font-size: 13px !important; }', $frame);
-        $this->assertStringContainsString('flex-wrap: wrap !important', $frame);
-        $this->assertStringContainsString('white-space: nowrap !important', $frame);
-        $this->assertStringContainsString('#club61-receipt-root [id^="printable-"], #club61-receipt-root #fnbpos-receipt', $frame);
-        $this->assertStringNotContainsString('word-break: break-word', $frame);
     }
 
-    public function test_print_script_sizes_the_paper_to_the_receipt_and_skips_the_fallback_style(): void
+    public function test_print_script_sizes_the_paper_to_the_receipt_and_prints_a_pure_black_image(): void
     {
         $script = view('pos.partials.receipt-print-script')->render();
 
         $this->assertStringContainsString('window.club61PrintReceipt', $script);
         $this->assertStringContainsString("'@page { size: 58mm ' + heightMm + 'mm; margin: 0; }'", $script);
-        $this->assertStringContainsString('style:not([data-club61-receipt-print])', $script);
+        // PC juga mencetak gambar struk (sama dengan RawBT), bukan teks HTML yang dihaluskan Chrome lalu jadi belang.
+        $this->assertStringContainsString('window.club61PrintBrowser(el);', $script);
+        $this->assertStringContainsString("img.src = canvas.toDataURL('image/png');", $script);
+        $this->assertStringContainsString('width: 48mm; height: auto; image-rendering: pixelated;', $script);
+        $this->assertStringContainsString('const v = lum < 160 ? 0 : 255;', $script);
         $this->assertStringContainsString('data-club61-receipt-print', view('pos.partials.receipt-print-style', ['selectors' => ['#struk']])->render());
 
         // Livewire menyisipkan script-nya sebelum tag penutup body PERTAMA di respons. Tag head/body/html di dalam
@@ -62,7 +53,7 @@ class ReceiptPaperSizeTest extends TestCase
         $this->assertStringContainsString("/Android/i.test(navigator.userAgent) ? 'rawbt' : 'browser'", $script);
         $this->assertStringContainsString("window.location.href = 'rawbt:base64,' + btoa(binary);", $script);
         $this->assertStringContainsString("localStorage.getItem('club61_print_mode')", $script);
-        // Gambar selebar kepala print 58mm (384 titik, 203 dpi), font & ukuran sama dengan cetak dari PC.
+        // Gambar selebar kepala print 58mm (384 titik, 203 dpi) — gambar yang sama dengan cetak dari PC.
         $this->assertSame(384, ReceiptPaper::RASTER_DOTS);
         $this->assertStringContainsString('const W = 384;', $script);
         $this->assertStringContainsString('const bodyPx = 13 * 0.75 * (dpi / 96);', $script);

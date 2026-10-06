@@ -1,11 +1,11 @@
 {{--
     Cetak struk thermal: club61PrintReceipt('#id-struk' | elemen).
 
-    - Android (tablet / HP / aplikasi Flutter): struk digambar ke kanvas (font, tebal & ukuran sama dengan cetak dari PC),
+    - Android (tablet / HP / aplikasi Flutter): struk digambar ke kanvas hitam-putih (selebar kepala print 384 titik),
       diubah jadi gambar ESC/POS lalu dikirim ke aplikasi RawBT lewat link "rawbt:base64,…" — RawBT meneruskan ke printer
       (MP-58C via Bluetooth/USB) tanpa dialog cetak.
-    - Selain Android (PC kasir): struk disalin ke iframe tersembunyi yang isinya HANYA struk, tingginya diukur, lalu
-      @page diatur 58mm x tinggi struk. Dulu window.print() mencetak seluruh halaman dan ukuran kertasnya tidak terbaca
+    - Selain Android (PC kasir): gambar yang sama dicetak lewat iframe tersembunyi yang isinya HANYA gambar struk, dengan
+      @page 58mm x tinggi struk. Dulu window.print() mencetak seluruh halaman dan ukuran kertasnya tidak terbaca
       ("58mm auto" tidak valid), jadi kertas mengikuti driver "User Defined" yang panjangnya bermeter-meter.
     - Paksa salah satu cara di perangkat tertentu: localStorage.setItem('club61_print_mode', 'rawbt' | 'browser').
 --}}
@@ -80,7 +80,7 @@
         };
 
         /**
-         * Daftar baris → kanvas selebar kepala print (384 titik). Ukuran fisik sama dengan cetak dari PC: isi struk
+         * Daftar baris → kanvas selebar kepala print (384 titik), dipakai RawBT maupun cetak dari PC. Isi struk
          * 0.75rem dari {{ $paper::BASE_FONT_PX }}px, dikonversi dari 96 dpi layar ke {{ $paper::RASTER_DPI }} dpi printer.
          */
         window.club61ReceiptCanvas = function (receipt) {
@@ -96,7 +96,7 @@
             const canvas = document.createElement('canvas');
             const ctx = canvas.getContext('2d');
             const fontOf = (l) => (l.bold ? 'bold ' : '') + Math.round(bodyPx * (l.scale || 1)) + 'px ' + family;
-            // Jarak antar huruf sama dengan cetak dari PC (letter-spacing 0.02em di frameCss).
+            // Huruf sedikit direnggangkan supaya tidak mepet.
             const spacing = (l) => (Math.round(bodyPx * (l.scale || 1) * 0.02 * 10) / 10) + 'px';
             const applyFont = (l) => { ctx.font = fontOf(l); if ('letterSpacing' in ctx) { ctx.letterSpacing = spacing(l); } };
 
@@ -164,6 +164,18 @@
                 const x = op.align === 'center' ? W / 2 : (op.align === 'right' ? W - side : side);
                 ctx.fillText(op.text, x, op.y);
             }
+
+            // Hitam murni / putih murni (tanpa abu-abu pinggiran huruf): abu-abu dicetak printer thermal sebagai
+            // titik-titik → huruf belang & buram. Gambar yang sama dipakai RawBT (Android) dan cetak dari PC.
+            const img = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            const px = img.data;
+            for (let i = 0; i < px.length; i += 4) {
+                const lum = px[i] * 0.299 + px[i + 1] * 0.587 + px[i + 2] * 0.114;
+                const v = lum < 160 ? 0 : 255;
+                px[i] = px[i + 1] = px[i + 2] = v;
+                px[i + 3] = 255;
+            }
+            ctx.putImageData(img, 0, 0);
             return canvas;
         };
 
@@ -209,70 +221,60 @@
             window.location.href = 'rawbt:base64,' + btoa(binary);
         };
 
-        window.club61PrintReceipt = function (source) {
-            const el = typeof source === 'string' ? document.querySelector(source) : source;
-            if (! el) { window.print(); return; }
-
-            if (window.club61PrintMode() === 'rawbt') {
-                window.club61PrintRawBt(el);
-                return;
-            }
+        /**
+         * PC kasir: gambar struk yang sama dengan RawBT dicetak lewat iframe tersembunyi, kertas = 58mm x tinggi struk.
+         * Dulu struk dicetak sebagai teks HTML — Chrome menghaluskan pinggiran huruf (abu-abu) dan driver POS58
+         * mengubahnya jadi titik-titik, jadi hasilnya belang & tidak setajam test page Windows.
+         */
+        window.club61PrintBrowser = async function (el) {
+            if (document.fonts && document.fonts.ready) { try { await document.fonts.ready; } catch (e) {} }
+            const canvas = window.club61ReceiptCanvas(el);
+            const heightMm = Math.max({{ $paper::MIN_LENGTH_MM }}, Math.ceil(canvas.height * 25.4 / {{ $paper::RASTER_DPI }}));
 
             const old = document.getElementById('club61-receipt-frame');
             if (old) { old.remove(); }
-
             const frame = document.createElement('iframe');
             frame.id = 'club61-receipt-frame';
             frame.setAttribute('aria-hidden', 'true');
             frame.style.cssText = 'position:fixed;right:0;bottom:0;width:{{ $paper::PAPER_MM }}mm;height:0;border:0;opacity:0;pointer-events:none;';
             document.body.appendChild(frame);
 
-            // Gaya halaman ikut disalin supaya class Tailwind / Filament di struk tetap berlaku.
-            const pageStyles = Array.from(document.querySelectorAll('link[rel="stylesheet"], style:not([data-club61-receipt-print])')).map((n) => n.outerHTML).join('');
             // Dokumen dibangun lewat DOM, bukan document.write berisi tag head/body/html: Livewire menyisipkan script-nya
             // sebelum tag penutup body PERTAMA di respons — kalau tag itu ada di string JS ini, script terpotong (error).
             const doc = frame.contentDocument;
             doc.open();
             doc.write('<!doctype html>');
             doc.close();
-            const base = doc.createElement('base');
-            base.href = location.href;
-            doc.head.appendChild(base);
-            doc.head.insertAdjacentHTML('beforeend', pageStyles);
-            const receiptStyle = doc.createElement('style');
-            receiptStyle.textContent = @js($paper::frameCss());
-            doc.head.appendChild(receiptStyle);
-            const rootEl = doc.createElement('div');
-            rootEl.id = 'club61-receipt-root';
-            rootEl.innerHTML = el.outerHTML;
-            doc.body.appendChild(rootEl);
+            const style = doc.createElement('style');
+            style.textContent = '@page { size: {{ $paper::PAPER_MM }}mm ' + heightMm + 'mm; margin: 0; }'
+                + ' html, body { margin: 0; padding: 0; background: #FFFFFF; }'
+                + ' img { display: block; width: {{ $paper::PRINT_MM }}mm; height: auto; image-rendering: pixelated; }';
+            doc.head.appendChild(style);
+            const img = doc.createElement('img');
+            img.alt = '';
 
             let printed = false;
             const go = () => {
                 if (printed) { return; }
                 printed = true;
-                const root = doc.getElementById('club61-receipt-root');
-                const heightMm = Math.max(
-                    {{ $paper::MIN_LENGTH_MM }},
-                    Math.ceil(root.getBoundingClientRect().height * 25.4 / 96) + {{ $paper::BOTTOM_FEED_MM }}
-                );
-                const page = doc.createElement('style');
-                page.textContent = '@page { size: {{ $paper::PAPER_MM }}mm ' + heightMm + 'mm; margin: 0; }';
-                doc.head.appendChild(page);
                 frame.contentWindow.focus();
                 frame.contentWindow.print();
                 setTimeout(() => frame.remove(), 2000);
             };
+            img.onload = () => setTimeout(go, 50);
+            img.src = canvas.toDataURL('image/png');
+            doc.body.appendChild(img);
+        };
 
-            // Tunggu stylesheet & font selesai dimuat supaya tinggi yang diukur sama dengan hasil cetak.
-            const links = Array.from(doc.querySelectorAll('link[rel="stylesheet"]'));
-            Promise.all(links.map((l) => (l.sheet ? Promise.resolve() : new Promise((resolve) => {
-                l.addEventListener('load', resolve);
-                l.addEventListener('error', resolve);
-                setTimeout(resolve, 1500);
-            }))))
-                .then(() => (doc.fonts ? doc.fonts.ready : null))
-                .then(() => setTimeout(go, 50));
+        window.club61PrintReceipt = function (source) {
+            const el = typeof source === 'string' ? document.querySelector(source) : source;
+            if (! el) { window.print(); return; }
+
+            if (window.club61PrintMode() === 'rawbt') {
+                window.club61PrintRawBt(el);
+            } else {
+                window.club61PrintBrowser(el);
+            }
         };
     }
 </script>
