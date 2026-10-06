@@ -1,12 +1,12 @@
 {{--
-    Cetak struk thermal: club61PrintReceipt('#id-struk' | elemen).
+    Cetak struk thermal: club61PrintReceipt('#id-struk' | elemen). Gaya struk POS umum (ESB, Moka): 32 kolom, label kiri -
+    nilai kanan, nominal rata kanan, TOTAL tebal dobel-tinggi.
 
-    - Android (tablet / HP / aplikasi Flutter): struk digambar ke kanvas hitam-putih (selebar kepala print 384 titik),
-      diubah jadi gambar ESC/POS lalu dikirim ke aplikasi RawBT lewat link "rawbt:base64,…" — RawBT meneruskan ke printer
-      (MP-58C via Bluetooth/USB) tanpa dialog cetak.
-    - Selain Android (PC kasir): gambar yang sama dicetak lewat iframe tersembunyi yang isinya HANYA gambar struk, dengan
-      @page 58mm x tinggi struk. Dulu window.print() mencetak seluruh halaman dan ukuran kertasnya tidak terbaca
-      ("58mm auto" tidak valid), jadi kertas mengikuti driver "User Defined" yang panjangnya bermeter-meter.
+    - Android (tablet / HP / aplikasi Flutter): struk dikirim sebagai TEKS ESC/POS ke aplikasi RawBT lewat link
+      "rawbt:base64,…" dan dicetak dengan font bawaan printer — paling tajam, tanpa dialog cetak.
+    - Selain Android (PC kasir): baris yang sama dicetak sebagai teks (bukan gambar) lewat iframe tersembunyi, kertas
+      58mm x tinggi struk. Teks tetap tajam walaupun Chrome menyekala halaman; gambar yang diperbesar/dikecilkan Chrome
+      jadi blur & belang.
     - Paksa salah satu cara di perangkat tertentu: localStorage.setItem('club61_print_mode', 'rawbt' | 'browser').
 --}}
 @php($paper = \App\Support\ReceiptPaper::class)
@@ -55,7 +55,8 @@
                         kind: 'row',
                         left: tidy(kids.slice(0, -1).map((k) => k.innerText || k.textContent).join(' ')),
                         right: tidy(last.innerText || last.textContent),
-                        bold: isBold(cs) || styles.some(isBold),
+                        // Tebal hanya kalau labelnya tebal — nilai yang ditebalkan di layar (No. Order, Kasir) dicetak biasa.
+                        bold: isBold(cs) || isBold(styles[0]),
                         scale: Math.max(scaleOf(cs), ...styles.map(scaleOf)),
                     });
                 } else if (isRowFlex || kids.length === 0 || kids.every((k) => getComputedStyle(k).display.indexOf('inline') === 0 || k.tagName === 'BR')) {
@@ -80,140 +81,84 @@
         };
 
         /**
-         * Daftar baris → kanvas selebar kepala print (384 titik), dipakai RawBT maupun cetak dari PC. Isi struk
-         * 0.75rem dari {{ $paper::BASE_FONT_PX }}px, dikonversi dari 96 dpi layar ke {{ $paper::RASTER_DPI }} dpi printer.
+         * Daftar baris → baris struk {{ $paper::COLUMNS }} kolom: { text, bold, big (dobel tinggi), align }. Satu tata letak untuk
+         * RawBT dan PC, jadi hasil cetak keduanya sama.
          */
-        window.club61ReceiptCanvas = function (receipt) {
-            const lines = window.club61ReceiptLines(receipt);
-            const W = {{ $paper::RASTER_DOTS }};
-            const dpi = {{ $paper::RASTER_DPI }};
-            const dotsPerMm = dpi / 25.4;
-            const side = Math.round({{ $paper::SIDE_PADDING_MM }} * dotsPerMm);
-            const inner = W - side * 2;
-            const bodyPx = {{ $paper::BASE_FONT_PX }} * 0.75 * (dpi / 96);
-            const family = @js($paper::FONT_STACK);
-            const lineHeight = 1.45;
-            const canvas = document.createElement('canvas');
-            const ctx = canvas.getContext('2d');
-            const fontOf = (l) => (l.bold ? 'bold ' : '') + Math.round(bodyPx * (l.scale || 1)) + 'px ' + family;
-            // Huruf sedikit direnggangkan supaya tidak mepet.
-            const spacing = (l) => (Math.round(bodyPx * (l.scale || 1) * 0.02 * 10) / 10) + 'px';
-            const applyFont = (l) => { ctx.font = fontOf(l); if ('letterSpacing' in ctx) { ctx.letterSpacing = spacing(l); } };
-
-            const wrap = (str, maxWidth) => {
-                const out = [];
+        window.club61ReceiptLayout = function (receipt, columns) {
+            const COLS = columns || {{ $paper::COLUMNS }};
+            const out = [];
+            // Font printer hanya ASCII: titik tengah / tanda pisah → "-", huruf beraksen → huruf biasa, sisanya dibuang.
+            const ascii = (s) => String(s || '').replace(/[•·–—]/g, '-').replace(/[“”]/g, '"').replace(/[‘’]/g, "'")
+                .normalize('NFKD').replace(/[^\x20-\x7E]/g, '').replace(/ +/g, ' ').trim();
+            const wrap = (s, width) => {
+                const lines = [];
                 let line = '';
-                for (const word of str.split(' ')) {
-                    const next = line ? line + ' ' + word : word;
-                    if (ctx.measureText(next).width <= maxWidth || ! line) { line = next; } else { out.push(line); line = word; }
+                for (let word of s.split(' ')) {
+                    while (word.length > width) { if (line) { lines.push(line); line = ''; } lines.push(word.slice(0, width)); word = word.slice(width); }
+                    if (! word) { continue; }
+                    if (! line) { line = word; } else if (line.length + 1 + word.length <= width) { line += ' ' + word; } else { lines.push(line); line = word; }
                 }
-                if (line) { out.push(line); }
-                // Kata yang lebih lebar dari kertas dipotong per huruf.
-                return out.flatMap((l) => {
-                    if (ctx.measureText(l).width <= maxWidth) { return [l]; }
-                    const parts = [];
-                    let cur = '';
-                    for (const ch of l) { if (ctx.measureText(cur + ch).width > maxWidth && cur) { parts.push(cur); cur = ch; } else { cur += ch; } }
-                    if (cur) { parts.push(cur); }
-                    return parts;
-                });
+                if (line) { lines.push(line); }
+                return lines.length ? lines : [''];
+            };
+            const pad = (left, right) => left + ' '.repeat(Math.max(1, COLS - left.length - right.length)) + right;
+            const push = (text, o) => out.push({ text, bold: !! o.bold, big: !! o.big, align: o.align || 'left' });
+
+            // Label kiri + nominal kanan. Kalau tidak muat sebaris, nama barang turun dan nominal menempel di baris
+            // terakhirnya ("x2              Rp 70.000"), bukan dipotong di tengah.
+            const twoCol = (left, right, o) => {
+                if (! right) { wrap(left, COLS).forEach((t) => push(t, o)); return; }
+                if (left.length + 1 + right.length <= COLS) { push(pad(left, right), o); return; }
+                let lines = wrap(left, COLS);
+                if (lines[lines.length - 1].length + 1 + right.length > COLS) {
+                    const words = lines[lines.length - 1].split(' ');
+                    const tail = words.pop();
+                    // Hanya jumlah barang ("x2") yang turun menemani nominal; label lain ("Masa Aktif") tetap utuh dan
+                    // nilainya rata kanan di baris berikutnya.
+                    if (! words.length || ! /^x\d+$/i.test(tail) || tail.length + 1 + right.length > COLS) {
+                        lines.forEach((t) => push(t, o));
+                        push(right, { ...o, align: 'right' });
+                        return;
+                    }
+                    lines = [...lines.slice(0, -1), words.join(' '), tail];
+                }
+                lines.slice(0, -1).forEach((t) => push(t, o));
+                push(pad(lines[lines.length - 1], right), o);
             };
 
-            // Tata letak dulu (butuh measureText), baru gambar setelah tinggi kanvas diketahui.
-            const ops = [];
-            let y = Math.round(dotsPerMm);
-            for (const l of lines) {
-                if (l.kind === 'rule') {
-                    y += Math.round(bodyPx * 0.35);
-                    ops.push({ kind: 'rule', y });
-                    y += Math.round(bodyPx * 0.35) + 2;
-                    continue;
-                }
-                applyFont(l);
-                const step = Math.round(bodyPx * (l.scale || 1) * lineHeight);
-                if (l.kind === 'text') {
-                    for (const t of wrap(l.text, inner)) { ops.push({ kind: 'text', line: l, text: t, align: l.align, y }); y += step; }
-                    continue;
-                }
-                const gap = Math.round(bodyPx * 0.5);
-                const rightW = ctx.measureText(l.right).width;
-                if (l.right && ctx.measureText(l.left).width + gap + rightW <= inner) {
-                    ops.push({ kind: 'text', line: l, text: l.left, align: 'left', y });
-                    ops.push({ kind: 'text', line: l, text: l.right, align: 'right', y });
-                    y += step;
-                } else {
-                    for (const t of wrap(l.left, inner)) { ops.push({ kind: 'text', line: l, text: t, align: 'left', y }); y += step; }
-                    if (l.right) { for (const t of wrap(l.right, inner)) { ops.push({ kind: 'text', line: l, text: t, align: 'right', y }); y += step; } }
-                }
+            for (const l of window.club61ReceiptLines(receipt)) {
+                if (l.kind === 'rule') { push('-'.repeat(COLS), {}); continue; }
+                // Judul & baris TOTAL dicetak dobel tinggi.
+                const big = (l.scale || 1) >= 1.15 || (l.kind === 'row' && /^total\b/i.test(l.left));
+                const o = { bold: l.bold || big, big, align: l.align };
+                if (l.kind === 'row') { twoCol(ascii(l.left), ascii(l.right), { ...o, align: 'left' }); continue; }
+                const text = ascii(l.text);
+                // "Kasir: Super Admin" → label kiri, nilai rata kanan (gaya struk POS).
+                const m = l.align === 'left' && ! big ? text.match(/^([^:]{1,16}):\s+(.+)$/) : null;
+                if (m && m[1].length + 2 + m[2].length <= COLS) { push(pad(m[1] + ':', m[2]), o); continue; }
+                wrap(text, COLS).forEach((t) => push(t, o));
             }
-            y += Math.round({{ $paper::BOTTOM_FEED_MM }} * dotsPerMm);
-
-            canvas.width = W;
-            canvas.height = Math.max(8, Math.ceil(y / 8) * 8);
-            ctx.fillStyle = '#FFFFFF';
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
-            ctx.fillStyle = '#000000';
-            ctx.textBaseline = 'top';
-            for (const op of ops) {
-                if (op.kind === 'rule') {
-                    for (let x = side; x < W - side; x += 10) { ctx.fillRect(x, op.y, 6, 2); }
-                    continue;
-                }
-                applyFont(op.line);
-                ctx.textAlign = op.align;
-                const x = op.align === 'center' ? W / 2 : (op.align === 'right' ? W - side : side);
-                ctx.fillText(op.text, x, op.y);
-            }
-
-            // Hitam murni / putih murni (tanpa abu-abu pinggiran huruf): abu-abu dicetak printer thermal sebagai
-            // titik-titik → huruf belang & buram. Gambar yang sama dipakai RawBT (Android) dan cetak dari PC.
-            const img = ctx.getImageData(0, 0, canvas.width, canvas.height);
-            const px = img.data;
-            for (let i = 0; i < px.length; i += 4) {
-                const lum = px[i] * 0.299 + px[i + 1] * 0.587 + px[i + 2] * 0.114;
-                const v = lum < 160 ? 0 : 255;
-                px[i] = px[i + 1] = px[i + 2] = v;
-                px[i + 3] = 255;
-            }
-            ctx.putImageData(img, 0, 0);
-            return canvas;
-        };
-
-        /**
-         * Kanvas → byte ESC/POS gambar (GS v 0). Hitam murni (ambang batas, tanpa abu-abu) supaya tidak belang di
-         * kertas thermal. Dikirim per potongan 128 baris — sebagian printer menolak gambar yang terlalu tinggi.
-         */
-        window.club61CanvasToEscPos = function (canvas) {
-            const ESC = 0x1B, GS = 0x1D;
-            const { width, height } = canvas;
-            const pixels = canvas.getContext('2d').getImageData(0, 0, width, height).data;
-            const bytesPerRow = Math.ceil(width / 8);
-            const out = [ESC, 0x40];
-            for (let top = 0; top < height; top += 128) {
-                const rows = Math.min(128, height - top);
-                out.push(GS, 0x76, 0x30, 0x00, bytesPerRow & 0xFF, bytesPerRow >> 8, rows & 0xFF, rows >> 8);
-                for (let yy = top; yy < top + rows; yy++) {
-                    for (let bx = 0; bx < bytesPerRow; bx++) {
-                        let byte = 0;
-                        for (let bit = 0; bit < 8; bit++) {
-                            const x = bx * 8 + bit;
-                            if (x >= width) { continue; }
-                            const i = (yy * width + x) * 4;
-                            const lum = pixels[i] * 0.299 + pixels[i + 1] * 0.587 + pixels[i + 2] * 0.114;
-                            if (pixels[i + 3] > 0 && lum < 160) { byte |= 0x80 >> bit; }
-                        }
-                        out.push(byte);
-                    }
-                }
-            }
-            out.push(ESC, 0x64, 3);          // dorong kertas supaya bisa disobek
-            out.push(GS, 0x56, 0x42, 0x00);  // potong (diabaikan printer tanpa pemotong)
             return out;
         };
 
-        window.club61PrintRawBt = async function (el) {
-            if (document.fonts && document.fonts.ready) { try { await document.fonts.ready; } catch (e) {} }
-            const bytes = window.club61CanvasToEscPos(window.club61ReceiptCanvas(el));
+        /** Baris struk → byte ESC/POS teks (font A bawaan printer, {{ $paper::COLUMNS }} kolom). */
+        window.club61LayoutToEscPos = function (layout) {
+            const ESC = 0x1B, GS = 0x1D;
+            const align = { left: 0, center: 1, right: 2 };
+            const out = [ESC, 0x40, ESC, 0x74, 0x00];
+            for (const l of layout) {
+                out.push(ESC, 0x61, align[l.align] || 0, ESC, 0x45, l.bold ? 1 : 0, GS, 0x21, l.big ? 0x01 : 0x00);
+                for (const ch of l.text) { out.push(ch.charCodeAt(0) & 0x7F); }
+                out.push(0x0A);
+            }
+            out.push(ESC, 0x61, 0, ESC, 0x45, 0, GS, 0x21, 0);
+            out.push(ESC, 0x64, {{ $paper::FEED_LINES }});   // sisa kertas untuk disobek
+            out.push(GS, 0x56, 0x42, 0x00);                    // potong (diabaikan printer tanpa pemotong)
+            return out;
+        };
+
+        window.club61PrintRawBt = function (el) {
+            const bytes = window.club61LayoutToEscPos(window.club61ReceiptLayout(el));
             let binary = '';
             for (let i = 0; i < bytes.length; i += 4096) {
                 binary += String.fromCharCode.apply(null, bytes.slice(i, i + 4096));
@@ -222,14 +167,15 @@
         };
 
         /**
-         * PC kasir: gambar struk yang sama dengan RawBT dicetak lewat iframe tersembunyi, kertas = 58mm x tinggi struk.
-         * Dulu struk dicetak sebagai teks HTML — Chrome menghaluskan pinggiran huruf (abu-abu) dan driver POS58
-         * mengubahnya jadi titik-titik, jadi hasilnya belang & tidak setajam test page Windows.
+         * PC kasir: baris yang sama dicetak sebagai teks monospace (JetBrains Mono) lewat iframe tersembunyi,
+         * {{ $paper::PC_COLUMNS }} karakter tepat selebar kepala print. Judul & TOTAL sedikit dipanjangkan ke atas (dobel tinggi di printer).
          */
-        window.club61PrintBrowser = async function (el) {
-            if (document.fonts && document.fonts.ready) { try { await document.fonts.ready; } catch (e) {} }
-            const canvas = window.club61ReceiptCanvas(el);
-            const heightMm = Math.max({{ $paper::MIN_LENGTH_MM }}, Math.ceil(canvas.height * 25.4 / {{ $paper::RASTER_DPI }}));
+        window.club61PrintBrowser = function (el) {
+            const layout = window.club61ReceiptLayout(el, {{ $paper::PC_COLUMNS }});
+            const lineMm = {{ $paper::LINE_MM }};
+            const bigMm = lineMm * {{ $paper::BIG_STRETCH_Y }};
+            const contentMm = layout.reduce((n, l) => n + (l.big ? bigMm : lineMm), 0) + {{ $paper::FEED_LINES }} * lineMm;
+            const heightMm = Math.max({{ $paper::MIN_LENGTH_MM }}, Math.ceil(2 + contentMm));
 
             const old = document.getElementById('club61-receipt-frame');
             if (old) { old.remove(); }
@@ -245,25 +191,55 @@
             doc.open();
             doc.write('<!doctype html>');
             doc.close();
+            const font = doc.createElement('link');
+            font.rel = 'stylesheet';
+            font.href = @js($paper::FONT_URL);
+            doc.head.appendChild(font);
             const style = doc.createElement('style');
             style.textContent = '@page { size: {{ $paper::PAPER_MM }}mm ' + heightMm + 'mm; margin: 0; }'
                 + ' html, body { margin: 0; padding: 0; background: #FFFFFF; }'
-                + ' img { display: block; width: {{ $paper::PRINT_MM }}mm; height: auto; image-rendering: pixelated; }';
+                + ' .r { width: {{ $paper::TEXT_MM }}mm; margin: 0 auto; padding-top: 2mm; color: #000000; font-family: ' + @js($paper::FONT_STACK) + '; font-weight: 400; }'
+                + ' .l { height: ' + lineMm + 'mm; line-height: ' + lineMm + 'mm; white-space: pre; overflow: visible; }'
+                + ' .g { height: ' + bigMm + 'mm; }'
+                + ' .g > span { display: inline-block; transform: scaleY({{ $paper::BIG_STRETCH_Y }}); transform-origin: 0 0; }'
+                + ' .b { font-weight: 700; }';
             doc.head.appendChild(style);
-            const img = doc.createElement('img');
-            img.alt = '';
+            const root = doc.createElement('div');
+            root.className = 'r';
+            for (const l of layout) {
+                const row = doc.createElement('div');
+                row.className = 'l' + (l.bold ? ' b' : '') + (l.big ? ' g' : '');
+                row.style.textAlign = l.align;
+                const span = doc.createElement('span');
+                span.textContent = l.text || ' ';
+                row.appendChild(span);
+                root.appendChild(row);
+            }
+            doc.body.appendChild(root);
 
-            let printed = false;
             const go = () => {
-                if (printed) { return; }
-                printed = true;
-                frame.contentWindow.focus();
-                frame.contentWindow.print();
-                setTimeout(() => frame.remove(), 2000);
+                // {{ $paper::PC_COLUMNS }} karakter tepat selebar area teks (diukur setelah font termuat; tanpa internet jatuh ke Consolas).
+                const probe = doc.createElement('span');
+                probe.style.cssText = 'position:absolute;visibility:hidden;white-space:pre;font-size:20px;font-weight:700;';
+                probe.textContent = 'M'.repeat({{ $paper::PC_COLUMNS }});
+                root.appendChild(probe);
+                root.style.fontSize = (20 * root.clientWidth / probe.getBoundingClientRect().width) + 'px';
+                probe.remove();
+                setTimeout(() => {
+                    frame.contentWindow.focus();
+                    frame.contentWindow.print();
+                    setTimeout(() => frame.remove(), 2000);
+                }, 50);
             };
-            img.onload = () => setTimeout(go, 50);
-            img.src = canvas.toDataURL('image/png');
-            doc.body.appendChild(img);
+            const fontLoaded = new Promise((resolve) => {
+                font.onload = resolve;
+                font.onerror = resolve;
+                setTimeout(resolve, 2000);
+            }).then(() => Promise.all([
+                doc.fonts.load("400 16px 'JetBrains Mono'"),
+                doc.fonts.load("700 16px 'JetBrains Mono'"),
+            ]).catch(() => null));
+            Promise.race([fontLoaded, new Promise((r) => setTimeout(r, 3000))]).then(go);
         };
 
         window.club61PrintReceipt = function (source) {

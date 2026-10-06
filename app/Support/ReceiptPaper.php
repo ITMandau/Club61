@@ -14,29 +14,37 @@ final class ReceiptPaper
     /** Area cetak printer 58mm (kepala print 48mm / 384 dot). Isi struk dibatasi ke lebar ini supaya tidak terpotong. */
     public const PRINT_MM = 48;
 
-    /** Ukuran huruf dasar saat dicetak — gaya struk memakai rem, jadi semua ukuran ikut mengecil proporsional. */
-    public const BASE_FONT_PX = 13;
-
-    /** Font gambar struk. Android tidak punya Segoe UI → jatuh ke Roboto yang mirip. */
-    public const FONT_STACK = "'Segoe UI', Roboto, Arial, sans-serif";
-
-    /** Ruang kosong kiri & kanan di dalam area cetak (mm). */
-    public const SIDE_PADDING_MM = 1.5;
-
     /**
-     * Struk digambar ke kanvas hitam-putih selebar kepala print, lalu gambar itu yang dicetak: lewat RawBT sebagai ESC/POS
-     * (tablet / HP Android) dan lewat Chrome (PC kasir) — hasil keduanya sama dan hitam pekat.
-     * Kepala print 58mm = 384 titik pada 203 dpi.
+     * Gaya struk POS umum (ESB, Moka): teks 32 kolom font A bawaan printer — Android lewat RawBT mengirim teks ESC/POS,
+     * PC mencetak teks monospace dengan tata letak yang sama.
      */
-    public const RASTER_DOTS = 384;
+    public const COLUMNS = 32;
 
-    public const RASTER_DPI = 203;
+    /** Kolom cetak dari PC — lebih sedikit dari font printer supaya huruf lebih besar & tidak terkesan pelit. */
+    public const PC_COLUMNS = 28;
+
+    /** Lebar teks di cetak dari PC (mm), di tengah kertas 58mm — selebar kepala print. */
+    public const TEXT_MM = 48;
+
+    /** Font cetak dari PC: monospace tipis tapi tajam (angka & huruf mirip mudah dibedakan), dimuat dari Google Fonts. */
+    public const FONT_STACK = "'JetBrains Mono', Consolas, monospace";
+
+    public const FONT_URL = 'https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&display=block';
+
+    /** Baris judul & TOTAL di PC dipanjangkan ke atas segini (dobel tinggi di printer). Teks biasa tidak dipanjangkan. */
+    public const BIG_STRETCH_Y = 1.5;
+
+    /** Tinggi satu baris cetak dari PC (mm). */
+    public const LINE_MM = 4.8;
+
+    /** Baris kosong di bawah struk sebelum disobek / dipotong. */
+    public const FEED_LINES = 4;
 
     /** Tinggi kertas minimal (mm) supaya struk sangat pendek tetap terpotong rapi. */
     public const MIN_LENGTH_MM = 40;
 
-    /** Ruang kosong di bawah struk (mm) sebelum dipotong. */
-    public const BOTTOM_FEED_MM = 4;
+    /** Ukuran huruf cadangan Ctrl+P (printCss). */
+    public const BASE_FONT_PX = 12;
 
     /**
      * CSS @media print untuk elemen struk dengan selector tertentu — cadangan kalau dicetak lewat Ctrl+P. Tombol cetak
@@ -51,8 +59,6 @@ final class ReceiptPaper
         $media = implode(', ', array_map(fn (string $s) => "{$s} img, {$s} svg, {$s} canvas", $selectors));
         $print = self::PRINT_MM;
         $font = self::BASE_FONT_PX;
-        $family = self::FONT_STACK;
-        $side = self::SIDE_PADDING_MM;
 
         return <<<CSS
 @media print {

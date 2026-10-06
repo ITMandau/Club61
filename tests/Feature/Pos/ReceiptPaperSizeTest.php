@@ -27,17 +27,16 @@ class ReceiptPaperSizeTest extends TestCase
         $this->assertStringNotContainsString('78mm', $css);
     }
 
-    public function test_print_script_sizes_the_paper_to_the_receipt_and_prints_a_pure_black_image(): void
+    public function test_pc_prints_the_receipt_as_sharp_text_sized_to_the_receipt(): void
     {
         $script = view('pos.partials.receipt-print-script')->render();
 
         $this->assertStringContainsString('window.club61PrintReceipt', $script);
         $this->assertStringContainsString("'@page { size: 58mm ' + heightMm + 'mm; margin: 0; }'", $script);
-        // PC juga mencetak gambar struk (sama dengan RawBT), bukan teks HTML yang dihaluskan Chrome lalu jadi belang.
+        // Teks (bukan gambar): gambar yang disekala Chrome jadi blur & belang di printer thermal.
         $this->assertStringContainsString('window.club61PrintBrowser(el);', $script);
-        $this->assertStringContainsString("img.src = canvas.toDataURL('image/png');", $script);
-        $this->assertStringContainsString('width: 48mm; height: auto; image-rendering: pixelated;', $script);
-        $this->assertStringContainsString('const v = lum < 160 ? 0 : 255;', $script);
+        $this->assertStringNotContainsString('toDataURL', $script);
+        $this->assertStringContainsString("probe.textContent = 'M'.repeat(32);", $script);
         $this->assertStringContainsString('data-club61-receipt-print', view('pos.partials.receipt-print-style', ['selectors' => ['#struk']])->render());
 
         // Livewire menyisipkan script-nya sebelum tag penutup body PERTAMA di respons. Tag head/body/html di dalam
@@ -45,20 +44,19 @@ class ReceiptPaperSizeTest extends TestCase
         $this->assertDoesNotMatchRegularExpression('#</?\s*(head|body|html)[\s>]#i', $script);
     }
 
-    public function test_android_devices_print_through_rawbt_without_a_dialog(): void
+    public function test_android_devices_print_pos_style_text_through_rawbt_without_a_dialog(): void
     {
         $script = view('pos.partials.receipt-print-script')->render();
 
-        // Tablet / HP Android (termasuk aplikasi Flutter WebView): struk → gambar ESC/POS → aplikasi RawBT → printer.
+        // Tablet / HP Android (termasuk aplikasi Flutter WebView): struk → teks ESC/POS → aplikasi RawBT → printer.
         $this->assertStringContainsString("/Android/i.test(navigator.userAgent) ? 'rawbt' : 'browser'", $script);
         $this->assertStringContainsString("window.location.href = 'rawbt:base64,' + btoa(binary);", $script);
         $this->assertStringContainsString("localStorage.getItem('club61_print_mode')", $script);
-        // Gambar selebar kepala print 58mm (384 titik, 203 dpi) — gambar yang sama dengan cetak dari PC.
-        $this->assertSame(384, ReceiptPaper::RASTER_DOTS);
-        $this->assertStringContainsString('const W = 384;', $script);
-        $this->assertStringContainsString('const bodyPx = 13 * 0.75 * (dpi / 96);', $script);
-        $this->assertStringContainsString('out.push(GS, 0x76, 0x30, 0x00', $script);
-        $this->assertStringContainsString("Segoe UI", $script);
+        // Gaya struk POS: 32 kolom font A, tebal (ESC E) & dobel tinggi (GS !) untuk judul dan TOTAL.
+        $this->assertSame(32, ReceiptPaper::COLUMNS);
+        $this->assertStringContainsString('const COLS = 32;', $script);
+        $this->assertStringContainsString('out.push(ESC, 0x61, align[l.align] || 0, ESC, 0x45, l.bold ? 1 : 0, GS, 0x21, l.big ? 0x01 : 0x00);', $script);
+        $this->assertStringContainsString("/^total\\b/i.test(l.left)", $script);
     }
 
     public function test_pos_page_keeps_the_print_script_intact_after_livewire_injects_its_assets(): void
