@@ -291,6 +291,9 @@
                                 @elseif($b->status === 'REFUNDED')
                                     <span class="adm-pill"
                                         style="background: #F3F4F6; color: #374151; border: 1px solid #D1D5DB; font-weight: 700;">Refunded</span>
+                                @elseif($b->status === 'REFUND_PENDING')
+                                    <span class="adm-pill" title="Booking sudah batal, refund menunggu persetujuan di Antrian Refund"
+                                        style="background: #FFF7ED; color: #9A3412; border: 1px solid #FED7AA; font-weight: 700;">Menunggu Refund</span>
                                 @elseif($b->status === 'CANCELLED')
                                     <span class="adm-pill"
                                         style="background: #FEE2E2; color: #DC2626; border: 1px solid #FECACA; font-weight: 700;">Cancelled</span>
@@ -494,10 +497,10 @@
                                         </button>
                                     @endif
 
-                                    @if ($this->canRefund && in_array($b->status, ['PAID', 'LOCKED', 'REFUND_PENDING']))
+                                    @if ($this->canRequestRefundFor($b))
                                         <button type="button"
                                             wire:click="openCancelRefundModal('{{ $b->id }}')"
-                                            wire:loading.attr="disabled" title="Batalkan Reservasi &amp; Refund"
+                                            wire:loading.attr="disabled" title="Ajukan Pembatalan &amp; Refund"
                                             class="adm-btn-icon adm-btn-icon-danger">
                                             <span wire:loading.remove
                                                 wire:target="openCancelRefundModal('{{ $b->id }}')">
@@ -522,7 +525,7 @@
                                         </button>
                                     @endif
 
-                                    @if (in_array($b->status, ['REFUNDED', 'CANCELLED', 'EXPIRED', 'COMPLETED']))
+                                    @if (in_array($b->status, ['REFUNDED', 'REFUND_PENDING', 'CANCELLED', 'EXPIRED', 'COMPLETED']))
                                         <span
                                             title="{{ $b->status === 'COMPLETED' ? 'Sesi Telah Selesai' : 'Tiket Telah Dinonaktifkan' }}"
                                             style="display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: 8px; background: #F3F4F6; border: 1px solid #D1D5DB; color: #6B7280; cursor: help;">
@@ -831,9 +834,9 @@
                     <div>
                         <div
                             style="color: #F87171; font-size: 0.6875rem; font-weight: 700; text-transform: uppercase;">
-                            Pembatalan Resmi &bull; Kasir Audit</div>
+                            Pengajuan &bull; Disetujui di Antrian Refund</div>
                         <div style="color: #FFFFFF; font-size: 1.125rem; font-weight: 800; margin-top: 0.25rem;">
-                            Batalkan Reservasi &amp; Refund</div>
+                            Ajukan Pembatalan &amp; Refund</div>
                     </div>
                     <button type="button" wire:click="$set('showCancelRefundModal', false)"
                         style="background: none; border: none; color: #FFFFFF; font-size: 1.5rem; cursor: pointer;">&times;</button>
@@ -847,7 +850,7 @@
                         <div style="font-size: 0.9375rem; font-weight: 800; color: #1F170D;">{{ $cancelCustomerName }}
                             (#{{ $cancelBookingCode }})</div>
                         <div style="margin-top: 0.25rem; font-size: 0.75rem; color: #4B5563;">
-                            Maks. refund (uang yang sudah masuk untuk booking ini): <strong>Rp {{ number_format($originalTotalAmount, 0, ',', '.') }}</strong>
+                            Uang yang sudah masuk untuk booking ini: <strong>Rp {{ number_format($originalTotalAmount, 0, ',', '.') }}</strong>
                         </div>
                     </div>
 
@@ -857,36 +860,36 @@
                             Alasan Pembatalan:</label>
                         <select wire:model="refundCategory"
                             style="width: 100%; border: 1px solid #D4AF37; border-radius: 8px; padding: 0.5rem; font-size: 0.8125rem;">
+                            <option value="PERMINTAAN_CUSTOMER">Permintaan Customer</option>
+                            <option value="KESALAHAN_VENUE">Kesalahan Venue (Lapangan Rusak / Venue Tutup)</option>
+                            <option value="FORCE_MAJEURE">Force Majeure (Hujan Badai / Listrik Padam)</option>
                             <option value="SALAH_BAYAR">Salah Bayar / Double Transfer</option>
-                            <option value="FORCE_MAJEURE">Force Majeure (Hujan Badai / Lapangan Rusak)</option>
-                            <option value="PERMINTAAN_MEMBER">Permintaan Khusus Member (Disetujui Manager)</option>
                         </select>
                     </div>
 
-                    <div style="margin-bottom: 1rem;">
-                        <label
-                            style="display: block; font-size: 0.75rem; font-weight: 700; color: #1F170D; margin-bottom: 0.35rem;">Nominal
-                            Pengembalian Dana (Rp):</label>
-                        <input type="number" wire:model="refundAmount"
-                            style="width: 100%; border: 1px solid #D4AF37; border-radius: 8px; padding: 0.5rem; font-size: 0.8125rem; font-family: var(--font-mono, monospace); font-weight: 700;">
-                    </div>
-
-                    <div style="margin-bottom: 1rem;">
-                        <label
-                            style="display: block; font-size: 0.75rem; font-weight: 700; color: #1F170D; margin-bottom: 0.35rem;">Metode
-                            Pengembalian:</label>
-                        <select wire:model="refundMethod"
-                            style="width: 100%; border: 1px solid #D4AF37; border-radius: 8px; padding: 0.5rem; font-size: 0.8125rem;">
-                            <option value="TRANSFER_MANUAL">Transfer Bank Manual</option>
-                            <option value="VOID_EDC">Void / Refund di Mesin EDC</option>
-                        </select>
+                    <div style="margin-bottom: 1rem; background: #FFF7ED; border: 1px solid #FED7AA; border-radius: 12px; padding: 0.85rem 1rem;">
+                        <div style="font-size: 0.75rem; font-weight: 800; color: #9A3412;">
+                            @if ($originalTotalAmount > 0)
+                                Refund yang diajukan: Rp {{ number_format($originalTotalAmount, 0, ',', '.') }} (penuh)
+                            @else
+                                Tidak ada uang yang perlu dikembalikan
+                            @endif
+                        </div>
+                        <div style="font-size: 0.6875rem; color: #7C2D12; line-height: 1.45; margin-top: 0.25rem;">
+                            @if ($originalTotalAmount > 0)
+                                Uang belum keluar dari sini. Pengajuan masuk ke <strong>Antrian Refund</strong> untuk disetujui superadmin / manager.
+                                Kalau ditolak, uangnya otomatis jadi <strong>voucher saldo</strong> di akun customer.
+                            @else
+                                Booking ini ditanggung kuota member / voucher sponsor atau belum dibayar. Kuota / jam voucher dikembalikan ke customer.
+                            @endif
+                        </div>
                     </div>
 
                     <div style="margin-bottom: 0.5rem;">
                         <label
-                            style="display: block; font-size: 0.75rem; font-weight: 700; color: #1F170D; margin-bottom: 0.35rem;">Catatan
-                            Kasir:</label>
-                        <textarea wire:model="refundNotes" rows="2" placeholder="Tuliskan keterangan detail kasir..."
+                            style="display: block; font-size: 0.75rem; font-weight: 700; color: #1F170D; margin-bottom: 0.35rem;">Alasan
+                            (wajib, dibaca pemeriksa refund):</label>
+                        <textarea wire:model="refundNotes" rows="2" maxlength="500" placeholder="Contoh: customer sakit, minta uang kembali via transfer BCA a.n. ..."
                             style="width: 100%; border: 1px solid #D4AF37; border-radius: 8px; padding: 0.5rem; font-size: 0.8125rem;"></textarea>
                     </div>
 
@@ -904,7 +907,7 @@
                     <button type="button" wire:click="executeCancelRefund" wire:loading.attr="disabled"
                         class="adm-btn-sec"
                         style="background: #DC2626; color: #FFFFFF; border-color: #B91C1C; font-weight: 800;">
-                        <span wire:loading.remove wire:target="executeCancelRefund">Konfirmasi &amp; Refund</span>
+                        <span wire:loading.remove wire:target="executeCancelRefund">Batalkan &amp; Ajukan</span>
                         <span wire:loading wire:target="executeCancelRefund">Membatalkan...</span>
                     </button>
                 </div>

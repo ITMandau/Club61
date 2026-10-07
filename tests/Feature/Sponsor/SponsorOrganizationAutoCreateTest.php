@@ -109,7 +109,7 @@ class SponsorOrganizationAutoCreateTest extends TestCase
             ->set('walkInPhone', '081277778888')
             ->set('paymentMethod', 'QRIS')
             ->set('qrisProvider', 'GOPAY_QRIS')
-            ->set('qrisRrn', '112233445566')
+            ->set('qrisMode', 'MANUAL')->set('qrisRrn', '112233445566')
             ->set('qrisSenderName', 'PT Pembeli Corporate')
             ->call('submitSale');
 

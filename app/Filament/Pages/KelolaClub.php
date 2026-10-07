@@ -14,11 +14,11 @@ class KelolaClub extends Page
 
     protected static ?string $navigationLabel = 'Kelola Club';
 
-    protected static string | UnitEnum | null $navigationGroup = 'Main Menu';
+    protected static string | UnitEnum | null $navigationGroup = 'Master Data';
 
     protected static ?string $title = 'Kelola Fasilitas Club';
 
-    protected static ?int $navigationSort = 9;
+    protected static ?int $navigationSort = 2;
 
     protected string $view = 'filament.pages.kelola-club';
 }

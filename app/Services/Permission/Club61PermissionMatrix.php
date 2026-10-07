@@ -36,6 +36,13 @@ class Club61PermissionMatrix
         // Log aktivitas berisi siapa melakukan refund, perubahan izin, dan data pelanggan.
         'View:LogAktivitas',
         'export_activity_logs',
+        // Buku Transaksi (Modul 17): seluruh omzet, data customer & bukti bayar; antrian refund = mengeluarkan uang.
+        'View:BukuTransaksi',
+        'export_ledger',
+        'view_ledger_invoice',
+        'process_refund_queue',
+        // Daftar Voucher: saldo voucher customer = uang customer yang masih disimpan klub.
+        'View:DaftarVoucher',
     ];
 
     /**
@@ -64,6 +71,8 @@ class Club61PermissionMatrix
                 'process_fnb_order',
                 'open_pos_shift',
                 'close_pos_shift',
+                'View:KelolaPemesanan',
+                'request_refund_padel',
             ],
             'receptionist' => [
                 'View:BookOfflineCourt',
@@ -78,6 +87,7 @@ class Club61PermissionMatrix
                 'view_padel_bookings',
                 'checkin_padel_ticket',
                 'print_padel_invoice',
+                'request_refund_padel',
             ],
             'kitchen' => [
                 'view_kitchen_kds',
@@ -119,6 +129,7 @@ class Club61PermissionMatrix
                             'view_padel_bookings' => 'Lihat Daftar Pemesanan Lapangan',
                             'checkin_padel_ticket' => 'Check-in Tiket Pemesan Lapangan',
                             'reschedule_padel_booking' => 'Reschedule Jadwal Pemesanan',
+                            'request_refund_padel' => 'Ajukan Pembatalan & Refund (masuk Antrian Refund)',
                             'cancel_refund_padel' => 'Batalkan & Refund Pemesanan (Admin / Staf)',
                             'cancel_padel_booking' => 'Batalkan Pesanan Lapangan (Tombol Batal)',
                             'print_padel_invoice' => 'Cetak Invoice & Bukti Pembayaran',
@@ -195,10 +206,10 @@ class Club61PermissionMatrix
                 'title' => '5. Wellness & Recovery Suite',
                 'submodules' => [
                     'sauna_icebath' => [
-                        'label' => 'Sauna & Ice Bath Cold Plunge',
+                        'label' => 'Sauna',
                         'actions' => [
                             'view_wellness_slots' => 'Lihat Jadwal & Slot Sesi Wellness',
-                            'book_wellness_session' => 'Reservasi Sesi Sauna / Ice Bath',
+                            'book_wellness_session' => 'Reservasi Sesi Sauna',
                             'checkin_wellness' => 'Check-in Akses Ruang Recovery',
                         ],
                     ],
@@ -293,6 +304,16 @@ class Club61PermissionMatrix
                             'View:Analytics' => 'Akses Halaman Analytics Keuangan',
                             'view_financial_reports' => 'Lihat Rincian Laporan Omset Venue',
                             'export_reports' => 'Export Laporan Keuangan (Excel / PDF)',
+                        ],
+                    ],
+                    'ledger_book' => [
+                        'label' => 'Buku Transaksi & Antrian Refund',
+                        'actions' => [
+                            'View:BukuTransaksi' => 'Akses Halaman Buku Transaksi (semua uang masuk & refund)',
+                            'export_ledger' => 'Export Buku Transaksi ke Excel / CSV',
+                            'view_ledger_invoice' => 'Lihat Invoice / Struk Salinan Admin dari Buku Transaksi',
+                            'process_refund_queue' => 'Proses / Tolak Refund yang Menunggu (Antrian Refund)',
+                            'View:DaftarVoucher' => 'Akses Halaman Daftar Voucher (semua voucher & saldo customer)',
                         ],
                     ],
                 ],

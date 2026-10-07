@@ -14,11 +14,11 @@ class Marketing extends Page
 
     protected static ?string $navigationLabel = 'Marketing';
 
-    protected static string | UnitEnum | null $navigationGroup = 'Main Menu';
+    protected static string | UnitEnum | null $navigationGroup = 'Marketing & Event';
 
     protected static ?string $title = 'Marketing & Promosi';
 
-    protected static ?int $navigationSort = 10;
+    protected static ?int $navigationSort = 1;
 
     protected string $view = 'filament.pages.marketing';
 }

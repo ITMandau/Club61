@@ -10,7 +10,7 @@ return new class extends Migration
     {
         Schema::create('wellness_facilities', function (Blueprint $table) {
             $table->ulid('id')->primary();
-            $table->string('name', 50); // Cold Plunge / Ice Bath, Finnish Sauna
+            $table->string('name', 50); // mis. Finnish Sauna
             $table->integer('max_capacity_per_slot')->default(6);
             $table->integer('duration_minutes')->default(45);
             $table->decimal('price_per_person', 12, 2);

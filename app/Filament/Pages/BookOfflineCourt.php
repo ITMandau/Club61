@@ -19,17 +19,18 @@ use UnitEnum;
 
 class BookOfflineCourt extends Page
 {
+    use \App\Livewire\Concerns\AutoPrintsReceipts;
     use HasPageShield;
 
     protected static string | BackedEnum | null $navigationIcon = 'heroicon-o-building-storefront';
 
     protected static ?string $navigationLabel = 'POS Walk-In Booking';
 
-    protected static string | UnitEnum | null $navigationGroup = 'Main Menu';
+    protected static string | UnitEnum | null $navigationGroup = 'Operasional Harian';
 
     protected static ?string $title = 'Walk-In Offline Booking & Frontdesk POS';
 
-    protected static ?int $navigationSort = 4;
+    protected static ?int $navigationSort = 2;
 
     protected string $view = 'filament.pages.book-offline-court';
 
@@ -86,6 +87,11 @@ class BookOfflineCourt extends Page
     // Metode Pembayaran Kasir (100% Cashless): 'QRIS', 'DEBIT_CARD', 'CREDIT_CARD'
     public string $paymentMethod = 'QRIS';
 
+    /** Voucher promo / voucher saldo customer (Modul 21). Potongannya selalu dihitung ulang server dari kode ini. */
+    public string $voucherInput = '';
+
+    public ?string $appliedVoucherCode = null;
+
     // Rincian Pembayaran Mesin EDC (Kartu Debit & Kredit)
     public string $edcTerminal = 'EDC_BCA'; // EDC_BCA, EDC_MANDIRI, EDC_LAINNYA
     public string $edcCardType = 'DEBIT'; // DEBIT, CREDIT
@@ -99,6 +105,19 @@ class BookOfflineCourt extends Page
     public string $qrisProvider = 'BCA_QRIS'; // BCA_QRIS, MANDIRI_QRIS, GOPAY_QRIS, LAINNYA
     public string $qrisRrn = '';
     public string $qrisSenderName = '';
+
+    /** MIDTRANS = QR dinamis Midtrans tampil di layar (utama); MANUAL = QRIS statis + input RRN (cadangan). */
+    public string $qrisMode = 'MIDTRANS';
+
+    /** Metode "Bayar Otomatis" pilihan kasir (QRIS / VA yang dicentang "Tampil di Kasir"). Divalidasi ulang di server. */
+    public string $posOnlineMethod = 'QRIS';
+
+    /**
+     * QR Midtrans yang sedang menunggu dibayar customer (popup QR + polling). Dikunci: id tagihan tidak boleh diganti
+     * dari browser (bisa dipakai untuk membatalkan tagihan orang lain).
+     */
+    #[\Livewire\Attributes\Locked]
+    public ?array $pendingQris = null;
 
     // Auto-Recovery Draf Transaksi POS
     public bool $hasPendingDraft = false;
@@ -130,6 +149,8 @@ class BookOfflineCourt extends Page
         $this->bookingDate = now()->format('Y-m-d');
         $this->initializeEquipmentQuantities();
         $this->checkPendingDraft();
+        // Bayar Otomatis yang masih menunggu (halaman sempat di-refresh / tertutup) → popup dilanjutkan.
+        $this->pendingQris = app(\App\Services\Pos\PosMidtransQrisService::class)->resumeFor('PADEL_FRONTDESK', 'WALK_IN_OFFLINE', auth()->id());
 
         if ($this->settleRequest) {
             $this->startSettlement($this->settleRequest);
@@ -313,6 +334,8 @@ class BookOfflineCourt extends Page
                 $this->cancelSettlement();
                 $this->completedOrderData = $receipt;
                 $this->showSuccessModal = true;
+                // Struk langsung dicetak di aplikasi Club61 — sama dengan Bayar Otomatis (semua metode, satu alur).
+                $this->queueAutoPrint($payment->order_id, 'filament.partials.walkin-receipt', ['receipt' => $receipt], 'closeSuccessModal');
 
                 return;
             }
@@ -554,6 +577,7 @@ class BookOfflineCourt extends Page
     protected ?float $membershipDiscountAmountCache = null;
     protected ?float $subtotalCache = null;
     protected ?array $financeCalculationCache = null;
+    protected ?array $voucherResultCache = null;
 
     public function getCourtTotalProperty(): float
     {
@@ -629,10 +653,63 @@ class BookOfflineCourt extends Page
     {
         return $this->financeCalculationCache ??= app(\App\Services\Finance\TaxAndFeeService::class)->calculate(
             subtotal: $this->subtotal,
-            discountAmount: 0,
+            discountAmount: $this->voucherDiscount,
             channel: 'POS_WALKIN',
             module: 'PADEL'
         );
+    }
+
+    /** Hasil cek voucher terpasang terhadap customer & subtotal saat ini (aturan sama dengan checkout). */
+    public function getVoucherResultProperty(): array
+    {
+        if ($this->voucherResultCache !== null) {
+            return $this->voucherResultCache;
+        }
+        if (! $this->appliedVoucherCode || $this->settleBill) {
+            return $this->voucherResultCache = ['voucher' => null, 'discount' => 0.0, 'error' => null];
+        }
+
+        $customer = $this->selectedCustomerId ? User::find($this->selectedCustomerId) : null;
+
+        return $this->voucherResultCache = app(\App\Services\Finance\VoucherService::class)
+            ->resolve($this->appliedVoucherCode, $customer, max(0, $this->courtTotal - $this->membershipDiscountAmount) + $this->equipmentTotal);
+    }
+
+    public function getVoucherDiscountProperty(): float
+    {
+        return (float) $this->voucherResult['discount'];
+    }
+
+    /** Voucher saldo milik customer terpilih yang masih bisa dipakai. */
+    public function getCustomerCreditVouchersProperty(): \Illuminate\Support\Collection
+    {
+        $customer = $this->selectedCustomerId ? User::find($this->selectedCustomerId) : null;
+
+        return $customer ? app(\App\Services\Finance\VoucherService::class)->walletFor($customer) : collect();
+    }
+
+    public function applyVoucher(?string $code = null): void
+    {
+        $code = strtoupper(trim((string) ($code ?? $this->voucherInput)));
+        if ($code === '') {
+            return;
+        }
+
+        $this->appliedVoucherCode = mb_substr($code, 0, 30);
+        $this->voucherInput = $this->appliedVoucherCode;
+        $this->voucherResultCache = null;
+        $this->financeCalculationCache = null;
+
+        if ($error = $this->voucherResult['error']) {
+            $this->appliedVoucherCode = null;
+            Notification::make()->title('Voucher Tidak Bisa Dipakai')->body($error)->warning()->send();
+        }
+    }
+
+    public function removeVoucher(): void
+    {
+        $this->appliedVoucherCode = null;
+        $this->voucherInput = '';
     }
 
     public function getTaxAmountProperty(): int
@@ -758,6 +835,12 @@ class BookOfflineCourt extends Page
             return;
         }
 
+        if ($shift->pendingAutoPaymentCount() > 0) {
+            Notification::make()->title('Shift Belum Bisa Ditutup')->body(PosCashierShift::PENDING_AUTO_PAYMENT_MESSAGE)->warning()->send();
+
+            return;
+        }
+
         $summary = $shift->calculateSummary();
         $this->closingShiftSummary = $summary;
         $this->closingNotes = '';
@@ -777,6 +860,13 @@ class BookOfflineCourt extends Page
 
         if (! $shift) {
             $this->showCloseShiftModal = false;
+            return;
+        }
+
+        if ($shift->pendingAutoPaymentCount() > 0) {
+            $this->showCloseShiftModal = false;
+            Notification::make()->title('Shift Belum Bisa Ditutup')->body(PosCashierShift::PENDING_AUTO_PAYMENT_MESSAGE)->warning()->send();
+
             return;
         }
 
@@ -1094,6 +1184,7 @@ class BookOfflineCourt extends Page
         $this->hasPendingDraft = false;
         $this->pendingDraftSummary = null;
         $this->selectedSlots = [];
+        $this->removeVoucher();
         $this->initializeEquipmentQuantities();
         $this->walkInName = '';
         $this->walkInPhone = '';
@@ -1133,6 +1224,13 @@ class BookOfflineCourt extends Page
 
     public function submitWalkInBooking(PadelBookingService $service): void
     {
+        // Masih ada Bayar Otomatis yang menunggu customer → selesaikan / batalkan dulu (popup tetap tampil).
+        if ($this->pendingQris) {
+            Notification::make()->title('Masih Menunggu Pembayaran')->body('Selesaikan atau batalkan pembayaran otomatis sebelumnya dulu.')->warning()->send();
+
+            return;
+        }
+
         if ($this->settleBill) {
             $this->submitSettlement($service);
 
@@ -1218,7 +1316,10 @@ class BookOfflineCourt extends Page
         $grandTotal = $this->grandTotal;
         $paymentMeta = [];
 
-        if (in_array($method, ['CASH', 'TUNAI'])) {
+        if ($this->appliedVoucherCode && $grandTotal <= 0) {
+            // Seluruh tagihan ditutup voucher: tidak ada uang masuk, jadi tidak ada bukti EDC / QRIS.
+            $method = 'VOUCHER';
+        } elseif (in_array($method, ['CASH', 'TUNAI'])) {
             Notification::make()
                 ->title('Metode Pembayaran Ditolak')
                 ->body('Pembayaran tunai (CASH) tidak diperbolehkan. Venue Club 61 beroperasi 100% Cashless — gunakan QRIS, EDC, atau Transfer.')
@@ -1270,6 +1371,10 @@ class BookOfflineCourt extends Page
                 'trace_number' => $traceNumber,
                 'charged_amount' => (float) $grandTotal,
             ];
+        } elseif (in_array($method, ['QRIS_STATIS', 'QRIS']) && $this->qrisMode === 'MIDTRANS' && \App\Services\Pos\PosMidtransQrisService::resolveMethod($this->posOnlineMethod, (float) $grandTotal) !== null) {
+            // QR Midtrans: tidak ada bukti yang diketik kasir — lunas dikonfirmasi Midtrans.
+            $method = 'QRIS_MIDTRANS';
+            $paymentMeta = ['qris_provider' => \App\Services\Pos\PosMidtransQrisService::PROVIDER, 'pos_online_method' => $this->posOnlineMethod];
         } elseif (in_array($method, ['QRIS_STATIS', 'QRIS'])) {
             $rrn = trim($this->qrisRrn);
 
@@ -1330,14 +1435,30 @@ class BookOfflineCourt extends Page
                 slots: $slotsPayload,
                 bookingDate: $this->bookingDate,
                 equipments: $equipmentsPayload,
-                paymentMethod: $this->paymentMethod,
+                paymentMethod: in_array($method, ['VOUCHER', 'QRIS_MIDTRANS'], true) ? $method : $this->paymentMethod,
                 cashier: $cashier,
                 autoCheckIn: $this->isAutoCheckIn,
                 paymentMeta: $paymentMeta,
                 // 'NONE' kalau kasir sengaja matiin toggle benefit membership untuk transaksi ini —
                 // konsisten dengan guard yang sama dipakai di jalur online checkout.
-                membershipBalanceId: $this->useMembershipBenefit ? ($this->activeMembershipInfo['balance_id'] ?? null) : 'NONE'
+                membershipBalanceId: $this->useMembershipBenefit ? ($this->activeMembershipInfo['balance_id'] ?? null) : 'NONE',
+                // Voucher hanya dikirim kalau di layar memang berlaku — dulu voucher milik customer yang belum dipilih
+                // (mode Walk-In Cepat) tetap dipakai server walau layar tidak menampilkan potongannya.
+                voucherCode: $this->appliedVoucherCode && ! $this->voucherResult['error'] ? $this->appliedVoucherCode : null,
+                // Total yang dilihat & ditagih kasir wajib sama dengan yang dicatat server.
+                expectedGrandTotal: (float) $grandTotal,
             );
+
+            // QR Midtrans: order & slot sudah ditahan, tinggal tunggu customer scan. Struk keluar setelah lunas.
+            if (! empty($result['pending_qris'])) {
+                $this->pendingQris = $result['pending_qris'];
+                Cache::forget($this->getDraftCacheKey());
+                $this->hasPendingDraft = false;
+                $this->pendingDraftSummary = null;
+                $this->resetWalkInCart();
+
+                return;
+            }
 
             // Siapkan data struk POS thermal
             $this->completedOrderData = [
@@ -1349,6 +1470,8 @@ class BookOfflineCourt extends Page
                 // Pembayaran di kasir: label EDC/QRIS frontdesk, bukan label metode online.
                 'payment_method' => $service->formatPaymentMethodLabel($this->paymentMethod, ['cashier_id' => auth()->id()]),
                 'subtotal' => $result['order']->subtotal,
+                'discount_amount' => (float) $result['order']->discount_amount,
+                'voucher_code' => $result['order']->voucher_code,
                 'tax_amount' => $result['order']->tax_amount,
                 'tax_name' => $this->taxName,
                 'service_charge' => $result['order']->service_charge,
@@ -1392,15 +1515,11 @@ class BookOfflineCourt extends Page
                 ->success()
                 ->send();
 
+            // Struk langsung dicetak di aplikasi Club61 — sama dengan Bayar Otomatis (semua metode, satu alur).
+            $this->queueAutoPrint($result['order']->id, 'filament.partials.walkin-receipt', ['receipt' => $this->completedOrderData], 'startNewTransaction');
+
             // Reset seleksi keranjang untuk transaksi berikutnya
-            $this->selectedSlots = [];
-            $this->initializeEquipmentQuantities();
-            $this->walkInName = '';
-            $this->walkInPhone = '';
-            $this->walkInEmail = '';
-            $this->selectedCustomerId = null;
-            $this->selectedCustomerName = null;
-            $this->selectedCustomerPhone = null;
+            $this->resetWalkInCart();
 
         } catch (SlotConflictException $e) {
             Notification::make()
@@ -1416,6 +1535,117 @@ class BookOfflineCourt extends Page
                 ->danger()
                 ->send();
         }
+    }
+
+    /** Kosongkan keranjang & data customer untuk transaksi berikutnya. */
+    protected function resetWalkInCart(): void
+    {
+        $this->selectedSlots = [];
+        $this->removeVoucher();
+        $this->initializeEquipmentQuantities();
+        $this->walkInName = '';
+        $this->walkInPhone = '';
+        $this->walkInEmail = '';
+        $this->selectedCustomerId = null;
+        $this->selectedCustomerName = null;
+        $this->selectedCustomerPhone = null;
+        $this->qrisRrn = '';
+        $this->qrisSenderName = '';
+    }
+
+    // ===================== QRIS MIDTRANS (QR DI LAYAR KASIR) =====================
+
+    /** Tagihan QR yang sedang ditampilkan — milik loket ini & dibuat dari layar kasir. */
+    protected function pendingQrisPayment(): ?\App\Models\Pos\Payment
+    {
+        $id = $this->pendingQris['payment_id'] ?? null;
+        $payment = $id ? \App\Models\Pos\Payment::find($id) : null;
+
+        return $payment && ($payment->payload_log['counter'] ?? null) === 'PADEL_FRONTDESK' && isset($payment->payload_log['pos_qris'])
+            ? $payment
+            : null;
+    }
+
+    /** Dipanggil wire:poll popup QR: lunas → struk; kedaluwarsa / batal → beri tahu kasir. */
+    public function pollPendingQris(): void
+    {
+        $payment = $this->pendingQrisPayment();
+        if (! $payment) {
+            $this->pendingQris = null;
+
+            return;
+        }
+
+        $status = app(\App\Services\Pos\PosMidtransQrisService::class)->status($payment->id);
+
+        if ($status === \App\Services\Pos\PosMidtransQrisService::PAID) {
+            $this->completePendingQris($payment->fresh());
+        } elseif ($status !== \App\Services\Pos\PosMidtransQrisService::PENDING) {
+            $this->pendingQris = null;
+            $this->posStep = 'selection';
+            Notification::make()
+                ->title($status === \App\Services\Pos\PosMidtransQrisService::EXPIRED ? 'QR Kedaluwarsa' : 'QR Dibatalkan')
+                ->body('Pembayaran QRIS tidak diterima. Pesanan dibatalkan dan slot lapangan dilepas.')
+                ->warning()
+                ->send();
+        }
+    }
+
+    public function cancelPendingQris(): void
+    {
+        abort_unless(auth()->user()?->can('process_walkin_booking'), 403);
+        $payment = $this->pendingQrisPayment();
+        if (! $payment) {
+            $this->pendingQris = null;
+
+            return;
+        }
+
+        $status = app(\App\Services\Pos\PosMidtransQrisService::class)->cancel($payment->id);
+
+        if ($status === \App\Services\Pos\PosMidtransQrisService::PAID) {
+            // Customer ternyata sudah bayar tepat sebelum dibatalkan — uang sudah masuk, transaksi diteruskan.
+            $this->completePendingQris($payment->fresh());
+
+            return;
+        }
+
+        $this->pendingQris = null;
+        $this->posStep = 'selection';
+        Notification::make()->title('QR Dibatalkan')->body('Pesanan dibatalkan dan slot lapangan dilepas.')->success()->send();
+    }
+
+    /** Hanya di laptop developer tanpa server key Midtrans (QR mock). */
+    public function simulatePendingQrisPaid(): void
+    {
+        $payment = $this->pendingQrisPayment();
+        abort_unless($payment && ($this->pendingQris['is_mock'] ?? false) && ! app()->environment('production'), 403);
+
+        app(\App\Services\Pos\PosMidtransQrisService::class)->simulatePaid($payment->id);
+        $this->pollPendingQris();
+    }
+
+    protected function completePendingQris(\App\Models\Pos\Payment $payment): void
+    {
+        $autoCheckIn = (bool) ($payment->payload_log['auto_check_in'] ?? false);
+        if ($autoCheckIn) {
+            PadelBooking::where('order_id', $payment->order_id)->where('status', 'PAID')->update(['status' => 'CHECKED_IN', 'checked_in_at' => now()]);
+        }
+
+        $this->completedOrderData = $this->buildWalkInReceipt($payment);
+        $this->completedOrderData['auto_checked_in'] = $autoCheckIn;
+        $this->pendingQris = null;
+        $this->posStep = 'receipt';
+        $this->showSuccessModal = false;
+
+        Notification::make()
+            ->title('Pembayaran QRIS Diterima')
+            ->body("Order #{$payment->order?->order_number} lunas dan e-tiket telah aktif.")
+            ->success()
+            ->send();
+
+        // Lunas lewat Bayar Otomatis → struk langsung dicetak di aplikasi Club61 (tanpa buka modal / tekan Cetak Struk).
+        $this->queueAutoPrint($payment->order_id, 'filament.partials.walkin-receipt', ['receipt' => $this->completedOrderData], 'startNewTransaction');
     }
 
     public function closeSuccessModal(): void
@@ -1479,14 +1709,14 @@ class BookOfflineCourt extends Page
         $date = $this->resolvedHistoryDate();
         $search = trim($this->historySearch);
 
-        // updated_at = saat pembayaran jadi SUCCESS. created_at tagihan selisih = saat reschedule (bisa berhari-hari
-        // sebelumnya) → pelunasan hari ini dulu tidak muncul di riwayat hari ini & jam di struk salah.
+        // paid_at = saat pembayaran jadi SUCCESS (Modul 17; dulu didekati dengan updated_at, yang ikut berubah setiap kali
+        // baris pembayaran disentuh). created_at tagihan selisih = saat reschedule (bisa berhari-hari sebelumnya).
         return \App\Models\Pos\Payment::query()
             ->with(['order.user:id,name,phone', 'order.cashier:id,name', 'order.padelBookings.court:id,name', 'order.refunds', 'order.payments'])
             ->where('status', 'SUCCESS')
-            ->where('payment_gateway', 'CASHIER_POS')
+            ->where(fn ($q) => $q->where('payment_gateway', 'CASHIER_POS')->orWhereNotNull('pos_shift_id')) // + QR Midtrans dari layar kasir
             ->whereHas('order', fn ($q) => $q->whereIn('order_type', ['WALK_IN', 'ONLINE_BOOKING']))
-            ->whereBetween('updated_at', [
+            ->whereBetween('paid_at', [
                 Carbon::parse($date, 'Asia/Jakarta')->startOfDay()->setTimezone(config('app.timezone')),
                 Carbon::parse($date, 'Asia/Jakarta')->endOfDay()->setTimezone(config('app.timezone')),
             ])
@@ -1494,7 +1724,7 @@ class BookOfflineCourt extends Page
                 ->whereHas('order', fn ($o) => $o->where('order_number', 'like', "%{$search}%")
                     ->orWhereHas('user', fn ($u) => $u->where('name', 'like', "%{$search}%")->orWhere('phone', 'like', "%{$search}%"))
                     ->orWhereHas('padelBookings', fn ($b) => $b->where('booking_code', 'like', "%{$search}%")))))
-            ->latest('updated_at')
+            ->latest('paid_at')
             ->limit(100)
             ->get()
             ->map(function (\App\Models\Pos\Payment $payment) {
@@ -1503,7 +1733,7 @@ class BookOfflineCourt extends Page
 
                 return [
                     'payment_id' => $payment->id,
-                    'time' => $payment->updated_at->setTimezone('Asia/Jakarta')->format('H:i'),
+                    'time' => ($payment->paid_at ?? $payment->updated_at)->setTimezone('Asia/Jakarta')->format('H:i'),
                     'status' => $this->historyStatusLabel($order),
                     'order_number' => $order->order_number,
                     'type' => $this->transactionTypeLabel($payment, $log),
@@ -1555,7 +1785,7 @@ class BookOfflineCourt extends Page
 
         $payment = \App\Models\Pos\Payment::query()
             ->where('status', 'SUCCESS')
-            ->where('payment_gateway', 'CASHIER_POS')
+            ->where(fn ($q) => $q->where('payment_gateway', 'CASHIER_POS')->orWhereNotNull('pos_shift_id')) // + QR Midtrans dari layar kasir
             ->whereHas('order', fn ($q) => $q->whereIn('order_type', ['WALK_IN', 'ONLINE_BOOKING']))
             ->findOrFail($paymentId);
 
@@ -1589,7 +1819,8 @@ class BookOfflineCourt extends Page
             ->where('status', 'SUCCESS')
             // Pembayaran yang terjadi SEBELUM pembayaran ini (waktu, lalu id ULID sebagai penentu kalau sama detik).
             ->filter(fn ($p) => $p->id !== $payment->id
-                && ($p->updated_at->lt($payment->updated_at) || ($p->updated_at->eq($payment->updated_at) && strcmp($p->id, $payment->id) < 0)))
+                && (($p->paid_at ?? $p->updated_at)->lt($payment->paid_at ?? $payment->updated_at)
+                    || (($p->paid_at ?? $p->updated_at)->eq($payment->paid_at ?? $payment->updated_at) && strcmp($p->id, $payment->id) < 0)))
             ->sum('amount');
         $isSettlement = $paidBefore > 0 || $order->order_type !== 'WALK_IN';
 
@@ -1619,7 +1850,7 @@ class BookOfflineCourt extends Page
             'grand_total' => $atSale ? (float) $payment->amount : (float) $order->grand_total,
             'auto_checked_in' => false,
             // Waktu uang diterima (pembayaran jadi SUCCESS), bukan waktu tagihan dibuat.
-            'created_at' => $payment->updated_at->setTimezone('Asia/Jakarta')->format('d/m/Y H:i:s'),
+            'created_at' => ($payment->paid_at ?? $payment->updated_at)->setTimezone('Asia/Jakarta')->format('d/m/Y H:i:s'),
             'payment_meta' => $paymentMeta,
             'note' => $atSale && $wasRescheduled ? 'Jadwal di bawah adalah jadwal TERBARU (booking sudah dipindah setelah transaksi ini).' : null,
             'bookings' => $bookings->map(fn ($b) => [
@@ -1657,6 +1888,7 @@ class BookOfflineCourt extends Page
         $this->membershipDiscountAmountCache = null;
         $this->subtotalCache = null;
         $this->financeCalculationCache = null;
+        $this->voucherResultCache = null;
 
         // Fail-safe sinkronisasi kedaluwarsa — di-throttle max 1x per 15 detik (bukan tiap render/klik).
         // Cache::add() atomic: cuma proses PERTAMA dalam window 15 detik yang benar-benar menjalankan sync,

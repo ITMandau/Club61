@@ -465,25 +465,21 @@ class ReschedulePaymentTest extends TestCase
         $booking = $this->paidBooking('10:00');
         $this->reschedule($booking, '18:00');
 
-        try {
-            $this->service->adminCancelAndRefund($booking->id, 200001, 'TRANSFER_MANUAL', 'CUACA', 'hujan', $this->admin);
-            $this->fail('Refund tidak boleh melebihi uang yang benar-benar masuk');
-        } catch (HttpException $e) {
-            $this->assertStringContainsString('tidak boleh melebihi', $e->getMessage());
-        }
+        // Selisih reschedule yang belum dibayar tidak ikut diajukan: refund = uang yang benar-benar masuk.
+        $result = $this->service->requestCancelAndRefund($booking->id, 'CUACA', 'hujan', $this->admin);
 
-        $this->service->adminCancelAndRefund($booking->id, 200000, 'TRANSFER_MANUAL', 'CUACA', 'hujan', $this->admin);
-
-        $this->assertSame('REFUNDED', $booking->fresh()->status);
+        $this->assertEqualsWithDelta(200000, $result['refund_amount'], 0.01);
+        $this->assertSame('REFUND_PENDING', $booking->fresh()->status);
         $this->assertSame(0, Payment::where('order_id', $booking->order_id)->where('status', 'PENDING')->count());
     }
 
-    public function test_refund_to_nonexistent_member_deposit_is_rejected(): void
+    public function test_refund_request_cannot_be_submitted_twice(): void
     {
         $booking = $this->paidBooking('10:00');
+        $this->service->requestCancelAndRefund($booking->id, 'CUACA', 'hujan', $this->admin);
 
         $this->expectException(HttpException::class);
-        $this->service->adminCancelAndRefund($booking->id, 100000, 'DEPOSIT_MEMBER', 'CUACA', 'hujan', $this->admin);
+        $this->service->requestCancelAndRefund($booking->id, 'CUACA', 'hujan lagi', $this->admin);
     }
 
     public function test_rescheduling_into_a_past_hour_is_rejected(): void

@@ -25,11 +25,11 @@ class KelolaPemesanan extends Page
 
     protected static ?string $navigationLabel = 'Kelola Pemesanan';
 
-    protected static string | UnitEnum | null $navigationGroup = 'Main Menu';
+    protected static string | UnitEnum | null $navigationGroup = 'Operasional Harian';
 
     protected static ?string $title = 'Kelola Pemesanan & Tiket';
 
-    protected static ?int $navigationSort = 6;
+    protected static ?int $navigationSort = 3;
 
     protected string $view = 'filament.pages.kelola-pemesanan';
 
@@ -62,9 +62,9 @@ class KelolaPemesanan extends Page
     public ?string $cancelBookingCode = null;
     public ?string $cancelCustomerName = null;
     public float $originalTotalAmount = 0.0;
+    /** Ditampilkan saja (tidak bisa diubah): seluruh uang yang masuk untuk booking ini, tanpa potongan (Modul 21). */
     public float $refundAmount = 0.0;
-    public string $refundMethod = 'TRANSFER_MANUAL';
-    public string $refundCategory = 'SALAH_BAYAR';
+    public string $refundCategory = 'PERMINTAAN_CUSTOMER';
     public string $refundNotes = '';
 
     // Check-In Gate Modal State
@@ -100,7 +100,33 @@ class KelolaPemesanan extends Page
 
     public function getCanRefundProperty(): bool
     {
-        return (bool) auth()->user()?->can('cancel_refund_padel');
+        return (bool) auth()->user()?->can('request_refund_padel');
+    }
+
+    /**
+     * REFUND_PENDING dari pengajuan customer lewat web (fitur lama, sebelum Modul 21) yang belum punya catatan refund —
+     * staf perlu memasukkannya ke Antrian Refund, kalau tidak booking itu tertahan selamanya.
+     */
+    public static function isLegacyRefundRequest(PadelBooking $booking): bool
+    {
+        if ($booking->status !== 'REFUND_PENDING') {
+            return false;
+        }
+
+        $refunds = $booking->relationLoaded('order') && $booking->order?->relationLoaded('refunds')
+            ? $booking->order->refunds
+            : \App\Models\Pos\Refund::where('padel_booking_id', $booking->id)->get();
+
+        return ! $refunds->contains(fn ($r) => $r->padel_booking_id === $booking->id && $r->status === 'PENDING');
+    }
+
+    /** Tombol "Ajukan Pembatalan & Refund": booking aktif yang jam mainnya belum mulai, atau pengajuan lama customer. */
+    public function canRequestRefundFor(PadelBooking $booking): bool
+    {
+        return $this->canRefund && (
+            (in_array($booking->status, ['PAID', 'LOCKED'], true) && $booking->start_time->gt(now()))
+            || self::isLegacyRefundRequest($booking)
+        );
     }
 
     public function getCanSettleProperty(): bool
@@ -150,6 +176,16 @@ class KelolaPemesanan extends Page
                 ->body($booking->status === 'LOCKED' && $booking->reschedule_count > 0
                     ? 'Booking ini masih punya tagihan selisih reschedule yang belum lunas. Lunasi dulu di POS Walk-In (klik slot "Bayar" di grid jadwal).'
                     : "Hanya booking yang sudah lunas yang bisa dipindah jadwalnya (status saat ini: {$booking->status}).")
+                ->warning()
+                ->send();
+
+            return;
+        }
+
+        if (now()->gte(PadelBookingService::rescheduleDeadline($booking))) {
+            Notification::make()
+                ->title('Tidak Bisa Dipindah')
+                ->body('Reschedule paling lambat '.PadelBookingService::RESCHEDULE_CUTOFF_HOURS.' jam sebelum jam main ('.PadelBookingService::rescheduleDeadline($booking)->format('d M Y H:i').' WIB).')
                 ->warning()
                 ->send();
 
@@ -361,18 +397,29 @@ class KelolaPemesanan extends Page
         Notification::make()->title($title)->body($body)->color($color)->send();
     }
 
+    /**
+     * Modul 21: staf (kasir / resepsionis / admin) mengajukan pembatalan + refund. Booking langsung batal, uangnya
+     * menunggu persetujuan di Antrian Refund — halaman ini tidak pernah mengeluarkan uang.
+     */
     public function openCancelRefundModal(string $bookingId): void
     {
-        // Hanya cancel_refund_padel — cancel_padel_booking itu izin customer membatalkan
-        // pesanannya sendiri, bukan izin staf memindahkan uang kembali.
-        if ($this->deniedWithout('cancel_refund_padel')) {
+        if ($this->deniedWithout('request_refund_padel')) {
             return;
         }
 
         $booking = PadelBooking::with(['user', 'order'])->findOrFail($bookingId);
 
-        // Default & batas = uang yang benar-benar sudah dibayar untuk booking ini. Dulu total_amount (sudah ikut
-        // menghitung tagihan selisih yang BELUM dibayar) → selisih yang tidak pernah masuk ikut "dikembalikan".
+        if (! self::isLegacyRefundRequest($booking) && $booking->start_time->lte(now())) {
+            Notification::make()
+                ->title('Tidak Bisa Dibatalkan')
+                ->body('Jam main booking ini sudah dimulai atau lewat. Booking yang hangus tidak bisa dibatalkan, di-refund, maupun di-reschedule.')
+                ->warning()
+                ->send();
+
+            return;
+        }
+
+        // Nominal = uang yang benar-benar sudah dibayar untuk booking ini (tanpa potongan).
         $refundable = app(PadelBookingService::class)->refundableAmountForBooking($booking);
         if ($refundable <= 0 && $booking->status === 'PAID' && (! $booking->order_id || ! \App\Models\Pos\Payment::where('order_id', $booking->order_id)->exists())) {
             $refundable = (float) $booking->total_amount; // data legacy tanpa catatan pembayaran
@@ -383,8 +430,7 @@ class KelolaPemesanan extends Page
         $this->cancelCustomerName = $booking->user?->name ?? 'Guest';
         $this->originalTotalAmount = $refundable;
         $this->refundAmount = $refundable;
-        $this->refundMethod = 'TRANSFER_MANUAL';
-        $this->refundCategory = 'SALAH_BAYAR';
+        $this->refundCategory = 'PERMINTAAN_CUSTOMER';
         $this->refundNotes = '';
 
         $this->showCancelRefundModal = true;
@@ -392,27 +438,33 @@ class KelolaPemesanan extends Page
 
     public function executeCancelRefund(PadelBookingService $service): void
     {
-        if ($this->deniedWithout('cancel_refund_padel')) {
+        if ($this->deniedWithout('request_refund_padel')) {
+            return;
+        }
+
+        if (! in_array($this->refundCategory, ['PERMINTAAN_CUSTOMER', 'FORCE_MAJEURE', 'SALAH_BAYAR', 'KESALAHAN_VENUE'], true)) {
+            $this->refundCategory = 'PERMINTAAN_CUSTOMER';
+        }
+
+        if (mb_strlen(trim($this->refundNotes)) < 5) {
+            Notification::make()->title('Alasan Wajib Diisi')->body('Tulis alasan pembatalan (minimal 5 karakter) untuk pemeriksa di Antrian Refund.')->danger()->send();
+
             return;
         }
 
         try {
-            $adminUser = auth()->user() ?? \App\Models\User::role(['admin', 'super_admin'])->first();
-
-            $service->adminCancelAndRefund(
-                bookingId: $this->cancelBookingId,
-                refundAmount: (float) $this->refundAmount,
-                refundMethod: $this->refundMethod,
+            $result = $service->requestCancelAndRefund(
+                bookingId: (string) $this->cancelBookingId,
                 reasonCategory: $this->refundCategory,
-                notes: $this->refundNotes ?: 'Pembatalan & Refund via Frontdesk Admin',
-                adminUser: $adminUser
+                notes: mb_substr(trim($this->refundNotes), 0, 500),
+                requester: auth()->user(),
             );
 
             Cache::forget('kelola_pemesanan_tab_counts');
 
             Notification::make()
                 ->title('Reservasi Dibatalkan')
-                ->body('Tiket QR telah dinonaktifkan dan pengembalian dana tercatat di database.')
+                ->body($result['message'].' Tiket QR sudah dinonaktifkan dan slot dilepas.')
                 ->success()
                 ->send();
 
@@ -540,7 +592,7 @@ class KelolaPemesanan extends Page
         } elseif ($this->activeTab === 'COMPLETED') {
             $query->whereIn('status', ['CHECKED_IN', 'COMPLETED']);
         } elseif ($this->activeTab === 'CANCELLED') {
-            $query->whereIn('status', ['CANCELLED', 'REFUNDED', 'EXPIRED']);
+            $query->whereIn('status', ['CANCELLED', 'REFUND_PENDING', 'REFUNDED', 'EXPIRED']);
         }
 
         if (trim($this->search) !== '') {
@@ -567,7 +619,7 @@ class KelolaPemesanan extends Page
                     SUM(CASE WHEN status = 'PAID' THEN 1 ELSE 0 END) as confirmed,
                     SUM(CASE WHEN status = 'LOCKED' THEN 1 ELSE 0 END) as locked,
                     SUM(CASE WHEN status IN ('CHECKED_IN', 'COMPLETED') THEN 1 ELSE 0 END) as completed,
-                    SUM(CASE WHEN status IN ('CANCELLED', 'REFUNDED', 'EXPIRED') THEN 1 ELSE 0 END) as cancelled
+                    SUM(CASE WHEN status IN ('CANCELLED', 'REFUND_PENDING', 'REFUNDED', 'EXPIRED') THEN 1 ELSE 0 END) as cancelled
                 ")
                 ->first();
 

@@ -371,16 +371,32 @@ class MembershipSystemTest extends TestCase
      */
     public function test_sync_expired_memberships_command_expires_when_all_hours_or_visits_depleted(): void
     {
-        $membership = $this->balanceService->purchasePlan($this->user, $this->planSilver);
-        $membership = $this->balanceService->activateMembership($membership);
+        // Paket kuota murni (tanpa unlimited, tanpa diskon) — habis kuota = kartu tidak memberi apa pun lagi.
+        $planQuotaOnly = MembershipPlan::create(['code' => 'MBR-QUOTA', 'name' => 'Quota Only', 'ownership_type' => 'INDIVIDUAL', 'duration_days' => 30, 'price' => 900000, 'is_active' => true]);
+        MembershipPlanBenefit::create(['plan_id' => $planQuotaOnly->id, 'facility' => 'PADEL', 'quota_type' => 'HOURS', 'quota_value' => 10, 'discount_percent' => 0]);
+        MembershipPlanBenefit::create(['plan_id' => $planQuotaOnly->id, 'facility' => 'SAUNA', 'quota_type' => 'VISITS', 'quota_value' => 4, 'discount_percent' => 0]);
+        $membership = $this->balanceService->activateMembership($this->balanceService->purchasePlan($this->user, $planQuotaOnly));
 
-        // Habiskan kuota Padel & Sauna langsung di DB
         UserMembershipBalance::where('user_membership_id', $membership->id)->update(['remaining_quota' => 0.00]);
 
         $this->artisan('membership:sync-expired')->assertSuccessful();
 
         $membership->refresh();
         $this->assertEquals('EXPIRED', $membership->status);
+    }
+
+    /**
+     * Dulu kartu Silver (gym UNLIMITED + diskon padel 20% di luar kuota) ikut hangus begitu jam padel & sesi sauna
+     * habis — balance unlimited (sisa selalu 0) dianggap habis. Kartu tetap aktif sampai end_date.
+     */
+    public function test_sync_expired_keeps_cards_with_unlimited_access_or_remaining_discount(): void
+    {
+        $membership = $this->balanceService->activateMembership($this->balanceService->purchasePlan($this->user, $this->planSilver));
+        UserMembershipBalance::where('user_membership_id', $membership->id)->update(['remaining_quota' => 0.00]);
+
+        $this->artisan('membership:sync-expired')->assertSuccessful();
+
+        $this->assertEquals('ACTIVE', $membership->fresh()->status);
     }
 
     /**
@@ -476,13 +492,11 @@ class MembershipSystemTest extends TestCase
         $admin = User::factory()->admin()->create();
         $padelService = app(PadelBookingService::class);
 
-        $padelService->adminCancelAndRefund(
+        $padelService->requestCancelAndRefund(
             bookingId: $booking->id,
-            refundAmount: 0,
-            refundMethod: 'ORIGINAL_PAYMENT',
             reasonCategory: 'CUSTOMER_REQUEST',
             notes: 'Batal tanding hujan',
-            adminUser: $admin
+            requester: $admin
         );
 
         $padelBal->refresh();
@@ -534,6 +548,25 @@ class MembershipSystemTest extends TestCase
         $this->assertEquals(300000.00, (float) $booking->total_amount);
         $this->assertEquals(150000.00, (float) $booking->member_discount_amount);
         $this->assertEquals(1.00, (float) $booking->member_sessions_consumed);
+    }
+
+    public function test_unlimited_sauna_covers_the_member_without_charging_full_price(): void
+    {
+        $facility = WellnessFacility::create(['name' => 'Sauna Unlimited', 'max_capacity_per_slot' => 8, 'duration_minutes' => 45, 'price_per_person' => 150000.00]);
+        $slot = WellnessSlot::create([
+            'facility_id' => $facility->id, 'session_date' => Carbon::tomorrow()->toDateString(),
+            'start_time' => Carbon::tomorrow()->setTime(16, 0), 'end_time' => Carbon::tomorrow()->setTime(16, 45),
+            'max_capacity' => 8, 'booked_count' => 0, 'status' => 'AVAILABLE',
+        ]);
+        $plan = MembershipPlan::create(['code' => 'MBR-SAUNA-UNL', 'name' => 'Sauna Unlimited', 'ownership_type' => 'INDIVIDUAL', 'duration_days' => 30, 'price' => 1000000, 'is_active' => true]);
+        MembershipPlanBenefit::create(['plan_id' => $plan->id, 'facility' => 'SAUNA', 'quota_type' => 'VISITS', 'quota_value' => null, 'discount_percent' => 0]);
+        $membership = $this->balanceService->activateMembership($this->balanceService->purchasePlan($this->user, $plan));
+
+        // Dulu unlimited (sisa kuota selalu 0) tetap ditagih harga penuh.
+        $booking = app(WellnessBookingService::class)->bookSlot(user: $this->user, slotId: $slot->id, numPersons: 2, membershipBalanceId: $membership->balanceFor('SAUNA')->id);
+
+        $this->assertEquals(150000.00, (float) $booking->total_amount, 'member gratis, teman bayar penuh');
+        $this->assertEquals(150000.00, (float) $booking->member_discount_amount);
     }
 
     /**

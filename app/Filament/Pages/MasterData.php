@@ -25,11 +25,11 @@ class MasterData extends Page
 
     protected static ?string $navigationLabel = 'Master Data & Tarif';
 
-    protected static string | UnitEnum | null $navigationGroup = 'Main Menu';
+    protected static string | UnitEnum | null $navigationGroup = 'Master Data';
 
     protected static ?string $title = 'Master Data, Tarif & Add-ons';
 
-    protected static ?int $navigationSort = 11;
+    protected static ?int $navigationSort = 1;
 
     protected string $view = 'filament.pages.master-data';
 

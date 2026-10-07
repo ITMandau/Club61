@@ -45,7 +45,7 @@
                         Club 61 Padel Court Medan
                     </h2>
                     <p class="text-xs sm:text-sm text-emerald-100/80 mt-3 font-medium leading-relaxed">
-                        Medan's premier padel sporting venue featuring 3 tournament-standard panoramic courts (2 indoor AC, 1 outdoor), cedarwood Finnish sauna, 4°C cold plunge, and specialty cafe lounge.
+                        Medan's premier padel sporting venue featuring 3 tournament-standard panoramic courts (2 indoor AC, 1 outdoor), cedarwood Finnish sauna, and specialty cafe lounge.
                     </p>
 
                     <div class="mt-6 flex flex-wrap items-center gap-3">
@@ -73,6 +73,7 @@
                 $allPlans = \App\Models\Membership\MembershipPlan::with('benefits')->where('is_active', true)->get();
 
                 $facilityService = app(\App\Services\Membership\MembershipFacilityService::class);
+                $creditVouchers = app(\App\Services\Finance\VoucherService::class)->walletFor(Auth::user());
             @endphp
 
             @if($activeMbr)
@@ -194,8 +195,29 @@
                 </div>
             @endif
 
-            <!-- Membership Plans Catalog -->
-            <div class="space-y-4">
+            <!-- Voucher saldo (refund yang dijadikan voucher) -->
+            @if ($creditVouchers->isNotEmpty())
+                <div class="p-5 rounded-3xl bg-emerald-50/80 border border-emerald-200 shadow-sm space-y-3">
+                    <div>
+                        <h3 class="font-serif font-extrabold text-lg text-[#1F170D]">My Credit Vouchers</h3>
+                        <p class="text-xs text-[#7A643E]">Saldo dari refund yang dialihkan ke voucher. Bisa dipakai sebagian untuk booking padel berikutnya &mdash; muncul otomatis di halaman checkout, atau sebutkan kodenya di kasir.</p>
+                    </div>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                        @foreach ($creditVouchers as $v)
+                            <div class="p-4 rounded-2xl bg-white border border-emerald-200">
+                                <div class="text-sm font-mono font-black text-emerald-900">{{ $v['code'] }}</div>
+                                <div class="text-lg font-black text-[#1F170D]">Rp {{ number_format($v['balance'], 0, ',', '.') }}</div>
+                                <div class="text-[11px] text-[#7A643E]">
+                                    dari Rp {{ number_format($v['initial'], 0, ',', '.') }}
+                                    @if ($v['valid_until']) &middot; berlaku s/d {{ $v['valid_until'] }} @endif
+                                </div>
+                            </div>
+                        @endforeach
+                    </div>
+                </div>
+            @endif
+
+            <!-- Membership Plans Catalog -->            <div class="space-y-4">
                 <div class="flex items-center justify-between px-1">
                     <div>
                         <h3 class="font-serif font-extrabold text-lg text-[#1F170D]">Paket Keanggotaan Club 61</h3>
@@ -327,16 +349,16 @@
                         </div>
                     </div>
 
-                    <!-- Facility 2: Sauna & Cold Plunge -->
+                    <!-- Facility 2: Sauna -->
                     <div class="p-6 rounded-3xl bg-white/95 backdrop-blur-xl border border-[#DFC387] shadow-sm flex flex-col justify-between hover:border-[#D4AF37] hover:shadow-[0_10px_25px_rgba(212,175,55,0.2)] transition-all group">
                         <div class="flex items-start gap-4">
                             <div class="w-12 h-12 rounded-2xl bg-[#FAF2DE] border border-[#DFC387] flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform">
                                 <span class="text-[10px] font-black tracking-widest text-[#8C6418] uppercase">SAUNA</span>
                             </div>
                             <div>
-                                <h4 class="font-serif font-black text-sm text-[#1F170D]">Cold Plunge 4°C &amp; Sauna</h4>
+                                <h4 class="font-serif font-black text-sm text-[#1F170D]">Finnish Cedarwood Sauna</h4>
                                 <p class="text-xs text-[#7A643E] mt-1.5 leading-relaxed">
-                                    High-speed ozone-circulated 4°C ice bath and Finnish red cedarwood sauna for optimal post-match muscle recovery.
+                                    Finnish red cedarwood sauna for optimal post-match muscle recovery.
                                 </p>
                             </div>
                         </div>
@@ -462,8 +484,8 @@
                         <div class="flex items-start gap-3 p-3 rounded-2xl bg-[#FAF8F2] border border-[#DFC387]/60">
                             <span class="font-black text-[#8C6418] shrink-0">03.</span>
                             <div>
-                                <strong class="text-[#1F170D]">Sauna &amp; Cold Plunge Protocol:</strong>
-                                <span class="text-[#7A643E] block mt-0.5">Showering is mandatory prior to entering the cold plunge pool to preserve hygiene and community wellness.</span>
+                                <strong class="text-[#1F170D]">Sauna Protocol:</strong>
+                                <span class="text-[#7A643E] block mt-0.5">Showering is mandatory prior to entering the sauna to preserve hygiene and community wellness.</span>
                             </div>
                         </div>
                     </div>
@@ -503,7 +525,7 @@
                                 <span class="text-[#E5C378] font-bold mt-0.5">&bull;</span>
                                 <div>
                                     <strong class="text-white block font-bold">Integrated Multi-Facility Access</strong>
-                                    <span class="text-[11px] text-emerald-100/70">Akses terpadu fasilitas Technogym Fitness Center &amp; Finnish Sauna 4°C.</span>
+                                    <span class="text-[11px] text-emerald-100/70">Akses terpadu fasilitas Technogym Fitness Center &amp; Finnish Sauna.</span>
                                 </div>
                             </li>
                             <li class="flex items-start gap-2.5">

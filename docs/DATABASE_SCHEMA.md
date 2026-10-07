@@ -94,7 +94,7 @@ WHERE (status IN ('PENDING', 'PAID', 'IN_SERVICE'));
 ```
 
 ### C. Anti-Bocor Kuota Sesi Wellness (`check_wellness_capacity`)
-Mencegah total orang melebihi kapasitas maksimum Cold Plunge & Sauna:
+Mencegah total orang melebihi kapasitas maksimum Sauna:
 ```sql
 ALTER TABLE wellness_slots
 ADD CONSTRAINT check_wellness_capacity
@@ -221,13 +221,13 @@ CHECK (used_count <= quota);
 
 ---
 
-### MODUL 3: WELLNESS (COLD PLUNGE & SAUNA BERKUOTA)
+### MODUL 3: WELLNESS (SAUNA BERKUOTA)
 
 #### 8. `wellness_facilities` (Fasilitas Wellness)
 | Kolom | Tipe Data | Keterangan |
 | :--- | :--- | :--- |
 | `id` | `UUID` (PK) | Primary Key |
-| `name` | `VARCHAR(50)` | "Ice Bath / Cold Plunge", "Finnish Sauna" |
+| `name` | `VARCHAR(50)` | "Finnish Sauna" |
 | `max_capacity_per_slot` | `INT` | Batas orang per sesi (misal: 6 orang) |
 | `duration_minutes`| `INT` | Durasi per sesi (misal: 45 menit) |
 | `price_per_person`| `DECIMAL(12,2)` | Biaya per orang per sesi |

@@ -18,11 +18,11 @@ class PengaturanBiayaPajak extends Page
 
     protected static ?string $navigationLabel = 'Biaya & Pajak';
 
-    protected static string | UnitEnum | null $navigationGroup = 'Main Menu';
+    protected static string | UnitEnum | null $navigationGroup = 'Keuangan';
 
     protected static ?string $title = 'Pengaturan Biaya Layanan & Pajak Terpusat';
 
-    protected static ?int $navigationSort = 10;
+    protected static ?int $navigationSort = 4;
 
     protected string $view = 'filament.pages.pengaturan-biaya-pajak';
 

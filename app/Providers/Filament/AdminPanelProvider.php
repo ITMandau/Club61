@@ -41,10 +41,27 @@ class AdminPanelProvider extends PanelProvider
             // Sidebar bisa diciutkan ke samping jadi strip ikon (tombol di header sidebar);
             // status buka/ciut diingat browser per user.
             ->sidebarCollapsibleOnDesktop()
+            // Urutan grup menu sidebar (tiap grup bisa dibuka/tutup; statusnya diingat browser per user).
+            // Dashboard sengaja tanpa grup supaya selalu di paling atas.
+            ->navigationGroups([
+                'Operasional Harian',
+                'Customer & Membership',
+                'Sponsor',
+                'Keuangan',
+                'Marketing & Event',
+                'Master Data',
+                'Karyawan & Akses',
+            ])
             ->colors([
                 'primary' => Color::Amber,
             ])
             ->spa()
+            // Link download (export) jangan dibuka lewat navigasi SPA: Livewire mengambil URL-nya dengan fetch lalu
+            // menampilkan isi file (XLSX/PDF/CSV) sebagai halaman teks, bukan mengunduhnya.
+            ->spaUrlExceptions(fn (): array => [
+                url('/admin/buku-transaksi/export*'),
+                url('/admin/log-aktivitas/export*'),
+            ])
             ->resources([
                 \App\Filament\Resources\Users\UserResource::class,
                 \App\Filament\Resources\Roles\RoleResource::class,
@@ -63,6 +80,11 @@ class AdminPanelProvider extends PanelProvider
             ->renderHook(
                 'panels::body.end',
                 fn () => view('filament.sidebar-auto-collapse')
+            )
+            // Cetak struk thermal 58mm: club61PrintReceipt() dipakai semua tombol cetak struk di panel.
+            ->renderHook(
+                'panels::body.end',
+                fn () => view('pos.partials.receipt-print-script')
             )
             // Dialog konfirmasi Club61 (pengganti popup bawaan browser / wire:confirm).
             ->renderHook(
@@ -88,6 +110,9 @@ class AdminPanelProvider extends PanelProvider
                 \App\Filament\Pages\KelolaMenuFnb::class,
                 \App\Filament\Pages\SponsorDashboard::class,
                 \App\Filament\Pages\LogAktivitas::class,
+                \App\Filament\Pages\BukuTransaksi::class,
+                \App\Filament\Pages\AntrianRefund::class,
+                \App\Filament\Pages\DaftarVoucher::class,
             ])
             ->widgets([])
             ->middleware([

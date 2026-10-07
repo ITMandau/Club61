@@ -18,7 +18,7 @@ class MidtransService
     public function __construct()
     {
         $this->serverKey = config('services.midtrans.server_key') ?? '';
-        $this->clientKey = config('services.midtrans.client_key') ?? 'SB-Mid-client-demo-61';
+        $this->clientKey = (string) config('services.midtrans.client_key');
         $this->isProduction = (bool) config('services.midtrans.is_production', false);
 
         $this->snapApiUrl = $this->isProduction
@@ -86,7 +86,6 @@ class MidtransService
                 'gross_amount' => $grossAmount,
             ],
             'item_details' => $itemDetails,
-            'customer_details' => $customerDetails,
             // Batas bayar dari pengaturan admin (BookingTimeService) — SAMA dengan batas pelepasan slot. Bayar ulang
             // mengirim sisa waktunya sendiri (`expiry_minutes`) supaya ganti metode tidak memperpanjang batas bayar.
             // Nilai di sini mengalahkan pengaturan "Payment Expiry" di dashboard Midtrans.
@@ -96,6 +95,11 @@ class MidtransService
                 'duration' => max(1, (int) ($params['expiry_minutes'] ?? app(\App\Services\Padel\BookingTimeService::class)->paymentWindowMinutes())),
             ],
         ];
+
+        // Order tanpa data customer (F&B kasir): customer_details kosong terkirim sebagai [] (bukan objek) dan ditolak.
+        if (! empty($customerDetails)) {
+            $payload['customer_details'] = $customerDetails;
+        }
 
         if (!empty($params['payment_method'])) {
             // Pemetaan dari katalog resmi (OnlinePaymentCatalog) — satu sumber dengan halaman checkout & validasi.
@@ -118,10 +122,7 @@ class MidtransService
             // Timeout eksplisit: panggilan ini berjalan di dalam transaksi DB yang mengunci baris booking/court —
             // Midtrans yang lambat (default 30 detik) membuat antrean lock menumpuk.
             $response = Http::withBasicAuth($this->serverKey, '')
-                ->withHeaders([
-                    'Content-Type' => 'application/json',
-                    'Accept' => 'application/json',
-                ])
+                ->withHeaders($this->snapHeaders())
                 ->timeout(10)
                 ->post($this->snapApiUrl, $payload);
         } catch (\Throwable $e) {
@@ -141,6 +142,24 @@ class MidtransService
             'redirect_url' => $data['redirect_url'] ?? null,
             'is_mock' => false,
         ];
+    }
+
+    /**
+     * Header request Snap. MIDTRANS_NOTIFICATION_URL (https) → X-Override-Notification: webhook transaksi ini dikirim ke
+     * URL tersebut, bukan ke "Payment Notification URL" dashboard (satu akun sandbox dipakai server & laptop ngrok).
+     */
+    public function snapHeaders(): array
+    {
+        $headers = ['Content-Type' => 'application/json', 'Accept' => 'application/json'];
+        $url = trim((string) config('services.midtrans.notification_url'));
+
+        // Tidak pernah berlaku di production: salah isi .env di sana akan mengirim webhook uang sungguhan ke laptop orang.
+        if ($url !== '' && ! $this->isProduction && ! app()->environment('production')
+            && str_starts_with($url, 'https://') && filter_var($url, FILTER_VALIDATE_URL)) {
+            $headers['X-Override-Notification'] = $url;
+        }
+
+        return $headers;
     }
 
     /**

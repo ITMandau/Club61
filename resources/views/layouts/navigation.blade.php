@@ -15,13 +15,13 @@
                 </div>
 
                 <!-- Navigation Links (Desktop) -->
-                <div class="hidden md:flex space-x-5 -my-px ms-6">
+                <div class="hidden md:flex space-x-4 lg:space-x-5 -my-px ms-2 lg:ms-6">
                     <a href="{{ route('dashboard') }}" 
-                       class="inline-flex items-center px-1 pt-1 border-b-2 {{ request()->routeIs('dashboard') ? 'border-[#D4AF37] text-[#8C6418]' : 'border-transparent text-[#6B5738] hover:text-[#1F170D] hover:border-[#D4AF37]/50' }} text-xs font-bold uppercase tracking-wider transition-colors">
+                       class="inline-flex items-center px-1 pt-1 border-b-2 {{ request()->routeIs('dashboard') ? 'border-[#D4AF37] text-[#8C6418]' : 'border-transparent text-[#6B5738] hover:text-[#1F170D] hover:border-[#D4AF37]/50' }} text-xs font-bold uppercase tracking-wider whitespace-nowrap transition-colors">
                         Home
                     </a>
                     <a href="{{ route('customer.booking') }}" 
-                       class="inline-flex items-center px-1 pt-1 border-b-2 {{ request()->routeIs('customer.booking') ? 'border-[#D4AF37] text-[#8C6418]' : 'border-transparent text-[#6B5738] hover:text-[#1F170D] hover:border-[#D4AF37]/50' }} text-xs font-bold uppercase tracking-wider transition-colors">
+                       class="inline-flex items-center px-1 pt-1 border-b-2 {{ request()->routeIs('customer.booking') ? 'border-[#D4AF37] text-[#8C6418]' : 'border-transparent text-[#6B5738] hover:text-[#1F170D] hover:border-[#D4AF37]/50' }} text-xs font-bold uppercase tracking-wider whitespace-nowrap transition-colors">
                         Book Court
                     </a>
                     {{-- "Membership" sengaja tidak lagi jadi menu navbar terpisah yang langsung ke halaman
@@ -29,16 +29,16 @@
                          benefit per fasilitas) sudah ditampilkan di atas katalog pada halaman "My Club" itu
                          sendiri — dan dari situ pula customer klik untuk membeli/upgrade paket. --}}
                     <a href="{{ route('customer.my-club') }}"
-                       class="inline-flex items-center px-1 pt-1 border-b-2 {{ request()->routeIs('customer.my-club') || request()->routeIs('customer.membership') ? 'border-[#D4AF37] text-[#8C6418]' : 'border-transparent text-[#6B5738] hover:text-[#1F170D] hover:border-[#D4AF37]/50' }} text-xs font-bold uppercase tracking-wider transition-colors">
+                       class="inline-flex items-center px-1 pt-1 border-b-2 {{ request()->routeIs('customer.my-club') || request()->routeIs('customer.membership') ? 'border-[#D4AF37] text-[#8C6418]' : 'border-transparent text-[#6B5738] hover:text-[#1F170D] hover:border-[#D4AF37]/50' }} text-xs font-bold uppercase tracking-wider whitespace-nowrap transition-colors">
                         My Club
                     </a>
                     <a href="{{ route('customer.invoice') }}"
-                       class="inline-flex items-center px-1 pt-1 border-b-2 {{ request()->routeIs('customer.invoice') ? 'border-[#D4AF37] text-[#8C6418]' : 'border-transparent text-[#6B5738] hover:text-[#1F170D] hover:border-[#D4AF37]/50' }} text-xs font-bold uppercase tracking-wider transition-colors">
+                       class="inline-flex items-center px-1 pt-1 border-b-2 {{ request()->routeIs('customer.invoice') ? 'border-[#D4AF37] text-[#8C6418]' : 'border-transparent text-[#6B5738] hover:text-[#1F170D] hover:border-[#D4AF37]/50' }} text-xs font-bold uppercase tracking-wider whitespace-nowrap transition-colors">
                         Invoice
                     </a>
                     @if(Auth::check() && \App\Models\Sponsor\SponsorOrganization::where('sponsor_admin_user_id', Auth::id())->exists())
                         <a href="{{ route('customer.corporate') }}"
-                           class="inline-flex items-center px-1 pt-1 border-b-2 {{ request()->routeIs('customer.corporate') ? 'border-[#D4AF37] text-[#8C6418]' : 'border-transparent text-[#6B5738] hover:text-[#1F170D] hover:border-[#D4AF37]/50' }} text-xs font-bold uppercase tracking-wider transition-colors">
+                           class="inline-flex items-center px-1 pt-1 border-b-2 {{ request()->routeIs('customer.corporate') ? 'border-[#D4AF37] text-[#8C6418]' : 'border-transparent text-[#6B5738] hover:text-[#1F170D] hover:border-[#D4AF37]/50' }} text-xs font-bold uppercase tracking-wider whitespace-nowrap transition-colors">
                             Sponsor Team
                         </a>
                     @endif
@@ -173,7 +173,7 @@
                                             <span class="text-[9px] font-mono text-emerald-700 font-bold bg-emerald-100 px-1 py-0.5 rounded">VIP Plat</span>
                                         </div>
                                         <p class="text-[11px] text-[#7A643E] mt-1 leading-snug">
-                                            Finnish cedarwood sauna &amp; 4&deg;C ice bath facilities available complimentarily for Platinum members post-match.
+                                            Finnish cedarwood sauna facilities available complimentarily for Platinum members post-match.
                                         </p>
                                     </div>
                                 </div>
@@ -239,8 +239,13 @@
                     }
                 @endphp
                 <div class="hidden sm:flex items-center gap-3 ms-2">
-                    <div class="text-right">
-                        <div class="text-xs font-bold text-[#1F170D]">{{ Auth::user()->name }}</div>
+                    {{-- Tablet: avatar saja (nama + status member membuat menu turun baris). --}}
+                    <a href="{{ route('profile.edit') }}" title="{{ Auth::user()->name }}"
+                       class="lg:hidden w-9 h-9 rounded-full bg-[#FAF2DE] border border-[#DFC387] flex items-center justify-center text-xs font-bold text-[#7A5818] shadow-sm">
+                        {{ strtoupper(substr(Auth::user()->name, 0, 1)) }}
+                    </a>
+                    <div class="hidden lg:block text-right whitespace-nowrap max-w-[180px]">
+                        <div class="text-xs font-bold text-[#1F170D] truncate">{{ Auth::user()->name }}</div>
                         @if($navActiveMembership && $navActiveMembership->plan)
                             <a href="{{ route('customer.my-club') }}"
                                class="text-[9px] text-[#7A5818] font-mono uppercase bg-[#FAF2DE] px-2 py-0.5 rounded-full border border-[#D9BE84] inline-flex items-center gap-1 hover:bg-[#F3DFAD] transition-colors"

@@ -18,9 +18,14 @@
         .fnbpos-page-btn { padding: 0.5rem 1rem; border-radius: 10px; font-size: 0.75rem; font-weight: 800; border: 1.5px solid #DFC387; background: rgba(255,255,255,0.95); color: #5C410F; cursor: pointer; }
         .fnbpos-page-btn:disabled { opacity: 0.4; cursor: not-allowed; }
         .fnbpos-cart-item { padding: 0.75rem; border-radius: 12px; background: rgba(255,255,255,0.95); border: 1.5px solid #DFC387; }
-        .fnbpos-qty-btn { width: 22px; height: 22px; border-radius: 6px; display: inline-flex; align-items: center; justify-content: center; font-weight: 900; cursor: pointer; background: #FAF2DE; border: 1px solid #D9BE84; color: #7A5818; }
+        .fnbpos-note-input { width: 100%; margin-top: 0.5rem; padding: 0.4rem 0.6rem; border-radius: 8px; border: 1px solid #E8D5A8; background: #FFFDF7; font-size: 0.6875rem; color: #1F170D; outline: none; }
+        .fnbpos-note-input:focus { border-color: #B38622; box-shadow: 0 0 0 2px rgba(180,134,11,0.15); }
+        .fnbpos-qty-btn { width: 32px; height: 32px; border-radius: 8px; font-size: 1rem; display: inline-flex; align-items: center; justify-content: center; font-weight: 900; cursor: pointer; user-select: none; background: #FAF2DE; border: 1px solid #D9BE84; color: #7A5818; }
         .fnbpos-pay-btn { padding: 0.85rem; border-radius: 14px; font-weight: 800; font-size: 0.8125rem; text-align: center; cursor: pointer; border: 1.5px solid #DFC387; background: rgba(255,255,255,0.95); color: #5C410F; }
         .fnbpos-pay-btn.active { background: linear-gradient(180deg, #F0DB9D 0%, #D4AF37 35%, #B38622 100%); border-color: #FBF0CE; color: #281A05; }
+        /* Tombol tipe pesanan (Dine-In / Bawa Pulang) — satu ketukan di tablet. */
+        .fnbpos-type-btn { padding: 0.6rem 0.5rem; border-radius: 9px; font-size: 0.75rem; font-weight: 800; white-space: nowrap; cursor: pointer; border: 1.5px solid #DFC387; background: #FAF9F6; color: #5C410F; transition: all 0.15s ease; }
+        .fnbpos-type-btn.active { background: linear-gradient(180deg, #F0DB9D 0%, #D4AF37 35%, #B38622 100%); border-color: #FBF0CE; color: #281A05; }
         .fnbpos-input { width: 100%; padding: 0.65rem 0.85rem; border-radius: 9px; border: 1.5px solid #DFC387; font-size: 0.8125rem; background: #FAF9F6; outline: none; }
         .fnbpos-modal-backdrop { position: fixed; inset: 0; background: rgba(15,23,42,0.65); backdrop-filter: blur(6px); z-index: 9999; display: flex; align-items: center; justify-content: center; padding: 1.5rem; }
         .fnbpos-modal-dialog { background: #FFFFFF; border: 2px solid #D4AF37; border-radius: 20px; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.35); width: 100%; max-width: 480px; padding: 1.75rem; display: flex; flex-direction: column; gap: 1rem; max-height: 90vh; overflow-y: auto; }
@@ -30,13 +35,11 @@
         .fnbpos-status-unpaid { background: #FEF3C7; color: #92400E; border: 1px solid #FCD34D; }
         .fnbpos-status-refunded, .fnbpos-status-cancelled { background: #FEE2E2; color: #991B1B; border: 1px solid #FCA5A5; }
         .fnbpos-history-table th { text-align: left; padding: 0.6rem 0.75rem; font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.04em; color: #5C410F; background: #FAF5E8; white-space: nowrap; }
-        .fnbpos-history-table td { padding: 0.6rem 0.75rem; font-size: 0.75rem; border-top: 1px solid #F3E8CE; vertical-align: middle; }
-        @media print {
-            body * { visibility: hidden; }
-            #fnbpos-receipt, #fnbpos-receipt * { visibility: visible; }
-            #fnbpos-receipt { position: absolute; left: 0; top: 0; width: 100%; }
-        }
+        /* Riwayat: satu baris per sel (tidak turun ke bawah); teks panjang dipotong "…" — lengkapnya di tooltip. */
+        .fnbpos-history-table td { padding: 0.6rem 0.75rem; font-size: 0.75rem; border-top: 1px solid #F3E8CE; vertical-align: middle; white-space: nowrap; }
+        .fnbpos-history-table td.fnbpos-cell-clip { max-width: 9rem; overflow: hidden; text-overflow: ellipsis; }
     </style>
+    @include('pos.partials.receipt-print-style', ['selectors' => ['#fnbpos-receipt']])
 
     @if($errorMessage)
         <div class="fixed top-4 right-4 z-[10000] max-w-sm p-4 rounded-xl shadow-2xl" style="background: #FEE2E2; border: 1.5px solid #FCA5A5; color: #991B1B;">
@@ -114,7 +117,7 @@
             @endif
         </section>
 
-        <aside class="w-full sm:w-96 lg:w-[420px] flex flex-col justify-between shrink-0 shadow-2xl border-l border-[#D4AF37]/50" style="background: rgba(255,255,255,0.94); backdrop-filter: blur(20px);">
+        <aside class="w-full sm:w-72 lg:w-80 xl:w-96 flex flex-col justify-between shrink-0 shadow-2xl border-l border-[#D4AF37]/50" style="background: rgba(255,255,255,0.94); backdrop-filter: blur(20px);">
             <div class="p-4 border-b border-[#DFC387]/60 bg-white/80">
                 <div class="flex items-center justify-between mb-2.5">
                     <span class="text-xs font-bold uppercase tracking-wider text-[#7A5818]">Pesanan Baru</span>
@@ -125,14 +128,17 @@
                     @endif
                 </div>
 
+                {{-- Tipe pesanan: satu ketukan (bukan dropdown). Bawa Pulang tidak punya meja — kolom meja disembunyikan. --}}
                 <div class="grid grid-cols-2 gap-2 mb-2">
-                    <select wire:model="orderType" class="fnbpos-input">
-                        <option value="DINE_IN">Dine-In (Meja)</option>
-                        <option value="TAKE_AWAY">Bawa Pulang</option>
-                    </select>
-                    <input type="text" wire:model="tableNumber" placeholder="No. Meja (opsional)" class="fnbpos-input">
+                    <button type="button" wire:click="setOrderType('DINE_IN')" class="fnbpos-type-btn {{ $orderType === 'DINE_IN' ? 'active' : '' }}">Dine-In</button>
+                    <button type="button" wire:click="setOrderType('TAKE_AWAY')" class="fnbpos-type-btn {{ $orderType === 'TAKE_AWAY' ? 'active' : '' }}">Take Away</button>
                 </div>
-                <input type="text" wire:model="customerName" placeholder="Nama Pelanggan (opsional)" class="fnbpos-input">
+                <div class="flex gap-2">
+                    @if($orderType === 'DINE_IN')
+                        <input type="text" wire:model="tableNumber" placeholder="No. Meja" class="fnbpos-input" style="width: 6.5rem; flex-shrink: 0;">
+                    @endif
+                    <input type="text" wire:model="customerName" placeholder="{{ $orderType === 'TAKE_AWAY' ? 'Nama Pelanggan (untuk dipanggil)' : 'Nama Pelanggan' }}" class="fnbpos-input min-w-0">
+                </div>
 
                 <div class="flex items-center justify-end mt-2">
                     @if($this->activeShift)
@@ -143,16 +149,20 @@
 
             <div class="flex-1 overflow-y-auto p-4 space-y-2.5">
                 @forelse($cart as $menuId => $item)
-                    <div class="fnbpos-cart-item flex items-center justify-between" wire:key="cart-{{ $menuId }}">
-                        <div class="flex-1 pr-2">
-                            <div class="text-xs font-bold text-[#1F170D]">{{ $item['name'] }}</div>
-                            <div class="text-[10px] text-[#7A5818] font-mono font-medium">Rp {{ number_format($item['price'], 0, ',', '.') }} x {{ $item['quantity'] }}</div>
+                    <div class="fnbpos-cart-item" wire:key="cart-{{ $menuId }}">
+                        <div class="flex items-center justify-between">
+                            <div class="flex-1 pr-2">
+                                <div class="text-xs font-bold text-[#1F170D]">{{ $item['name'] }}</div>
+                                <div class="text-[10px] text-[#7A5818] font-mono font-medium">Rp {{ number_format($item['price'], 0, ',', '.') }} x {{ $item['quantity'] }}</div>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <span wire:click="decrementCartItem('{{ $menuId }}')" class="fnbpos-qty-btn">-</span>
+                                <span class="text-sm font-bold w-6 text-center">{{ $item['quantity'] }}</span>
+                                <span wire:click="incrementCartItem('{{ $menuId }}')" class="fnbpos-qty-btn">+</span>
+                            </div>
                         </div>
-                        <div class="flex items-center gap-1.5">
-                            <span wire:click="decrementCartItem('{{ $menuId }}')" class="fnbpos-qty-btn">-</span>
-                            <span class="text-xs font-bold w-4 text-center">{{ $item['quantity'] }}</span>
-                            <span wire:click="incrementCartItem('{{ $menuId }}')" class="fnbpos-qty-btn">+</span>
-                        </div>
+                        {{-- Catatan untuk bar / dapur — ikut tercetak di slip pesanan stasiunnya. --}}
+                        <input type="text" wire:model.blur="cart.{{ $menuId }}.notes" maxlength="120" placeholder="Catatan (mis. less sugar, tanpa es)" class="fnbpos-note-input">
                     </div>
                 @empty
                     <div class="text-center py-10 text-xs text-[#9CA3AF]">Keranjang kosong. Klik menu di sebelah kiri.</div>
@@ -189,7 +199,7 @@
                 </div>
 
                 <div class="flex-1 overflow-y-auto p-5 flex flex-col gap-4">
-                    @include("pos.partials.payment-method-form", ["grandTotal" => $this->grandTotal])
+                    @include("pos.partials.payment-method-form", ["grandTotal" => $this->grandTotal, "qrisMidtrans" => true])
 
                     <div style="display:flex; justify-content:space-between; align-items:center; gap:0.75rem; margin-top:0.5rem;">
                         <button type="button" wire:click="backToSelection" style="padding:0.7rem 1.2rem; border-radius:10px; border:1.5px solid #DFC387; background:#FFFFFF; color:#1F170D; font-weight:800; font-size:0.8125rem; cursor:pointer;">&larr; Kembali ke Menu</button>
@@ -202,7 +212,7 @@
             </div>
         </section>
 
-        <aside class="w-full sm:w-96 lg:w-[420px] flex flex-col shrink-0 shadow-2xl border-l border-[#D4AF37]/50" style="background: rgba(255,255,255,0.94);">
+        <aside class="w-full sm:w-72 lg:w-80 xl:w-96 flex flex-col shrink-0 shadow-2xl border-l border-[#D4AF37]/50" style="background: rgba(255,255,255,0.94);">
             <div class="p-4 border-b border-[#DFC387]/60 bg-white/80 flex items-center justify-between">
                 <div>
                     <span style="font-size:0.625rem; font-weight:900; color:#8C6418; text-transform:uppercase; border:1px solid #DFC387; border-radius:4px; padding:0.1rem 0.45rem;">Langkah 2 dari 2</span>
@@ -220,6 +230,9 @@
                         <div>
                             <div class="text-xs font-bold text-[#1F170D]">{{ $item["name"] }}</div>
                             <div class="text-[10px] text-[#7A5818] font-mono">Rp {{ number_format($item["price"], 0, ",", ".") }} x {{ $item["quantity"] }}</div>
+                            @if(trim($item["notes"] ?? "") !== "")
+                                <div class="text-[10px] italic text-[#8C6418]">Catatan: {{ $item["notes"] }}</div>
+                            @endif
                         </div>
                         <span class="font-mono text-xs font-extrabold text-[#8C6418]">Rp {{ number_format($item["price"] * $item["quantity"], 0, ",", ".") }}</span>
                     </div>
@@ -258,7 +271,8 @@
                 @if($history->isEmpty())
                     <div class="text-xs text-center py-16 text-[#9CA3AF]">Belum ada transaksi F&amp;B yang tercatat.</div>
                 @else
-                    <table class="fnbpos-history-table w-full border-collapse rounded-xl overflow-hidden" style="background:#FFFFFF; border:1.5px solid #DFC387;">
+                    <div class="overflow-x-auto rounded-xl" style="border:1.5px solid #DFC387;">
+                    <table class="fnbpos-history-table w-full border-collapse" style="background:#FFFFFF;">
                         <thead>
                             <tr>
                                 <th>No. Antrian</th>
@@ -282,16 +296,16 @@
                                         'CANCELLED' => 'fnbpos-status-cancelled',
                                         default => 'fnbpos-status-unpaid',
                                     };
-                                    $payment = $order->payments->first();
+                                    $payment = $order->payments->firstWhere('status', 'SUCCESS') ?? $order->payments->first();
                                 @endphp
                                 <tr wire:key="history-row-{{ $order->id }}">
                                     <td class="font-mono font-black text-[#8C6418]">{{ $order->queue_number ? str_pad((string) $order->queue_number, 3, '0', STR_PAD_LEFT) : '—' }}</td>
                                     <td class="font-mono font-bold text-[#1F170D]">{{ $order->order_number }}</td>
                                     <td class="font-mono">{{ $order->created_at->setTimezone('Asia/Jakarta')->format('d/m/Y H:i') }}</td>
-                                    <td>{{ $order->cashier?->name ?? '-' }}</td>
+                                    <td class="fnbpos-cell-clip" title="{{ $order->cashier?->name }}">{{ $order->cashier?->name ?? '-' }}</td>
                                     <td>{{ $order->order_type === 'DINE_IN' ? 'Dine-In' : 'Bawa Pulang' }}{{ $order->table_number ? ' - '.$order->table_number : '' }}</td>
-                                    <td>{{ $order->customer_name ?: '—' }}</td>
-                                    <td>{{ $payment ? $this->formatPaymentMethodLabel($payment->payment_method) : '-' }}</td>
+                                    <td class="fnbpos-cell-clip" title="{{ $order->customer_name }}">{{ $order->customer_name ?: '—' }}</td>
+                                    <td class="fnbpos-cell-clip" title="{{ $this->paymentLabelFor($payment) }}">{{ $this->paymentLabelFor($payment) }}</td>
                                     <td class="font-mono font-bold text-right">Rp {{ number_format($order->grand_total, 0, ',', '.') }}</td>
                                     <td><span class="fnbpos-status-badge {{ $statusClass }}">{{ $order->payment_status }}</span></td>
                                     <td><button type="button" wire:click="viewOrderReceipt('{{ $order->id }}')" class="text-[11px] font-bold text-[#8C6418] underline">Lihat Struk</button></td>
@@ -299,6 +313,7 @@
                             @endforeach
                         </tbody>
                     </table>
+                    </div>
                 @endif
                 @endif
             </div>
@@ -306,74 +321,46 @@
     @endif
     </div>
 
+    {{-- QR Midtrans menunggu dibayar customer --}}
+    @include('pos.partials.midtrans-qris-modal', ['pendingQris' => $pendingQris, 'pollAction' => 'pollPendingQris', 'cancelAction' => 'cancelPendingQris', 'simulateAction' => 'simulatePendingQrisPaid'])
+
     @if($showReceiptModal && $completedOrderData)
         {{-- ================= POPUP: STRUK PEMBAYARAN SUKSES ================= --}}
-        @php
-            $meta = $completedOrderData['payment_meta'] ?? [];
-            $qrisProviderLabels = [
-                'BCA_QRIS' => 'QRIS BCA Frontdesk', 'MANDIRI_QRIS' => 'QRIS Bank Mandiri',
-                'GOPAY' => 'GoPay / Midtrans QRIS', 'GOPAY_QRIS' => 'GoPay / Midtrans QRIS',
-                'OVO' => 'OVO', 'SHOPEEPAY' => 'ShopeePay', 'DANA' => 'DANA',
-                'LIVIN' => 'Livin Mandiri', 'LAINNYA' => 'QRIS Lainnya / Bank Lain',
-            ];
-        @endphp
-        <div class="fnbpos-modal-backdrop">
-            <div class="fnbpos-modal-dialog" style="max-width:520px;">
+        {{-- Klik di luar popup / tombol Esc juga menutup. --}}
+        <div class="fnbpos-modal-backdrop" wire:click.self="closeReceiptModal" x-data x-on:keydown.escape.window="$wire.closeReceiptModal()">
+            <div class="fnbpos-modal-dialog" style="max-width:400px; padding:1.25rem; gap:0.85rem;">
                 <div style="display:flex; justify-content:space-between; align-items:flex-start;">
                     <div>
-                        <span style="font-size:0.6875rem; font-weight:900; color:#8C6418; text-transform:uppercase; letter-spacing:0.06em; background:#FAF5E8; border:1px solid #DFC387; border-radius:4px; padding:0.1rem 0.5rem;">Transaksi Lunas</span>
-                        <div class="font-serif font-black text-xl text-[#1F170D] mt-1.5">Struk Pembayaran F&amp;B</div>
+                        {{-- Status mengikuti order — dulu selalu "Transaksi Lunas" walau order batal / belum dibayar. --}}
+                        @switch($completedOrderData['payment_status'] ?? 'PAID')
+                            @case('PAID')
+                                <span style="font-size:0.6875rem; font-weight:900; color:#8C6418; text-transform:uppercase; letter-spacing:0.06em; background:#FAF5E8; border:1px solid #DFC387; border-radius:4px; padding:0.1rem 0.5rem;">Transaksi Lunas</span>
+                                @break
+                            @case('CANCELLED')
+                                <span style="font-size:0.6875rem; font-weight:900; color:#991B1B; text-transform:uppercase; letter-spacing:0.06em; background:#FEE2E2; border:1px solid #FCA5A5; border-radius:4px; padding:0.1rem 0.5rem;">Dibatalkan — tidak dibayar</span>
+                                @break
+                            @case('REFUNDED')
+                                <span style="font-size:0.6875rem; font-weight:900; color:#991B1B; text-transform:uppercase; letter-spacing:0.06em; background:#FEE2E2; border:1px solid #FCA5A5; border-radius:4px; padding:0.1rem 0.5rem;">Sudah Direfund</span>
+                                @break
+                            @default
+                                <span style="font-size:0.6875rem; font-weight:900; color:#92400E; text-transform:uppercase; letter-spacing:0.06em; background:#FEF3C7; border:1px solid #FCD34D; border-radius:4px; padding:0.1rem 0.5rem;">Belum Dibayar</span>
+                        @endswitch
+                        <div class="font-serif font-black text-lg text-[#1F170D] mt-1.5">Struk Pembayaran F&amp;B</div>
                     </div>
-                    <button type="button" wire:click="startNewTransaction" style="background:none; border:none; font-size:1.5rem; color:#78350F; cursor:pointer; line-height:1;">&times;</button>
+                    <button type="button" wire:click="closeReceiptModal" aria-label="Tutup" style="background:none; border:none; font-size:1.5rem; color:#78350F; cursor:pointer; line-height:1; padding:0.25rem 0.5rem;">&times;</button>
                 </div>
 
-                <div id="fnbpos-receipt" class="w-full bg-white rounded-2xl border-2 border-[#D4AF37] p-6 font-mono text-sm space-y-2.5">
-                    <div class="text-center font-serif font-black text-lg border-b border-dashed border-gray-400 pb-1 mb-1">CLUB 61 F&amp;B</div>
-                    <div class="text-center pb-2.5 mb-1.5 border-b border-dashed border-gray-400">
-                        <div class="text-[10px] uppercase tracking-widest text-gray-500 font-bold">Nomor Antrian</div>
-                        <div class="text-4xl font-black text-[#8C6418] leading-tight">{{ $completedOrderData['queue_number'] ? str_pad((string) $completedOrderData['queue_number'], 3, '0', STR_PAD_LEFT) : '—' }}</div>
-                    </div>
-                    <div class="flex justify-between"><span class="text-gray-500">No. Order</span><span class="font-bold">{{ $completedOrderData['order_number'] }}</span></div>
-                    <div class="flex justify-between"><span class="text-gray-500">Waktu</span><span class="font-bold">{{ $completedOrderData['created_at'] ?? now()->setTimezone('Asia/Jakarta')->format('d/m/Y H:i') }}</span></div>
-                    <div class="flex justify-between"><span class="text-gray-500">Tipe Pesanan</span><span class="font-bold">{{ $completedOrderData['order_type'] === 'DINE_IN' ? 'Dine-In' : 'Bawa Pulang' }}</span></div>
-                    <div class="flex justify-between"><span class="text-gray-500">No. Meja</span><span class="font-bold">{{ $completedOrderData['table_number'] ?: '—' }}</span></div>
-                    <div class="flex justify-between"><span class="text-gray-500">Nama Pelanggan</span><span class="font-bold">{{ $completedOrderData['customer_name'] ?? '' ?: '—' }}</span></div>
-                    <div class="flex justify-between"><span class="text-gray-500">Kasir</span><span class="font-bold">{{ $completedOrderData['cashier_name'] }}</span></div>
-                    <div class="border-t border-dashed border-gray-400 my-2.5"></div>
-                    @foreach($completedOrderData['items'] as $item)
-                        <div class="flex justify-between"><span>{{ $item['name'] }} x{{ $item['quantity'] }}</span><span>Rp {{ number_format($item['subtotal'], 0, ',', '.') }}</span></div>
-                    @endforeach
-                    <div class="border-t border-dashed border-gray-400 my-2.5"></div>
-                    <div class="flex justify-between"><span>Subtotal</span><span>Rp {{ number_format($completedOrderData['subtotal'], 0, ',', '.') }}</span></div>
-                    @if($completedOrderData['tax_amount'] > 0)
-                        <div class="flex justify-between"><span>{{ $completedOrderData['tax_name'] }}</span><span>Rp {{ number_format($completedOrderData['tax_amount'], 0, ',', '.') }}</span></div>
+                @include('pos.receipts.fnb', ['receipt' => $completedOrderData])
+
+                <div class="grid grid-cols-2 gap-3">
+                    {{-- Struk hanya dicetak untuk transaksi lunas. --}}
+                    @if(($completedOrderData['payment_status'] ?? 'PAID') === 'PAID')
+                        <button type="button" onclick="club61PrintReceipt('#fnbpos-receipt')" class="fnbpos-pay-btn flex-1">Cetak Struk</button>
+                        {{-- Cetak ulang slip pesanan bar / dapur (tidak tampil di layar, hanya dicetak). --}}
+                        <template id="fnbpos-kot-template">@include('pos.receipts.fnb-kitchen', ['receipt' => $completedOrderData])</template>
+                        <button type="button" onclick="club61PrintReceiptHtml(document.getElementById('fnbpos-kot-template').innerHTML)" class="fnbpos-pay-btn flex-1">Cetak Pesanan Dapur/Bar</button>
                     @endif
-                    <div class="flex justify-between font-bold text-base border-t border-gray-400 pt-2.5 mt-1"><span>TOTAL</span><span>Rp {{ number_format($completedOrderData['grand_total'], 0, ',', '.') }}</span></div>
-
-                    <div class="border-t border-dashed border-gray-400 my-2.5"></div>
-                    <div class="text-center font-bold text-[#8C6418]">LUNAS &bull; {{ $completedOrderData['payment_method_label'] ?? $completedOrderData['payment_method'] }}</div>
-
-                    @if(!empty($meta['qris_provider']) || !empty($meta['qris_rrn']))
-                        <div class="text-xs text-[#4B5563] space-y-1 pt-1.5">
-                            <div class="flex justify-between"><span>Provider QRIS</span><span class="font-bold">{{ $qrisProviderLabels[$meta['qris_provider']] ?? $meta['qris_provider'] }}</span></div>
-                            <div class="flex justify-between"><span>RRN</span><span class="font-bold">{{ $meta['qris_rrn'] }}</span></div>
-                            @if(!empty($meta['qris_sender_name']))
-                                <div class="flex justify-between"><span>Pengirim</span><span class="font-bold">{{ $meta['qris_sender_name'] }}</span></div>
-                            @endif
-                        </div>
-                    @elseif(!empty($meta['terminal']) || !empty($meta['card_last_4']))
-                        <div class="text-xs text-[#4B5563] space-y-1 pt-1.5">
-                            <div class="flex justify-between"><span>Terminal</span><span class="font-bold">{{ $meta['terminal'] === 'EDC_BCA' ? 'Mesin EDC BCA' : ($meta['terminal'] === 'EDC_MANDIRI' ? 'Mesin EDC Mandiri' : $meta['terminal']) }}</span></div>
-                            <div class="flex justify-between"><span>Kartu</span><span class="font-bold">{{ $meta['card_issuer'] ?? '' }} {{ $meta['card_network'] ?? '' }} &bull;&bull;&bull;&bull;{{ $meta['card_last_4'] }}</span></div>
-                            <div class="flex justify-between"><span>Approval Code</span><span class="font-bold">{{ $meta['approval_code'] }}</span></div>
-                            <div class="flex justify-between"><span>Trace Number</span><span class="font-bold">{{ $meta['trace_number'] }}</span></div>
-                        </div>
-                    @endif
-                </div>
-
-                <div class="flex gap-3">
-                    <button type="button" onclick="window.print()" class="fnbpos-pay-btn">Cetak Struk</button>
-                    <button type="button" wire:click="startNewTransaction" class="fnbpos-pay-btn active">Transaksi Baru</button>
+                    <button type="button" wire:click="{{ $posStep === 'history' ? 'closeReceiptModal' : 'startNewTransaction' }}" class="fnbpos-pay-btn active col-span-2">{{ $posStep === 'history' ? 'Tutup' : 'Transaksi Baru' }}</button>
                 </div>
             </div>
         </div>

@@ -1027,7 +1027,13 @@
 
                 <div class="pos-terminal-body">
                     {{-- Form metode pembayaran bersama (dipakai juga oleh Kasir F&B) --}}
-                    @include("pos.partials.payment-method-form", ["grandTotal" => $this->grandTotal])
+                    @if ($appliedVoucherCode && ! $settleBill && $this->grandTotal <= 0)
+                        <div style="background:#ECFDF5; border:1.5px solid #A7F3D0; border-radius:12px; padding:0.9rem 1rem; margin-bottom:0.75rem; color:#065F46; font-size:0.8125rem; font-weight:700;">
+                            Tagihan lunas penuh dengan voucher {{ $appliedVoucherCode }} &mdash; tidak perlu EDC / QRIS. Langsung selesaikan transaksi.
+                        </div>
+                    @else
+                        @include("pos.partials.payment-method-form", ["grandTotal" => $this->grandTotal, "qrisMidtrans" => true])
+                    @endif
 
                     {{-- Action Buttons --}}
                     <div
@@ -1057,7 +1063,7 @@
                             Pembayaran POS &amp; E-Tiket Walk-In</div>
                     </div>
                     <div style="display:flex; gap:0.5rem;">
-                        <button type="button" onclick="window.print()"
+                        <button type="button" onclick="club61PrintReceipt('#printable-pos-receipt')"
                             style="padding:0.4rem 0.85rem; font-size:0.75rem; font-weight:800; border:1.5px solid #DFC387; background:#FFFFFF; border-radius:8px; cursor:pointer; color:#1F170D;">
                             Cetak Struk
                         </button>
@@ -1329,8 +1335,44 @@
                     </div>
                 @endif
 
-                {{-- 4. TOTAL --}}
-                <div class="pos-total-box">
+                {{-- 3b. VOUCHER (promo / voucher saldo customer — Modul 21) --}}
+                @if (! $settleBill)
+                    <div style="margin-bottom:0.6rem;">
+                        <div class="pos-section-label" style="margin-bottom:0.35rem;">Voucher</div>
+                        @if ($appliedVoucherCode)
+                            <div style="display:flex; justify-content:space-between; align-items:center; gap:0.5rem; background:#ECFDF5; border:1px solid #A7F3D0; border-radius:8px; padding:0.45rem 0.6rem;">
+                                <div style="min-width:0;">
+                                    <div style="font-family:var(--font-mono, monospace); font-weight:900; font-size:0.75rem; color:#065F46;">{{ $appliedVoucherCode }}</div>
+                                    @if ($this->voucherResult['error'])
+                                        <div style="font-size:0.6875rem; color:#B91C1C; font-weight:700;">{{ $this->voucherResult['error'] }}</div>
+                                    @else
+                                        <div style="font-size:0.6875rem; color:#047857;">Potongan Rp {{ number_format($this->voucherDiscount, 0, ',', '.') }}</div>
+                                    @endif
+                                </div>
+                                <button type="button" wire:click="removeVoucher" style="font-size:0.6875rem; font-weight:800; color:#B91C1C; background:none; border:none; cursor:pointer;">Hapus</button>
+                            </div>
+                        @else
+                            <div style="display:flex; gap:0.4rem;">
+                                <input type="text" wire:model="voucherInput" wire:keydown.enter.prevent="applyVoucher" maxlength="30" placeholder="Kode voucher"
+                                    style="flex:1; min-width:0; border:1.5px solid #DFC387; border-radius:8px; padding:0.4rem 0.55rem; font-size:0.75rem; font-family:var(--font-mono, monospace); text-transform:uppercase;">
+                                <button type="button" wire:click="applyVoucher" wire:loading.attr="disabled"
+                                    style="padding:0.4rem 0.75rem; border-radius:8px; border:1.5px solid #DFC387; background:#FAF5E8; color:#7A5818; font-weight:800; font-size:0.75rem; cursor:pointer;">Pakai</button>
+                            </div>
+                            @foreach ($this->customerCreditVouchers as $cv)
+                                <div style="display:flex; justify-content:space-between; align-items:center; gap:0.5rem; margin-top:0.35rem; background:#F0FDF4; border:1px dashed #86EFAC; border-radius:8px; padding:0.35rem 0.55rem;">
+                                    <div style="font-size:0.6875rem; color:#065F46;">
+                                        <strong style="font-family:var(--font-mono, monospace);">{{ $cv['code'] }}</strong>
+                                        &middot; saldo Rp {{ number_format($cv['available'], 0, ',', '.') }}
+                                    </div>
+                                    <button type="button" wire:click="applyVoucher('{{ $cv['code'] }}')"
+                                        style="font-size:0.6875rem; font-weight:800; color:#047857; background:none; border:none; cursor:pointer;">Pakai</button>
+                                </div>
+                            @endforeach
+                        @endif
+                    </div>
+                @endif
+
+                {{-- 4. TOTAL --}}                <div class="pos-total-box">
                     <div
                         style="display:flex; justify-content:space-between; font-size:0.6875rem; color:#7A643E; margin-bottom:0.2rem;">
                         <span>Lapangan:</span><span>Rp {{ number_format($this->courtTotal, 0, ',', '.') }}</span>
@@ -1344,6 +1386,13 @@
                             style="display:flex; justify-content:space-between; font-size:0.6875rem; color:#047857; font-weight:800; margin-bottom:0.2rem;">
                             <span>Diskon Membership ({{ $activeMembershipInfo['plan_name'] ?? 'Member' }}):</span>
                             <span>- Rp {{ number_format($this->membershipDiscountAmount, 0, ',', '.') }}</span>
+                        </div>
+                    @endif
+                    @if ($this->voucherDiscount > 0)
+                        <div
+                            style="display:flex; justify-content:space-between; font-size:0.6875rem; color:#047857; font-weight:800; margin-bottom:0.2rem;">
+                            <span>Voucher {{ $appliedVoucherCode }}:</span>
+                            <span>- Rp {{ number_format($this->voucherDiscount, 0, ',', '.') }}</span>
                         </div>
                     @endif
                     @if ($this->isTaxEnabled && $this->taxAmount > 0)
@@ -1427,6 +1476,9 @@
     </div>{{-- end pos-main --}}
     @endif
 
+    {{-- QR Midtrans menunggu dibayar customer --}}
+    @include('pos.partials.midtrans-qris-modal', ['pendingQris' => $pendingQris, 'pollAction' => 'pollPendingQris', 'cancelAction' => 'cancelPendingQris', 'simulateAction' => 'simulatePendingQrisPaid'])
+
     {{-- ============================
      MODAL SUKSES – STRUK POS
      ============================ --}}
@@ -1464,32 +1516,10 @@
 
                 @include('filament.partials.walkin-receipt', ['receipt' => $completedOrderData])
 
-                <style>
-                    @media print {
-                        body * {
-                            visibility: hidden;
-                        }
-
-                        #printable-pos-receipt,
-                        #printable-pos-receipt * {
-                            visibility: visible;
-                        }
-
-                        #printable-pos-receipt {
-                            position: absolute;
-                            left: 0;
-                            top: 0;
-                            width: 78mm;
-                            margin: 0;
-                            padding: 5mm;
-                            border: none !important;
-                        }
-                    }
-                </style>
 
                 <div
                     style="background:#FAF5E8; border-top:1px solid #DFC387; padding:0.65rem 1.1rem; display:flex; justify-content:flex-end; gap:0.5rem;">
-                    <button type="button" onclick="window.print()"
+                    <button type="button" onclick="club61PrintReceipt('#printable-pos-receipt')"
                         style="padding:0.4rem 0.85rem; font-size:0.8125rem; font-weight:800; border:1.5px solid #DFC387; background:#FFFFFF; border-radius:7px; cursor:pointer; color:#1F170D;">
                         Cetak Struk
                     </button>
@@ -1676,7 +1706,7 @@
                         <div
                             style="text-align:center; border-bottom:1px dashed #000; padding-bottom:0.6rem; margin-bottom:0.6rem;">
                             <div style="font-weight:900; font-size:0.9375rem;">CLUB 61 PADEL ARENA</div>
-                            <div style="font-size:0.6rem;">Jl. Karang Tengah Raya No. 61, Lebak Bulus</div>
+                            <div style="font-size:0.6rem;">{{ \App\Models\Setting\CompanyProfileSetting::receiptAddress() }}</div>
                             <div style="font-size:0.65rem; font-weight:800; margin-top:0.25rem;">LAPORAN PENUTUPAN
                                 KASIR (Z-REPORT)</div>
                             <div style="font-size:0.6rem;">Loket: {{ $reportShiftData['counter'] }}</div>
@@ -1767,7 +1797,7 @@
 
                 <div
                     style="background:#FAF5E8; border-top:1px solid #DFC387; padding:0.65rem 1.1rem; display:flex; justify-content:flex-end; gap:0.5rem; flex-shrink:0;">
-                    <button type="button" onclick="window.print()"
+                    <button type="button" onclick="club61PrintReceipt('#printable-z-report')"
                         style="padding:0.4rem 0.85rem; font-size:0.8125rem; font-weight:800; border:1.5px solid #DFC387; background:#FFFFFF; border-radius:7px; cursor:pointer; color:#1F170D;">
                         Cetak Z-Report
                     </button>
@@ -1780,31 +1810,8 @@
         </div>
     @endif
 
-    <style>
-        @media print {
-            body * {
-                visibility: hidden;
-            }
-
-            #printable-pos-receipt,
-            #printable-pos-receipt *,
-            #printable-z-report,
-            #printable-z-report * {
-                visibility: visible;
-            }
-
-            #printable-pos-receipt,
-            #printable-z-report {
-                position: absolute;
-                left: 0;
-                top: 0;
-                width: 78mm;
-                margin: 0;
-                padding: 5mm;
-                border: none !important;
-            }
-        }
-    </style>
+    {{-- Struk & Z-Report dicetak di printer thermal 58mm (App\Support\ReceiptPaper). --}}
+    @include('pos.partials.receipt-print-style', ['selectors' => ['#printable-pos-receipt', '#printable-z-report']])
     <script>
         window.addEventListener('beforeunload', function(e) {
             if (@this.get('posStep') === 'payment') {

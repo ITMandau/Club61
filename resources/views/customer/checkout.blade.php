@@ -1,823 +1,453 @@
 <x-app-layout>
-    <div x-data="checkoutApp()" x-init="init()" class="py-6 sm:py-8 text-[#1F170D]">
-        <div class="w-full px-4 sm:px-8 lg:px-12 2xl:px-16 space-y-6">
+    @include('customer.partials.bk-style')
 
-            <!-- Top Header & Breadcrumb -->
-            <div
-                class="flex items-center justify-between bg-white/95 backdrop-blur-xl p-5 rounded-3xl border border-[#DFC387] shadow-sm">
-                <div class="flex items-center gap-3.5">
-                    <a href="{{ route('customer.cart') }}"
-                        class="p-2.5 rounded-2xl bg-[#FAF2DE] hover:bg-[#F3DFAD] border border-[#DFC387] text-[#7A5818] transition-colors"
-                        title="Back to Cart">
-                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"
-                                d="M15 19l-7-7 7-7" />
-                        </svg>
+    <div x-data="checkoutApp()" x-init="init()" class="bk-page bk-bar-compact-only text-[#1F170D]">
+        <div class="w-full px-4 sm:px-8 lg:px-12 2xl:px-16 pt-4 sm:pt-6 space-y-4 sm:space-y-5">
+
+            {{-- Header --}}
+            <div class="flex items-center justify-between gap-3">
+                <div class="flex items-center gap-3 min-w-0">
+                    <a href="{{ route('customer.cart') }}" title="Back to Cart"
+                       class="bk-tap w-10 h-10 shrink-0 flex items-center justify-center rounded-2xl bg-white/90 border border-[#EADBB5] text-[#7A5818] hover:bg-[#FAF2DE] transition-colors">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M15 19l-7-7 7-7" /></svg>
                     </a>
-                    <div>
-                        <h1 class="font-serif font-black text-xl sm:text-2xl text-[#1F170D]">Payment Details &amp; Checkout</h1>
-                        <p class="text-xs text-[#7A643E]">Select add-on equipment, apply promo codes, and choose payment method</p>
+                    <div class="min-w-0">
+                        <h1 class="font-serif font-black text-xl sm:text-2xl leading-tight">Checkout</h1>
+                        <p class="hidden sm:block text-xs text-[#7A643E] mt-0.5">Add equipment, apply a voucher and choose how to pay.</p>
                     </div>
                 </div>
-
-                <div class="flex items-center gap-2 bg-white/80 px-3.5 py-1.5 rounded-2xl border border-[#DFC387]">
-                    <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                    <span class="text-xs font-mono font-bold text-[#8C6418]"
-                        x-text="'Time Left: ' + timerDisplay">10:00</span>
+                <div x-show="bookingItems.length > 0 && !paymentStarted" style="display: none;"
+                     :class="remainingMs > 0 && remainingMs < 120000 ? 'bg-rose-50 border-rose-200 text-rose-700' : 'bg-white/90 border-[#EADBB5] text-[#7A5818]'"
+                     class="shrink-0 flex items-center gap-1.5 h-9 px-3 rounded-2xl border whitespace-nowrap" title="Time left to finish checkout">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                    <span class="font-black text-sm tabular-nums" x-text="timerDisplay">--:--</span>
                 </div>
             </div>
 
-            <!-- Multi-Column Desktop Checkout Layout -->
-            <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+            {{-- Tidak ada slot yang ditahan --}}
+            <div x-show="bookingItems.length === 0" style="display: none;" class="bk-fade-up bg-white/90 backdrop-blur-xl rounded-3xl border border-[#EADBB5] p-8 sm:p-12 text-center space-y-3">
+                <div class="w-16 h-16 mx-auto rounded-2xl bg-[#FBF7EE] border border-[#EADBB5] flex items-center justify-center text-[#8C6418]">
+                    <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+                </div>
+                <h3 class="font-serif font-black text-lg">Nothing to check out</h3>
+                <p class="text-xs text-[#7A643E] max-w-xs mx-auto">Your held slots were released or already paid. Pick a new time to continue.</p>
+                <a href="{{ route('customer.booking') }}"
+                   class="bk-tap inline-flex items-center gap-2 h-11 px-6 rounded-2xl bg-gradient-to-b from-[#F5DE9B] via-[#D4AF37] to-[#A87D18] text-[#1E160A] text-xs font-black uppercase tracking-wider shadow-[0_8px_20px_rgba(168,125,24,0.3)] active:scale-95 transition-transform">
+                    Book a Court
+                </a>
+            </div>
 
-                <!-- Left Column: Details, Add-ons, Methods (Col 8) -->
-                <div class="lg:col-span-8 space-y-6">
+            <div x-show="bookingItems.length > 0" style="display: none;" class="grid grid-cols-1 lg:grid-cols-12 gap-4 sm:gap-5 items-start">
 
-                    <!-- 1. Booking Items Breakdown Card -->
-                    <div
-                        class="bg-white/95 backdrop-blur-xl rounded-3xl border border-[#DFC387] shadow-[0_15px_40px_rgba(160,120,30,0.15)] p-6 space-y-4">
-                        <div class="flex items-center justify-between border-b border-[#DFC387]/50 pb-3">
-                            <div>
-                                <h2 class="font-serif font-black text-base text-[#1F170D]">Selected Padel Court Schedule</h2>
-                                <p class="text-xs text-[#7A643E]" x-text="bookingDateFormatted"></p>
+                <div class="lg:col-span-7 xl:col-span-8 space-y-4 sm:space-y-5">
+
+                    {{-- 1. Jadwal --}}
+                    <section class="bg-white/90 backdrop-blur-xl rounded-3xl border border-[#EADBB5] shadow-[0_8px_30px_rgba(160,120,30,0.08)] p-4 sm:p-5">
+                        <div class="flex items-center justify-between gap-3 mb-1">
+                            <div class="min-w-0">
+                                <div class="text-[11px] font-extrabold uppercase tracking-wider text-[#8C6418]">Your booking</div>
+                                <div class="text-sm font-bold truncate" x-text="bookingDateFormatted"></div>
                             </div>
-                            <span
-                                class="px-3 py-1 rounded-full text-xs font-bold bg-[#FAF2DE] text-[#7A5818] border border-[#DFC387]"
-                                x-text="bookingItems.length + (bookingItems.length > 1 ? ' Match Sessions' : ' Match Session')"></span>
+                            <span class="shrink-0 whitespace-nowrap px-2.5 py-1 rounded-full text-[11px] font-bold bg-[#FBF7EE] text-[#7A5818] border border-[#EADBB5]"
+                                  x-text="bookingItems.length + (bookingItems.length === 1 ? ' session' : ' sessions')"></span>
                         </div>
-
-                        <div class="divide-y divide-[#EEDBB0]/60 text-xs">
+                        <div class="divide-y divide-[#F0E4C8]">
                             <template x-for="(item, idx) in bookingItems" :key="idx">
-                                <div class="py-3.5 flex items-center justify-between">
-                                    <div class="flex items-center gap-3">
-                                        <div
-                                            class="w-8 h-8 rounded-xl bg-[#FAF2DE] border border-[#DFC387] flex items-center justify-center text-[10px] font-black text-[#7A5818]">
-                                            COURT
-                                        </div>
-                                        <div>
-                                            <div class="font-bold text-sm text-[#1F170D]"
-                                                x-text="item.court || 'Court Arena'"></div>
-                                            <div class="text-[11px] text-[#7A643E] font-mono" x-text="item.time"></div>
-                                        </div>
+                                <div class="flex items-center gap-3 py-3">
+                                    <div class="w-10 h-10 shrink-0 rounded-2xl bg-[#183428] text-[#F5E6BE] flex items-center justify-center">
+                                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><rect x="4" y="3" width="16" height="18" rx="2" stroke-width="1.8" /><path stroke-width="1.8" stroke-linecap="round" d="M4 12h16M12 3v18" /></svg>
                                     </div>
-                                    <span class="font-mono font-black text-sm text-[#1F170D]"
-                                        x-text="'Rp ' + formatNumber(item.price)"></span>
-                                </div>
-                            </template>
-                        </div>
-                    </div>
-
-                    <!-- 2. Equipment Add-Ons (Real Catalog) -->
-                    <div
-                        class="bg-white/95 backdrop-blur-xl rounded-3xl border border-[#DFC387] shadow-[0_15px_40px_rgba(160,120,30,0.15)] p-6 space-y-4">
-                        <div class="flex items-center justify-between border-b border-[#DFC387]/50 pb-3">
-                            <div>
-                                <h2 class="font-serif font-black text-base text-[#1F170D]">Equipment Rental &amp; Add-ons</h2>
-                                <p class="text-xs text-[#7A643E]">Official tournament-standard equipment and gear</p>
-                            </div>
-                            <button type="button" @click="showAddOnsModal = true"
-                                class="text-xs font-bold text-[#8C6418] hover:text-[#5C410F] flex items-center gap-1 cursor-pointer">
-                                <span>+ Add Equipment</span>
-                            </button>
-                        </div>
-
-                        <!-- Selected Add-ons List -->
-                        <div x-show="selectedAddOns.length === 0"
-                            class="text-xs text-[#8C7A58] italic py-2 text-center">
-                            No add-on equipment selected yet. Click "+ Add Equipment" to rent rackets or balls.
-                        </div>
-
-                        <div x-show="selectedAddOns.length > 0" class="divide-y divide-[#EEDBB0]/60 text-xs">
-                            <template x-for="(addon, idx) in selectedAddOns" :key="addon.id || idx">
-                                <div class="py-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                                     <div class="flex-1 min-w-0">
-                                        <div class="font-bold text-sm text-[#1F170D]" x-text="addon.name"></div>
-                                        <div class="flex items-center gap-2 mt-0.5 text-[11px] text-[#7A643E]">
-                                            <span class="font-mono text-[#8C6418]" x-text="'Rp ' + formatNumber(addon.price) + ' / unit'"></span>
-                                            <span>&bull;</span>
-                                            <span x-text="addon.desc || ('In Stock: ' + (addon.stock || 20))"></span>
+                                        <div class="font-extrabold text-sm leading-snug line-clamp-2" x-text="item.court || 'Court'"></div>
+                                        <div class="mt-0.5 flex items-center gap-1.5 text-[11px] text-[#7A643E] whitespace-nowrap">
+                                            <span class="font-semibold tabular-nums" x-text="timeRange(item)"></span>
+                                            <span x-show="item.duration_hours" class="px-1.5 py-px rounded-md bg-[#FBF7EE] border border-[#EADBB5] font-bold text-[10px] text-[#7A5818]"
+                                                  x-text="item.duration_hours + (item.duration_hours === 1 ? ' hr' : ' hrs')"></span>
                                         </div>
                                     </div>
-
-                                    <div class="flex items-center justify-between sm:justify-end gap-3 sm:gap-4">
-                                        <!-- Stepper Quantity -->
-                                        <div class="flex items-center bg-[#FAF8F2] border border-[#DFC387] rounded-xl p-0.5 shadow-sm">
-                                            <button type="button"
-                                                @click="decrementAddon(idx)"
-                                                :disabled="(addon.quantity || 1) <= 1"
-                                                :class="(addon.quantity || 1) <= 1 ? 'opacity-30 cursor-not-allowed text-gray-400' : 'hover:bg-[#F3DFAD] text-[#7A5818] active:scale-95 cursor-pointer'"
-                                                class="w-7 h-7 rounded-lg flex items-center justify-center font-bold text-sm transition-all"
-                                                title="Kurangi kuantitas">
-                                                -
-                                            </button>
-                                            <span class="w-9 text-center font-mono font-bold text-xs text-[#1F170D]"
-                                                x-text="addon.quantity || 1"></span>
-                                            <button type="button"
-                                                @click="incrementAddon(idx)"
-                                                :disabled="addon.stock && (addon.quantity || 1) >= addon.stock"
-                                                :class="addon.stock && (addon.quantity || 1) >= addon.stock ? 'opacity-30 cursor-not-allowed text-gray-400' : 'hover:bg-[#F3DFAD] text-[#7A5818] active:scale-95 cursor-pointer'"
-                                                class="w-7 h-7 rounded-lg flex items-center justify-center font-bold text-sm transition-all"
-                                                title="Tambah kuantitas">
-                                                +
-                                            </button>
-                                        </div>
-
-                                        <!-- Subtotal per item sewa -->
-                                        <div class="text-right min-w-[95px]">
-                                            <div class="font-mono font-black text-sm text-[#1F170D]"
-                                                x-text="'Rp ' + formatNumber(addon.price * (addon.quantity || 1))"></div>
-                                            <div class="text-[10px] text-[#8C7A58]"
-                                                x-text="(addon.quantity || 1) + 'x Rp ' + formatNumber(addon.price)"></div>
-                                        </div>
-
-                                        <!-- Tombol Remove -->
-                                        <button type="button" @click="removeAddon(idx)"
-                                            class="p-1.5 rounded-lg text-rose-500 hover:text-rose-700 hover:bg-rose-50 transition-colors cursor-pointer"
-                                            title="Hapus sewa alat">
-                                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                                    d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                                            </svg>
-                                        </button>
-                                    </div>
+                                    <div class="shrink-0 font-black text-sm tabular-nums whitespace-nowrap" x-text="'Rp ' + formatNumber(item.price)"></div>
                                 </div>
                             </template>
                         </div>
-                    </div>
+                    </section>
 
-                    <!-- 3. Payment Method Selection (Midtrans Gateway) -->
-                    <div
-                        class="bg-white/95 backdrop-blur-xl rounded-3xl border border-[#DFC387] shadow-[0_15px_40px_rgba(160,120,30,0.15)] p-6 space-y-4">
-                        <div class="flex items-center justify-between border-b border-[#DFC387]/50 pb-3">
-                            <div>
-                                <h2 class="font-serif font-black text-base text-[#1F170D]">Payment Method (Midtrans Gateway)</h2>
-                                <p class="text-xs text-[#7A643E]">Instant QRIS and automated bank Virtual Account verification</p>
+                    {{-- 2. Sewa alat --}}
+                    <section class="bg-white/90 backdrop-blur-xl rounded-3xl border border-[#EADBB5] shadow-[0_8px_30px_rgba(160,120,30,0.08)] p-4 sm:p-5">
+                        <div class="flex items-center justify-between gap-3 mb-1">
+                            <div class="min-w-0">
+                                <div class="text-[11px] font-extrabold uppercase tracking-wider text-[#8C6418]">Equipment Rental &amp; Add-ons</div>
+                                <div class="text-[11px] text-[#7A643E]">Optional — price is per session.</div>
                             </div>
-                            <button type="button" @click="showPaymentModal = true"
-                                class="text-xs font-bold text-[#8C6418] hover:text-[#5C410F] cursor-pointer">
-                                Change Method &rarr;
-                            </button>
+                            <span x-show="addonsTotal > 0" class="shrink-0 whitespace-nowrap px-2.5 py-1 rounded-full text-[11px] font-bold bg-[#183428] text-[#F5E6BE] tabular-nums"
+                                  x-text="'+ Rp ' + formatNumber(addonsTotal)"></span>
                         </div>
 
-                        <!-- Selected Method Display Card -->
-                        <div
-                            class="p-4 rounded-2xl bg-[#FAF8F2] border border-[#DFC387] flex items-center justify-between">
-                            <div class="flex items-center gap-3">
-                                <div class="w-10 h-10 rounded-xl bg-white border border-[#DFC387] flex items-center justify-center font-bold text-xs font-mono text-[#8C6418]"
-                                    x-text="selectedMethod.badge">
-                                    QRIS
-                                </div>
-                                <div>
-                                    <div class="font-bold text-sm text-[#1F170D]" x-text="selectedMethod.name"></div>
-                                    <div class="text-[11px] text-[#7A643E]" x-text="selectedMethod.note"></div>
-                                </div>
-                            </div>
-
-                            <span class="text-xs font-mono font-bold text-[#1F170D]"
-                                x-text="(isAdminFeeApplicable && calculatedAdminFee > 0 && selectedMethod.id !== 'cash') ? '+ Rp ' + formatNumber(calculatedAdminFee) : 'No Fee'"></span>
-                        </div>
-                    </div>
-
-                </div>
-
-                <!-- Right Column: Payment Summary & Pay CTA (Col 4) -->
-                <div class="lg:col-span-4 space-y-4">
-                    <div
-                        class="bg-white/95 backdrop-blur-xl rounded-3xl border-2 border-[#D4AF37] shadow-[0_15px_40px_rgba(160,120,30,0.18)] p-6 space-y-5 sticky top-24">
-
-                        <h3 class="font-serif font-black text-base text-[#1F170D] border-b border-[#DFC387]/50 pb-3">
-                            Payment Summary</h3>
-
-                        <!-- Membership Benefit Banner (Muncul Otomatis Kalau Ada Membership Aktif) -->
-                        <template x-if="isLoadingMembershipPreview">
-                            <div class="p-3 rounded-2xl bg-[#FAF8F2] border border-[#DFC387]/70 text-[11px] text-[#7A643E] flex items-center gap-2">
-                                <div class="w-3.5 h-3.5 border-2 border-[#D4AF37] border-t-transparent rounded-full animate-spin"></div>
-                                <span>Checking membership benefit...</span>
+                        <template x-if="isLoadingAddOns">
+                            <div class="space-y-2 pt-2">
+                                <template x-for="i in 3" :key="i"><div class="bk-skeleton h-14 rounded-2xl"></div></template>
                             </div>
                         </template>
 
-                        <template x-if="!isLoadingMembershipPreview && membershipBenefit">
-                            <div class="p-3.5 rounded-2xl border space-y-2.5 transition-all shadow-sm"
-                                :style="useMembershipBenefit 
-                                    ? 'background-color: #FAF6EC; border: 1.5px solid #D4AF37;' 
-                                    : 'background-color: #F4EFE6; border: 1.5px solid #CDBFA8;'">
-                                <div class="flex items-center justify-between gap-3">
-                                    <div class="flex items-center gap-2 min-w-0">
-                                        <span class="px-2 py-0.5 rounded-full text-[9px] font-extrabold uppercase tracking-wider shrink-0 transition-colors"
-                                            :style="useMembershipBenefit 
-                                                ? 'background-color: #D1FAE5; color: #065F46; border: 1px solid #6EE7B7;' 
-                                                : 'background-color: #E6DCCD; color: #5C4A26; border: 1px solid #C4B59D;'">
-                                            Member
-                                        </span>
-                                        <span class="text-xs font-bold text-[#1F170D] truncate" x-text="membershipBenefit.plan_name"></span>
+                        <div x-show="!isLoadingAddOns && availableAddOns.length === 0" class="py-4 text-center text-xs text-[#8C7A58]">
+                            No equipment available for rent right now.
+                        </div>
+
+                        <div x-show="!isLoadingAddOns" class="divide-y divide-[#F0E4C8]">
+                            <template x-for="addon in visibleAddOns" :key="addon.id">
+                                <div class="flex items-center gap-3 py-3">
+                                    <div class="flex-1 min-w-0">
+                                        <div class="font-bold text-sm leading-snug line-clamp-2" x-text="addon.name"></div>
+                                        <div class="mt-0.5 flex items-center gap-1.5 text-[11px] whitespace-nowrap">
+                                            <span class="font-bold tabular-nums text-[#8C6418]" x-text="'Rp ' + formatNumber(addon.price)"></span>
+                                            <span class="text-[#B8A888]">•</span>
+                                            <span class="text-[#7A643E]" x-text="addon.stock + ' in stock'"></span>
+                                        </div>
                                     </div>
 
-                                    <!-- Toggle Switch Pakai / Tidak Pakai Benefit -->
-                                    <div class="flex items-center gap-2 shrink-0">
-                                        <span class="text-[10px] font-extrabold uppercase tracking-wider select-none transition-colors"
-                                            :style="useMembershipBenefit ? 'color: #8C6418;' : 'color: #786546;'"
-                                            x-text="useMembershipBenefit ? 'Dipakai' : 'Nonaktif'">
-                                        </span>
-                                        <button type="button" @click="toggleMembershipBenefit()"
-                                            class="relative inline-flex items-center rounded-full transition-all shrink-0 cursor-pointer focus:outline-none p-0.5"
-                                            :style="useMembershipBenefit 
-                                                ? 'width: 44px; height: 24px; background: linear-gradient(135deg, #D4AF37 0%, #B38622 100%); border: 1.5px solid #997015; box-shadow: inset 0 1px 2px rgba(0,0,0,0.15);' 
-                                                : 'width: 44px; height: 24px; background-color: #8C7A58; border: 1.5px solid #635338; box-shadow: inset 0 1px 3px rgba(0,0,0,0.3);'"
-                                            :title="useMembershipBenefit ? 'Klik untuk menonaktifkan benefit membership' : 'Klik untuk mengaktifkan benefit membership'">
-                                            <span class="inline-block rounded-full bg-white transition-all shadow-md"
-                                                :style="useMembershipBenefit 
-                                                    ? 'width: 18px; height: 18px; transform: translateX(21px); box-shadow: 0 2px 4px rgba(0,0,0,0.35);' 
-                                                    : 'width: 18px; height: 18px; transform: translateX(2px); box-shadow: 0 2px 4px rgba(0,0,0,0.3);'">
-                                            </span>
+                                    <template x-if="!isAddOnSelected(addon.id)">
+                                        <button type="button" @click="toggleAddOn(addon)"
+                                                class="bk-tap shrink-0 h-9 px-4 rounded-xl border border-[#DFC387] bg-[#FBF7EE] hover:bg-[#F3DFAD] text-[#7A5818] text-xs font-bold whitespace-nowrap active:scale-95 transition-all">
+                                            + Add
                                         </button>
-                                    </div>
-                                </div>
-
-                                <div x-show="useMembershipBenefit" class="text-[11px] text-[#7A643E]">
-                                    <template x-if="membershipBenefit.benefit_type === 'HOURS'">
-                                        <span>
-                                            Pakai <span class="font-bold text-[#8C6418]" x-text="membershipBenefit.hours_to_consume + ' jam'"></span>
-                                            kuota membership &mdash; sisa jadi
-                                            <span class="font-bold" x-text="membershipBenefit.remaining_quota_after + ' jam'"></span>.
-                                        </span>
                                     </template>
-                                    <template x-if="membershipBenefit.benefit_type === 'DISCOUNT_PERCENT'">
-                                        <span>
-                                            Diskon member
-                                            <span class="font-bold text-[#8C6418]" x-text="membershipBenefit.discount_percent + '%'"></span>
-                                            untuk sewa lapangan ini.
-                                        </span>
+
+                                    <template x-if="isAddOnSelected(addon.id)">
+                                        <div class="bk-pop shrink-0 flex items-center rounded-xl border border-[#D4AF37] bg-white p-0.5 shadow-sm">
+                                            <button type="button" @click="decrementOrRemoveById(addon.id)"
+                                                    :title="getAddOnQuantity(addon.id) <= 1 ? 'Remove' : 'Less'"
+                                                    class="bk-tap w-8 h-8 rounded-lg flex items-center justify-center hover:bg-[#FAF2DE] transition-colors"
+                                                    :class="getAddOnQuantity(addon.id) <= 1 ? 'text-rose-500' : 'text-[#7A5818]'">
+                                                <svg x-show="getAddOnQuantity(addon.id) <= 1" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                                                <svg x-show="getAddOnQuantity(addon.id) > 1" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-width="2.5" d="M5 12h14" /></svg>
+                                            </button>
+                                            <span class="w-8 text-center font-black text-sm tabular-nums" x-text="getAddOnQuantity(addon.id)"></span>
+                                            <button type="button" @click="incrementAddonById(addon.id)" :disabled="getAddOnQuantity(addon.id) >= addon.stock" title="More"
+                                                    class="bk-tap w-8 h-8 rounded-lg flex items-center justify-center text-[#7A5818] hover:bg-[#FAF2DE] transition-colors disabled:opacity-30 disabled:cursor-not-allowed">
+                                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-width="2.5" d="M12 5v14M5 12h14" /></svg>
+                                            </button>
+                                        </div>
                                     </template>
                                 </div>
+                            </template>
+                        </div>
 
-                                <div x-show="!useMembershipBenefit" class="text-[10px] font-semibold text-[#6B5B3E] bg-[#EBE2D3] p-2.5 rounded-xl border border-[#CDBFA8] leading-relaxed">
-                                    Benefit membership dinonaktifkan untuk booking ini &mdash; kuota jam / diskon Anda tetap aman dan tidak akan berkurang.
-                                </div>
-                            </div>
-                        </template>
+                        <button type="button" x-show="!isLoadingAddOns && availableAddOns.length > addOnPreviewCount" @click="showAllAddOns = !showAllAddOns"
+                                class="bk-tap mt-1 w-full h-10 rounded-2xl text-xs font-bold text-[#8C6418] hover:bg-[#FBF7EE] transition-colors"
+                                x-text="showAllAddOns ? 'Show less' : 'Show all equipment (' + availableAddOns.length + ')'"></button>
+                    </section>
 
-                        <!-- Corporate Sponsor Voucher Benefit -->
-                        <template x-if="!isLoadingMembershipPreview && sponsorVoucherBenefit">
-                            <div class="p-3.5 rounded-2xl border space-y-2.5 transition-all shadow-sm"
-                                :style="useSponsorVoucherBenefit
-                                    ? 'background-color: #F0F7F2; border: 1.5px solid #1E3327;'
-                                    : 'background-color: #F4EFE6; border: 1.5px solid #CDBFA8;'">
-                                <div class="flex items-center justify-between gap-3">
-                                    <div class="flex items-center gap-2 min-w-0">
-                                        <span class="px-2 py-0.5 rounded-full text-[9px] font-extrabold uppercase tracking-wider shrink-0 transition-colors"
-                                            :style="useSponsorVoucherBenefit
-                                                ? 'background-color: #1E3327; color: #FAF5E6; border: 1px solid #1E3327;'
-                                                : 'background-color: #E6DCCD; color: #5C4A26; border: 1px solid #C4B59D;'">
-                                            🎟️ Corporate
-                                        </span>
-                                        <span class="text-xs font-bold text-[#1F170D] truncate" x-text="sponsorVoucherBenefit.plan_name || sponsorVoucherBenefit.organization_name"></span>
-                                    </div>
+                    {{-- 3. Metode pembayaran --}}
+                    <section class="bg-white/90 backdrop-blur-xl rounded-3xl border border-[#EADBB5] shadow-[0_8px_30px_rgba(160,120,30,0.08)] p-4 sm:p-5">
+                        <div class="mb-3">
+                            <div class="text-[11px] font-extrabold uppercase tracking-wider text-[#8C6418]">Payment method</div>
+                            <div class="text-[11px] text-[#7A643E]">Paid online via Midtrans — confirmed automatically.</div>
+                        </div>
 
-                                    <!-- Toggle Switch Pakai / Tidak Pakai Voucher -->
-                                    <div class="flex items-center gap-2 shrink-0">
-                                        <span class="text-[10px] font-extrabold uppercase tracking-wider select-none transition-colors"
-                                            :style="useSponsorVoucherBenefit ? 'color: #1E3327;' : 'color: #786546;'"
-                                            x-text="useSponsorVoucherBenefit ? 'Dipakai' : 'Nonaktif'">
-                                        </span>
-                                        <button type="button" @click="toggleSponsorVoucherBenefit()"
-                                            class="relative inline-flex items-center rounded-full transition-all shrink-0 cursor-pointer focus:outline-none p-0.5"
-                                            :style="useSponsorVoucherBenefit
-                                                ? 'width: 44px; height: 24px; background: linear-gradient(135deg, #1E3327 0%, #15241B 100%); border: 1.5px solid #0F1A13; box-shadow: inset 0 1px 2px rgba(0,0,0,0.15);'
-                                                : 'width: 44px; height: 24px; background-color: #8C7A58; border: 1.5px solid #635338; box-shadow: inset 0 1px 3px rgba(0,0,0,0.3);'"
-                                            :title="useSponsorVoucherBenefit ? 'Klik untuk menonaktifkan voucher corporate' : 'Klik untuk mengaktifkan voucher corporate'">
-                                            <span class="inline-block rounded-full bg-white transition-all shadow-md"
-                                                :style="useSponsorVoucherBenefit
-                                                    ? 'width: 18px; height: 18px; transform: translateX(21px); box-shadow: 0 2px 4px rgba(0,0,0,0.35);'
-                                                    : 'width: 18px; height: 18px; transform: translateX(2px); box-shadow: 0 2px 4px rgba(0,0,0,0.3);'">
-                                            </span>
-                                        </button>
-                                    </div>
-                                </div>
+                        <div x-show="grandTotal <= 0" class="flex items-center gap-3 p-3.5 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-900">
+                            <svg class="w-5 h-5 shrink-0 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7" /></svg>
+                            <div class="text-xs font-semibold">Fully covered — no payment needed.</div>
+                        </div>
 
-                                <div x-show="useSponsorVoucherBenefit" class="text-[11px] text-[#7A643E]">
-                                    <span>
-                                        Pakai <span class="font-bold text-[#1E3327]" x-text="sponsorVoucherBenefit.hours_to_consume + ' jam'"></span>
-                                        voucher gratis dari perusahaan &mdash; sisa jadi
-                                        <span class="font-bold" x-text="sponsorVoucherBenefit.remaining_hours_after + ' jam'"></span>.
+                        <div x-show="grandTotal > 0 && availableMethods.length === 0" class="p-3.5 rounded-2xl bg-rose-50 border border-rose-200 text-xs text-rose-800">
+                            No online payment method is available for this total. Please contact the front desk.
+                        </div>
+
+                        <div x-show="grandTotal > 0" class="space-y-2" role="radiogroup" aria-label="Payment method">
+                            <template x-for="m in visibleMethods" :key="m.code">
+                                <button type="button" role="radio" :aria-checked="selectedMethod.code === m.code" @click="selectPaymentMethod(m)"
+                                        :class="selectedMethod.code === m.code ? 'border-[#D4AF37] bg-[#FDF8EB] shadow-[0_6px_18px_rgba(160,120,30,0.14)]' : 'border-[#EADBB5] bg-white hover:border-[#DFC387]'"
+                                        class="bk-tap w-full p-3 rounded-2xl border text-left flex items-center gap-3 transition-all active:scale-[0.99]">
+                                    <span class="w-12 h-9 shrink-0 rounded-xl bg-white border border-[#EADBB5] flex items-center justify-center text-[10px] font-black tracking-wide text-[#8C6418]" x-text="m.badge"></span>
+                                    <span class="flex-1 min-w-0">
+                                        <span class="font-bold text-[13px] leading-snug line-clamp-2" x-text="m.name"></span>
+                                        <span class="text-[11px] text-[#7A643E] leading-snug line-clamp-2 mt-0.5" x-text="m.note"></span>
                                     </span>
-                                </div>
-
-                                <div x-show="!useSponsorVoucherBenefit" class="text-[10px] font-semibold text-[#6B5B3E] bg-[#EBE2D3] p-2.5 rounded-xl border border-[#CDBFA8] leading-relaxed">
-                                    Voucher corporate dinonaktifkan untuk booking ini &mdash; jam Anda tetap aman dan tidak akan berkurang.
-                                </div>
-                            </div>
-                        </template>
-
-                        <!-- Promo Code Input -->
-                        <div class="space-y-2">
-                            <label class="text-[11px] font-bold text-[#7A5818] uppercase tracking-wider block">Discount Promo Code</label>
-                            <div class="flex gap-2">
-                                <input type="text" x-model="promoCode" :disabled="promoApplied"
-                                    placeholder="HEMAT10 / CLUB61"
-                                    class="flex-1 px-3.5 py-2.5 rounded-xl border border-[#DFC387] text-xs font-mono uppercase focus:ring-1 focus:ring-[#D4AF37] focus:outline-none bg-white">
-                                <button type="button" x-show="!promoApplied" @click="applyPromo()"
-                                    class="px-4 py-2.5 rounded-xl bg-[#FAF2DE] hover:bg-[#F3DFAD] border border-[#DFC387] text-[#7A5818] text-xs font-bold transition-colors cursor-pointer">
-                                    Apply
-                                </button>
-                                <button type="button" x-show="promoApplied" @click="removePromo()"
-                                    class="px-3 py-2.5 rounded-xl bg-rose-50 text-rose-600 border border-rose-200 text-xs font-bold cursor-pointer">
-                                    Remove
-                                </button>
-                            </div>
-                            <div x-show="promoApplied" class="text-[10px] text-emerald-700 font-bold">
-                                Promo Code Applied: Saved Rp 40,000
-                            </div>
-                        </div>
-
-                        <!-- Price Breakdown List -->
-                        <div class="space-y-2.5 text-xs text-[#5C410F] border-t border-[#DFC387]/50 pt-3">
-                            <div class="flex justify-between">
-                                <span>Court Rental Subtotal:</span>
-                                <span class="font-mono font-bold" x-text="'Rp ' + formatNumber(subtotal)"></span>
-                            </div>
-                            <div class="flex justify-between" x-show="addonsTotal > 0">
-                                <span>Equipment Add-ons:</span>
-                                <span class="font-mono font-bold" x-text="'Rp ' + formatNumber(addonsTotal)"></span>
-                            </div>
-                            <div x-show="membershipDiscountAmount > 0" class="flex justify-between text-[#8C6418] font-bold">
-                                <span x-text="'Membership Benefit (' + (membershipBenefit ? membershipBenefit.plan_name : '') + '):'"></span>
-                                <span class="font-mono" x-text="'- Rp ' + formatNumber(membershipDiscountAmount)"></span>
-                            </div>
-                            <div x-show="sponsorVoucherDiscountAmount > 0" class="flex justify-between text-[#1E3327] font-bold">
-                                <span>🎟️ Corporate Voucher:</span>
-                                <span class="font-mono" x-text="'- Rp ' + formatNumber(sponsorVoucherDiscountAmount)"></span>
-                            </div>
-                            <div x-show="promoApplied" class="flex justify-between text-emerald-700 font-bold">
-                                <span>Voucher Discount:</span>
-                                <span class="font-mono" x-text="'- Rp ' + formatNumber(promoDiscount)"></span>
-                            </div>
-
-                            <!-- Biaya Layanan / Admin Fee dari Panel Admin -->
-                            <div x-show="isAdminFeeApplicable && calculatedAdminFee > 0" class="flex justify-between">
-                                <span x-text="financeSettings.admin_fee_name || 'Biaya Layanan / Admin'"></span>
-                                <span class="font-mono font-bold"
-                                    x-text="'Rp ' + formatNumber(calculatedAdminFee)"></span>
-                            </div>
-
-                            <!-- Pajak Daerah / PPh / PPN dari Panel Admin -->
-                            <div x-show="isTaxApplicable && calculatedTax > 0" class="flex justify-between">
-                                <span x-text="(financeSettings.tax_name || 'Pajak') + (financeSettings.tax_type === 'PERCENTAGE' ? ' (' + financeSettings.tax_rate + '%):' : ':')"></span>
-                                <span class="font-mono font-bold"
-                                    x-text="'Rp ' + formatNumber(calculatedTax)"></span>
-                            </div>
-
-                            <div class="pt-3 border-t border-[#DFC387]/60 flex justify-between items-center text-sm">
-                                <span class="font-serif font-black text-[#1F170D]">Grand Total:</span>
-                                <span class="font-mono font-black text-xl text-[#1F170D]"
-                                    x-text="'Rp ' + formatNumber(grandTotal)"></span>
-                            </div>
-                        </div>
-
-                        <!-- Pay Button with Loading & Expiry State -->
-                        <div class="pt-2">
-                            <button type="button" :disabled="isSubmitting || isExpired" @click="executePayment()"
-                                class="w-full py-4 rounded-2xl text-xs font-black uppercase tracking-widest transition-all duration-150 transform shadow-lg flex items-center justify-center gap-2 cursor-pointer"
-                                :class="(isSubmitting || isExpired) ? 'opacity-60 cursor-not-allowed bg-gray-400 text-white' :
-                                'hover:brightness-105 active:scale-95 text-[#1E160A]'"
-                                style="background: linear-gradient(180deg, #F5DE9B 0%, #D4AF37 50%, #A87D18 100%); border: 1.5px solid #FFF3CD;">
-
-                                <!-- Spinner loading -->
-                                <template x-if="isSubmitting">
-                                    <div class="flex items-center gap-2">
-                                        <div
-                                            class="w-4 h-4 border-2 border-[#1E160A] border-t-transparent rounded-full animate-spin">
-                                        </div>
-                                        <span>Processing Secure Payment...</span>
-                                    </div>
-                                </template>
-
-                                <!-- Normal Pay Label -->
-                                <template x-if="!isSubmitting">
-                                    <div class="flex items-center gap-2">
-                                        <span>Pay Now</span>
-                                        <svg class="w-4 h-4" fill="none" stroke="currentColor"
-                                            viewBox="0 0 24 24">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"
-                                                d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                                        </svg>
-                                    </div>
-                                </template>
-                            </button>
-
-                            <template x-if="canCancelBooking">
-                                <button type="button" @click="cancelCheckout()"
-                                    class="w-full mt-2 py-2.5 px-4 rounded-2xl text-rose-700 hover:text-rose-800 bg-rose-50 hover:bg-rose-100 border border-rose-200 text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer">
-                                    <svg class="w-3.5 h-3.5 text-rose-600" fill="none" stroke="currentColor"
-                                        viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                            d="M6 18L18 6M6 6l12 12" />
-                                    </svg>
-                                    <span>Cancel &amp; Select Another Schedule</span>
+                                    <span class="w-5 h-5 shrink-0 rounded-full border-2 flex items-center justify-center transition-colors"
+                                          :class="selectedMethod.code === m.code ? 'border-[#B8891E] bg-[#D4AF37]' : 'border-[#D9CBA8] bg-white'">
+                                        <span x-show="selectedMethod.code === m.code" class="w-2 h-2 rounded-full bg-white"></span>
+                                    </span>
                                 </button>
                             </template>
+                            <button type="button" x-show="availableMethods.length > methodPreviewCount" @click="showAllMethods = !showAllMethods"
+                                    class="bk-tap w-full h-10 rounded-2xl text-xs font-bold text-[#8C6418] hover:bg-[#FBF7EE] transition-colors"
+                                    x-text="showAllMethods ? 'Show fewer methods' : 'Show all payment methods (' + availableMethods.length + ')'"></button>
                         </div>
-
-                        <div class="text-[10px] text-center text-[#7A643E]">
-                            Transactions secured with 256-bit SSL encryption and Midtrans 3D-Secure.
-                        </div>
-
-                    </div>
+                    </section>
                 </div>
 
-            </div>
+                {{-- Ringkasan pembayaran --}}
+                <aside class="lg:col-span-5 xl:col-span-4 lg:sticky lg:top-24 bg-white/90 backdrop-blur-xl rounded-3xl border border-[#E3CF9C] shadow-[0_8px_30px_rgba(160,120,30,0.10)] p-4 sm:p-5 space-y-4">
+                    <div class="text-[11px] font-extrabold uppercase tracking-wider text-[#8C6418]">Payment Summary</div>
 
-        </div>
+                    <template x-if="isLoadingMembershipPreview">
+                        <div class="bk-skeleton h-14 rounded-2xl"></div>
+                    </template>
 
-        <!-- Session Expired Modal -->
-        <div x-show="showExpiredModal" style="display: none; z-index: 99999 !important;"
-            class="fixed inset-0 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-            <div
-                class="bg-white rounded-3xl border-2 border-[#D4AF37] max-w-md w-full p-6 text-center space-y-4 shadow-2xl animate-scaleIn">
-                <div
-                    class="w-16 h-16 rounded-full bg-rose-100 border border-rose-300 text-rose-600 flex items-center justify-center mx-auto text-xs font-black tracking-wider">
-                    EXPIRED
-                </div>
-                <h3 class="font-serif font-black text-xl text-[#1F170D]">Session Expired!</h3>
-                <p class="text-xs text-[#7A643E] leading-relaxed">
-                    The 10-minute reservation window has ended and your held court slots have been released back to the public schedule.
-                </p>
-                <div class="pt-2">
-                    <a href="{{ route('customer.booking') }}"
-                        class="w-full py-3.5 px-4 rounded-2xl text-[#1E160A] text-xs font-black uppercase tracking-wider block shadow-md hover:brightness-105 transition-all"
-                        style="background: linear-gradient(180deg, #F5DE9B 0%, #D4AF37 100%); color: #1E160A; border: 1px solid #FFF3CD;">
-                        Select Schedule Again &rarr;
-                    </a>
-                </div>
-            </div>
-        </div>
-
-        <!-- Payment Method Selection Modal -->
-        <div x-show="showPaymentModal" style="display: none; z-index: 99999 !important;"
-            class="fixed inset-0 overflow-y-auto bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-            <div class="w-full max-w-md bg-white rounded-3xl border-2 border-[#DFC387] shadow-2xl p-6 space-y-4">
-                <div class="flex items-center justify-between border-b border-[#DFC387]/50 pb-3">
-                    <h3 class="font-serif font-black text-base text-[#1F170D]">Select Payment Method</h3>
-                    <button type="button" @click="showPaymentModal = false"
-                        class="text-xs text-[#8C7A58] hover:text-[#1F170D] font-bold cursor-pointer">Close</button>
-                </div>
-
-                <div class="space-y-2.5 max-h-96 overflow-y-auto pr-1">
-                    <template x-for="m in availableMethods" :key="m.id">
-                        <button type="button" @click="selectPaymentMethod(m)"
-                            :class="selectedMethod.id === m.id ? 'border-[#D4AF37] bg-[#FAF6EC]' :
-                                'border-[#E8DCC0] hover:bg-gray-50'"
-                            class="w-full p-3.5 rounded-2xl border text-left flex items-center justify-between transition-all cursor-pointer">
-                            <div class="flex items-center gap-3">
-                                <span
-                                    class="w-8 h-8 rounded-lg bg-white border border-[#DFC387] flex items-center justify-center font-bold text-[10px] text-[#8C6418]"
-                                    x-text="m.badge"></span>
-                                <div>
-                                    <div class="font-bold text-xs text-[#1F170D]" x-text="m.name"></div>
-                                    <div class="text-[10px] text-[#7A643E]" x-text="m.note"></div>
-                                </div>
+                    {{-- Benefit membership --}}
+                    <template x-if="!isLoadingMembershipPreview && membershipBenefit">
+                        <div class="rounded-2xl border p-3 space-y-2 transition-colors"
+                             :class="useMembershipBenefit ? 'bg-[#FDF8EB] border-[#D4AF37]' : 'bg-[#F6F2EA] border-[#E0D4BC]'">
+                            <div class="flex items-center gap-2.5">
+                                <span class="shrink-0 px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider"
+                                      :class="useMembershipBenefit ? 'bg-emerald-100 text-emerald-800 border border-emerald-300' : 'bg-[#E9E1D2] text-[#6B5B3E] border border-[#D6C9B0]'">Member</span>
+                                <span class="flex-1 min-w-0 text-xs font-bold truncate" x-text="membershipBenefit.plan_name"></span>
+                                <button type="button" role="switch" :aria-checked="useMembershipBenefit" @click="toggleMembershipBenefit()"
+                                        :title="useMembershipBenefit ? 'Turn off membership benefit' : 'Use membership benefit'"
+                                        :class="useMembershipBenefit ? 'bg-[#B8891E]' : 'bg-[#B5A88E]'"
+                                        class="bk-tap relative shrink-0 w-11 h-6 rounded-full transition-colors">
+                                    <span class="absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform duration-200" :class="useMembershipBenefit ? 'translate-x-5' : ''"></span>
+                                </button>
                             </div>
-                            <span class="text-xs font-mono font-bold text-[#1F170D]"
-                                x-text="(isAdminFeeApplicable && calculatedAdminFee > 0 && m.id !== 'cash') ? '+ Rp ' + formatNumber(calculatedAdminFee) : 'No Fee'"></span>
+                            <div x-show="useMembershipBenefit" class="text-[11px] leading-relaxed text-[#7A643E]">
+                                <template x-if="membershipBenefit.benefit_type === 'HOURS'">
+                                    <span>Uses <b class="text-[#8C6418]" x-text="membershipBenefit.hours_to_consume + ' hr'"></b> of your quota — <b x-text="membershipBenefit.remaining_quota_after + ' hr'"></b> left after.</span>
+                                </template>
+                                <template x-if="membershipBenefit.benefit_type === 'DISCOUNT_PERCENT'">
+                                    <span>Member discount <b class="text-[#8C6418]" x-text="membershipBenefit.discount_percent + '%'"></b> on this court rental.</span>
+                                </template>
+                            </div>
+                            <div x-show="!useMembershipBenefit" class="text-[11px] leading-relaxed text-[#6B5B3E]">Benefit off for this booking — your quota stays untouched.</div>
+                        </div>
+                    </template>
+
+                    {{-- Voucher jam corporate --}}
+                    <template x-if="!isLoadingMembershipPreview && sponsorVoucherBenefit">
+                        <div class="rounded-2xl border p-3 space-y-2 transition-colors"
+                             :class="useSponsorVoucherBenefit ? 'bg-[#F0F7F2] border-[#1E3327]' : 'bg-[#F6F2EA] border-[#E0D4BC]'">
+                            <div class="flex items-center gap-2.5">
+                                <span class="shrink-0 px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider"
+                                      :class="useSponsorVoucherBenefit ? 'bg-[#1E3327] text-[#FAF5E6]' : 'bg-[#E9E1D2] text-[#6B5B3E] border border-[#D6C9B0]'">Corporate</span>
+                                <span class="flex-1 min-w-0 text-xs font-bold truncate" x-text="sponsorVoucherBenefit.plan_name || sponsorVoucherBenefit.organization_name"></span>
+                                <button type="button" role="switch" :aria-checked="useSponsorVoucherBenefit" @click="toggleSponsorVoucherBenefit()"
+                                        :title="useSponsorVoucherBenefit ? 'Turn off corporate voucher' : 'Use corporate voucher'"
+                                        :class="useSponsorVoucherBenefit ? 'bg-[#1E3327]' : 'bg-[#B5A88E]'"
+                                        class="bk-tap relative shrink-0 w-11 h-6 rounded-full transition-colors">
+                                    <span class="absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform duration-200" :class="useSponsorVoucherBenefit ? 'translate-x-5' : ''"></span>
+                                </button>
+                            </div>
+                            <div x-show="useSponsorVoucherBenefit" class="text-[11px] leading-relaxed text-[#7A643E]">
+                                Uses <b class="text-[#1E3327]" x-text="sponsorVoucherBenefit.hours_to_consume + ' hr'"></b> of free company hours — <b x-text="sponsorVoucherBenefit.remaining_hours_after + ' hr'"></b> left after.
+                            </div>
+                            <div x-show="!useSponsorVoucherBenefit" class="text-[11px] leading-relaxed text-[#6B5B3E]">Corporate voucher off for this booking — your hours stay untouched.</div>
+                        </div>
+                    </template>
+
+                    {{-- Voucher / promo --}}
+                    <div class="space-y-2">
+                        <label for="voucher-code" class="block text-[11px] font-bold text-[#7A5818]">Voucher / promo code</label>
+                        <div class="flex gap-2">
+                            <input id="voucher-code" type="text" x-model="promoCode" :disabled="promoApplied" autocomplete="off" autocapitalize="characters"
+                                   placeholder="Enter code" maxlength="30" @keydown.enter.prevent="applyPromo()"
+                                   class="flex-1 min-w-0 h-11 px-3.5 rounded-xl border border-[#DFC387] bg-white text-sm font-semibold uppercase tracking-wide placeholder:normal-case placeholder:tracking-normal placeholder:font-normal focus:ring-1 focus:ring-[#D4AF37] focus:border-[#D4AF37] focus:outline-none disabled:bg-[#FBF7EE]">
+                            <button type="button" x-show="!promoApplied" @click="applyPromo()" :disabled="isCheckingPromo || !promoCode.trim()"
+                                    class="bk-tap shrink-0 h-11 px-4 rounded-xl bg-[#183428] text-[#F5E6BE] text-xs font-bold whitespace-nowrap active:scale-95 transition-all disabled:opacity-40">
+                                <span x-text="isCheckingPromo ? '…' : 'Apply'"></span>
+                            </button>
+                            <button type="button" x-show="promoApplied" @click="removePromo()"
+                                    class="bk-tap shrink-0 h-11 px-4 rounded-xl bg-rose-50 text-rose-600 border border-rose-200 text-xs font-bold whitespace-nowrap">
+                                Remove
+                            </button>
+                        </div>
+                        <div x-show="promoApplied" class="text-[11px] font-bold leading-snug" :class="promoDiscount > 0 ? 'text-emerald-700' : 'text-rose-600'">
+                            <span x-show="promoDiscount > 0" x-text="(promoVoucher ? promoVoucher.code : '') + ' applied — you save Rp ' + formatNumber(promoDiscount)"></span>
+                            <span x-show="promoDiscount <= 0">This voucher does not apply to the current total.</span>
+                        </div>
+
+                        {{-- Voucher saldo milik customer (refund yang dijadikan voucher) --}}
+                        <template x-if="myVouchers.length > 0 && !promoApplied">
+                            <div class="space-y-1.5 pt-1">
+                                <div class="text-[10px] font-bold uppercase tracking-wider text-[#7A5818]">Your credit vouchers</div>
+                                <template x-for="v in myVouchers" :key="v.code">
+                                    <div class="flex items-center gap-2 px-3 py-2 rounded-xl bg-emerald-50 border border-emerald-200">
+                                        <div class="flex-1 min-w-0">
+                                            <div class="text-xs font-bold text-emerald-900 truncate" x-text="v.code"></div>
+                                            <div class="text-[10px] text-emerald-800 truncate" x-text="'Rp ' + formatNumber(Math.round(v.available)) + (v.valid_until ? ' · until ' + v.valid_until : '')"></div>
+                                        </div>
+                                        <button type="button" @click="promoCode = v.code; applyPromo()" :disabled="isCheckingPromo || v.available <= 0"
+                                                class="bk-tap shrink-0 h-8 px-3 rounded-lg bg-emerald-600 text-white text-[11px] font-bold disabled:opacity-50">Use</button>
+                                    </div>
+                                </template>
+                            </div>
+                        </template>
+                    </div>
+
+                    {{-- Rincian harga --}}
+                    <div class="space-y-2 text-xs text-[#5C410F] border-t border-[#F0E4C8] pt-3">
+                        <div class="flex items-start justify-between gap-3">
+                            <span class="min-w-0">Court rental</span>
+                            <span class="shrink-0 font-bold tabular-nums whitespace-nowrap" x-text="'Rp ' + formatNumber(subtotal)"></span>
+                        </div>
+                        <div x-show="addonsTotal > 0" class="flex items-start justify-between gap-3">
+                            <span class="min-w-0">Equipment add-ons</span>
+                            <span class="shrink-0 font-bold tabular-nums whitespace-nowrap" x-text="'Rp ' + formatNumber(addonsTotal)"></span>
+                        </div>
+                        <div x-show="membershipDiscountAmount > 0" class="flex items-start justify-between gap-3 font-bold text-[#8C6418]">
+                            <span class="min-w-0" x-text="'Membership' + (membershipBenefit ? ' · ' + membershipBenefit.plan_name : '')"></span>
+                            <span class="shrink-0 tabular-nums whitespace-nowrap" x-text="'- Rp ' + formatNumber(membershipDiscountAmount)"></span>
+                        </div>
+                        <div x-show="sponsorVoucherDiscountAmount > 0" class="flex items-start justify-between gap-3 font-bold text-[#1E3327]">
+                            <span class="min-w-0">Corporate voucher</span>
+                            <span class="shrink-0 tabular-nums whitespace-nowrap" x-text="'- Rp ' + formatNumber(sponsorVoucherDiscountAmount)"></span>
+                        </div>
+                        <div x-show="promoApplied && promoDiscount > 0" class="flex items-start justify-between gap-3 font-bold text-emerald-700">
+                            <span class="min-w-0">Voucher discount</span>
+                            <span class="shrink-0 tabular-nums whitespace-nowrap" x-text="'- Rp ' + formatNumber(promoDiscount)"></span>
+                        </div>
+                        {{-- Biaya layanan / admin & pajak dari panel admin --}}
+                        <div x-show="isAdminFeeApplicable && calculatedAdminFee > 0" class="flex items-start justify-between gap-3">
+                            <span class="min-w-0" x-text="financeSettings.admin_fee_name || 'Service fee'"></span>
+                            <span class="shrink-0 font-bold tabular-nums whitespace-nowrap" x-text="'Rp ' + formatNumber(calculatedAdminFee)"></span>
+                        </div>
+                        <div x-show="isTaxApplicable && calculatedTax > 0" class="flex items-start justify-between gap-3">
+                            <span class="min-w-0" x-text="(financeSettings.tax_name || 'Tax') + (financeSettings.tax_type === 'PERCENTAGE' ? ' (' + financeSettings.tax_rate + '%)' : '')"></span>
+                            <span class="shrink-0 font-bold tabular-nums whitespace-nowrap" x-text="'Rp ' + formatNumber(calculatedTax)"></span>
+                        </div>
+                        <div class="pt-3 border-t border-[#F0E4C8] flex items-center justify-between gap-3">
+                            <span class="font-bold text-sm text-[#1F170D]">Grand total</span>
+                            <span class="shrink-0 font-black text-xl tabular-nums whitespace-nowrap text-[#1F170D]" x-text="'Rp ' + formatNumber(grandTotal)"></span>
+                        </div>
+                    </div>
+
+                    <button type="button" :disabled="isSubmitting || isExpired" @click="executePayment()"
+                            class="bk-tap hidden lg:flex w-full h-12 rounded-2xl items-center justify-center gap-2 text-xs font-black uppercase tracking-wider transition-all bg-gradient-to-b from-[#F5DE9B] via-[#D4AF37] to-[#A87D18] text-[#1E160A] shadow-[0_8px_20px_rgba(168,125,24,0.35)] hover:brightness-105 active:scale-[0.98] disabled:opacity-60 disabled:cursor-not-allowed">
+                        <span x-show="isSubmitting" class="w-4 h-4 border-2 border-[#1E160A] border-t-transparent rounded-full animate-spin"></span>
+                        <span x-text="payButtonLabel"></span>
+                        <svg x-show="!isSubmitting" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
+                    </button>
+
+                    <template x-if="canCancelBooking">
+                        <button type="button" @click="cancelCheckout()"
+                                class="bk-tap w-full h-10 rounded-2xl text-xs font-bold text-[#8A7A64] hover:text-rose-600 hover:bg-rose-50 transition-colors">
+                            Cancel &amp; pick another time
                         </button>
                     </template>
-                </div>
+
+                    <div class="flex items-center justify-center gap-1.5 text-[10px] text-[#8C7A58]">
+                        <svg class="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" /></svg>
+                        <span>Secure payment by Midtrans</span>
+                    </div>
+                </aside>
             </div>
         </div>
 
-        <!-- Add-Ons Selection Modal -->
-        <div x-show="showAddOnsModal" style="display: none; z-index: 99999 !important;"
-            class="fixed inset-0 overflow-y-auto bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-            <div class="w-full max-w-md bg-white rounded-3xl border-2 border-[#DFC387] shadow-2xl p-6 space-y-4">
-                <div class="flex items-center justify-between border-b border-[#DFC387]/50 pb-3">
-                    <div>
-                        <h3 class="font-serif font-black text-base text-[#1F170D]">Equipment &amp; Add-ons Catalog</h3>
-                        <p class="text-[11px] text-[#7A643E]">Pilih jumlah raket dan bola yang ingin disewa</p>
-                    </div>
-                    <button type="button" @click="showAddOnsModal = false"
-                        class="text-xs text-[#8C7A58] hover:text-[#1F170D] font-bold cursor-pointer">Done</button>
+        {{-- Bar bawah (HP & tablet) --}}
+        <div x-show="bookingItems.length > 0" style="display: none;" class="bk-bar bk-bar-compact-only fixed inset-x-0 z-30 px-3 sm:px-8 lg:px-12 2xl:px-16 pointer-events-none">
+            <div x-ref="bar" class="w-full pointer-events-auto bg-white/95 backdrop-blur-xl rounded-3xl border border-[#E3CF9C] shadow-[0_18px_44px_rgba(90,64,12,0.22)] p-3 sm:p-4 flex items-center gap-3">
+                <div class="flex-1 min-w-0">
+                    <div class="text-[11px] font-bold text-[#7A643E] truncate" x-text="grandTotal > 0 ? (selectedMethod.name || 'Choose a payment method') : 'Fully covered'"></div>
+                    <div class="font-black text-lg sm:text-xl leading-tight tabular-nums whitespace-nowrap" x-text="'Rp ' + formatNumber(grandTotal)"></div>
                 </div>
-
-                <div class="space-y-2.5 max-h-96 overflow-y-auto pr-1">
-                    <template x-for="addon in availableAddOns" :key="addon.id">
-                        <div
-                            class="p-3.5 rounded-2xl border border-[#DFC387]/70 bg-[#FAF8F2] flex items-center justify-between gap-3">
-                            <div class="flex-1 min-w-0">
-                                <div class="font-bold text-xs text-[#1F170D]" x-text="addon.name"></div>
-                                <div class="text-[10px] text-[#7A643E]" x-text="addon.desc"></div>
-                                <div class="font-mono font-bold text-xs text-[#8C6418] mt-1"
-                                    x-text="'Rp ' + formatNumber(addon.price) + ' / session'"></div>
-                            </div>
-
-                            <!-- Belum dipilih -->
-                            <template x-if="!isAddOnSelected(addon.id)">
-                                <button type="button" @click="toggleAddOn(addon)"
-                                    class="px-3.5 py-1.5 rounded-xl text-xs font-bold border transition-colors cursor-pointer bg-[#FAF2DE] text-[#7A5818] border-[#DFC387] hover:bg-[#F3DFAD]">
-                                    + Add
-                                </button>
-                            </template>
-
-                            <!-- Sudah dipilih: stepper kuantitas langsung -->
-                            <template x-if="isAddOnSelected(addon.id)">
-                                <div class="flex items-center gap-2">
-                                    <div class="flex items-center bg-white border border-[#D4AF37] rounded-xl p-0.5 shadow-xs">
-                                        <button type="button" 
-                                            @click="decrementAddonById(addon.id)"
-                                            class="w-6 h-6 rounded-lg flex items-center justify-center font-bold text-xs text-[#7A5818] hover:bg-[#FAF2DE] transition-all cursor-pointer">
-                                            -
-                                        </button>
-                                        <span class="w-7 text-center font-mono font-bold text-xs text-[#1F170D]"
-                                            x-text="getAddOnQuantity(addon.id)"></span>
-                                        <button type="button" 
-                                            @click="incrementAddonById(addon.id)"
-                                            :disabled="addon.stock && getAddOnQuantity(addon.id) >= addon.stock"
-                                            class="w-6 h-6 rounded-lg flex items-center justify-center font-bold text-xs text-[#7A5818] hover:bg-[#FAF2DE] transition-all disabled:opacity-30 cursor-pointer">
-                                            +
-                                        </button>
-                                    </div>
-                                    <button type="button" @click="removeAddonById(addon.id)"
-                                        class="text-[11px] text-rose-500 hover:text-rose-700 font-bold cursor-pointer">
-                                        Remove
-                                    </button>
-                                </div>
-                            </template>
-                        </div>
-                    </template>
-                </div>
+                <button type="button" :disabled="isSubmitting || isExpired" @click="executePayment()"
+                        class="bk-tap shrink-0 h-12 px-5 sm:px-7 rounded-2xl flex items-center gap-2 text-xs sm:text-sm font-black uppercase tracking-wider whitespace-nowrap bg-gradient-to-b from-[#F5DE9B] via-[#D4AF37] to-[#A87D18] text-[#1E160A] shadow-[0_8px_20px_rgba(168,125,24,0.35)] active:scale-95 transition-transform disabled:opacity-60">
+                    <span x-show="isSubmitting" class="w-4 h-4 border-2 border-[#1E160A] border-t-transparent rounded-full animate-spin"></span>
+                    <span x-text="isSubmitting ? 'Processing…' : (grandTotal > 0 ? 'Pay Now' : 'Confirm')"></span>
+                </button>
             </div>
         </div>
 
-        <!-- Payment Confirmed Modal (shown after a FULLY-SETTLED transaction — either free/covered
-             by voucher/membership, or via the local mock payment simulator. By the time this modal
-             renders, the order is ALREADY marked PAID server-side — there is no pending decision
-             left to make, so this only ever offers ONE way forward (view the e-ticket), never a
-             "close without paying" escape that would misleadingly imply the charge didn't happen. -->
-        <div x-show="showPaymentSuccessModal" style="display: none; z-index: 99999 !important;"
-            class="fixed inset-0 overflow-y-auto bg-black/75 backdrop-blur-md flex items-center justify-center p-4 sm:p-6">
-
-            <div
-                class="w-full max-w-2xl bg-white rounded-3xl border-2 border-[#D4AF37] shadow-2xl p-6 sm:p-8 space-y-6 animate-scaleIn">
-
-                <!-- Modal Header -->
-                <div class="flex items-center justify-between border-b border-[#DFC387]/50 pb-4">
-                    <div class="flex items-center gap-3">
-                        <div
-                            class="w-10 h-10 rounded-xl bg-emerald-50 border border-emerald-300 flex items-center justify-center text-emerald-700 shadow-sm">
-                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7" />
-                            </svg>
-                        </div>
-                        <div>
-                            <div class="flex items-center gap-2">
-                                <h3 class="font-serif font-black text-base sm:text-lg text-[#1F170D]">Payment Confirmed</h3>
-                                <span
-                                    class="px-2 py-0.5 rounded-full text-[9px] font-extrabold uppercase tracking-wider bg-emerald-100 text-emerald-800 border border-emerald-300">
-                                    Paid
-                                </span>
-                            </div>
-                            <p class="text-xs text-[#7A643E]">Your booking has been settled and is ready — no further action needed.</p>
-                        </div>
+        {{-- Pembayaran selesai (sudah LUNAS di server: hanya satu jalan lanjut, ke e-ticket) --}}
+        <div x-show="showPaymentSuccessModal" style="display: none; z-index: 99999 !important;" class="fixed inset-0 flex items-end sm:items-center justify-center sm:p-4">
+            <div class="absolute inset-0 bg-black/60 backdrop-blur-sm"></div>
+            <div x-show="showPaymentSuccessModal" x-transition:enter="transition ease-out duration-300" x-transition:enter-start="translate-y-8 opacity-0" x-transition:enter-end="translate-y-0 opacity-100"
+                 class="relative w-full sm:max-w-md bg-white rounded-t-3xl sm:rounded-3xl border-t-2 sm:border-2 border-[#D4AF37] shadow-2xl p-6 pb-[calc(1.5rem+env(safe-area-inset-bottom,0px))] sm:pb-6 text-center space-y-4">
+                <div class="bk-pop w-16 h-16 mx-auto rounded-full bg-emerald-50 border-2 border-emerald-300 flex items-center justify-center text-emerald-600">
+                    <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7" /></svg>
+                </div>
+                <div class="space-y-1.5">
+                    <h3 class="font-serif font-black text-xl">Booking confirmed</h3>
+                    <p class="text-xs text-[#7A643E] leading-relaxed">Payment is settled and your court is locked in — no further action needed.</p>
+                </div>
+                <div class="rounded-2xl bg-[#FBF7EE] border border-[#F0E4C8] p-3.5 text-xs space-y-2 text-left">
+                    <div class="flex items-center justify-between gap-3">
+                        <span class="text-[#7A643E] shrink-0">Paid with</span>
+                        <span class="font-bold text-right min-w-0 truncate" x-text="grandTotal <= 0 ? 'Fully covered' : (selectedMethod.name || 'Online payment')"></span>
+                    </div>
+                    <div class="flex items-center justify-between gap-3">
+                        <span class="text-[#7A643E]">Status</span>
+                        <span class="px-2 py-0.5 rounded-md text-[10px] font-black bg-emerald-100 text-emerald-800 border border-emerald-200">PAID</span>
+                    </div>
+                    <div class="pt-2 border-t border-[#F0E4C8] flex items-center justify-between gap-3">
+                        <span class="font-bold">Total</span>
+                        <span class="font-black text-lg tabular-nums whitespace-nowrap text-[#8C6418]" x-text="'Rp ' + formatNumber(grandTotal)"></span>
                     </div>
                 </div>
-
-                <!-- Modal Body: 2-Column Responsive Layout -->
-                <div class="grid grid-cols-1 md:grid-cols-12 gap-6 items-center">
-
-                    <!-- Left Column: Bill Summary & Action (Col 7) -->
-                    <div class="md:col-span-7 space-y-4">
-                        <div class="p-4 rounded-2xl bg-[#FAF8F2] border border-[#E8DCC0] space-y-3">
-                            <div class="flex justify-between items-center text-xs text-[#5C410F]">
-                                <span>Payment Method:</span>
-                                <span class="font-bold text-[#1F170D]"
-                                    x-text="grandTotal <= 0 ? 'Fully Covered (No Charge)' : (selectedMethod.name || 'QRIS Instant')"></span>
-                            </div>
-                            <div class="flex justify-between items-center text-xs text-[#5C410F]">
-                                <span>System Status:</span>
-                                <span
-                                    class="font-mono text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">PAID</span>
-                            </div>
-                            <div class="pt-2 border-t border-[#DFC387]/60 flex justify-between items-baseline">
-                                <span class="text-xs font-serif font-black text-[#1F170D]">Grand Total:</span>
-                                <span class="font-mono font-black text-xl text-[#8C6418]"
-                                    x-text="'Rp ' + formatNumber(grandTotal)"></span>
-                            </div>
-                        </div>
-
-                        <div class="space-y-1 text-[11px] text-[#7A643E]">
-                            <div class="flex items-center gap-1.5 font-medium">
-                                <svg class="w-4 h-4 text-emerald-600 shrink-0" fill="none" stroke="currentColor"
-                                    viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                        d="M5 13l4 4L19 7" />
-                                </svg>
-                                <span>Your court slot is locked in and confirmed.</span>
-                            </div>
-                            <div class="flex items-center gap-1.5 font-medium">
-                                <svg class="w-4 h-4 text-[#8C6418] shrink-0" fill="none" stroke="currentColor"
-                                    viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                        d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                                </svg>
-                                <span>Protected by SHA-512 Signatures &amp; Idempotency.</span>
-                            </div>
-                        </div>
-
-                        <div class="space-y-2 pt-2">
-                            <button type="button" @click="completePaymentAndRedirect()"
-                                class="w-full py-3.5 px-4 rounded-2xl text-xs font-black uppercase tracking-wider shadow-lg active:scale-95 transition-all cursor-pointer flex items-center justify-center gap-2"
-                                style="background: linear-gradient(180deg, #F5DE9B 0%, #D4AF37 50%, #A87D18 100%); color: #1E160A; border: 1.5px solid #FFF3CD;">
-                                <span>View My E-Ticket</span>
-                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"
-                                        d="M9 5l7 7-7 7" />
-                                </svg>
-                            </button>
-                        </div>
-                    </div>
-
-                    <!-- Right Column: Confirmation Badge (Col 5) -->
-                    <div
-                        class="md:col-span-5 flex flex-col items-center justify-center p-6 bg-[#FAF8F2] rounded-2xl border border-[#DFC387]/70">
-                        <div class="w-20 h-20 rounded-full bg-emerald-50 border-2 border-emerald-300 flex items-center justify-center text-emerald-600">
-                            <svg class="w-10 h-10" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
-                            </svg>
-                        </div>
-                        <div class="mt-3 text-center">
-                            <div class="text-xs font-serif font-black text-[#1F170D]">Booking Secured</div>
-                            <div class="text-[10px] text-[#7A643E] mt-0.5">Club 61 Padel Court</div>
-                        </div>
-                    </div>
-
-                </div>
-
+                <button type="button" @click="completePaymentAndRedirect()"
+                        class="bk-tap w-full h-12 rounded-2xl flex items-center justify-center gap-2 text-xs font-black uppercase tracking-wider bg-gradient-to-b from-[#F5DE9B] via-[#D4AF37] to-[#A87D18] text-[#1E160A] shadow-md active:scale-[0.98] transition-transform">
+                    View My E-Ticket
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M13 7l5 5m0 0l-5 5m5-5H6" /></svg>
+                </button>
             </div>
         </div>
 
-        <!-- Cancel Checkout Confirmation Modal (Club 61 Luxury Theme) -->
-        <div x-show="showCancelModal" style="display: none; z-index: 99999 !important;"
-            x-transition:enter="transition ease-out duration-200" x-transition:enter-start="opacity-0"
-            x-transition:enter-end="opacity-100" x-transition:leave="transition ease-in duration-150"
-            x-transition:leave-start="opacity-100" x-transition:leave-end="opacity-0"
-            class="fixed inset-0 overflow-y-auto bg-black/75 backdrop-blur-md flex items-center justify-center p-4">
-
-            <div
-                class="w-full max-w-md bg-white rounded-3xl border-2 border-[#D4AF37] shadow-2xl p-6 sm:p-7 space-y-5 animate-scaleIn text-center relative">
-
-                <!-- Header Alert Icon -->
-                <div
-                    class="w-16 h-16 rounded-2xl bg-rose-50 border border-rose-200 text-rose-600 flex items-center justify-center mx-auto shadow-sm">
-                    <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                            d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                    </svg>
+        {{-- Konfirmasi batal checkout --}}
+        <div x-show="showCancelModal" style="display: none; z-index: 99999 !important;" class="fixed inset-0 flex items-end sm:items-center justify-center sm:p-4">
+            <div x-show="showCancelModal" x-transition.opacity.duration.200ms @click="if (!isCancellingCheckout) showCancelModal = false" class="absolute inset-0 bg-black/60 backdrop-blur-sm"></div>
+            <div x-show="showCancelModal" x-transition:enter="transition ease-out duration-250" x-transition:enter-start="translate-y-8 opacity-0" x-transition:enter-end="translate-y-0 opacity-100"
+                 class="relative w-full sm:max-w-md bg-white rounded-t-3xl sm:rounded-3xl border-t-2 sm:border-2 border-[#D4AF37] shadow-2xl p-6 pb-[calc(1.5rem+env(safe-area-inset-bottom,0px))] sm:pb-6 text-center space-y-4">
+                <div class="w-14 h-14 mx-auto rounded-2xl bg-rose-50 border border-rose-200 text-rose-600 flex items-center justify-center">
+                    <svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
                 </div>
-
-                <!-- Content -->
-                <div class="space-y-2">
-                    <h3 class="font-serif font-black text-xl text-[#1F170D]">Cancel Checkout Session?</h3>
-                    <p class="text-xs text-[#7A643E] leading-relaxed">
-                        Your held court slots will be immediately released back to the public schedule for other players.
-                    </p>
+                <div class="space-y-1.5">
+                    <h3 class="font-serif font-black text-xl">Cancel checkout?</h3>
+                    <p class="text-xs text-[#7A643E] leading-relaxed">Your held slots will be released right away so other players can book them.</p>
                 </div>
-
-                <!-- Booking Details Preview in Checkout -->
                 <template x-if="bookingItems && bookingItems.length > 0">
-                    <div class="p-3.5 rounded-2xl bg-[#FAF8F2] border border-[#E8DCC0] text-left text-xs space-y-2">
-                        <div class="flex justify-between items-center text-xs">
-                            <span class="text-[#7A643E]">Court:</span>
-                            <span class="font-bold text-[#1F170D]"
-                                x-text="bookingItems[0].court || 'Court Arena'"></span>
-                        </div>
-                        <div class="flex justify-between items-center text-xs">
-                            <span class="text-[#7A643E]">Match Schedule:</span>
-                            <span class="font-bold text-[#1F170D]"
-                                x-text="(formatDate(bookingItems[0].booking_date) || bookingDateFormatted || '') + ' • ' + (bookingItems[0].time || '')"></span>
-                        </div>
-                        <template x-if="bookingItems.length > 1">
-                            <div class="flex justify-between items-center text-xs pt-1 border-t border-[#DFC387]/40">
-                                <span class="text-[#7A643E]">Total Sessions:</span>
-                                <span class="font-mono font-bold text-[#8C6418]"
-                                    x-text="bookingItems.length + (bookingItems.length > 1 ? ' Court Sessions' : ' Court Session')"></span>
-                            </div>
-                        </template>
+                    <div class="rounded-2xl bg-[#FBF7EE] border border-[#F0E4C8] p-3 text-xs space-y-1.5 text-left">
+                        <div class="flex justify-between gap-3"><span class="text-[#7A643E] shrink-0">Court</span><span class="font-bold text-right min-w-0 truncate" x-text="bookingItems[0].court || 'Court'"></span></div>
+                        <div class="flex justify-between gap-3"><span class="text-[#7A643E] shrink-0">Schedule</span><span class="font-bold text-right min-w-0 truncate" x-text="formatDate(bookingItems[0].booking_date) + ' · ' + timeRange(bookingItems[0])"></span></div>
+                        <div x-show="bookingItems.length > 1" class="flex justify-between gap-3"><span class="text-[#7A643E]">Sessions</span><span class="font-bold" x-text="bookingItems.length"></span></div>
                     </div>
                 </template>
-
-                <!-- Action Buttons -->
-                <div class="space-y-2.5 pt-2">
-                    <button type="button" @click="confirmCancelCheckout()" :disabled="isCancellingCheckout"
-                        class="w-full py-3.5 px-4 rounded-2xl text-xs font-black uppercase tracking-wider transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 hover:brightness-105 active:scale-98"
-                        style="background: linear-gradient(180deg, #E11D48 0%, #BE123C 100%); color: #FFFFFF !important; border: 1px solid #FDA4AF; box-shadow: 0 4px 14px rgba(225, 29, 72, 0.35);">
-                        <template x-if="!isCancellingCheckout">
-                            <span class="flex items-center gap-1.5" style="color: #FFFFFF;">
-                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"
-                                    style="color: #FFFFFF;">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                        d="M6 18L18 6M6 6l12 12" />
-                                </svg>
-                                <span style="color: #FFFFFF;">Yes, Cancel &amp; Pick Another Schedule</span>
-                            </span>
-                        </template>
-                        <template x-if="isCancellingCheckout">
-                            <span class="flex items-center gap-2" style="color: #FFFFFF;">
-                                <div class="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin"
-                                    style="border-color: #FFFFFF; border-top-color: transparent;"></div>
-                                <span style="color: #FFFFFF;">Releasing Slots...</span>
-                            </span>
-                        </template>
-                    </button>
-
+                <div class="grid grid-cols-2 gap-2">
                     <button type="button" @click="showCancelModal = false" :disabled="isCancellingCheckout"
-                        class="w-full py-3 px-4 rounded-2xl border text-xs font-bold transition-all cursor-pointer hover:brightness-95 disabled:opacity-50"
-                        style="border: 1px solid #DFC387; background-color: #FAF8F2; color: #7A5818;">
-                        Continue Payment
+                            class="bk-tap h-12 rounded-2xl border border-[#DFC387] bg-[#FBF7EE] text-[#7A5818] text-xs font-bold disabled:opacity-50">
+                        Keep paying
+                    </button>
+                    <button type="button" @click="confirmCancelCheckout()" :disabled="isCancellingCheckout"
+                            class="bk-tap h-12 rounded-2xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-black uppercase tracking-wider flex items-center justify-center gap-2 disabled:opacity-60 transition-colors">
+                        <span x-show="isCancellingCheckout" class="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
+                        <span x-text="isCancellingCheckout ? 'Releasing…' : 'Yes, cancel'"></span>
                     </button>
                 </div>
-
             </div>
         </div>
 
-        <!-- Session Expired Modal (Club 61 Luxury Theme) -->
-        <div x-show="showExpiredModal" style="display: none; z-index: 99999 !important;"
-            x-transition:enter="transition ease-out duration-200" x-transition:enter-start="opacity-0"
-            x-transition:enter-end="opacity-100" x-transition:leave="transition ease-in duration-150"
-            x-transition:leave-start="opacity-100" x-transition:leave-end="opacity-0"
-            class="fixed inset-0 overflow-y-auto bg-black/75 backdrop-blur-md flex items-center justify-center p-4">
-
-            <div class="w-full max-w-md bg-white rounded-3xl border-2 border-[#D4AF37] shadow-2xl p-6 sm:p-7 space-y-5 animate-scaleIn text-center relative">
-                <div class="w-16 h-16 rounded-2xl bg-rose-50 border border-rose-200 text-rose-600 flex items-center justify-center mx-auto text-xs font-black tracking-wider shadow-sm">
-                    EXPIRED
+        {{-- Waktu habis --}}
+        <div x-show="showExpiredModal" style="display: none; z-index: 99999 !important;" class="fixed inset-0 flex items-end sm:items-center justify-center sm:p-4">
+            <div class="absolute inset-0 bg-black/60 backdrop-blur-sm"></div>
+            <div x-show="showExpiredModal" x-transition:enter="transition ease-out duration-250" x-transition:enter-start="translate-y-8 opacity-0" x-transition:enter-end="translate-y-0 opacity-100"
+                 class="relative w-full sm:max-w-md bg-white rounded-t-3xl sm:rounded-3xl border-t-2 sm:border-2 border-[#D4AF37] shadow-2xl p-6 pb-[calc(1.5rem+env(safe-area-inset-bottom,0px))] sm:pb-6 text-center space-y-4">
+                <div class="w-14 h-14 mx-auto rounded-2xl bg-rose-50 border border-rose-200 text-rose-600 flex items-center justify-center">
+                    <svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
                 </div>
-                <div class="space-y-2">
-                    <h3 class="font-serif font-black text-xl text-[#1F170D]">Waktu Checkout Habis!</h3>
-                    <p class="text-xs text-[#7A643E] leading-relaxed">
-                        Batas waktu kuncian slot {{ app(\App\Services\Padel\BookingTimeService::class)->holdMinutes() }} menit telah berakhir. Slot lapangan telah otomatis dirilis kembali agar dapat dipesan pemain lain.
-                    </p>
+                <div class="space-y-1.5">
+                    <h3 class="font-serif font-black text-xl">Time's up</h3>
+                    <p class="text-xs text-[#7A643E] leading-relaxed">The {{ app(\App\Services\Padel\BookingTimeService::class)->holdMinutes() }}-minute hold has ended and your slots are back on the public schedule.</p>
                 </div>
-                <div class="pt-2">
-                    <a href="{{ route('customer.booking') }}"
-                        class="w-full py-3.5 px-4 rounded-2xl text-[#1E160A] text-xs font-black uppercase tracking-wider block shadow-md hover:brightness-105 transition-all cursor-pointer text-center"
-                        style="background: linear-gradient(180deg, #F5DE9B 0%, #D4AF37 50%, #A87D18 100%); color: #1E160A; border: 1px solid #FFF3CD;">
-                        Pilih Jadwal Baru &rarr;
-                    </a>
-                </div>
+                <a href="{{ route('customer.booking') }}"
+                   class="bk-tap flex items-center justify-center w-full h-12 rounded-2xl text-xs font-black uppercase tracking-wider bg-gradient-to-b from-[#F5DE9B] via-[#D4AF37] to-[#A87D18] text-[#1E160A] shadow-md active:scale-[0.98] transition-transform">
+                    Pick a new time
+                </a>
             </div>
         </div>
 
-        <!-- Custom Luxury Notice Modal -->
-        <div x-show="noticeModal.show" style="display: none; z-index: 99999 !important;"
-            x-transition:enter="transition ease-out duration-200" x-transition:enter-start="opacity-0"
-            x-transition:enter-end="opacity-100" x-transition:leave="transition ease-in duration-150"
-            x-transition:leave-start="opacity-100" x-transition:leave-end="opacity-0"
-            class="fixed inset-0 overflow-y-auto bg-black/75 backdrop-blur-md flex items-center justify-center p-4">
-
-            <div class="w-full max-w-md bg-white rounded-3xl border-2 border-[#D4AF37] shadow-2xl p-6 sm:p-7 space-y-5 animate-scaleIn text-center relative"
-                @click.away="handleNoticeClose()">
-
-                <!-- Icon Header -->
-                <div class="w-16 h-16 rounded-2xl flex items-center justify-center mx-auto shadow-sm"
-                    :class="{
-                        'bg-[#FAF2DE] border border-[#DFC387] text-[#8C6418]': noticeModal.type === 'info' ||
-                            noticeModal.type === 'gold',
-                        'bg-rose-50 border border-rose-200 text-rose-600': noticeModal.type === 'error' ||
-                            noticeModal.type === 'danger',
-                        'bg-emerald-50 border border-emerald-200 text-emerald-600': noticeModal.type === 'success'
-                    }">
-                    <template x-if="noticeModal.type === 'info' || noticeModal.type === 'gold'">
-                        <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                        </svg>
-                    </template>
-                    <template x-if="noticeModal.type === 'error' || noticeModal.type === 'danger'">
-                        <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                        </svg>
-                    </template>
-                    <template x-if="noticeModal.type === 'success'">
-                        <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                        </svg>
-                    </template>
+        {{-- Pemberitahuan --}}
+        <div x-show="noticeModal.show" style="display: none; z-index: 99999 !important;" class="fixed inset-0 flex items-end sm:items-center justify-center sm:p-4">
+            <div x-show="noticeModal.show" x-transition.opacity.duration.200ms @click="handleNoticeClose()" class="absolute inset-0 bg-black/60 backdrop-blur-sm"></div>
+            <div x-show="noticeModal.show" x-transition:enter="transition ease-out duration-250" x-transition:enter-start="translate-y-8 opacity-0" x-transition:enter-end="translate-y-0 opacity-100"
+                 class="relative w-full sm:max-w-md bg-white rounded-t-3xl sm:rounded-3xl border-t-2 sm:border-2 border-[#D4AF37] shadow-2xl p-6 pb-[calc(1.5rem+env(safe-area-inset-bottom,0px))] sm:pb-6 text-center space-y-4">
+                <div class="w-14 h-14 mx-auto rounded-2xl flex items-center justify-center"
+                     :class="noticeModal.type === 'error' || noticeModal.type === 'danger' ? 'bg-rose-50 border border-rose-200 text-rose-600' : (noticeModal.type === 'success' ? 'bg-emerald-50 border border-emerald-200 text-emerald-600' : 'bg-[#FAF2DE] border border-[#DFC387] text-[#8C6418]')">
+                    <svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
                 </div>
-
-                <!-- Content -->
-                <div class="space-y-2">
-                    <h3 class="font-serif font-black text-xl text-[#1F170D]" x-text="noticeModal.title"></h3>
+                <div class="space-y-1.5">
+                    <h3 class="font-serif font-black text-xl" x-text="noticeModal.title"></h3>
                     <p class="text-xs text-[#7A643E] leading-relaxed" x-text="noticeModal.message"></p>
                 </div>
-
-                <!-- Action Button -->
-                <div class="pt-2">
-                    <button type="button" @click="handleNoticeClose()"
-                        class="w-full py-3.5 px-4 rounded-2xl text-[#1E160A] text-xs font-black uppercase tracking-wider block shadow-md hover:brightness-105 transition-all cursor-pointer active:scale-98"
-                        style="background: linear-gradient(180deg, #F5DE9B 0%, #D4AF37 50%, #A87D18 100%); color: #1E160A; border: 1px solid #FFF3CD;">
-                        <span x-text="noticeModal.buttonText || 'OK, Understood'"></span>
-                    </button>
-                </div>
-
+                <button type="button" @click="handleNoticeClose()"
+                        class="bk-tap w-full h-12 rounded-2xl text-xs font-black uppercase tracking-wider bg-gradient-to-b from-[#F5DE9B] via-[#D4AF37] to-[#A87D18] text-[#1E160A] shadow-md active:scale-[0.98] transition-transform">
+                    <span x-text="noticeModal.buttonText || 'OK, Understood'"></span>
+                </button>
             </div>
         </div>
 
@@ -866,7 +496,8 @@
                 isLoadingMembershipPreview: false,
                 holdData: null,
                 expiresAtTime: null,
-                timerDisplay: '10:00',
+                remainingMs: 0,
+                timerDisplay: '--:--',
                 timerInterval: null,
                 isExpired: false,
                 paymentStarted: false,
@@ -876,35 +507,22 @@
                 isSubmitting: false,
                 createdBookingId: null,
 
-                showPaymentModal: false,
-                showAddOnsModal: false,
                 showPaymentSuccessModal: false,
                 promoCode: '',
                 promoApplied: false,
-                promoDiscount: 0,
+                // Hasil cek server (/vouchers/check); potongannya dihitung ulang dari total terkini (getter promoDiscount).
+                promoVoucher: null,
+                isCheckingPromo: false,
+                myVouchers: [],
                 selectedAddOns: [],
-                availableAddOns: [{
-                        id: 'racket-01',
-                        name: 'Bullpadel Hack 03 Pro',
-                        desc: 'Carbon 12K Official WPT',
-                        price: 50000,
-                        quantity: 1
-                    },
-                    {
-                        id: 'balls-01',
-                        name: 'Can of Bullpadel Next Balls (3 Pcs)',
-                        desc: 'Official Match Balls',
-                        price: 75000,
-                        quantity: 1
-                    },
-                    {
-                        id: 'shoes-01',
-                        name: 'Non-Marking Padel Shoes',
-                        desc: 'Special Turf Court Outsole',
-                        price: 35000,
-                        quantity: 1
-                    },
-                ],
+                // Katalog alat hanya dari database (/equipments). Dulu ada daftar contoh bawaan dengan id palsu yang
+                // ikut terkirim ke server kalau API gagal dimuat.
+                availableAddOns: [],
+                isLoadingAddOns: true,
+                showAllAddOns: false,
+                addOnPreviewCount: 4,
+                showAllMethods: false,
+                methodPreviewCount: 3,
                 // Daftar metode dari menu "Metode Pembayaran Online" (OnlinePaymentMethodService) — sama dengan yang
                 // divalidasi server. Metode di luar batas nominal (mis. QRIS maks Rp10 juta) disembunyikan otomatis.
                 paymentMethods: @js(app(\App\Services\Payment\OnlinePaymentMethodService::class)->forFrontend()),
@@ -913,6 +531,24 @@
                 get availableMethods() {
                     const total = this.grandTotal;
                     return this.paymentMethods.filter(m => (m.min_amount === null || total >= m.min_amount) && (m.max_amount === null || total <= m.max_amount));
+                },
+
+                // Daftar metode diringkas (3 teratas); metode yang sedang dipilih selalu ikut tampil.
+                get visibleMethods() {
+                    const all = this.availableMethods;
+                    if (this.showAllMethods || all.length <= this.methodPreviewCount) return all;
+                    const top = all.slice(0, this.methodPreviewCount);
+                    const selected = all.find(m => m.code === this.selectedMethod.code);
+                    return selected && !top.includes(selected) ? [...top, selected] : top;
+                },
+
+                get visibleAddOns() {
+                    return this.showAllAddOns ? this.availableAddOns : this.availableAddOns.slice(0, this.addOnPreviewCount);
+                },
+
+                get payButtonLabel() {
+                    if (this.isSubmitting) return 'Processing…';
+                    return this.grandTotal > 0 ? 'Pay Now' : 'Confirm Booking';
                 },
 
                 ensureSelectedMethodAvailable() {
@@ -964,10 +600,23 @@
                         });
                     }
 
+                    this.$nextTick(() => window.bkWatchBar && window.bkWatchBar(this.$root, this.$refs.bar));
+
                     // Load catalog from database & sync finance settings
                     this.fetchEquipments();
                     this.fetchFinanceSettings();
                     this.fetchMembershipBenefitPreview();
+                    this.fetchMyVouchers();
+                },
+
+                async fetchMyVouchers() {
+                    try {
+                        const res = await fetch('/api/v1/padel/vouchers/mine', { headers: { 'Accept': 'application/json' } });
+                        const json = await res.json();
+                        this.myVouchers = (json.success && Array.isArray(json.data)) ? json.data : [];
+                    } catch (e) {
+                        this.myVouchers = [];
+                    }
                 },
 
                 /**
@@ -1033,21 +682,23 @@
                 },
 
                 async fetchEquipments() {
+                    this.isLoadingAddOns = true;
                     try {
                         const res = await fetch('/api/v1/padel/equipments');
                         const json = await res.json();
-                        if (json.success && json.data && json.data.length > 0) {
-                            this.availableAddOns = json.data.map(eq => ({
+                        this.availableAddOns = (json.success && Array.isArray(json.data))
+                            ? json.data.map(eq => ({
                                 id: eq.id,
                                 name: eq.name,
-                                desc: `In Stock: ${eq.stock_quantity}`,
                                 price: parseFloat(eq.rental_price),
                                 stock: parseInt(eq.stock_quantity, 10) || 99,
                                 quantity: 1,
-                            }));
-                        }
+                            }))
+                            : [];
                     } catch (e) {
-                        console.log('Using default equipment list');
+                        this.availableAddOns = [];
+                    } finally {
+                        this.isLoadingAddOns = false;
                     }
                 },
 
@@ -1062,8 +713,8 @@
                     // Jangan melepas slot saat checkout sedang dikirim (termasuk panggilan Midtrans) atau sudah klik bayar.
                     if (!this.expiresAtTime || this.paymentStarted || this.isSubmitting) return;
 
-                    const now = Date.now();
-                    const diffMs = this.expiresAtTime - now;
+                    const diffMs = this.expiresAtTime - Date.now();
+                    this.remainingMs = Math.max(0, diffMs);
 
                     if (diffMs <= 0) {
                         this.isExpired = true;
@@ -1104,17 +755,18 @@
                         }
                     }
 
-                    localStorage.removeItem('club61_cart');
-                    localStorage.removeItem('club61_hold_data');
-                    sessionStorage.removeItem('club61_cart');
-                    sessionStorage.removeItem('club61_hold_data');
-                    sessionStorage.removeItem('vantage_cart');
-                    sessionStorage.removeItem('vantage_hold_data');
+                    this.clearStorage();
+                },
+
+                clearStorage() {
+                    ['club61_cart', 'club61_hold_data', 'vantage_cart', 'vantage_hold_data'].forEach(k => {
+                        try { localStorage.removeItem(k); sessionStorage.removeItem(k); } catch (e) {}
+                    });
                     window.dispatchEvent(new CustomEvent('cart-updated'));
                 },
 
                 get subtotal() {
-                    return this.bookingItems.reduce((sum, item) => sum + item.price, 0);
+                    return this.bookingItems.reduce((sum, item) => sum + (Number(item.price) || 0), 0);
                 },
 
                 get addonsTotal() {
@@ -1138,6 +790,28 @@
                     const courtAfterMembership = Math.max(0, this.subtotal - this.membershipDiscountAmount);
                     const courtAfterSponsorVoucher = Math.max(0, courtAfterMembership - this.sponsorVoucherDiscountAmount);
                     return Math.max(0, courtAfterSponsorVoucher + this.addonsTotal - this.promoDiscount);
+                },
+
+                // Dasar potongan voucher = sama dengan server: sewa lapangan setelah benefit member & sponsor + add-on.
+                get voucherBase() {
+                    const courtAfterMembership = Math.max(0, this.subtotal - this.membershipDiscountAmount);
+                    return Math.max(0, courtAfterMembership - this.sponsorVoucherDiscountAmount) + this.addonsTotal;
+                },
+
+                get promoDiscount() {
+                    const v = this.promoVoucher;
+                    const base = this.voucherBase;
+                    if (!this.promoApplied || !v || base <= 0 || base < (v.min_order || 0)) return 0;
+                    let discount = 0;
+                    if (v.type === 'CREDIT') {
+                        discount = v.available_balance || 0;
+                    } else if (v.type === 'PERCENT') {
+                        discount = base * (v.value || 0) / 100;
+                        if (v.max_discount) discount = Math.min(discount, v.max_discount);
+                    } else {
+                        discount = v.value || 0;
+                    }
+                    return Math.round(Math.min(discount, base));
                 },
 
                 get isTaxApplicable() {
@@ -1182,7 +856,7 @@
 
                 selectPaymentMethod(method) {
                     this.selectedMethod = method;
-                    this.showPaymentModal = false;
+                    if (navigator.vibrate) { try { navigator.vibrate(8); } catch (e) {} }
                 },
 
                 isAddOnSelected(id) {
@@ -1216,14 +890,6 @@
                     }
                 },
 
-                decrementAddon(idx) {
-                    if (!this.selectedAddOns[idx]) return;
-                    const item = this.selectedAddOns[idx];
-                    if ((item.quantity || 1) > 1) {
-                        item.quantity = (item.quantity || 1) - 1;
-                    }
-                },
-
                 incrementAddonById(id) {
                     const idx = this.selectedAddOns.findIndex(a => a.id === id);
                     if (idx >= 0) {
@@ -1231,56 +897,73 @@
                     }
                 },
 
-                decrementAddonById(id) {
+                // Tombol kiri stepper: kurangi 1, atau hapus alat kalau jumlahnya tinggal 1.
+                decrementOrRemoveById(id) {
                     const idx = this.selectedAddOns.findIndex(a => a.id === id);
-                    if (idx >= 0) {
-                        this.decrementAddon(idx);
-                    }
-                },
-
-                removeAddon(idx) {
-                    this.selectedAddOns.splice(idx, 1);
-                },
-
-                removeAddonById(id) {
-                    const idx = this.selectedAddOns.findIndex(a => a.id === id);
-                    if (idx >= 0) {
+                    if (idx < 0) return;
+                    const item = this.selectedAddOns[idx];
+                    if ((item.quantity || 1) > 1) {
+                        item.quantity = (item.quantity || 1) - 1;
+                    } else {
                         this.selectedAddOns.splice(idx, 1);
                     }
                 },
 
-                applyPromo() {
-                    const code = this.promoCode.trim().toUpperCase();
-                    if (code === 'HEMAT10' || code === 'VANTAGE20' || code === 'CLUB61' || code === 'GOLDVIP') {
-                        this.promoApplied = true;
-                        this.promoDiscount = 40000;
-                    } else {
-                        this.showNotice('Invalid Promo Code',
-                            'The promo code entered is invalid. Try: HEMAT10 or CLUB61', 'error', 'Close');
+                async applyPromo() {
+                    const code = (this.promoCode || '').trim().toUpperCase();
+                    if (!code || this.isCheckingPromo) return;
+                    this.isCheckingPromo = true;
+                    try {
+                        const res = await fetch('/api/v1/padel/vouchers/check', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'Accept': 'application/json',
+                                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
+                            },
+                            body: JSON.stringify({ code, amount: this.voucherBase }),
+                        });
+                        const json = await res.json().catch(() => ({}));
+                        if (res.ok && json.success) {
+                            this.promoCode = json.data.code;
+                            this.promoVoucher = json.data;
+                            this.promoApplied = true;
+                        } else {
+                            this.showNotice('Voucher Not Applied', json.message || 'The voucher code is invalid or cannot be used for this booking.', 'error', 'Close');
+                        }
+                    } catch (e) {
+                        this.showNotice('Voucher Check Failed', 'Could not check the voucher right now. Please try again.', 'error', 'Close');
+                    } finally {
+                        this.isCheckingPromo = false;
                     }
                 },
 
                 removePromo() {
                     this.promoApplied = false;
-                    this.promoDiscount = 0;
+                    this.promoVoucher = null;
                     this.promoCode = '';
+                },
+
+                timeRange(item) {
+                    if (!item) return '';
+                    if (item.start_time && item.end_time) return `${item.start_time}–${item.end_time}`;
+                    return String(item.time || '').replace(/\s*\(.*\)\s*$/, '');
                 },
 
                 formatNumber(val) {
                     if (!val) return '0';
-                    return val.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+                    return Math.round(Number(val)).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ".");
                 },
 
+                // "2026-10-05" → "Mon, 5 Oct 2026" (diurai manual supaya tidak bergeser zona waktu).
                 formatDate(val) {
                     if (!val) return '-';
-                    try {
-                        const d = new Date(val);
-                        if (!isNaN(d.getTime())) {
-                            const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-                            return `${String(d.getDate()).padStart(2, '0')} ${months[d.getMonth()]} ${d.getFullYear()}`;
-                        }
-                    } catch(e) {}
-                    return String(val).substring(0, 10);
+                    const m = String(val).match(/^(\d{4})-(\d{2})-(\d{2})/);
+                    if (!m) return String(val).substring(0, 10);
+                    const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+                    const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+                    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+                    return `${days[d.getDay()]}, ${d.getDate()} ${months[d.getMonth()]} ${d.getFullYear()}`;
                 },
 
                 /**
@@ -1373,10 +1056,7 @@
                             // Hapus data hold dari browser SEKARANG (bukan baru saat redirect): kalau halaman ter-reload
                             // (pindah ke aplikasi e-wallet, tab dibuang browser), keranjang/checkout tidak lagi membaca
                             // countdown lama lalu memanggil "lepas slot" untuk booking yang sedang dibayar.
-                            ['club61_cart', 'club61_hold_data', 'vantage_cart', 'vantage_hold_data'].forEach(k => {
-                                try { localStorage.removeItem(k); sessionStorage.removeItem(k); } catch (e) {}
-                            });
-                            window.dispatchEvent(new CustomEvent('cart-updated'));
+                            this.clearStorage();
 
                             if (data.driver === 'midtrans' && window.snap && typeof window.snap.pay === 'function' && !
                                 data.is_mock && data.snap_token) {
@@ -1411,9 +1091,17 @@
                                         );
                                     }
                                 });
-                            } else {
-                                // Sandbox Mock Simulator / Cash
+                            } else if (data.is_mock || !data.snap_token) {
+                                // Simulator lokal / total Rp0 ditanggung kuota-voucher: sudah lunas di server.
                                 this.showPaymentSuccessModal = true;
+                            } else if (data.redirect_url || data.payment_url) {
+                                // Popup Snap tidak termuat (client key kosong / snap.js diblokir) → halaman pembayaran Midtrans.
+                                // Dulu jatuh ke cabang simulator di atas: customer melihat "pembayaran berhasil" padahal belum bayar.
+                                window.location.href = data.redirect_url || data.payment_url;
+                            } else {
+                                this.showNotice('Payment Not Started', 'The payment window could not be opened. Continue payment from the Invoice page.', 'error', 'View Invoice Page', () => {
+                                    this.clearSessionAndRedirect(this.createdBookingId, this.createdOrderId);
+                                });
                             }
                         } else {
                             this.showNotice('Payment Failed', json.message || 'Failed to process payment.',
@@ -1427,13 +1115,7 @@
                 },
 
                 clearSessionAndRedirect(bookingId, orderId) {
-                    localStorage.removeItem('club61_cart');
-                    localStorage.removeItem('club61_hold_data');
-                    sessionStorage.removeItem('club61_cart');
-                    sessionStorage.removeItem('club61_hold_data');
-                    sessionStorage.removeItem('vantage_cart');
-                    sessionStorage.removeItem('vantage_hold_data');
-                    window.dispatchEvent(new CustomEvent('cart-updated'));
+                    this.clearStorage();
                     let target = "{{ route('customer.invoice') }}";
                     const params = [];
                     if (bookingId) params.push(`booking_id=${bookingId}`);
@@ -1488,13 +1170,7 @@
                         }
                     }
 
-                    localStorage.removeItem('club61_cart');
-                    localStorage.removeItem('club61_hold_data');
-                    sessionStorage.removeItem('club61_cart');
-                    sessionStorage.removeItem('club61_hold_data');
-                    sessionStorage.removeItem('vantage_cart');
-                    sessionStorage.removeItem('vantage_hold_data');
-                    window.dispatchEvent(new CustomEvent('cart-updated'));
+                    this.clearStorage();
 
                     window.location.href = "{{ route('customer.booking') }}";
                 }
@@ -1504,9 +1180,7 @@
 
     @push('scripts')
         @if (config('services.payment.driver', 'midtrans') === 'midtrans')
-            <script
-                src="{{ config('services.midtrans.is_production') ? 'https://app.midtrans.com/snap/snap.js' : 'https://app.sandbox.midtrans.com/snap/snap.js' }}"
-                data-client-key="{{ config('services.midtrans.client_key', 'SB-Mid-client-demo-61') }}"></script>
+            @include('customer.partials.midtrans-snap')
         @endif
     @endpush
 </x-app-layout>

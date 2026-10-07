@@ -122,6 +122,7 @@
             get amountToPay() {
                 const t = this.currentTicket;
                 if (!t) return 0;
+                if (t.type === 'MEMBERSHIP') return parseFloat(t.grand_total) || 0;
                 return parseFloat(t.has_pending_delta ? t.unpaid_delta : (t.order_grand_total ?? t.total_amount)) || 0;
             },
 
@@ -220,7 +221,7 @@
                     this.showNotice('Metode Pembayaran Diganti', `${previous} tidak bisa dipakai untuk nominal ini. Metode diganti ke ${this.selectedMethod.name}. Periksa lagi lalu tekan bayar.`, 'info', 'Oke');
                     return;
                 }
-                if (['EXPIRED', 'CANCELLED', 'REFUNDED'].includes(this.currentTicket.status)) {
+                if (['EXPIRED', 'CANCELLED', 'REFUNDED', 'REFUND_PENDING'].includes(this.currentTicket.status)) {
                     this.showNotice('Reservation Inactive', 'This reservation has expired or has been cancelled and can no longer be processed. Please make a new booking.', 'error', 'Close');
                     return;
                 }
@@ -250,7 +251,7 @@
                             await this.loadTicket(this.currentTicket.id);
                         } else if (json.snap_token) {
                             this.lastSnapToken = json.snap_token;
-                            this.openSnap(json.snap_token);
+                            this.openSnap(json.snap_token, json.redirect_url);
                         }
                     } else {
                         this.showNotice('Payment Failed', json.message || 'Failed to process payment session.', 'error', 'Close');
@@ -260,6 +261,184 @@
                     this.showNotice('Network Issue', 'Encountered a problem connecting to the payment gateway.', 'error', 'Close');
                 } finally {
                     this.isSubmittingPayment = false;
+                }
+            },
+
+            /**
+             * Gambar QR di elemen ini dari teks (qrcodejs lokal, public/js/qrcode.min.js). Dulu gambar diminta ke
+             * api.qrserver.com — kode akses gate / kartu member ikut terkirim ke pihak ketiga, dan QR tidak muncul kalau
+             * layanan itu down. Menunggu library termuat (script di bawah halaman) maksimal ±6 detik.
+             */
+            // Modul 21: judul & keterangan tiket yang sudah tidak aktif (batal / refund / voucher saldo / hangus).
+            closedTicketTitle(t) {
+                const refund = t.refund_info || null;
+                if (t.status === 'REFUND_PENDING') return 'Refund Under Review';
+                if (t.status === 'REFUNDED') return 'Reservation Refunded';
+                if (t.status === 'CANCELLED' && refund && refund.voucher_code) return 'Converted to Credit Voucher';
+                if (t.status === 'CANCELLED') return 'Reservation Cancelled';
+                return t.total_paid > 0 ? 'Match Session Expired (No-Show)' : 'Payment Window Expired';
+            },
+
+            closedTicketMessage(t) {
+                const refund = t.refund_info || null;
+                const amount = refund ? 'Rp ' + this.formatNumber(Math.round(refund.amount)) : '';
+                if (t.status === 'REFUND_PENDING') return `This reservation has been cancelled and the court slot released. Your refund of ${amount} is being reviewed by the club.`;
+                if (t.status === 'REFUNDED') return `Your refund of ${amount} has been processed and returned by the club administration.`;
+                if (t.status === 'CANCELLED' && refund && refund.voucher_code) {
+                    return `The refund could not be returned as cash, so ${amount} was saved as credit voucher ${refund.voucher_code}` + (refund.voucher_valid_until ? ` (valid until ${refund.voucher_valid_until})` : '') + '. It appears automatically at checkout for your next booking.';
+                }
+                if (t.status === 'CANCELLED') return 'This reservation was cancelled and the slot has been returned to the schedule.';
+                return t.total_paid > 0 ? 'Your scheduled match time has passed without turnstile check-in. This ticket is now closed.' : 'The 15-minute payment window for this session has ended and the court slots have been released. Please book a new schedule.';
+            },
+
+            renderQr(el, text, attempt = 0) {
+                if (!el) return;
+                text = text ? String(text) : '';
+                if (attempt === 0) el._qrWanted = text;
+                if (el._qrWanted !== text) return; // teks sudah berganti selama menunggu library
+                if (el._qrDrawn === text) return;
+
+                if (!text) {
+                    el.innerHTML = '';
+                    el._qrDrawn = '';
+                    return;
+                }
+                if (!window.QRCode) {
+                    if (attempt < 40) setTimeout(() => this.renderQr(el, text, attempt + 1), 150);
+                    return;
+                }
+
+                el.innerHTML = '';
+                new QRCode(el, { text, width: 220, height: 220, colorDark: '#000000', colorLight: '#ffffff', correctLevel: QRCode.CorrectLevel.H });
+                el.querySelectorAll('img, canvas').forEach(node => { node.style.width = '100%'; node.style.height = '100%'; });
+                el._qrDrawn = text;
+            },
+
+            // Pesanan membership online yang belum dibayar: lanjutkan bayar (order yang sama) / batalkan.
+            showCancelMembershipModal: false,
+            isCancellingMembership: false,
+            membershipPollTimer: null,
+            membershipPollId: null,
+
+            async payMembership() {
+                const t = this.currentTicket;
+                if (!t || !t.can_pay_online) return;
+                if (! this.availableMethods.length) {
+                    this.showNotice('Pembayaran Online Tidak Tersedia', 'Belum ada metode pembayaran online yang bisa dipakai untuk nominal ini. Silakan hubungi frontdesk.', 'error', 'Tutup');
+                    return;
+                }
+                if (! this.availableMethods.some(m => m.code === this.selectedMethod.code)) {
+                    const previous = this.selectedMethod.name;
+                    this.ensureSelectedMethodAvailable();
+                    this.showNotice('Metode Pembayaran Diganti', `${previous} tidak bisa dipakai untuk nominal ini. Metode diganti ke ${this.selectedMethod.name}. Periksa lagi lalu tekan bayar.`, 'info', 'Oke');
+                    return;
+                }
+
+                this.isSubmittingPayment = true;
+                try {
+                    const res = await fetch(`/api/v1/membership/purchases/${t.id}/pay`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': '{{ csrf_token() }}' },
+                        body: JSON.stringify({ payment_method: this.selectedMethod.code }),
+                    });
+                    const json = await res.json();
+                    if (!res.ok || !json.success) {
+                        this.showNotice('Pembayaran Gagal', json.message || 'Sesi pembayaran belum bisa dibuat.', 'error', 'Tutup');
+                        await this.refreshMembershipTicket(t.id);
+                        return;
+                    }
+
+                    const payment = json.data.payment || {};
+                    if (json.data.already_paid || payment.is_mock) {
+                        await this.refreshMembershipTicket(t.id);
+                        this.showNotice('Membership Aktif', json.message, 'success', 'Oke');
+                    } else if (payment.snap_token && window.snap) {
+                        window.snap.pay(payment.snap_token, {
+                            onSuccess: () => this.pollMembership(t.id),
+                            onPending: () => this.pollMembership(t.id),
+                            onError: () => this.showNotice('Payment Declined', 'Payment was declined or failed to process.', 'error', 'Close'),
+                            onClose: () => this.pollMembership(t.id),
+                        });
+                    } else if (payment.redirect_url || payment.payment_url) {
+                        window.location.href = payment.redirect_url || payment.payment_url;
+                    }
+                } catch (e) {
+                    console.error('Error membership payment:', e);
+                    this.showNotice('Network Issue', 'Encountered a problem connecting to the payment gateway.', 'error', 'Close');
+                } finally {
+                    this.isSubmittingPayment = false;
+                }
+            },
+
+            async confirmCancelMembership() {
+                const t = this.currentTicket;
+                if (!t) return;
+                this.isCancellingMembership = true;
+                try {
+                    const res = await fetch(`/api/v1/membership/purchases/${t.id}/cancel`, {
+                        method: 'POST',
+                        headers: { 'Accept': 'application/json', 'X-CSRF-TOKEN': '{{ csrf_token() }}' },
+                    });
+                    const json = await res.json();
+                    this.showCancelMembershipModal = false;
+                    await this.refreshMembershipTicket(t.id);
+                    this.showNotice(json.success ? 'Pesanan Dibatalkan' : 'Tidak Bisa Dibatalkan', json.message, json.success ? 'success' : 'error', 'Oke');
+                } catch (e) {
+                    console.error('Error cancel membership order:', e);
+                    this.showNotice('Server Error', 'An unexpected error occurred while communicating with the server.', 'error', 'Close');
+                } finally {
+                    this.isCancellingMembership = false;
+                }
+            },
+
+            /** Muat ulang daftar pembelian (ikut cek Midtrans kalau verify) lalu tampilkan lagi kartu yang sama. */
+            async refreshMembershipTicket(id, verify = false) {
+                try {
+                    const res = await fetch('/api/v1/membership/my-purchases' + (verify ? '?verify_payment=1' : ''), { headers: { 'Accept': 'application/json' } });
+                    const json = await res.json();
+                    if (json.success && json.data) {
+                        this.allMembershipPurchases = json.data;
+                        const found = json.data.find(m => m.id === id);
+                        if (found && this.isMembershipTicket && this.currentTicket && this.currentTicket.id === id) {
+                            this.setMembershipTicket(found);
+                        }
+                        return found;
+                    }
+                } catch (e) {
+                    console.error('Failed to refresh membership purchase:', e);
+                }
+                return null;
+            },
+
+            /**
+             * Cek status ke server (yang ikut menanyakan Midtrans) sampai aktif / batal — dipakai setelah jendela
+             * Midtrans DAN saat halaman dibuka dengan pesanan yang masih menunggu (customer bisa membayar VA di tab /
+             * aplikasi bank lain). Dulu cuma 3 menit setelah Snap ditutup, jadi status baru berubah setelah refresh.
+             * Tiap 5 detik di menit pertama, lalu tiap 15 detik, maks. 15 menit.
+             */
+            pollMembership(id) {
+                if (this.membershipPollTimer) clearTimeout(this.membershipPollTimer);
+                this.membershipPollId = id;
+                const startedAt = Date.now();
+                const tick = async () => {
+                    const found = await this.refreshMembershipTicket(id, true);
+                    const elapsed = Date.now() - startedAt;
+                    if (!found || found.status !== 'PENDING_PAYMENT' || elapsed > 900000) {
+                        this.membershipPollTimer = null;
+                        if (found && found.status === 'ACTIVE') {
+                            this.showNotice('Membership Aktif', 'Pembayaran diterima. Paket membership Anda sudah aktif.', 'success', 'Oke');
+                        }
+                        return;
+                    }
+                    this.membershipPollTimer = setTimeout(tick, elapsed < 60000 ? 5000 : 15000);
+                };
+                this.membershipPollTimer = setTimeout(tick, 0);
+            },
+
+            /** Pesanan online yang masih menunggu → mulai cek otomatis (sekali per kartu yang dibuka). */
+            watchPendingMembership(data) {
+                if (data && data.can_pay_online && data.status === 'PENDING_PAYMENT' && !(this.membershipPollTimer && this.membershipPollId === data.id)) {
+                    this.pollMembership(data.id);
                 }
             },
 
@@ -326,7 +505,7 @@
                 }
             },
 
-            openSnap(token) {
+            openSnap(token, redirectUrl = null) {
                 if (window.snap) {
                     window.snap.pay(token, {
                         onSuccess: async (result) => {
@@ -342,6 +521,9 @@
                             this.startAutoPolling(this.currentTicket.id);
                         }
                     });
+                } else if (redirectUrl) {
+                    // Popup Snap tidak termuat (client key kosong / snap.js diblokir) → halaman pembayaran Midtrans.
+                    window.location.href = redirectUrl;
                 } else {
                     this.showNotice('Loading Gateway', 'Midtrans payment gateway component is loading. Please try again shortly.', 'info', 'Close');
                 }
@@ -368,6 +550,14 @@
 
                 await this.loadMyBookings();
                 this.isLoading = false;
+
+                // Kembali ke tab ini (mis. habis bayar VA di aplikasi bank) → langsung cek ulang pesanan membership yang menunggu.
+                document.addEventListener('visibilitychange', () => {
+                    const t = this.currentTicket;
+                    if (document.visibilityState === 'visible' && this.isMembershipTicket && t && t.can_pay_online && t.status === 'PENDING_PAYMENT') {
+                        this.pollMembership(t.id);
+                    }
+                });
 
                 window.addEventListener('popstate', async () => {
                     const params = new URLSearchParams(window.location.search);
@@ -469,6 +659,7 @@
                 this.ticket = data;
                 this.currentTicket = data;
                 this.isMembershipTicket = true;
+                this.watchPendingMembership(data);
 
                 if (data.payment_method) {
                     const methodObj = this.getPaymentMethodObject(data.payment_method);
@@ -644,13 +835,21 @@
                 return Math.round(val).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ".");
             },
 
+            // Tanggal & jam selalu dalam zona waktu venue (bukan zona waktu HP customer): jadwal 19:00 WIB tetap
+            // tampil 19:00 walau HP disetel ke zona lain.
+            appTimezone: @js(config('app.timezone')),
+
             formatDate(val) {
                 if (!val) return '-';
+                const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+                const plain = String(val).match(/^(\d{4})-(\d{2})-(\d{2})$/);
+                if (plain) return `${plain[3]} ${months[Number(plain[2]) - 1]} ${plain[1]}`;
                 try {
                     const d = new Date(val);
                     if (!isNaN(d.getTime())) {
-                        const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-                        return `${String(d.getDate()).padStart(2, '0')} ${months[d.getMonth()]} ${d.getFullYear()}`;
+                        const parts = Object.fromEntries(new Intl.DateTimeFormat('en-GB', { timeZone: this.appTimezone, day: '2-digit', month: 'short', year: 'numeric' })
+                            .formatToParts(d).map(p => [p.type, p.value]));
+                        return `${parts.day} ${parts.month} ${parts.year}`;
                     }
                 } catch(e) {}
                 return String(val).substring(0, 10);
@@ -661,10 +860,32 @@
                 try {
                     const d = new Date(isoString);
                     if (!isNaN(d.getTime())) {
-                        return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+                        return new Intl.DateTimeFormat('en-GB', { timeZone: this.appTimezone, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(d);
                     }
                 } catch(e) {}
                 return isoString.substring(11, 16) || isoString;
+            },
+
+            // Label status yang ramah dibaca (bukan kode mentah seperti PENDING_PAYMENT).
+            statusLabel(status) {
+                const map = {
+                    PAID: 'Paid', CONFIRMED: 'Confirmed', CHECKED_IN: 'Checked in', COMPLETED: 'Completed', ACTIVE: 'Active',
+                    PENDING: 'Awaiting payment', PENDING_PAYMENT: 'Awaiting payment', UNPAID: 'Unpaid', PARTIALLY_PAID: 'Partly paid',
+                    LOCKED: 'In checkout', EXPIRED: 'Expired', CANCELLED: 'Cancelled', REFUND_PENDING: 'Refund pending', REFUNDED: 'Refunded',
+                };
+                return map[status] || (status ? String(status).replace(/_/g, ' ').toLowerCase().replace(/^\w/, c => c.toUpperCase()) : '-');
+            },
+
+            // 'ok' = lunas / aktif, 'bad' = tutup / batal, 'wait' = menunggu.
+            statusTone(status) {
+                if (['PAID', 'CONFIRMED', 'CHECKED_IN', 'COMPLETED', 'ACTIVE'].includes(status)) return 'ok';
+                if (['EXPIRED', 'CANCELLED', 'REFUNDED', 'REFUND_PENDING'].includes(status)) return 'bad';
+                return 'wait';
+            },
+
+            statusPillClass(status) {
+                const tone = this.statusTone(status);
+                return tone === 'ok' ? 'bg-emerald-100 text-emerald-800 border-emerald-200' : (tone === 'bad' ? 'bg-rose-100 text-rose-800 border-rose-200' : 'bg-amber-100 text-amber-900 border-amber-200');
             },
 
             /**
@@ -843,10 +1064,12 @@
 
                 drawRoundRect(qrBoxX, qrSectionY, qrBoxW, qrBoxH, 20, true, true, '#FFFFFF', '#DFC387', 2);
 
-                const qrText = this.currentTicket.qr_code_hash || this.currentTicket.booking_code || this.currentTicket.id || 'CLUB61-PASS';
+                // QR hanya dari kode akses asli — dulu jatuh ke kode booking / teks 'CLUB61-PASS' yang pasti ditolak gate.
+                const qrText = this.currentTicket.qr_code_hash || '';
+                const codeLabel = this.currentTicket.qr_code_hash || this.currentTicket.booking_code || '';
                 let qrLoaded = false;
 
-                if (window.QRCode) {
+                if (qrText && window.QRCode) {
                     try {
                         const qrDiv = document.createElement('div');
                         qrDiv.style.display = 'none';
@@ -869,40 +1092,22 @@
                     } catch(e) {}
                 }
 
-                if (!qrLoaded) {
-                    try {
-                        const img = new Image();
-                        img.crossOrigin = 'anonymous';
-                        await new Promise((resolve) => {
-                            img.onload = () => {
-                                try {
-                                    ctx.drawImage(img, qrBoxX + 30, qrSectionY + 30, 220, 220);
-                                    qrLoaded = true;
-                                } catch(e) {}
-                                resolve();
-                            };
-                            img.onerror = () => resolve();
-                            setTimeout(resolve, 2500);
-                            img.src = `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(qrText)}`;
-                        });
-                    } catch(e) {}
-                }
-
+                // Tidak ada cadangan layanan QR luar (dulu api.qrserver.com — kode akses gate terkirim ke pihak ketiga).
                 if (!qrLoaded) {
                     drawRoundRect(qrBoxX + 30, qrSectionY + 30, 220, 220, 12, true, true, '#FAF8F2', '#DFC387', 1);
                     ctx.fillStyle = '#8C6418';
                     ctx.font = 'bold 14px monospace';
                     ctx.textAlign = 'center';
-                    ctx.fillText('[ QR CODE PASS ]', width / 2, qrSectionY + 130);
+                    ctx.fillText('QR NOT AVAILABLE', width / 2, qrSectionY + 130);
                     ctx.font = '11px sans-serif';
-                    ctx.fillText(qrText.substring(0, 24), width / 2, qrSectionY + 155);
+                    ctx.fillText('Show booking code at frontdesk', width / 2, qrSectionY + 155);
                     ctx.textAlign = 'left';
                 }
 
                 ctx.fillStyle = '#8C6418';
                 ctx.font = 'bold 14px monospace';
                 ctx.textAlign = 'center';
-                ctx.fillText(qrText, width / 2, qrSectionY + qrBoxH + 28);
+                ctx.fillText(codeLabel, width / 2, qrSectionY + qrBoxH + 28);
 
                 ctx.fillStyle = '#7A643E';
                 ctx.font = '12px sans-serif';
@@ -1068,7 +1273,7 @@
 </script>
 
 @push('scripts')
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-    <script src="{{ config('services.midtrans.is_production') ? 'https://app.midtrans.com/snap/snap.js' : 'https://app.sandbox.midtrans.com/snap/snap.js' }}" 
-            data-client-key="{{ config('services.midtrans.client_key', 'SB-Mid-client-demo-61') }}"></script>
+    {{-- qrcodejs dari server sendiri — QR tetap muncul walau CDN luar diblokir / sinyal venue jelek. --}}
+    <script src="{{ asset('js/qrcode.min.js') }}"></script>
+    @include('customer.partials.midtrans-snap')
 @endpush

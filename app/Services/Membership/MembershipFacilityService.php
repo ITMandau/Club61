@@ -21,7 +21,7 @@ class MembershipFacilityService
     private const SYSTEM_DEFAULTS = [
         'PADEL' => ['name' => 'Padel Court', 'badge' => 'PADEL', 'description' => null, 'usage_mode' => MembershipFacility::MODE_PADEL_BOOKING],
         'GYM' => ['name' => 'Fitness & Gym', 'badge' => 'GYM', 'description' => null, 'usage_mode' => MembershipFacility::MODE_CHECK_IN],
-        'SAUNA' => ['name' => 'Sauna & Ice Bath', 'badge' => 'SAUNA', 'description' => null, 'usage_mode' => MembershipFacility::MODE_WELLNESS_BOOKING],
+        'SAUNA' => ['name' => 'Sauna', 'badge' => 'SAUNA', 'description' => null, 'usage_mode' => MembershipFacility::MODE_WELLNESS_BOOKING],
     ];
 
     /** @var array<string, array<string, mixed>>|null */

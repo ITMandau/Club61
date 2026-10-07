@@ -397,28 +397,7 @@ trait ManagesScheduleAndSlots
                     $currLock->addHour();
                 }
 
-                if ($booking->membership_balance_id && (float) $booking->member_hours_consumed > 0) {
-                    app(\App\Services\Membership\MembershipBalanceService::class)->adjustQuota(
-                        balanceId: $booking->membership_balance_id,
-                        changeType: 'REVERSAL',
-                        quantity: (float) $booking->member_hours_consumed,
-                        notes: 'Reversal pembatalan/expired booking Padel ' . $booking->booking_code,
-                        relatedType: PadelBooking::class,
-                        relatedId: $booking->id
-                    );
-                    $booking->member_hours_consumed = 0.00;
-                }
-
-                if ($booking->sponsor_member_voucher_id && (float) $booking->sponsor_hours_consumed > 0) {
-                    $sponsorVoucher = \App\Models\Sponsor\SponsorMemberVoucher::where('id', $booking->sponsor_member_voucher_id)
-                        ->lockForUpdate()
-                        ->first();
-                    if ($sponsorVoucher) {
-                        $sponsorVoucher->hours_used = max(0, (float) $sponsorVoucher->hours_used - (float) $booking->sponsor_hours_consumed);
-                        $sponsorVoucher->save();
-                    }
-                    $booking->sponsor_hours_consumed = 0.00;
-                }
+                $this->reverseBookingBenefits($booking);
 
                 $booking->update(['status' => 'CANCELLED']);
                 $c++;
@@ -488,6 +467,46 @@ trait ManagesScheduleAndSlots
         })->values();
     }
 
+    /**
+     * Kembalikan jam kuota member & jam voucher sponsor yang dipotong saat checkout untuk booking yang batal / hangus
+     * tanpa dibayar. Idempoten: kolom pemakaian dinolkan & disimpan. Dulu hanya dipanggil saat customer membatalkan
+     * sendiri — booking yang hangus (pembersih otomatis) atau dibatalkan gateway membuat jam member hilang.
+     * Wajib dipanggil di dalam transaksi DB.
+     */
+    public function reverseBookingBenefits(PadelBooking $booking): void
+    {
+        $changed = false;
+
+        if ($booking->membership_balance_id && (float) $booking->member_hours_consumed > 0) {
+            app(\App\Services\Membership\MembershipBalanceService::class)->adjustQuota(
+                balanceId: $booking->membership_balance_id,
+                changeType: 'REVERSAL',
+                quantity: (float) $booking->member_hours_consumed,
+                notes: 'Reversal pembatalan/expired booking Padel ' . $booking->booking_code,
+                relatedType: PadelBooking::class,
+                relatedId: $booking->id
+            );
+            $booking->member_hours_consumed = 0.00;
+            $changed = true;
+        }
+
+        if ($booking->sponsor_member_voucher_id && (float) $booking->sponsor_hours_consumed > 0) {
+            $sponsorVoucher = \App\Models\Sponsor\SponsorMemberVoucher::where('id', $booking->sponsor_member_voucher_id)
+                ->lockForUpdate()
+                ->first();
+            if ($sponsorVoucher) {
+                $sponsorVoucher->hours_used = max(0, (float) $sponsorVoucher->hours_used - (float) $booking->sponsor_hours_consumed);
+                $sponsorVoucher->save();
+            }
+            $booking->sponsor_hours_consumed = 0.00;
+            $changed = true;
+        }
+
+        if ($changed) {
+            $booking->save();
+        }
+    }
+
     /** Status booking yang menempati slot lapangan (setelah GC releaseExpiredLocks berjalan). */
     protected static function activeSlotStatuses(): array
     {
@@ -541,7 +560,16 @@ trait ManagesScheduleAndSlots
             // Update BERSYARAT: di sela pengecekan di atas (yang bisa memanggil Midtrans beberapa detik) booking ini bisa
             // saja baru di-checkout / dibayar. Dulu langsung ditimpa EXPIRED → order dibatalkan & sesi Midtrans di-cancel
             // padahal customer sedang membayar.
-            if (! PadelBooking::whereKey($b->id)->where('status', $b->status)->update(['status' => 'EXPIRED'])) {
+            $expired = DB::transaction(function () use ($b) {
+                if (! PadelBooking::whereKey($b->id)->where('status', $b->status)->update(['status' => 'EXPIRED'])) {
+                    return false;
+                }
+                // Jam kuota member / voucher sponsor yang dipotong saat checkout dikembalikan.
+                $this->reverseBookingBenefits(PadelBooking::whereKey($b->id)->lockForUpdate()->first());
+
+                return true;
+            });
+            if (! $expired) {
                 continue;
             }
 

@@ -24,11 +24,11 @@ class KelolaKontenWebsite extends Page
 
     protected static ?string $navigationLabel = 'Konten Website';
 
-    protected static string | UnitEnum | null $navigationGroup = 'Main Menu';
+    protected static string | UnitEnum | null $navigationGroup = 'Marketing & Event';
 
     protected static ?string $title = 'Konten Halaman Depan & Company Profile';
 
-    protected static ?int $navigationSort = 13;
+    protected static ?int $navigationSort = 3;
 
     protected string $view = 'filament.pages.kelola-konten-website';
 

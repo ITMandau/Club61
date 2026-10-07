@@ -164,11 +164,12 @@ class ActivityLogTest extends TestCase
         $owner = User::factory()->superAdmin()->create(['name' => 'Owner']);
         $this->actingAs($owner);
 
-        app(PadelBookingService::class)->adminCancelAndRefund($booking->id, 150000, 'TRANSFER_BANK', 'CUACA', 'Lapangan bocor', $owner);
+        $result = app(PadelBookingService::class)->requestCancelAndRefund($booking->id, 'CUACA', 'Lapangan bocor', $owner);
 
-        $log = ActivityLog::where('event', 'booking.refunded')->sole();
+        $log = ActivityLog::where('event', 'booking.refund_requested')->sole();
         $this->assertSame('CRITICAL', $log->severity);
-        $this->assertStringContainsString('Rp 150.000', $log->description);
+        $this->assertStringContainsString(\App\Services\Audit\ActivityLogger::rupiah($result['refund_amount']), $log->description);
+        $this->assertStringContainsString('Antrian Refund', $log->description);
         $this->assertStringContainsString('BK-AUDIT-001', $log->description);
         $this->assertSame('Lapangan bocor', $log->meta['catatan']);
         $this->assertSame('Owner', $log->causer_name);
@@ -177,20 +178,26 @@ class ActivityLogTest extends TestCase
     public function test_admin_refund_attempt_without_permission_is_logged_as_access_denied(): void
     {
         $booking = $this->paidBooking();
-        $this->actingAs(User::factory()->admin()->create(['name' => 'Admin Nakal']));
+        // Bisa membuka Kelola Pemesanan, tapi tidak punya izin mengajukan refund.
+        $role = \App\Models\Role::findOrCreate('lihat_pemesanan', 'web');
+        $role->givePermissionTo('View:KelolaPemesanan');
+        app(\Spatie\Permission\PermissionRegistrar::class)->forgetCachedPermissions();
+        $user = User::factory()->create(['name' => 'Admin Nakal']);
+        $user->assignRole($role);
+        $this->actingAs($user);
 
         Livewire::test(KelolaPemesanan::class)
             ->set('cancelBookingId', $booking->id)
-            ->set('refundAmount', 200000)
+            ->set('refundNotes', 'mencoba refund tanpa izin')
             ->call('executeCancelRefund');
 
         $this->assertSame('PAID', $booking->fresh()->status);
         $log = ActivityLog::where('event', 'auth.access_denied')->sole();
         $this->assertSame('WARNING', $log->severity);
         $this->assertSame('Admin Nakal', $log->causer_name);
-        $this->assertStringContainsString('cancel_refund_padel', $log->description);
+        $this->assertStringContainsString('request_refund_padel', $log->description);
         $this->assertSame('LIVEWIRE', $log->http_method, 'Endpoint update Livewire asli tetap dikenali');
-        $this->assertSame(0, ActivityLog::where('event', 'booking.refunded')->count());
+        $this->assertSame(0, ActivityLog::where('event', 'booking.refund_requested')->count());
     }
 
     public function test_blocked_page_access_is_logged_once_per_minute(): void

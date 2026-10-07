@@ -94,10 +94,13 @@ class MidtransReconciliationService
         // order_id Midtrans yang SUDAH tercatat lunas tidak perlu ditanyakan lagi. Tanpa ini, order yang
         // punya tagihan selisih reschedule akan "menemukan" pembayaran awalnya (settlement) dan
         // melaporkan PAID, padahal tagihan selisihnya belum dibayar.
-        $alreadySettled = $payments->where('status', 'SUCCESS')->pluck('transaction_id')->filter()->all();
+        // Pembayaran ganda (DUPLICATE) juga sudah tercatat — jangan ditanyakan & dilunasi ulang.
+        $recorded = ['SUCCESS', PaymentOrchestratorService::DUPLICATE_STATUS];
+        $alreadySettled = $payments->whereIn('status', $recorded)->pluck('transaction_id')->filter()->all();
 
-        foreach ($payments->where('status', '!=', 'SUCCESS') as $payment) {
-            if ($payment->payment_gateway === 'MIDTRANS') {
+        foreach ($payments->whereNotIn('status', $recorded) as $payment) {
+            // Id tagihan kasir (SUPP-…) bukan order_id Midtrans — dulu ditanyakan tiap 5 menit dan selalu 404.
+            if ($payment->payment_gateway === 'MIDTRANS' && ! str_starts_with((string) $payment->transaction_id, 'SUPP-')) {
                 $ids[] = $payment->transaction_id;
             }
             $log = is_array($payment->payload_log) ? $payment->payload_log : [];
@@ -206,7 +209,7 @@ class MidtransReconciliationService
         foreach ($query->get() as $payment) {
             $log = is_array($payment->payload_log) ? $payment->payload_log : [];
             $sessions = array_values(array_unique(array_filter(array_merge(
-                [$payment->transaction_id, $log['midtrans_order_id'] ?? null],
+                [str_starts_with((string) $payment->transaction_id, 'SUPP-') ? null : $payment->transaction_id, $log['midtrans_order_id'] ?? null],
                 (array) ($log['midtrans_order_ids'] ?? [])
             ))));
             $gatewaySaysFinal = $sessions !== [] && array_diff($sessions, $finalIds) === [];

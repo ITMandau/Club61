@@ -157,7 +157,7 @@ Semua response API dibungkus dalam format seragam:
 
 ### C. Modul Fasilitas Lainnya
 
-* **Wellness (Ice Bath & Sauna):**
+* **Wellness (Sauna):**
   * `GET /api/v1/wellness/facilities` $\rightarrow$ Info kapasitas dan harga per sesi.
   * `GET /api/v1/wellness/slots?date=2026-09-10` $\rightarrow$ Ketersediaan kuota jam sesi.
 * **Salon & Stylist:**

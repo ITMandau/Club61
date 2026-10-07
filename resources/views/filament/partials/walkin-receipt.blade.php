@@ -8,8 +8,7 @@
                                 style="text-align:center; border-bottom:1px dashed #000; padding-bottom:0.75rem; margin-bottom:0.75rem;">
                                 <div style="font-weight:900; font-size:1rem; letter-spacing:0.05em;">CLUB 61 PADEL
                                     ARENA</div>
-                                <div style="font-size:0.65rem; color:#4B5563;">Jl. Karang Tengah Raya No. 61, Lebak
-                                    Bulus</div>
+                                <div style="font-size:0.65rem; color:#4B5563;">{{ \App\Models\Setting\CompanyProfileSetting::receiptAddress() }}</div>
                                 <div style="font-size:0.65rem; color:#4B5563;">Frontdesk &amp; Reservation Counter
                                 </div>
                             </div>
@@ -77,6 +76,14 @@
                                     @endforeach
                                 @endif
 
+                                @if (!empty($receipt['discount_amount']) && $receipt['discount_amount'] > 0)
+                                    <div
+                                        style="display:flex; justify-content:space-between; font-size:0.65rem; margin-top:0.35rem; color:#047857;">
+                                        <span>Voucher {{ $receipt['voucher_code'] ?? '' }}</span>
+                                        <span>- Rp
+                                            {{ number_format($receipt['discount_amount'], 0, ',', '.') }}</span>
+                                    </div>
+                                @endif
                                 @if (!empty($receipt['tax_amount']) && $receipt['tax_amount'] > 0)
                                     <div
                                         style="display:flex; justify-content:space-between; font-size:0.65rem; margin-top:0.35rem; color:#4B5563;">
@@ -130,6 +137,10 @@
                                 </div>
                                 @if (! empty($receipt['is_reprint']))
                                     <div style="font-size:0.625rem; font-weight:900; margin-top:0.25rem;">*** CETAK ULANG {{ $receipt['reprinted_at'] ?? '' }} ***</div>
+                                @endif
+                                {{-- Dibuka dari Buku Transaksi (Modul 17) — bukan cetak ulang kasir. --}}
+                                @if (! empty($receipt['admin_copy_at']))
+                                    <div style="font-size:0.625rem; font-weight:900; margin-top:0.25rem;">*** SALINAN ADMIN {{ $receipt['admin_copy_at'] }} ***</div>
                                 @endif
                             </div>
 

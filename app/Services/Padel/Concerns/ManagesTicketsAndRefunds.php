@@ -11,31 +11,8 @@ use Symfony\Component\HttpKernel\Exception\HttpException;
 
 trait ManagesTicketsAndRefunds
 {
-    /**
-     * Mengajukan pembatalan dengan jalur refund resmi (H-24).
-     */
-    public function requestRefund(string $bookingId, string $reason, User $user): PadelBooking
-    {
-        $booking = PadelBooking::where('id', $bookingId)
-            ->where('user_id', $user->id)
-            ->firstOrFail();
-
-        if ($booking->status !== 'PAID') {
-            throw new HttpException(400, 'Hanya booking lunas (PAID) yang dapat diajukan refund.');
-        }
-
-        // Syarat H-24
-        if ($booking->start_time->diffInHours(now(), false) > -24) {
-            throw new HttpException(422, 'Pembatalan dengan refund hanya dapat diajukan minimal 24 jam sebelum jadwal bertanding.');
-        }
-
-        $booking->update([
-            'status' => 'REFUND_PENDING',
-            'cancel_reason' => $reason,
-        ]);
-
-        return $booking;
-    }
+    // Modul 21: customer tidak bisa mengajukan refund sendiri. Pembatalan + refund hanya diajukan staf dari Kelola
+    // Pemesanan (PadelBookingService::requestCancelAndRefund) dan disetujui / ditolak di Antrian Refund.
 
     /**
      * Mengambil riwayat booking user terfilter.
@@ -159,6 +136,17 @@ trait ManagesTicketsAndRefunds
                 $booking->setAttribute('pending_delta_channel', $pendingSupplementalPayment?->payload_log['preferred_channel'] ?? null);
             }
         }
+
+        // Modul 21: hasil pengajuan refund booking ini (menunggu / dikembalikan / dijadikan voucher saldo).
+        $refund = \App\Models\Pos\Refund::with('voucher:id,refund_id,code,balance,valid_until')
+            ->where('padel_booking_id', $booking->id)->latest()->first();
+        $booking->setAttribute('refund_info', $refund ? [
+            'status' => $refund->status,
+            'amount' => (float) $refund->refund_amount,
+            'voucher_code' => $refund->voucher?->code,
+            'voucher_balance' => $refund->voucher ? (float) $refund->voucher->balance : null,
+            'voucher_valid_until' => $refund->voucher?->valid_until?->timezone('Asia/Jakarta')->format('d M Y'),
+        ] : null);
 
         return $booking;
     }

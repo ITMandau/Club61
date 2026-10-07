@@ -665,7 +665,9 @@ class CashierShiftTest extends TestCase
             ->set('edcLast4', '9876')
             ->set('edcApprovalCode', 'AUTH8899')
             ->set('edcTraceNumber', 'TRC7766')
-            ->call('submitWalkInBooking');
+            ->call('submitWalkInBooking')
+            // Struk langsung dicetak di aplikasi Club61, sama dengan Bayar Otomatis.
+            ->assertDispatched('club61-auto-print', fn ($event, $params) => $params['next'] === 'startNewTransaction' && str_contains($params['html'], 'AUTH8899'));
 
         $orderDebit = Order::where('order_type', 'WALK_IN')->latest('id')->first();
         $this->assertNotNull($orderDebit);
@@ -682,7 +684,8 @@ class CashierShiftTest extends TestCase
                 'start_time' => '17:00:00',
                 'end_time' => '18:00:00',
                 'time_label' => '17:00 - 18:00',
-                'price' => 250000.00,
+                // Harga sesuai tarif prime court (dulu 250.000 — beda dengan yang dihitung server, kini ditolak).
+                'price' => 300000.00,
             ],
         ];
 

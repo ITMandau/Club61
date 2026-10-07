@@ -82,7 +82,36 @@
         text-transform: uppercase !important;
         letter-spacing: 0.15em !important;
         color: #8C754E !important;
-        margin-top: 0.75rem !important;
+    }
+
+    /* Grup menu sidebar (dropdown): bawaan Filament memberi jarak 1.75rem antar grup — terlalu renggang
+       saat grup ditutup. Jarak antar grup dirapatkan; grup yang terbuka diberi sedikit ruang di bawah
+       item-itemnya supaya tetap terpisah dari judul grup berikutnya. */
+    .fi-sidebar-nav {
+        padding-block: 1.25rem !important;
+        row-gap: 0.75rem !important;
+    }
+
+    .fi-sidebar-nav-groups {
+        row-gap: 0.125rem !important;
+    }
+
+    .fi-sidebar-group-btn {
+        padding-block: 0.5rem !important;
+        border-radius: 10px !important;
+        transition: background-color 150ms ease;
+    }
+
+    .fi-sidebar-group-btn:hover {
+        background: rgba(250, 242, 222, 0.7) !important;
+    }
+
+    .fi-sidebar-group-collapse-btn {
+        color: #B09A72 !important;
+    }
+
+    .fi-sidebar-group:not(.fi-collapsed) .fi-sidebar-group-items {
+        padding-bottom: 0.5rem;
     }
 
     /* Topbar: Frosted Glass */

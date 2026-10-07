@@ -35,33 +35,38 @@ Dokumen pelacak progres (Single Source of Truth). Status di bawah ini hasil audi
 | 14 | Company Profile / Konten Website | Selesai | 100% |
 | 15 | Manajemen Menu F&B | Selesai | 100% |
 | 16 | Activity / Audit Log | Jalan (panel superadmin, transaksi, perubahan data, login) | 85% |
-| 17 | Laporan Keuangan & Riwayat Transaksi Terpadu | Belum ada (URGENT) | 10% |
+| 17 | Laporan Keuangan & Riwayat Transaksi Terpadu | Buku Transaksi + Antrian Refund + dashboard Analytics dari buku jalan; MDR & rekonsiliasi bank (Fase 4) menyusul | 90% |
 | 18 | Pengaturan Invoice / Struk Terpusat | Belum ada | 0% |
 | 19 | Realtime (Laravel Reverb) | Belum terpasang, masih polling | 0% |
 | 20 | Halaman Admin Pendukung (Dashboard, Club, Karyawan, Turnamen, Marketing) | DUMMY semua | 0% |
+| 21 | Kebijakan Refund, No-Show & Pembayaran Bermasalah | PRD draft, menunggu keputusan PM | 0% |
 
-**Automated test suite:** 566 passed (2352 assertions) — termasuk regresi audit "bom waktu" 1 Okt 2026 (`tests/Feature/Padel/PaymentTimeBombRegressionTest.php`).
+**Automated test suite:** 634 passed (2748 assertions) — termasuk regresi audit "bom waktu" 1 Okt 2026 (`tests/Feature/Padel/PaymentTimeBombRegressionTest.php`).
 
 ---
 
 ## PRIORITAS SEBELUM LIVE
 
 ### KRITIS (bisa bikin rugi uang)
+- [x] **Upgrade Laravel 11.56 → 12.69.3** (4 Okt 2026): Laravel 11 tidak menerima patch keamanan lagi; celah *high* "CRLF injection pada aturan validasi `email`" (GHSA-5vg9-5847-vvmq) dan *Temporary Signed URL Path Confusion* hanya diperbaiki di 12.x. Ikut naik: `league/commonmark` 2.10.3 (DoS tabel Markdown), PHPUnit 11 (dev). `composer audit`: 0 advisory. Deploy: `composer install`.
+- [x] **Alamat di struk salah** (DIPERBAIKI 4 Okt 2026): struk POS Walk-In & Z-Report menulis "Jl. Karang Tengah Raya No. 61, Lebak Bulus" secara hardcode. Sekarang semua struk / invoice salinan admin memakai alamat dari menu **Konten Website** (`CompanyProfileSetting::receiptAddress()`).
 - [x] **KRITIS: Midtrans gagal = dianggap lunas** (DIPERBAIKI 30 Sep 2026). Dulu `MidtransService::createSnapTransaction()` menangkap semua error Midtrans (key salah, jaringan putus, request ditolak) atau server key kosong, lalu mengembalikan token palsu `is_mock=true`, sehingga booking padel langsung `PAID` dan membership online langsung aktif gratis.
   - Sekarang fail-closed: token mock hanya di environment `local` (tanpa key) / `testing`. Selain itu checkout ditolak HTTP 503 (`PaymentGatewayUnavailableException`), transaksi DB di-rollback, slot tetap `LOCKED` supaya customer bisa coba lagi, dan error dicatat `[ALERT]` di log.
   - Test: `tests/Feature/Payment/MidtransFailClosedTest.php` (7 test).
   - Catatan: driver `mock` via config `PAYMENT_DRIVER=mock` masih bisa dipakai di server non-production. Pastikan server sandbox / production memakai `PAYMENT_DRIVER=midtrans`.
-- [ ] Client key cadangan `'SB-Mid-client-demo-61'` masih dipakai kalau config kosong (`checkout.blade.php:1528`, `invoice-scripts.blade.php:1012`).
+- [x] Client key cadangan `'SB-Mid-client-demo-61'` dihapus (4 Okt 2026): `snap.js` hanya dimuat dengan `MIDTRANS_CLIENT_KEY` asli (`customer/partials/midtrans-snap.blade.php`); tanpa key, customer diarahkan ke halaman bayar Midtrans (`redirect_url`). Checkout padel dulu menampilkan "pembayaran berhasil" kalau popup Snap tidak termuat — sekarang diarahkan ke halaman bayar.
 
 ### URGENT (permintaan PM)
 - [x] Modul 16: Activity / Audit Log untuk superadmin.
-- [ ] Modul 17: Laporan keuangan per modul + tiap transaksi bisa dilacak detail & invoice-nya.
+- [x] Modul 17: Laporan keuangan per modul + tiap transaksi bisa dilacak detail & invoice-nya — Buku Transaksi & Antrian Refund (Fase 2) dan dashboard Analytics dari buku (Fase 3) jalan (4 Okt 2026). Fase 4 (MDR Midtrans, rekonsiliasi mutasi bank) menyusul.
+  - [x] Analytics & Keuangan membaca `ledger_entries` (F&B ikut terhitung, angka = Buku Transaksi); rincian per kategori / sumber / metode bayar (klik baris → Buku Transaksi tersaring lewat `?periode=&kategori=&sumber=&metode=`); grafik tren harian (per bulan untuk rentang > 62 hari); okupansi dari jam buka lapangan aktif (dulu tetap 4 × 18 jam). Test: `tests/Feature/Finance/AnalyticsLedgerTest.php`.
+  - [x] Dashboard admin memakai data asli (4 Okt 2026) — dulu seluruh isinya contoh mati ("Rp 50.272.597", "132 Bookings", booking "PXDL"). Isi: uang masuk hari ini vs kemarin & bulan ini (dari Buku Transaksi, hanya untuk yang boleh membuka Analytics), booking & okupansi hari ini, customer baru bulan ini vs bulan lalu, member aktif, daftar "Perlu Ditindaklanjuti" (tagihan kasir, refund, booking menunggu bayar), grafik uang masuk 7/30/90 hari, jadwal lapangan hari ini + pencarian. Okupansi Dashboard & Analytics satu rumus (`App\Services\Padel\CourtOccupancy`). Test: `tests/Feature/Finance/AdminDashboardTest.php`.
 - [ ] Modul 18: Panel pengaturan invoice untuk semua modul.
 - [ ] Rapikan pembayaran membership online di portal customer.
   - [x] Master Fasilitas Membership (menu **Fasilitas Membership**): tambah fasilitas baru (mode check-in / info saja), nama & deskripsi benefit diatur admin; paket punya deskripsi + daftar privilege + catatan per benefit. Halaman membership, My Club, teaser depan, POS Jual Membership & API `/membership/plans` (`benefit_cards`) tidak lagi memakai teks dummy (2 Okt 2026).
   - [x] Check-in generik `POST /api/v1/membership/checkin`; check-in Gym unlimited dulu selalu gagal, paket "diskon saja" dulu bisa check-in gratis — keduanya diperbaiki.
-  - [ ] Lanjutkan bayar membership PENDING_PAYMENT dari My Club, cegah order pending dobel.
-- [ ] Reset sandi via email (Gmail / SMTP).
+  - [x] Lanjutkan bayar membership PENDING_PAYMENT (4 Okt 2026): tombol "Continue Payment" + ganti metode + "Cancel This Order" di halaman Invoice; checkout paket sama saat masih pending = lanjut bayar order yang sama (tidak ada order dobel), paket beda = ditolak 409 dan diarahkan ke pesanan lama. Notifikasi expire Midtrans ikut membatalkan kartu PENDING; pesanan online yang ditinggal > 24 jam dibatalkan otomatis oleh `membership:sync-expired`. API: `POST /api/v1/membership/purchases/{id}/pay` & `/cancel`, flag `can_pay_online` di `my-purchases`. Test: `tests/Feature/Membership/MembershipOnlinePaymentTest.php`.
+- [~] Reset sandi via email: kode, tampilan & email Club 61 siap (4 Okt 2026); tinggal isi SMTP di `.env` server lalu tes `php artisan mail:test`.
 - [ ] Reverb untuk update tanpa refresh.
 
 ---
@@ -75,10 +80,16 @@ Dokumen pelacak progres (Single Source of Truth). Status di bawah ini hasil audi
 - [x] Staf diblokir dari halaman portal customer (middleware `CustomerPortalOnly`).
 - [x] Staf tanpa akses Dashboard diarahkan ke halaman admin pertama yang boleh dibuka.
 - [x] Reset sandi: controller jalan, pesan generik (tidak membocorkan email terdaftar), token Sanctum dicabut setelah reset.
+- [x] Sesi web di perangkat lain otomatis keluar setelah password diganti / direset (`AuthenticateSession` di grup web; dulu hanya panel admin). Test: `tests/Feature/Auth/SessionInvalidationTest.php`.
 - [ ] **Reset sandi via email belum sampai ke user.** `MAIL_MAILER=log`, jadi link reset cuma masuk ke `storage/logs`. Perlu:
   - [ ] Setting SMTP (Gmail App Password / Mailtrap / Resend / SES) di `.env` server.
-  - [ ] Template email reset bertema Club 61 (sekarang masih email bawaan Laravel).
-  - [ ] Pengirim `MAIL_FROM_ADDRESS` masih `hello@example.com`.
+  - [x] Template email reset bertema Club 61, bahasa Indonesia (`App\Notifications\Auth\ResetPasswordNotification`).
+  - [x] Halaman Lupa / Atur Ulang Kata Sandi bergaya Club 61; bisa pakai email ATAU nomor HP.
+  - [x] Link reset memakai `APP_URL` (dulu dari header Host — bisa dibelokkan ke domain penyerang karena `trustProxies('*')`).
+  - [x] Akun walk-in dengan email placeholder (`*@walkin.club61.internal`, `mbr_*@club61.id`, `corp_*@club61.id`) tidak dikirimi email; halaman mengarahkan ke frontdesk.
+  - [x] Batas 5 permintaan/menit per IP; SMTP gagal → pesan jelas + Log Aktivitas KRITIS `auth.password_reset_mail_failed`.
+  - [x] Perintah cek SMTP: `php artisan mail:test alamat@email.com`.
+  - [ ] Pengirim `MAIL_FROM_ADDRESS` masih `hello@example.com` — isi di `.env` server.
 - [ ] **Verifikasi email tidak aktif.** Model `User` tidak mengimplementasikan `MustVerifyEmail`, jadi middleware `verified` di route portal tidak berfungsi.
 
 ---
@@ -111,16 +122,16 @@ Dokumen pelacak progres (Single Source of Truth). Status di bawah ini hasil audi
 - [x] Arsitektur service modular (5 traits).
 - [~] Coach padel: kolom `coach_id` & `coach_fee` ada di skema, **belum ada UI pemilihan pelatih**.
 - [x] Checkout ditolak (bukan dianggap lunas) kalau Midtrans error.
-- [ ] QR tiket masih fallback ke layanan eksternal `api.qrserver.com` (`invoice-scripts.blade.php:824`).
-- [ ] Placeholder `'CLUB61-DEMO'` masih ada di kartu tiket (`ticket-card.blade.php:78`).
+- [x] QR e-tiket & kartu member dibuat di browser dengan `public/js/qrcode.min.js` (4 Okt 2026); `api.qrserver.com` (ikut menerima kode akses gate) & CDN qrcodejs tidak dipakai lagi.
+- [x] Placeholder `'CLUB61-DEMO'` / `'CLUB61-PASS'` dihapus: tiket tanpa kode QR menampilkan "QR belum tersedia". Halaman `/membership` tanpa paket aktif tidak lagi error 500. Test: `tests/Feature/Payment/CustomerPaymentScriptsTest.php`.
 
 ---
 
-## MODUL 03: WELLNESS (COLD PLUNGE & SAUNA)
+## MODUL 03: WELLNESS (SAUNA)
 
 ### Status: 35%
 - [x] Skema: `wellness_facilities`, `wellness_slots`, `wellness_bookings`, `wellness_waitlists`.
-- [x] Seeder fasilitas (Ice Bath & Finnish Sauna).
+- [x] Seeder fasilitas (Finnish Sauna — Club 61 tidak punya Ice Bath; data Ice Bath lama dibersihkan migration `2026_10_04_100001`).
 - [x] API: `GET facilities`, `GET slots`, `POST book`, `POST cancel` (`routes/api/wellness.php`).
 - [x] `WellnessBookingService`: lock kuota, potong kuota / diskon membership.
 - [ ] **Booking berbayar tidak bisa dibayar:** status tetap `PENDING`, tidak membuat Order / Payment, tidak ada fulfillment handler di `PaymentFulfillmentRegistry`.
@@ -312,10 +323,27 @@ Dokumen pelacak progres (Single Source of Truth). Status di bawah ini hasil audi
 
 ## MODUL 17: LAPORAN KEUANGAN & RIWAYAT TRANSAKSI TERPADU (URGENT)
 
-### Status: 10%
+### Status: 75%
 Sumber pendapatan yang harus masuk laporan: POS Walk-In Padel, Booking Online Padel, Membership (online & kasir), POS F&B, POS Wellness, Gym, Merchandise.
 
-PRD: [`PRD_MODUL_17_BUKU_TRANSAKSI_TERPADU.md`](PRD_MODUL_17_BUKU_TRANSAKSI_TERPADU.md) (draft 1 Okt 2026, belum dikerjakan).
+PRD: [`PRD_MODUL_17_BUKU_TRANSAKSI_TERPADU.md`](PRD_MODUL_17_BUKU_TRANSAKSI_TERPADU.md) (draft 1 Okt 2026; pertanyaan §10 memakai usulan default).
+
+- [x] **Fase 1 — Fondasi data** (4 Okt 2026):
+  - Tabel `ledger_entries` + model immutable `LedgerEntry`: satu baris per kategori (Sewa Lapangan / Add-on Padel / Membership / F&B) per pembayaran atau refund, dengan snapshot order, customer, kasir, shift, metode & bukti bayar.
+  - `LedgerWriter` dipanggil di semua cabang `markOrderAsPaid` (lunas, kelebihan bayar, pembayaran ganda `DUPLICATE`, uang masuk untuk tagihan tertutup) dan saat refund jadi `PROCESSED` — di transaksi DB yang sama; gagal tulis buku = pelunasan ikut gagal.
+  - Pembagian diskon/pajak/biaya layanan proporsional per kategori, pelunasan selisih reschedule dari `payload_log`-nya sendiri, total baris = `payments.amount` persis (dihitung dalam sen). Transaksi `MOCK` & catatan `legacy_backfill` tidak dicatat.
+  - Item sewa alat kini `item_type = EQUIPMENT` (data lama dikonversi migration); kolom `payments.paid_at` (data lama dari `updated_at`), dipakai riwayat & struk POS Walk-In.
+  - Command `ledger:backfill {--from=} {--dry-run}` (idempoten) dan `ledger:verify {--date=} {--days=}` (terjadwal 01:15, selisih → Log Aktivitas KRITIS).
+  - Test: `tests/Feature/Finance/LedgerTest.php` (18 test).
+- [x] **Fase 2 — Halaman Buku Transaksi & Antrian Refund** (4 Okt 2026), grup menu **Keuangan**:
+  - **Buku Transaksi**: satu baris per pembayaran / refund, kartu ringkasan (penjualan bersih, biaya layanan, pajak terkumpul, refund, total uang masuk bersih + info benefit, hangus, refund menunggu), filter periode (preset WIB), sumber, kategori, metode, kasir, shift, status, pencarian (no. order / kode booking / nama / HP / RRN).
+  - Detail slide-over: pembagian per kategori, bukti bayar, riwayat pembayaran & refund order, booking terkait, log aktivitas order (+ tautan `Log Aktivitas?cari=`).
+  - Invoice **SALINAN ADMIN**: struk POS Walk-In untuk pembayaran kasir padel; invoice ringkas dari buku untuk online / membership / F&B / refund. Tercatat `ledger.invoice_viewed`.
+  - Tombol **Export** (dropdown): Excel (lembar *Transaksi* + *Rincian Kategori*) & PDF (ringkasan, rekap per kategori, daftar transaksi; maks. 1.500 baris, `barryvdh/laravel-dompdf`) lewat route `admin.buku-transaksi.export` — dikecualikan dari mode SPA panel supaya file terunduh (dulu isi XLSX tampil sebagai teks). Anti formula injection, tanpa HP/email, tercatat `ledger.exported`.
+  - **Antrian Refund**: proses (metode + nomor referensi → baris buku negatif) / tolak (alasan wajib), row lock anti diproses dua kali, Log Aktivitas KRITIS (`refund.processed` / `refund.rejected`). Kolom baru `refunds.refund_method`, `refund_reference`, `processed_by_id`, `admin_notes`.
+  - Izin backdoor (hanya super_admin): `View:BukuTransaksi`, `export_ledger`, `view_ledger_invoice`, `process_refund_queue`.
+  - Test: `tests/Feature/Finance/BukuTransaksiTest.php` (14 test).
+- [ ] **Fase 3 — Dashboard**: rincian per kategori/sumber/metode, grafik, Analytics membaca dari buku.
 
 - [~] Halaman **Analytics & Keuangan** sudah query data asli, tapi:
   - [ ] **Pendapatan F&B tidak dihitung sama sekali.**
@@ -354,6 +382,60 @@ PRD: [`PRD_MODUL_17_BUKU_TRANSAKSI_TERPADU.md`](PRD_MODUL_17_BUKU_TRANSAKSI_TERP
 
 ---
 
+## MODUL 21: KEBIJAKAN REFUND, NO-SHOW & PEMBAYARAN BERMASALAH
+
+### Status: 80% (Tahap 1 selesai 5 Okt 2026, pembayaran bermasalah ditunda)
+
+PRD: [`PRD_MODUL_21_REFUND_NO_SHOW_PEMBAYARAN_BERMASALAH.md`](PRD_MODUL_21_REFUND_NO_SHOW_PEMBAYARAN_BERMASALAH.md) — keputusan PM di §0.
+
+- [x] Refund dua langkah: kasir / resepsionis / admin mengajukan dari Kelola Pemesanan (booking langsung batal, refund penuh tanpa potongan), superadmin menyetujui di Antrian Refund.
+- [x] Refund ditolak → uangnya jadi voucher saldo customer (+ email). Customer tidak bisa mengajukan refund sendiri.
+- [x] Kunci refund begitu jam main dimulai; reschedule paling lambat 2 jam sebelum main; booking hangus final.
+- [x] Voucher dipakai di checkout online & POS Walk-In; halaman Daftar Voucher (Keuangan).
+- [ ] Menu Pembayaran Bermasalah (saldo customer terpotong tapi uang belum masuk) — ditunda PM.
+
+---
+
+## MODUL 22: VOUCHER SALDO & VOUCHER PROMO MARKETING
+
+### Status: 30% (fondasi jalan, menunggu arahan PM)
+
+PRD: [`PRD_MODUL_22_VOUCHER_DAN_PROMO.md`](PRD_MODUL_22_VOUCHER_DAN_PROMO.md) — 11 pertanyaan untuk PM.
+
+- [x] Tabel & mesin voucher satu untuk online dan kasir (`VoucherService`), voucher saldo dari refund ditolak, Daftar Voucher.
+- [ ] Voucher saldo **sekali pakai, sisa hangus** (keputusan PM 5 Okt 2026 — yang berjalan sekarang masih menyimpan sisa).
+- [ ] Halaman Marketing: buat / kelola kode promo nyata (sekarang tampilan contoh) + batas per akun.
+- [ ] Skema sebar promo (kode umum sosmed / kode unik / klaim ke akun / otomatis) — menunggu arahan PM.
+
+---
+
+## MODUL 23: STRUKTUR PORTAL CUSTOMER (MEMBERSHIP, MY CLUB, PROFILE, VOUCHER SAYA)
+
+### Status: 0% (PRD disetujui arahnya, belum dikerjakan)
+
+PRD: [`PRD_MODUL_23_STRUKTUR_PORTAL_CUSTOMER.md`](PRD_MODUL_23_STRUKTUR_PORTAL_CUSTOMER.md)
+
+- [ ] Navigasi: tab Membership menggantikan Profile di navigasi bawah HP; menu Membership di navbar desktop; Profile + Voucher Saya + Logout di dropdown akun.
+- [ ] My Club jadi profil klub (compro): baris status member + 3 paket paling laku + "Lihat semua paket"; kartu member, voucher & katalog lengkap dipindah.
+- [ ] Profile: kartu membership aktif (QR + kuota), menu Voucher Saya, pengaturan akun dirapikan.
+- [ ] Voucher Saya gaya Shopee (voucher saldo + voucher jam corporate, tab Tersedia / Riwayat) + endpoint riwayat voucher saldo.
+- [ ] Pindahkan link lama (`/my-club#corporate-vouchers`, redirect setelah beli membership, kartu Upgrade di Home).
+
+---
+
+## MODUL 24: COACHING (BOOKING SESI COACH, SETORAN LAPANGAN & PAYOUT COACH)
+
+### Status: 0% (PRD draft, menunggu jawaban PM)
+
+PRD: [`PRD_MODUL_24_COACHING.md`](PRD_MODUL_24_COACHING.md)
+
+- [ ] Data coach partner (profil, harga sesi, jadwal tersedia, rekening, akun login) + migrasi `padel_bookings.coach_id` ke tabel `coaches`.
+- [ ] Booking coaching customer & mode Coaching di POS Walk-In (lapangan + jadwal coach dikunci bersamaan, maks 2 murid).
+- [ ] Buku Transaksi: setoran lapangan = pendapatan Club, bagian coach = utang ke coach; baris Coaching di Analytics.
+- [ ] Payout coach per periode + export.
+- [ ] Portal coach (jadwal, check-in murid, pendapatan).
+
+---
 ## MODUL 20: HALAMAN ADMIN PENDUKUNG
 
 ### Status: 0% (semua DUMMY)

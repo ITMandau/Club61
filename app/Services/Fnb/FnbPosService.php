@@ -24,7 +24,7 @@ class FnbPosService
     }
 
     /**
-     * @param  array<int, array{menu_id: string, quantity: int}>  $items
+     * @param  array<int, array{menu_id: string, quantity: int, notes?: ?string}>  $items
      * @param  array<string, mixed>  $paymentMeta
      */
     public function checkout(
@@ -62,6 +62,8 @@ class FnbPosService
                 }
 
                 $quantity = max(1, (int) ($entry['quantity'] ?? 1));
+                // Catatan untuk bar / dapur ("less sugar", "tanpa es") — dicetak di slip pesanan stasiunnya.
+                $notes = trim(mb_substr(preg_replace('/\s+/u', ' ', (string) ($entry['notes'] ?? '')), 0, 120)) ?: null;
                 $lineSubtotal = (float) $menu->base_price * $quantity;
                 $subtotal += $lineSubtotal;
 
@@ -72,6 +74,7 @@ class FnbPosService
                     'quantity' => $quantity,
                     'unit_price' => $menu->base_price,
                     'subtotal' => $lineSubtotal,
+                    'notes' => $notes,
                 ];
             }
 
@@ -122,6 +125,17 @@ class FnbPosService
                 'cashier_name' => $cashier->name,
                 'payment_method' => $method,
             ];
+
+            // Bayar Otomatis di layar kasir: order menunggu bayar, popup QR / VA tampil, lunas terkonfirmasi otomatis.
+            if ($method === 'QRIS_MIDTRANS') {
+                $payloadLog['payment_method'] = 'QRIS';
+
+                return [
+                    'order' => $order->fresh(['items', 'payments']),
+                    'finance' => $finance,
+                    'pending_qris' => app(\App\Services\Pos\PosMidtransQrisService::class)->open($order, 'FNB_COUNTER', $cashier, $payloadLog, (string) ($paymentMeta['pos_online_method'] ?? 'QRIS')),
+                ];
+            }
 
             if (in_array($method, ['QRIS', 'QRIS_STATIS'], true)) {
                 $payloadLog['qris_details'] = [

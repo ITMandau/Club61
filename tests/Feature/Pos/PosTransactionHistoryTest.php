@@ -83,7 +83,7 @@ class PosTransactionHistoryTest extends TestCase
             'status' => 'SUCCESS',
             'payload_log' => ['cashier_name' => 'Kasir Owner', 'qris_details' => ['provider' => 'BCA_QRIS', 'rrn' => 'RRN'.$code]],
         ]);
-        Payment::query()->toBase()->where('id', $payment->id)->update(['created_at' => $at, 'updated_at' => $at]);
+        Payment::query()->toBase()->where('id', $payment->id)->update(['created_at' => $at, 'updated_at' => $at, 'paid_at' => $at]);
 
         return $payment->fresh();
     }
@@ -141,7 +141,7 @@ class PosTransactionHistoryTest extends TestCase
         $page = Livewire::test(BookOfflineCourt::class)
             ->call('startSettlement', $booking->id)
             ->call('proceedToPayment')
-            ->set('qrisRrn', 'RRNSETTLE77')
+            ->set('qrisMode', 'MANUAL')->set('qrisRrn', 'RRNSETTLE77')
             ->call('submitWalkInBooking')
             ->assertSet('showSuccessModal', true)
             ->assertSet('completedOrderData.receipt_type', 'SETTLEMENT')
@@ -215,7 +215,7 @@ class PosTransactionHistoryTest extends TestCase
             ->set('walkInPhone', '081299990000')
             ->call('selectPlan', $plan->id)
             ->set('paymentMethod', 'QRIS')
-            ->set('qrisRrn', 'RRNMBR001')
+            ->set('qrisMode', 'MANUAL')->set('qrisRrn', 'RRNMBR001')
             ->call('submitSale')
             ->assertSet('showSuccessModal', true)
             ->assertSee('No. Order')

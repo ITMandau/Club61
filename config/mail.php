@@ -48,6 +48,33 @@ return [
             'local_domain' => env('MAIL_EHLO_DOMAIN'),
         ],
 
+        /*
+         * Akun billing@ — invoice lunas (booking online & membership) dan email voucher saldo. Server SMTP sama dengan
+         * mailer utama (noreply@), cuma akun & alamat pengirimnya beda. Selama MAIL_MAILER bukan smtp (lokal: log, test:
+         * array), billing ikut transport itu supaya tidak ada email sungguhan yang terkirim dari laptop developer.
+         */
+        'billing' => env('MAIL_MAILER', 'log') === 'smtp' ? [
+            'transport' => 'smtp',
+            'host' => env('MAIL_BILLING_HOST', env('MAIL_HOST', '127.0.0.1')),
+            'port' => env('MAIL_BILLING_PORT', env('MAIL_PORT', 2525)),
+            'encryption' => env('MAIL_BILLING_ENCRYPTION', env('MAIL_ENCRYPTION', 'tls')),
+            'username' => env('MAIL_BILLING_USERNAME'),
+            'password' => env('MAIL_BILLING_PASSWORD'),
+            'timeout' => null,
+            'local_domain' => env('MAIL_EHLO_DOMAIN'),
+            'from' => [
+                'address' => env('MAIL_BILLING_FROM_ADDRESS', env('MAIL_BILLING_USERNAME', env('MAIL_FROM_ADDRESS', 'hello@example.com'))),
+                'name' => env('MAIL_BILLING_FROM_NAME', env('MAIL_FROM_NAME', 'Example')),
+            ],
+        ] : [
+            'transport' => env('MAIL_MAILER', 'log'),
+            'channel' => env('MAIL_LOG_CHANNEL'),
+            'from' => [
+                'address' => env('MAIL_BILLING_FROM_ADDRESS', env('MAIL_FROM_ADDRESS', 'hello@example.com')),
+                'name' => env('MAIL_BILLING_FROM_NAME', env('MAIL_FROM_NAME', 'Example')),
+            ],
+        ],
+
         'ses' => [
             'transport' => 'ses',
         ],
@@ -98,6 +125,15 @@ return [
     'from' => [
         'address' => env('MAIL_FROM_ADDRESS', 'hello@example.com'),
         'name' => env('MAIL_FROM_NAME', 'Example'),
+    ],
+
+    /*
+     * Balasan customer (dari noreply@ maupun billing@) masuk ke kotak pertanyaan info@ — bukan ke kotak otomatis
+     * yang tidak dibaca.
+     */
+    'reply_to' => [
+        'address' => env('MAIL_REPLY_TO_ADDRESS'),
+        'name' => env('MAIL_REPLY_TO_NAME', env('MAIL_FROM_NAME', 'Example')),
     ],
 
 ];

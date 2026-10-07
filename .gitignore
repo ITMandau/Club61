@@ -16,3 +16,7 @@ yarn-error.log
 /.fleet
 /.idea
 /.vscode
+
+
+# File sementara Vite (normalnya langsung terhapus; nyangkut kalau dev server berhenti mendadak)
+vite.config.*.timestamp-*

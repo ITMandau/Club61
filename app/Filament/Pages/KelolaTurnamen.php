@@ -14,11 +14,11 @@ class KelolaTurnamen extends Page
 
     protected static ?string $navigationLabel = 'Kelola Turnamen';
 
-    protected static string | UnitEnum | null $navigationGroup = 'Main Menu';
+    protected static string | UnitEnum | null $navigationGroup = 'Marketing & Event';
 
     protected static ?string $title = 'Kelola Turnamen & Event';
 
-    protected static ?int $navigationSort = 8;
+    protected static ?int $navigationSort = 2;
 
     protected string $view = 'filament.pages.kelola-turnamen';
 }

@@ -62,7 +62,7 @@ All protected endpoints require the HTTP Authorization Header:
 - `POST /check-in` : Gate cashier / turnstile QR single-use validation (anti-replay attack)
 
 ### 3. Wellness & Waitlist (`/api/v1/wellness`)
-- `GET /facilities` : List facilities (Cold Plunge & Sauna)
+- `GET /facilities` : List facilities (Sauna)
 - `GET /slots?facility_id=&date=` : List session slots & remaining headcounts
 - `POST /bookings` : Book session ticket(s)
 - `POST /waitlist` : Join waitlist if slot capacity is full

@@ -42,8 +42,8 @@ return new class extends Migration
             [
                 'id' => (string) Str::ulid(),
                 'title' => 'Wellness Suite',
-                'description' => 'Ruang pemulihan pasca-main dengan sauna dan ice bath.',
-                'amenities' => json_encode(['Sauna', 'Ice bath 4°C', 'Ruang ganti privat']),
+                'description' => 'Ruang pemulihan pasca-main dengan sauna.',
+                'amenities' => json_encode(['Sauna', 'Ruang ganti privat']),
                 'photo_path' => null,
                 'sort_order' => 2,
                 'is_active' => true,

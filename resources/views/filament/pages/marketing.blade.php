@@ -42,7 +42,7 @@
         </div>
 
         <div class="adm-card" style="padding: 1.25rem;">
-            <span class="adm-pill adm-pill-green">Aktif &bull; Free Ice Bath</span>
+            <span class="adm-pill adm-pill-green">Aktif &bull; Free Sauna</span>
             <div style="font-family: var(--font-mono); font-size: 1.25rem; font-weight: 900; color: #8C6418; margin-top: 0.5rem;">
                 WELLNESSPACK
             </div>

@@ -301,21 +301,44 @@ class PadelBookingController extends Controller
         ]);
     }
 
+    /** Voucher saldo milik customer (dari refund yang ditolak) yang masih bisa dipakai. */
+    public function myVouchers(Request $request): JsonResponse
+    {
+        return response()->json([
+            'success' => true,
+            'data' => app(\App\Services\Finance\VoucherService::class)->walletFor($request->user())->values(),
+        ]);
+    }
+
     /**
-     * Pengajuan Pembatalan Refund Resmi (H-24).
+     * Cek kode voucher sebelum bayar — potongannya dihitung server dengan aturan yang sama dengan checkout,
+     * jadi angka di halaman checkout sama dengan yang ditagihkan.
      */
-    public function refund(string $id, Request $request): JsonResponse
+    public function checkVoucher(Request $request): JsonResponse
     {
         $validated = $request->validate([
-            'reason' => ['required', 'string', 'max:500'],
+            'code' => ['required', 'string', 'max:30'],
+            'amount' => ['required', 'numeric', 'min:0', 'max:1000000000'],
         ]);
 
-        $booking = $this->bookingService->requestRefund($id, $validated['reason'], $request->user());
+        $result = app(\App\Services\Finance\VoucherService::class)->resolve($validated['code'], $request->user(), (float) $validated['amount']);
+        if ($result['error']) {
+            return response()->json(['success' => false, 'message' => $result['error']], 422);
+        }
+
+        $voucher = $result['voucher'];
 
         return response()->json([
             'success' => true,
-            'message' => 'Pengajuan refund berhasil diajukan. Status telah diubah menjadi REFUND_PENDING.',
-            'data' => $booking,
+            'data' => [
+                'code' => $voucher->code,
+                'type' => $voucher->discount_type,
+                'discount' => $result['discount'],
+                'value' => (float) $voucher->discount_value,
+                'max_discount' => $voucher->max_discount_amount !== null ? (float) $voucher->max_discount_amount : null,
+                'min_order' => (float) $voucher->min_order_amount,
+                'available_balance' => $voucher->isCredit() ? app(\App\Services\Finance\VoucherService::class)->availableBalance($voucher) : null,
+            ],
         ]);
     }
 }

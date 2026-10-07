@@ -92,6 +92,15 @@ class WebhookReplayProtectionTest extends TestCase
         Http::assertSent(fn ($r) => str_contains($r->url(), '/v2/ORD-RPL/status'));
     }
 
+    public function test_settlement_is_retried_while_the_status_api_still_says_pending(): void
+    {
+        config(['services.midtrans.verify_webhook_with_status_api' => true]);
+        Http::fake(['api.sandbox.midtrans.com/*' => Http::response(['order_id' => 'ORD-RPL', 'status_code' => '201', 'transaction_status' => 'pending', 'gross_amount' => '200000.00'], 200)]);
+
+        // Dulu: 200 "IGNORED" → Midtrans berhenti mengirim ulang notifikasi pelunasan yang sah.
+        $this->postJson('/api/v1/padel/webhook/midtrans', $this->notification('settlement', '200'))->assertStatus(503);
+    }
+
     public function test_settlement_is_retried_when_the_status_api_is_unreachable(): void
     {
         config(['services.midtrans.verify_webhook_with_status_api' => true]);

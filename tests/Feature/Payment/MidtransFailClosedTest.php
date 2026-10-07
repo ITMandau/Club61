@@ -165,4 +165,21 @@ class MidtransFailClosedTest extends TestCase
         $this->assertSame(0, Order::count());
         $this->assertSame(0, Payment::count());
     }
+    public function test_notification_url_override_is_opt_in_and_https_only(): void
+    {
+        config(["services.midtrans.notification_url" => null]);
+        $this->assertArrayNotHasKey("X-Override-Notification", app(\App\Services\Payment\MidtransService::class)->snapHeaders());
+
+        config(["services.midtrans.notification_url" => "http://tidak-aman.test/hook"]);
+        $this->assertArrayNotHasKey("X-Override-Notification", app(\App\Services\Payment\MidtransService::class)->snapHeaders());
+
+        $url = "https://fence-stadium-scion.ngrok-free.dev/api/v1/padel/webhook/midtrans";
+        config(["services.midtrans.notification_url" => $url]);
+        $this->assertSame($url, app(\App\Services\Payment\MidtransService::class)->snapHeaders()["X-Override-Notification"]);
+
+        // Production: diabaikan walau terisi.
+        $this->app["env"] = "production";
+        $this->assertArrayNotHasKey("X-Override-Notification", app(\App\Services\Payment\MidtransService::class)->snapHeaders());
+        $this->app["env"] = "testing";
+    }
 }

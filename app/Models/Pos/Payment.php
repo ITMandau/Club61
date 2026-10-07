@@ -20,6 +20,7 @@ class Payment extends Model
         'amount',
         'payment_method',
         'status',
+        'paid_at',
         'payload_log',
     ];
 
@@ -34,8 +35,21 @@ class Payment extends Model
     {
         return [
             'amount' => 'decimal:2',
+            'paid_at' => 'datetime',
             'payload_log' => 'array',
         ];
+    }
+
+    protected static function booted(): void
+    {
+        // Saat uang diterima (Modul 17): diisi sekali ketika status berubah jadi SUCCESS / DUPLICATE, di jalur mana pun.
+        // Dipakai Buku Transaksi & riwayat — updated_at ikut berubah setiap kali baris pembayaran disentuh.
+        static::saving(function (Payment $payment) {
+            if ($payment->paid_at === null && $payment->isDirty('status')
+                && in_array($payment->status, ['SUCCESS', \App\Services\Payment\PaymentOrchestratorService::DUPLICATE_STATUS], true)) {
+                $payment->paid_at = now();
+            }
+        });
     }
 
     public function order()

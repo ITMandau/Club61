@@ -10,7 +10,7 @@
                 Kelola Fasilitas Club &amp; Venue
             </div>
             <div class="adm-banner-sub">
-                Konfigurasi fasilitas premium: 4 Lapangan Padel Panoramic, Finnish Cedar Sauna, Cold Plunge Ice Bath 4&deg;C, dan Social Cafe Lounge.
+                Konfigurasi fasilitas premium: 4 Lapangan Padel Panoramic, Finnish Cedar Sauna, dan Social Cafe Lounge.
             </div>
         </div>
 
@@ -35,13 +35,6 @@
             <div style="font-weight: 900; font-size: 1.125rem; color: #1F170D; margin-top: 0.5rem;">Finnish Cedar Sauna</div>
             <div style="font-size: 0.6875rem; color: #7A643E; margin-top: 0.25rem;">Kapasitas 8 orang, suhu 85&deg;C, aroma eucalyptus terapi relaksasi otot.</div>
             <div style="margin-top: 1rem;"><span class="adm-pill adm-pill-green">Suhu Optimal</span></div>
-        </div>
-
-        <div class="adm-card" style="padding: 1.25rem;">
-            <span class="adm-pill adm-pill-gold">WELLNESS</span>
-            <div style="font-weight: 900; font-size: 1.125rem; color: #1F170D; margin-top: 0.5rem;">Cold Plunge Ice Bath</div>
-            <div style="font-size: 0.6875rem; color: #7A643E; margin-top: 0.25rem;">Sirkulasi ozon UV, suhu 4&deg;C stabil untuk recovery atlet setelah tanding.</div>
-            <div style="margin-top: 1rem;"><span class="adm-pill adm-pill-green">4&deg;C Ready</span></div>
         </div>
 
         <div class="adm-card" style="padding: 1.25rem;">

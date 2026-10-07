@@ -567,27 +567,27 @@ class PadelAdminOverrideTest extends TestCase
             'qr_code_hash' => 'active_qr_before_cancel',
         ]);
 
-        // Eksekusi Admin Cancel & Refund
-        $res = $this->service->adminCancelAndRefund(
+        // Pengajuan pembatalan + refund (Modul 21): booking langsung batal, uangnya menunggu di Antrian Refund.
+        $res = $this->service->requestCancelAndRefund(
             bookingId: $booking->id,
-            refundAmount: 200000.00,
-            refundMethod: 'TRANSFER_MANUAL',
             reasonCategory: 'SALAH_BAYAR',
             notes: 'Customer salah jam, refund tunai kasir',
-            adminUser: $this->admin
+            requester: $this->admin
         );
 
         $this->assertTrue($res['success']);
         $updated = $booking->fresh();
-        $this->assertEquals('REFUNDED', $updated->status);
+        $this->assertEquals('REFUND_PENDING', $updated->status);
         $this->assertNull($updated->qr_code_hash, 'QR code harus dimatikan.');
 
-        // Refund tercatat di tabel refunds
+        // Refund PENUH tercatat sebagai pengajuan (belum ada uang keluar)
         $this->assertDatabaseHas('refunds', [
             'order_id' => $order->id,
             'payment_id' => $payment->id,
+            'padel_booking_id' => $booking->id,
+            'requested_by_id' => $this->admin->id,
             'refund_amount' => 200000.00,
-            'status' => 'PROCESSED',
+            'status' => 'PENDING',
         ]);
 
         // Slot 10:00 - 11:00 harus kembali AVAILABLE pada matriks ketersediaan
@@ -678,10 +678,10 @@ class PadelAdminOverrideTest extends TestCase
             ->assertSee('Total Uang Masuk Kotor (Gross)')
             ->assertSee('Total Refund Dikeluarkan')
             ->assertSee('Pendapatan Bersih (Net Revenue)')
-            ->call('setPeriod', 'THIS_MONTH')
-            ->assertSet('period', 'THIS_MONTH')
-            ->call('setPeriod', 'ALL')
-            ->assertSet('period', 'ALL');
+            ->call('setPreset', 'bulan_ini')
+            ->assertSet('preset', 'bulan_ini')
+            ->call('setPreset', 'semua')
+            ->assertSet('preset', 'semua');
     }
 
     /**

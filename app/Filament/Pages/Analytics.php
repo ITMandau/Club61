@@ -2,182 +2,197 @@
 
 namespace App\Filament\Pages;
 
+use App\Models\Finance\LedgerEntry;
 use App\Models\Padel\PadelBooking;
-use App\Models\Pos\Payment;
+use App\Services\Finance\LedgerAnalytics;
+use App\Services\Finance\LedgerReport;
+use App\Services\Padel\CourtOccupancy;
 use App\Services\Padel\PadelBookingService;
 use BackedEnum;
-use Carbon\Carbon;
-use Filament\Pages\Page;
-use Illuminate\Support\Facades\DB;
 use BezhanSalleh\FilamentShield\Traits\HasPageShield;
+use Filament\Pages\Page;
+use Livewire\Attributes\Locked;
 use UnitEnum;
 
+/**
+ * Modul 17 Fase 3 — Analytics & Keuangan membaca dari Buku Transaksi (ledger_entries). Dulu omzet dihitung dari
+ * padel_bookings (F&B tidak terhitung sama sekali, refund PENDING ikut mengurangi, tanggal memakai created_at
+ * booking) sehingga angkanya tidak pernah sama dengan Buku Transaksi.
+ */
 class Analytics extends Page
 {
     use HasPageShield;
-    protected static string | BackedEnum | null $navigationIcon = 'heroicon-o-chart-bar-square';
+
+    protected static string|BackedEnum|null $navigationIcon = 'heroicon-o-chart-bar-square';
 
     protected static ?string $navigationLabel = 'Analytics & Keuangan';
 
-    protected static string | UnitEnum | null $navigationGroup = 'Main Menu';
+    protected static string|UnitEnum|null $navigationGroup = 'Keuangan';
 
     protected static ?string $title = 'Laporan Uang Masuk & Analytics';
 
-    protected static ?int $navigationSort = 2;
+    protected static ?int $navigationSort = 1;
 
     protected string $view = 'filament.pages.analytics';
 
-    public string $period = 'ALL'; // ALL, THIS_MONTH, THIS_WEEK, TODAY
+    /** Hanya diubah lewat setPreset() — nilai kiriman browser yang diubah manual ditolak Livewire. */
+    /**
+     * Lini layanan di kartu "Rincian Pendapatan" (kode = kategori Buku Transaksi). `soon` = modulnya belum ada,
+     * ditandai "Menyusul" selama belum ada transaksi. Coaching belum punya kategori sendiri di buku.
+     */
+    public const SERVICE_LINES = [
+        'SEWA_LAPANGAN' => ['label' => 'Sewa Lapangan Padel (Court Rental)', 'sub' => 'Sewa slot jam lapangan padel', 'soon' => false],
+        'ADDON_PADEL' => ['label' => 'Sewa Alat & Add-on Bola (Equipment)', 'sub' => 'Sewa raket, bola & perlengkapan padel', 'soon' => false],
+        'FNB' => ['label' => 'Food & Beverage (F&B)', 'sub' => 'Penjualan kafe / bar dari POS F&B', 'soon' => false],
+        'WELLNESS' => ['label' => 'Wellness & Sauna', 'sub' => 'Akses sauna di luar paket membership', 'soon' => true],
+        'COACHING' => ['label' => 'Pelatih & Coaching Session', 'sub' => 'Sesi privat / kelas bersama pelatih', 'soon' => true],
+    ];
 
-    public function setPeriod(string $period): void
+    /** Sumber uang yang dibayar online lewat Midtrans; sumber lain = dibayar di kasir. */
+    public const ONLINE_SOURCES = ['ONLINE_PADEL', 'RESCHEDULE_DELTA_ONLINE', 'ONLINE_MEMBERSHIP'];
+
+    #[Locked]
+    public string $preset = LedgerReport::DEFAULT_PRESET;
+
+    public ?string $dari = null;
+
+    public ?string $sampai = null;
+
+    public function setPreset(string $preset): void
     {
-        $this->period = $period;
+        $this->preset = array_key_exists($preset, LedgerReport::PRESETS) ? $preset : LedgerReport::DEFAULT_PRESET;
+    }
+
+    /**
+     * Tanggal kustom dari input browser: selain Y-m-d yang valid diabaikan (teks bebas dulu → Carbon::parse error 500).
+     *
+     * @return array{0: ?string, 1: ?string}
+     */
+    public function customDates(): array
+    {
+        $date = fn (?string $v) => is_string($v) && preg_match('/^\d{4}-\d{2}-\d{2}$/', $v) && checkdate((int) substr($v, 5, 2), (int) substr($v, 8, 2), (int) substr($v, 0, 4)) ? $v : null;
+
+        return [$date($this->dari), $date($this->sampai)];
+    }
+
+    /** @return array{0: ?string, 1: ?string} */
+    public function range(): array
+    {
+        return LedgerReport::resolveRange($this->preset, ...$this->customDates());
+    }
+
+    /** Tautan ke Buku Transaksi dengan periode yang sama (+ filter rincian yang diklik). */
+    public function bukuUrl(array $filters = []): string
+    {
+        [$dari, $sampai] = $this->customDates();
+
+        return BukuTransaksi::getUrl(array_filter([
+            'periode' => $this->preset,
+            'dari' => $this->preset === 'kustom' ? $dari : null,
+            'sampai' => $this->preset === 'kustom' ? $sampai : null,
+        ] + $filters, fn ($v) => filled($v)));
     }
 
     protected function getViewData(): array
     {
-        // REAKTIF FAIL-SAFE: Sinkronkan status tiket terlebih dahulu
+        // Sinkronkan status tiket (PAID lewat jadwal → EXPIRED/COMPLETED) sebelum menghitung okupansi.
         app(PadelBookingService::class)->syncExpiredAndCompletedBookings();
 
-        $now = now();
-        $queryFinancialBookings = PadelBooking::whereIn('status', ['PAID', 'CHECKED_IN', 'COMPLETED', 'EXPIRED']);
-        $queryOccupancyBookings = PadelBooking::whereIn('status', ['PAID', 'CHECKED_IN', 'COMPLETED', 'EXPIRED']);
-        $queryRefunds = DB::table('refunds');
-        $queryPayments = DB::table('payments')->where('status', 'SUCCESS');
-        // Pemasukan penjualan paket Membership: KANAL TERPISAH dari booking (item_type = 'MEMBERSHIP' di order_items),
-        // wajib dijumlahkan sendiri agar tidak tercampur dengan omzet booking lapangan (lihat $memberBenefit di bawah).
-        $queryMembershipOrders = \App\Models\Pos\Order::whereHas('items', fn ($q) => $q->where('item_type', 'MEMBERSHIP'))
-            ->where('payment_status', 'PAID');
+        [$from, $until] = $this->range();
+        $base = LedgerReport::applyDateRange(LedgerEntry::query(), $from, $until);
 
-        if ($this->period === 'TODAY') {
-            $today = $now->format('Y-m-d');
-            // CASH BASIS: Uang diakui saat kas diterima (created_at)
-            $queryFinancialBookings->whereDate('created_at', $today);
-            $queryOccupancyBookings->whereDate('booking_date', $today);
-            $queryRefunds->whereDate('created_at', $today);
-            $queryPayments->whereDate('created_at', $today);
-            $queryMembershipOrders->whereDate('created_at', $today);
-            $periodLabel = 'Hari Ini (' . $now->translatedFormat('d M Y') . ')';
-        } elseif ($this->period === 'THIS_WEEK') {
-            $startOfWeek = $now->copy()->startOfWeek()->format('Y-m-d');
-            $queryFinancialBookings->whereDate('created_at', '>=', $startOfWeek);
-            $queryOccupancyBookings->whereDate('booking_date', '>=', $startOfWeek);
-            $queryRefunds->whereDate('created_at', '>=', $startOfWeek);
-            $queryPayments->whereDate('created_at', '>=', $startOfWeek);
-            $queryMembershipOrders->whereDate('created_at', '>=', $startOfWeek);
-            $periodLabel = 'Minggu Ini (Sejak ' . $now->copy()->startOfWeek()->translatedFormat('d M') . ')';
-        } elseif ($this->period === 'THIS_MONTH') {
-            $startOfMonth = $now->copy()->startOfMonth()->format('Y-m-d');
-            $queryFinancialBookings->whereDate('created_at', '>=', $startOfMonth);
-            $queryOccupancyBookings->whereDate('booking_date', '>=', $startOfMonth);
-            $queryRefunds->whereDate('created_at', '>=', $startOfMonth);
-            $queryPayments->whereDate('created_at', '>=', $startOfMonth);
-            $queryMembershipOrders->whereDate('created_at', '>=', $startOfMonth);
-            $periodLabel = 'Bulan Ini (' . $now->translatedFormat('F Y') . ')';
-        } else {
-            $periodLabel = 'Semua Waktu (All-Time)';
-        }
-
-        // Agregat Finansial Riil (Cash Basis)
-        $financials = (clone $queryFinancialBookings)->selectRaw("
-            COALESCE(SUM(total_amount), 0) as gross_revenue,
-            COALESCE(SUM(court_fee), 0) as court_revenue,
-            COALESCE(SUM(equipment_fee), 0) as equipment_revenue,
-            COALESCE(SUM(coach_fee), 0) as coach_revenue,
-            COUNT(*) as total_bookings
-        ")->first();
-
-        $grossRevenue = (float) ($financials->gross_revenue ?? 0);
-        $courtRevenue = (float) ($financials->court_revenue ?? 0);
-        $equipmentRevenue = (float) ($financials->equipment_revenue ?? 0);
-        $coachRevenue = (float) ($financials->coach_revenue ?? 0);
-        $totalBookings = (int) ($financials->total_bookings ?? 0);
-
-        $totalRefund = (float) ($queryRefunds->sum('refund_amount') ?? 0);
-        $netRevenue = max(0, $grossRevenue - $totalRefund);
-
-        // Pemasukan Penjualan Membership (Kanal Kas Terpisah — Uang Diterima Saat Paket Dibeli, Bukan Saat Dipakai)
-        $membershipSalesRevenue = (float) $queryMembershipOrders->sum('grand_total');
-
-        // Nilai Benefit Membership yang Diredeem (INFORMASIONAL — BUKAN pendapatan baru, jangan dijumlahkan ke omzet).
-        // Uangnya sudah diakui SEKALI saat paket dibeli ($membershipSalesRevenue di atas); angka ini hanya menunjukkan
-        // berapa nilai manfaat yang benar-benar dipakai member dari booking pada periode ini (dipakai untuk analisis
-        // utilisasi kapasitas, BUKAN untuk laporan uang masuk). Filter status booking mengikuti $queryFinancialBookings
-        // (PAID/CHECKED_IN/COMPLETED/EXPIRED) sehingga booking yang dibatalkan & sudah dikembalikan kuotanya otomatis
-        // tidak ikut terhitung di sini.
-        $memberBenefit = (clone $queryFinancialBookings)->selectRaw("
-            COALESCE(SUM(member_discount_court), 0) as benefit_value,
-            COALESCE(SUM(member_hours_consumed), 0) as hours_consumed,
-            COUNT(CASE WHEN membership_balance_id IS NOT NULL THEN 1 END) as bookings_with_membership
-        ")->first();
-
-        $memberBenefitRedeemedValue = (float) ($memberBenefit->benefit_value ?? 0);
-        $memberBenefitHoursConsumed = (float) ($memberBenefit->hours_consumed ?? 0);
-        $bookingsUsingMembership = (int) ($memberBenefit->bookings_with_membership ?? 0);
-
-        // Omzet Gabungan Venue (Booking + Penjualan Membership) — angka "total uang masuk" yang sesungguhnya,
-        // dipisah dari $netRevenue lama agar dashboard yang sudah ada tidak berubah arti tanpa disengaja.
-        $combinedRevenue = $netRevenue + $membershipSalesRevenue;
-
-        // Breakdown Metode Pembayaran (Sesuai Periode Aktif)
-        $cashTotal = (float) (clone $queryPayments)->where('payment_method', 'CASH')->sum('amount');
-        $midtransTotal = (float) (clone $queryPayments)->where('payment_gateway', 'MIDTRANS')->sum('amount');
-        
-        // Sisa transaksi booking default tunai kasir / manual
-        $settledFromBookings = max(0, $grossRevenue - ($cashTotal + $midtransTotal));
-        $cashTotal += $settledFromBookings;
-
-        // Okupansi Lapangan Estimasi (Sesuai Jadwal Lapangan booking_date)
-        $totalHoursBooked = 0;
-        foreach ((clone $queryOccupancyBookings)->get(['start_time', 'end_time']) as $b) {
-            $totalHoursBooked += max(1, (int) $b->start_time->diffInHours($b->end_time));
-        }
-        // 4 Lapangan x 18 jam/hari (06:00 - 24:00) = 72 jam/hari
-        $daysInPeriod = match($this->period) {
-            'TODAY' => 1,
-            'THIS_WEEK' => 7,
-            'THIS_MONTH' => $now->daysInMonth,
-            default => 30,
-        };
-        $totalCapacityHours = 4 * 18 * $daysInPeriod;
-        $occupancyRate = $totalCapacityHours > 0 ? round(($totalHoursBooked / $totalCapacityHours) * 100, 1) : 0;
-
-        // 10 Transaksi Uang Masuk Terkini (Live Audit Log untuk PM)
-        $latestTransactions = PadelBooking::with(['user', 'court'])
-            ->whereIn('status', ['PAID', 'CHECKED_IN', 'COMPLETED', 'EXPIRED'])
-            ->latest('created_at')
-            ->take(10)
-            ->get();
-
-        // 5 Refund Terkini
-        $latestRefunds = DB::table('refunds')
-            ->leftJoin('orders', 'refunds.order_id', '=', 'orders.id')
-            ->leftJoin('users', 'orders.user_id', '=', 'users.id')
-            ->select('refunds.*', 'users.name as customer_name', 'orders.order_number')
-            ->latest('refunds.created_at')
-            ->take(5)
-            ->get();
+        $latest = LedgerReport::orderNewestFirst(LedgerReport::grouped(clone $base))->limit(10)->get();
+        $byCategory = collect(LedgerAnalytics::breakdown($base, 'category'))->keyBy('key');
+        $summary = LedgerReport::summary(clone $base, $from, $until);
+        $membership = (float) ($byCategory['MEMBERSHIP']['money_net'] ?? 0);
 
         return [
-            'periodLabel' => $periodLabel,
-            'grossRevenue' => $grossRevenue,
-            'totalRefund' => $totalRefund,
-            'netRevenue' => $netRevenue,
-            'courtRevenue' => $courtRevenue,
-            'equipmentRevenue' => $equipmentRevenue,
-            'coachRevenue' => $coachRevenue,
-            'totalBookings' => $totalBookings,
-            'totalHoursBooked' => $totalHoursBooked,
-            'occupancyRate' => $occupancyRate,
-            'cashTotal' => $cashTotal,
-            'midtransTotal' => $midtransTotal,
-            'membershipSalesRevenue' => $membershipSalesRevenue,
-            'memberBenefitRedeemedValue' => $memberBenefitRedeemedValue,
-            'memberBenefitHoursConsumed' => $memberBenefitHoursConsumed,
-            'bookingsUsingMembership' => $bookingsUsingMembership,
-            'combinedRevenue' => $combinedRevenue,
-            'latestTransactions' => $latestTransactions,
-            'latestRefunds' => $latestRefunds,
+            'periodLabel' => BukuTransaksi::periodLabel($this->preset, ...$this->customDates()),
+            'summary' => $summary,
+            'channels' => $this->channels(LedgerAnalytics::breakdown($base, 'source')),
+            'byMethod' => LedgerAnalytics::breakdown($base, 'method'),
+            'serviceLines' => $this->serviceLines($byCategory->all()),
+            'membership' => ['sales' => $membership, 'others' => $summary['money_net'] - $membership],
+            'occupancy' => CourtOccupancy::calculate($from, $until),
+            'memberUsage' => $this->memberUsage($from, $until),
+            'latest' => $latest,
+            'canSeeRefundQueue' => AntrianRefund::canAccess(),
         ];
+    }
+
+    /**
+     * Uang masuk bersih per kanal: kasir (semua POS) vs online (Midtrans).
+     *
+     * @param  list<array<string, mixed>>  $bySource
+     * @return array{cashier: array{money_net: float, transactions: int}, online: array{money_net: float, transactions: int}}
+     */
+    private function channels(array $bySource): array
+    {
+        $channels = ['cashier' => ['money_net' => 0.0, 'transactions' => 0], 'online' => ['money_net' => 0.0, 'transactions' => 0]];
+        foreach ($bySource as $row) {
+            $key = in_array($row['key'], self::ONLINE_SOURCES, true) ? 'online' : 'cashier';
+            $channels[$key]['money_net'] += $row['money_net'];
+            $channels[$key]['transactions'] += $row['transactions'];
+        }
+
+        return $channels;
+    }
+
+    /**
+     * Baris "Rincian Pendapatan per Lini Layanan": lini tetap + "Lainnya" (gym, merchandise, salon, dll.) bila ada.
+     * Membership punya kartu sendiri. Jumlah semua baris + membership = Pendapatan Bersih.
+     *
+     * @param  array<string, array<string, mixed>>  $byCategory
+     * @return list<array{code: string, label: string, sub: string, money_net: float, transactions: int, soon: bool, filter: list<string>}>
+     */
+    private function serviceLines(array $byCategory): array
+    {
+        $lines = [];
+        foreach (self::SERVICE_LINES as $code => $line) {
+            $row = $byCategory[$code] ?? null;
+            $lines[] = [
+                'code' => $code,
+                'label' => $line['label'],
+                'sub' => $line['sub'],
+                'money_net' => (float) ($row['money_net'] ?? 0),
+                'transactions' => (int) ($row['transactions'] ?? 0),
+                'soon' => $line['soon'] && $row === null,
+                'filter' => array_key_exists($code, LedgerEntry::CATEGORIES) ? [$code] : [],
+            ];
+        }
+
+        $others = collect($byCategory)->except([...array_keys(self::SERVICE_LINES), 'MEMBERSHIP']);
+        if ($others->isNotEmpty()) {
+            $lines[] = [
+                'code' => 'LAINNYA',
+                'label' => 'Lainnya ('.$others->pluck('label')->implode(', ').')',
+                'sub' => 'Penjualan di luar lini utama',
+                'money_net' => (float) $others->sum('money_net'),
+                'transactions' => (int) $others->sum('transactions'),
+                'soon' => false,
+                'filter' => $others->keys()->all(),
+            ];
+        }
+
+        return $lines;
+    }
+
+    /** Pemakaian kuota membership di lapangan (informasi utilisasi — bukan uang masuk baru). */
+    private function memberUsage(?string $from, ?string $until): array
+    {
+        $row = PadelBooking::query()->whereIn('status', CourtOccupancy::OCCUPYING_STATUSES)
+            ->when($from, fn ($q) => $q->whereDate('booking_date', '>=', $from))
+            ->when($until, fn ($q) => $q->whereDate('booking_date', '<=', $until))
+            ->toBase()
+            ->selectRaw('COALESCE(SUM(member_discount_court), 0) as value, COALESCE(SUM(member_hours_consumed), 0) as hours,
+                COUNT(CASE WHEN membership_balance_id IS NOT NULL THEN 1 END) as bookings')
+            ->first();
+
+        return ['value' => (float) $row->value, 'hours' => (float) $row->hours, 'bookings' => (int) $row->bookings];
+    }
+
+    public static function rupiah(float|int|null $value): string
+    {
+        return BukuTransaksi::rupiah($value);
     }
 }

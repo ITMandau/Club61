@@ -12,6 +12,10 @@ Artisan::command('inspire', function () {
 // Cadangan webhook Midtrans: order yang sudah dibayar tapi notifikasinya tidak sampai tetap lunas otomatis.
 // Mutex 10 menit (default 24 jam): kalau proses mati di tengah jalan (deploy/OOM), rekonsiliasi tidak ikut mati seharian.
 \Illuminate\Support\Facades\Schedule::command('payment:reconcile-midtrans')->everyFiveMinutes()->withoutOverlapping(10);
+// Bayar Otomatis kasir (QR / VA) yang ditinggal sampai kedaluwarsa → order ikut dibatalkan (bukan UNPAID selamanya).
+\Illuminate\Support\Facades\Schedule::command('pos:sweep-auto-payments')->everyFiveMinutes()->withoutOverlapping(10);
 // Retensi Log Aktivitas (Modul 16) — default simpan 24 bulan, atur lewat AUDIT_RETENTION_MONTHS.
 \Illuminate\Support\Facades\Schedule::command('audit:prune')->dailyAt('02:30')->withoutOverlapping();
 
+// Modul 17: cocokkan Buku Transaksi dengan pembayaran & refund kemarin (selisih → Log Aktivitas KRITIS).
+\Illuminate\Support\Facades\Schedule::command('ledger:verify')->dailyAt('01:15')->withoutOverlapping();

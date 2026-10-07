@@ -76,9 +76,90 @@ class LaunchAuditRegressionTest extends TestCase
         // Notifikasi duplikat sesi yang sama tetap diabaikan.
         $orchestrator->markOrderAsPaid($order, ['payment_gateway' => 'MIDTRANS', 'transaction_id' => 'ORD-2SES_1', 'payment_method' => 'BANK_TRANSFER', 'amount' => 200000]);
 
-        $this->assertSame(2, Payment::where('order_id', $order->id)->where('status', 'SUCCESS')->count());
+        // Uang kedua dicatat terpisah (DUPLICATE, tidak dihitung sebagai pelunasan) + refund penuh.
+        $this->assertSame(1, Payment::where('order_id', $order->id)->where('status', 'SUCCESS')->count());
+        $this->assertSame(1, Payment::where('order_id', $order->id)->where('status', PaymentOrchestratorService::DUPLICATE_STATUS)->count());
+        $this->assertSame('PAID', $order->fresh()->payment_status);
         $this->assertSame(1, Refund::where('order_id', $order->id)->where('status', 'PENDING')->count());
         $this->assertEquals(200000, (float) Refund::where('order_id', $order->id)->value('refund_amount'));
+    }
+
+    private function openShift(User $cashier): void
+    {
+        \App\Models\Pos\PosCashierShift::create([
+            'shift_number' => 'SFT-L-'.Str::random(4), 'counter' => 'PADEL_FRONTDESK', 'status' => 'OPEN',
+            'opened_by_id' => $cashier->id, 'opened_at' => now(), 'starting_cash' => 0, 'expected_cash' => 0,
+        ]);
+    }
+
+    public function test_snap_payment_after_the_cashier_already_settled_is_recorded_and_refunded(): void
+    {
+        $cashier = User::factory()->superAdmin()->create();
+        $this->openShift($cashier);
+        $order = $this->order('ORD-POSX', 200000);
+        $this->booking($order, 'PENDING_PAYMENT');
+        Payment::create(['order_id' => $order->id, 'payment_gateway' => 'MIDTRANS', 'transaction_id' => 'ORD-POSX', 'amount' => 200000, 'payment_method' => 'QRIS', 'status' => 'PENDING']);
+        $orchestrator = app(PaymentOrchestratorService::class);
+
+        // Customer datang ke kasir (Snap belum dipakai) → kasir menerima EDC.
+        $orchestrator->markOrderAsPaid($order, ['payment_gateway' => 'CASHIER_POS', 'counter' => 'PADEL_FRONTDESK', 'transaction_id' => 'ORD-POSX', 'payment_method' => 'EDC_BCA', 'amount' => 200000, 'user' => $cashier, 'require_pending_payment' => true]);
+        $bill = Payment::where('order_id', $order->id)->where('status', 'SUCCESS')->firstOrFail();
+        $this->assertStringStartsWith('POS-', $bill->transaction_id, 'id Snap tidak dipakai sebagai id pelunasan kasir');
+
+        // Customer ternyata tetap membayar di Snap. Dulu: dianggap duplikat → uang hilang tanpa catatan.
+        $orchestrator->markOrderAsPaid($order, ['payment_gateway' => 'MIDTRANS', 'transaction_id' => 'ORD-POSX', 'payment_method' => 'QRIS', 'amount' => 200000]);
+
+        $this->assertSame(1, Payment::where('order_id', $order->id)->where('status', PaymentOrchestratorService::DUPLICATE_STATUS)->count());
+        $this->assertEquals(200000, (float) Refund::where('order_id', $order->id)->where('status', 'PENDING')->sum('refund_amount'));
+    }
+
+    public function test_double_payment_is_refunded_in_full_even_when_a_surcharge_is_still_open(): void
+    {
+        $order = $this->order('ORD-DLT', 300000, 'PARTIALLY_PAID'); // 200rb lunas + selisih reschedule 100rb belum
+        $booking = $this->booking($order, 'LOCKED', ['reschedule_count' => 1]);
+        Payment::create(['order_id' => $order->id, 'payment_gateway' => 'MIDTRANS', 'transaction_id' => 'ORD-DLT_2', 'amount' => 200000, 'payment_method' => 'QRIS', 'status' => 'SUCCESS',
+            'payload_log' => ['midtrans_order_ids' => ['ORD-DLT_1', 'ORD-DLT_2']]]);
+        Payment::create(['order_id' => $order->id, 'payment_gateway' => 'CASHIER_POS', 'transaction_id' => 'SUPP-DLT', 'amount' => 100000, 'payment_method' => 'MENUNGGU_PEMBAYARAN', 'status' => 'PENDING',
+            'payload_log' => ['type' => 'RESCHEDULE_PRICE_DELTA', 'booking_id' => $booking->id]]);
+
+        // VA lama (sesi 1) ikut ditransfer.
+        app(PaymentOrchestratorService::class)->markOrderAsPaid($order, ['payment_gateway' => 'MIDTRANS', 'transaction_id' => 'ORD-DLT_1', 'payment_method' => 'BANK_TRANSFER', 'amount' => 200000]);
+
+        $this->assertEquals(200000, (float) Refund::where('order_id', $order->id)->sum('refund_amount'), 'seluruh nominal dikembalikan');
+        $this->assertSame('PARTIALLY_PAID', $order->fresh()->payment_status, 'selisih reschedule tetap harus ditagih');
+        $this->assertSame('PENDING', Payment::where('transaction_id', 'SUPP-DLT')->value('status'));
+    }
+
+    public function test_member_hours_come_back_when_an_unpaid_booking_expires(): void
+    {
+        $plan = \App\Models\Membership\MembershipPlan::create(['code' => 'MBR-L1', 'name' => 'Padel 10', 'ownership_type' => 'INDIVIDUAL', 'duration_days' => 30, 'price' => 1000000, 'is_active' => true]);
+        \App\Models\Membership\MembershipPlanBenefit::create(['plan_id' => $plan->id, 'facility' => 'PADEL', 'quota_type' => 'HOURS', 'quota_value' => 10, 'discount_percent' => 0]);
+        $balances = app(\App\Services\Membership\MembershipBalanceService::class);
+        $membership = $balances->activateMembership($balances->purchasePlan($this->customer, $plan))->fresh('balances');
+        $padel = $membership->balanceFor('PADEL');
+        $balances->adjustQuota(balanceId: $padel->id, changeType: 'DECREMENT', quantity: 1.0, notes: 'checkout');
+
+        $order = $this->order('ORD-MHR', 200000);
+        $booking = $this->booking($order, 'PENDING_PAYMENT', ['expires_at' => now()->subMinutes(10), 'membership_balance_id' => $padel->id, 'member_hours_consumed' => 1]);
+
+        app(PadelBookingService::class)->releaseExpiredLocks();
+
+        $this->assertSame('EXPIRED', $booking->fresh()->status);
+        $this->assertEquals(10, (float) $padel->fresh()->remaining_quota, 'jam member yang dipotong saat checkout dikembalikan');
+        $this->assertEquals(0, (float) $booking->fresh()->member_hours_consumed);
+    }
+
+    public function test_surcharge_on_a_fully_voucher_covered_order_does_not_use_the_voucher_again(): void
+    {
+        \App\Models\Pos\Voucher::create(['code' => 'FREE100', 'discount_type' => 'FIXED', 'discount_value' => 200000, 'quota' => 5, 'used_count' => 1, 'valid_until' => now()->addMonth(), 'is_active' => true]);
+        $order = Order::create(['order_number' => 'ORD-VCR', 'user_id' => $this->customer->id, 'order_type' => 'ONLINE_BOOKING', 'subtotal' => 200000, 'discount_amount' => 200000, 'grand_total' => 100000, 'payment_status' => 'PARTIALLY_PAID', 'voucher_code' => 'FREE100']);
+        Payment::create(['order_id' => $order->id, 'payment_gateway' => 'PROMO_VOUCHER', 'transaction_id' => 'ORD-VCR', 'amount' => 0, 'payment_method' => 'PROMO_VOUCHER', 'status' => 'SUCCESS']);
+        Payment::create(['order_id' => $order->id, 'payment_gateway' => 'MIDTRANS', 'transaction_id' => 'SUPP-VCR', 'amount' => 100000, 'payment_method' => 'QRIS', 'status' => 'PENDING', 'payload_log' => ['type' => 'RESCHEDULE_PRICE_DELTA']]);
+
+        app(PaymentOrchestratorService::class)->markOrderAsPaid($order, ['payment_gateway' => 'MIDTRANS', 'transaction_id' => 'SUPP-VCR', 'payment_method' => 'QRIS', 'amount' => 100000]);
+
+        $this->assertSame(5, (int) \App\Models\Pos\Voucher::where('code', 'FREE100')->value('quota'));
+        $this->assertSame(1, (int) \App\Models\Pos\Voucher::where('code', 'FREE100')->value('used_count'));
     }
 
     public function test_reconciliation_waits_for_a_long_payment_window_before_closing_a_bill(): void

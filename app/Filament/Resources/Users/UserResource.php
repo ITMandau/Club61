@@ -29,9 +29,9 @@ class UserResource extends Resource
 
     protected static ?string $navigationLabel = 'Kelola Pengguna';
 
-    protected static string|\UnitEnum|null $navigationGroup = 'Main Menu';
+    protected static string|\UnitEnum|null $navigationGroup = 'Karyawan & Akses';
 
-    protected static ?int $navigationSort = 5;
+    protected static ?int $navigationSort = 2;
 
     public static function form(Schema $schema): Schema
     {

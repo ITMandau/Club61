@@ -353,14 +353,14 @@ class MembershipSeeder extends Seeder
                 'balance_id' => $rezaSauna->id,
                 'change_type' => 'TOPUP',
                 'quantity' => 10.00,
-                'notes' => 'Aktivasi kuota Sauna & Ice Bath Gold (10 Sesi)',
+                'notes' => 'Aktivasi kuota Sauna Gold (10 Sesi)',
             ]);
 
             MembershipUsageLog::create([
                 'balance_id' => $rezaSauna->id,
                 'change_type' => 'DECREMENT',
                 'quantity' => -2.00,
-                'notes' => 'Check-in Sauna & Cold Plunge Weekend (2 Sesi)',
+                'notes' => 'Check-in Sauna Weekend (2 Sesi)',
             ]);
 
             if ($court2) {
@@ -440,7 +440,7 @@ class MembershipSeeder extends Seeder
                 'last_played' => now()->subDays(5)->format('d M Y, 17:00 WIB (Court 2)'),
                 'next_schedule' => now()->addDays(4)->format('d M Y, 17:00 - 19:00 WIB (Court 2)'),
                 'status' => 'ACTIVE',
-                'notes' => 'Sesi sore santai + sauna & ice bath',
+                'notes' => 'Sesi sore santai + sauna',
             ],
             [
                 'name' => 'Dimas Setiawan',

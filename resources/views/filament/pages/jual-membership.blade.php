@@ -13,13 +13,8 @@
         .pos-terminal-card { background: #FFFFFF; border: 1.5px solid #DFC387; border-radius: 14px; display: flex; flex-direction: column; overflow: hidden; min-height: 0; }
         .pos-terminal-header { padding: 0.75rem 1.2rem; background: linear-gradient(135deg, #FAF5E8 0%, #F5E8C7 100%); border-bottom: 1.5px solid #DFC387; display: flex; justify-content: space-between; align-items: center; flex-shrink: 0; flex-wrap: wrap; gap: 0.5rem; }
         .pos-terminal-body { flex: 1; overflow-y: auto; padding: 1.2rem 1.4rem; display: flex; flex-direction: column; gap: 1.1rem; }
-        @media print {
-            body * { visibility: hidden; }
-            #printable-membership-receipt, #printable-membership-receipt * { visibility: visible; }
-            #printable-membership-receipt { position: absolute; left: 0; top: 0; width: 78mm; max-width: 78mm; border: none !important; box-shadow: none !important; padding: 5mm !important; }
-            #printable-membership-receipt .no-print { display: none !important; }
-        }
     </style>
+    @include('pos.partials.receipt-print-style', ['selectors' => ['#printable-membership-receipt']])
 
     @include('filament.partials.pos-subnav', ['activePos' => 'membership'])
     @include('filament.partials.pos-history-tabs', ['isHistory' => $posStep === 'history', 'canShowHistory' => $this->canShowHistoryTab])
@@ -385,6 +380,9 @@
                             </div>
                         </div>
 
+                        @include('pos.partials.qris-mode-toggle', ['grandTotal' => $this->grandTotal])
+
+                        @if($qrisMode !== 'MIDTRANS' || \App\Services\Pos\PosMidtransQrisService::resolveMethod($posOnlineMethod, (float) $this->grandTotal) === null)
                         <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.85rem;">
                             <div>
                                 <label style="display:block; font-size:0.75rem; font-weight:800; color:#1F170D; margin-bottom:0.3rem;">Penyedia / Acquirer QRIS *</label>
@@ -409,6 +407,7 @@
                             <label style="display:block; font-size:0.75rem; font-weight:800; color:#1F170D; margin-bottom:0.3rem;">Nama Pengirim di Resi QRIS (Opsional)</label>
                             <input type="text" wire:model="qrisSenderName" placeholder="Contoh: Budi Santoso / BCA Mobile" class="pos-input" style="background:#FFFFFF;" autocomplete="off">
                         </div>
+                        @endif
                     </div>
                 @endif
 
@@ -537,124 +536,13 @@
     @endif
 
     <!-- Success Modal & Thermal Struk -->
+    {{-- QR Midtrans menunggu dibayar customer --}}
+    @include('pos.partials.midtrans-qris-modal', ['pendingQris' => $pendingQris, 'pollAction' => 'pollPendingQris', 'cancelAction' => 'cancelPendingQris', 'simulateAction' => 'simulatePendingQrisPaid'])
+
     @if ($showSuccessModal && $completedMembershipData)
         <div
             style="position: fixed; inset: 0; background: rgba(0,0,0,0.6); display: flex; align-items: center; justify-content: center; z-index: 1000; padding: 1rem;">
-            <div id="printable-membership-receipt"
-                style="background: #FFFFFF; border: 2px solid #D4AF37; border-radius: 20px; width: 100%; max-width: 440px; padding: 1.5rem; box-shadow: 0 20px 40px rgba(0,0,0,0.3);">
-                <div
-                    style="text-align: center; border-bottom: 1.5px dashed #DFC387; padding-bottom: 1rem; margin-bottom: 1rem;">
-                    <div
-                        style="font-size: 0.6875rem; font-weight: 800; color: #8C6418; letter-spacing: 0.1em; text-transform: uppercase;">
-                        Struk Aktivasi Membership</div>
-                    <div
-                        style="font-size: 1.375rem; font-weight: 900; color: #1F170D; font-family: serif; margin-top: 0.25rem;">
-                        CLUB 61 MEDAN</div>
-                    <div style="font-size: 0.75rem; color: #665033; margin-top: 0.25rem;">Nomor:
-                        {{ $completedMembershipData['membership_code'] }}</div>
-                </div>
-
-                <div
-                    style="display: flex; flex-direction: column; gap: 0.35rem; font-size: 0.75rem; color: #1F170D; margin-bottom: 1rem;">
-                    <div style="display: flex; justify-content: space-between;">
-                        <span style="color: #7A643E;">No. Order</span>
-                        <strong style="font-family: monospace;">{{ $completedMembershipData['order_number'] }}</strong>
-                    </div>
-                    <div style="display: flex; justify-content: space-between;">
-                        <span style="color: #7A643E;">Waktu</span>
-                        <span>{{ $completedMembershipData['created_at'] ?? '-' }}</span>
-                    </div>
-                    <div style="display: flex; justify-content: space-between;">
-                        <span style="color: #7A643E;">Kasir</span>
-                        <span>{{ $completedMembershipData['cashier_name'] ?? '-' }}</span>
-                    </div>
-                    <div style="display: flex; justify-content: space-between;">
-                        <span style="color: #7A643E;">Metode</span>
-                        <span>{{ $completedMembershipData['payment_method'] ?? '-' }}</span>
-                    </div>
-                    @php $pm = $completedMembershipData['payment_meta'] ?? []; @endphp
-                    @if (! empty($pm['card_last_4']))
-                        <div style="font-size: 0.6875rem; color: #665033; text-align: right;">
-                            **** {{ $pm['card_last_4'] }} &bull; Appr {{ $pm['approval_code'] ?? '-' }} &bull; Trace {{ $pm['trace_number'] ?? '-' }}
-                        </div>
-                    @elseif (! empty($pm['rrn']) || ! empty($pm['qris_rrn']))
-                        <div style="font-size: 0.6875rem; color: #665033; text-align: right;">RRN {{ $pm['rrn'] ?? $pm['qris_rrn'] }}</div>
-                    @endif
-                    <div style="display: flex; justify-content: space-between;">
-                        <span style="color: #7A643E;">Member</span>
-                        <strong>{{ $completedMembershipData['customer_name'] }}</strong>
-                    </div>
-                    <div style="display: flex; justify-content: space-between;">
-                        <span style="color: #7A643E;">Paket</span>
-                        <strong>{{ $completedMembershipData['plan_name'] }}</strong>
-                    </div>
-                    <div style="display: flex; justify-content: space-between;">
-                        <span style="color: #7A643E;">Masa Aktif</span>
-                        <span>{{ $completedMembershipData['start_date'] }} s/d
-                            {{ $completedMembershipData['end_date'] }}</span>
-                    </div>
-                    @if (isset($completedMembershipData['subtotal']))
-                        <div style="display: flex; justify-content: space-between;">
-                            <span style="color: #7A643E;">Subtotal</span>
-                            <span>Rp {{ number_format($completedMembershipData['subtotal'], 0, ',', '.') }}</span>
-                        </div>
-                    @endif
-                    @if (($completedMembershipData['tax_amount'] ?? 0) > 0)
-                        <div style="display: flex; justify-content: space-between;">
-                            <span style="color: #7A643E;">{{ $completedMembershipData['tax_name'] ?: 'Pajak' }}</span>
-                            <span>Rp {{ number_format($completedMembershipData['tax_amount'], 0, ',', '.') }}</span>
-                        </div>
-                    @endif
-                    @if (($completedMembershipData['service_charge'] ?? 0) > 0)
-                        <div style="display: flex; justify-content: space-between;">
-                            <span style="color: #7A643E;">{{ $completedMembershipData['admin_fee_name'] ?: 'Biaya Layanan' }}</span>
-                            <span>Rp {{ number_format($completedMembershipData['service_charge'], 0, ',', '.') }}</span>
-                        </div>
-                    @endif
-                    <div style="display: flex; justify-content: space-between;">
-                        <span style="color: #7A643E;">Total Bayar</span>
-                        <strong>Rp {{ number_format($completedMembershipData['grand_total'], 0, ',', '.') }}</strong>
-                    </div>
-                </div>
-
-                <!-- Saldo Kuota Aktif -->
-                <div
-                    style="background: #FAF5E8; border: 1px solid #DFC387; border-radius: 8px; padding: 0.75rem; margin-bottom: 1.25rem;">
-                    <div
-                        style="font-size: 0.6875rem; font-weight: 800; color: #7A5818; margin-bottom: 0.35rem; text-transform: uppercase;">
-                        Saldo Kuota Terisi (Top-Up)</div>
-                    @foreach ($completedMembershipData['balances'] as $b)
-                        <div
-                            style="display: flex; justify-content: space-between; font-size: 0.75rem; color: #1F170D; padding: 0.15rem 0;">
-                            <span>{{ $b['facility'] }}</span>
-                            <strong>
-                                @if ($b['quota_type'] === 'HOURS')
-                                    {{ (float) $b['remaining_quota'] }} Jam
-                                @elseif($b['quota_type'] === 'VISITS')
-                                    {{ (float) $b['remaining_quota'] }} Sesi
-                                @else
-                                    Diskon {{ $b['discount_percent'] }}%
-                                @endif
-                            </strong>
-                        </div>
-                    @endforeach
-                </div>
-
-                @if (! empty($completedMembershipData['is_reprint']))
-                    <div style="text-align: center; font-size: 0.6875rem; font-weight: 900; color: #1F170D; margin-bottom: 0.75rem;">*** CETAK ULANG {{ $completedMembershipData['reprinted_at'] }} ***</div>
-                @endif
-
-                <div class="no-print" style="display: flex; gap: 0.5rem;">
-                    <button type="button" onclick="window.print()"
-                        style="flex: 1; background: #FAF5E8; border: 1.5px solid #DFC387; color: #7A5818; padding: 0.6rem; border-radius: 8px; font-weight: 800; font-size: 0.75rem; cursor: pointer;">
-                        Cetak Struk
-                    </button>
-                    <button type="button" wire:click="closeReceipt"
-                        style="flex: 1; background: #D4AF37; border: none; color: #1F170D; padding: 0.6rem; border-radius: 8px; font-weight: 900; font-size: 0.75rem; cursor: pointer;">
-                        {{ $receiptFromHistory ? 'Tutup' : 'Selesai & Transaksi Baru' }}
-                    </button>
-                </div>
-            </div>
+            @include('pos.receipts.membership', ['receipt' => $completedMembershipData, 'withActions' => true, 'receiptFromHistory' => $receiptFromHistory])
         </div>
     @endif
 </div>

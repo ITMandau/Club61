@@ -115,9 +115,9 @@
                 </div>
             </div>
 
-            <!-- Saldo Sauna & Cold Plunge -->
+            <!-- Saldo Sauna -->
             <div class="adm-metric-card">
-                <div class="adm-metric-label">Finnish Sauna &amp; Plunge</div>
+                <div class="adm-metric-label">Finnish Sauna</div>
                 <div class="adm-metric-val" style="color: #5C410F;">
                     @if($saunaBal && $saunaBal->initial_quota)
                         {{ (float) $saunaBal->remaining_quota }} <span style="font-size: 0.875rem; font-weight: 600;">/ {{ (float) $saunaBal->initial_quota }} Sesi</span>
@@ -308,7 +308,7 @@
                                         <span style="font-size: 0.75rem; font-weight: normal; color: #7A643E;">({{ $c->checkin_at->diffForHumans() }})</span>
                                     </td>
                                     <td style="padding: 0.85rem 1rem; font-weight: 800; color: #5C410F;">
-                                        {{ $c->facility === 'GYM' ? 'Fitness & Gym Club 61' : 'Finnish Sauna & Cold Plunge' }}
+                                        {{ app(\App\Services\Membership\MembershipFacilityService::class)->name($c->facility) }}
                                     </td>
                                     <td style="padding: 0.85rem 1rem;">
                                         <span class="adm-pill adm-pill-green">AKSES TERVERIFIKASI</span>

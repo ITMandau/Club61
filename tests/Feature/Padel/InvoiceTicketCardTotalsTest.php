@@ -19,7 +19,7 @@ class InvoiceTicketCardTotalsTest extends TestCase
             ->assertOk()
             ->getContent();
 
-        $card = substr($html, strpos($html, 'Total Ticket Amount:') - 4000, 5000);
+        $card = substr($html, strpos($html, 'Total ticket amount') - 4000, 5000);
 
         $this->assertStringContainsString('ticket.order.service_charge', $card);
         $this->assertStringContainsString('ticket.order.tax_amount', $card);

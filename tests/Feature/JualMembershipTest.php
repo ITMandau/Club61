@@ -138,6 +138,7 @@ class JualMembershipTest extends TestCase
             ->set('walkInName', 'Pembeli QRIS')
             ->set('walkInPhone', '081211113333')
             ->set('paymentMethod', 'QRIS')
+            ->set('qrisMode', 'MANUAL')
             ->call('submitSale');
 
         $this->assertEquals(0, Order::where('order_type', 'MEMBERSHIP')->count());
@@ -152,9 +153,11 @@ class JualMembershipTest extends TestCase
             ->set('walkInPhone', '081211114444')
             ->set('paymentMethod', 'QRIS')
             ->set('qrisProvider', 'GOPAY_QRIS')
-            ->set('qrisRrn', '998877665544')
+            ->set('qrisMode', 'MANUAL')->set('qrisRrn', '998877665544')
             ->set('qrisSenderName', 'Budi Santoso')
-            ->call('submitSale');
+            ->call('submitSale')
+            // Struk langsung dicetak di aplikasi Club61, sama dengan Bayar Otomatis.
+            ->assertDispatched('club61-auto-print', fn ($event, $params) => $params['next'] === 'closeReceipt' && str_contains($params['html'], 'printable-membership-receipt'));
 
         $order = Order::where('order_type', 'MEMBERSHIP')->latest('id')->first();
         $this->assertNotNull($order);

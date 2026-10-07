@@ -50,13 +50,17 @@ class MembershipFacility extends Model
             if ($facility->getOriginal('is_system') && ($facility->isDirty('usage_mode') || $facility->isDirty('is_system'))) {
                 throw new \LogicException('Mode pemakaian fasilitas sistem tidak boleh diubah.');
             }
+            // Kuota yang sudah dijual tidak boleh berubah arti (mis. kunjungan → info saja = kuota member hilang).
+            if ($facility->isDirty('usage_mode') && $facility->isInUse()) {
+                throw new \LogicException('Mode pemakaian tidak bisa diubah: fasilitas sudah dipakai di paket / kartu member.');
+            }
         });
 
         static::deleting(function (self $facility) {
             if ($facility->is_system) {
                 throw new \LogicException('Fasilitas sistem tidak boleh dihapus — nonaktifkan saja.');
             }
-            if (MembershipPlanBenefit::where('facility', $facility->code)->exists() || UserMembershipBalance::where('facility', $facility->code)->exists()) {
+            if ($facility->isInUse()) {
                 throw new \LogicException('Fasilitas masih dipakai di paket / kartu member — nonaktifkan saja.');
             }
         });
@@ -64,5 +68,14 @@ class MembershipFacility extends Model
         $flush = fn () => DB::afterCommit(fn () => app(MembershipFacilityService::class)->flush());
         static::saved($flush);
         static::deleted($flush);
+    }
+
+    /** Sudah dipakai di paket atau di kartu member yang sudah terjual. */
+    public function isInUse(): bool
+    {
+        $code = $this->getOriginal('code') ?? $this->code;
+
+        return MembershipPlanBenefit::where('facility', $code)->exists()
+            || UserMembershipBalance::where('facility', $code)->exists();
     }
 }
