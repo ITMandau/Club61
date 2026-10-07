@@ -528,6 +528,11 @@ class JualMembership extends Page
             ->title('Membership berhasil diterbitkan dan langsung aktif!')
             ->success()
             ->send();
+
+        // Struk langsung dicetak di aplikasi Club61 — sama dengan Bayar Otomatis (semua metode, satu alur).
+        if ($orderId = Order::where('order_number', $receipt['order_number'] ?? null)->value('id')) {
+            $this->queueAutoPrint($orderId, 'pos.receipts.membership', ['receipt' => $receipt], 'closeReceipt');
+        }
     }
 
     // ===================== QRIS MIDTRANS (QR DI LAYAR KASIR) =====================

@@ -39,7 +39,7 @@ class ReceiptPaperSizeTest extends TestCase
         // PC: 28 kolom (huruf lebih besar dari 32 kolom font printer).
         $this->assertSame(28, ReceiptPaper::PC_COLUMNS);
         $this->assertStringContainsString("probe.textContent = 'M'.repeat(28);", $script);
-        $this->assertStringContainsString('window.club61ReceiptLayout(el, 28)', $script);
+        $this->assertStringContainsString('window.club61ReceiptLayout(one, 28)', $script);
         $this->assertStringContainsString('data-club61-receipt-print', view('pos.partials.receipt-print-style', ['selectors' => ['#struk']])->render());
 
         // Livewire menyisipkan script-nya sebelum tag penutup body PERTAMA di respons. Tag head/body/html di dalam

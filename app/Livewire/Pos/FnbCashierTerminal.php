@@ -193,6 +193,7 @@ class FnbCashierTerminal extends Component
                 'name' => $menu->name,
                 'price' => (float) $menu->base_price,
                 'quantity' => 1,
+                'notes' => '',
             ];
         }
     }
@@ -612,6 +613,7 @@ class FnbCashierTerminal extends Component
         $itemsPayload = collect($this->cart)->map(fn (array $item) => [
             'menu_id' => $item['menu_id'],
             'quantity' => $item['quantity'],
+            'notes' => $item['notes'] ?? null,
         ])->values()->all();
 
         try {
@@ -646,12 +648,7 @@ class FnbCashierTerminal extends Component
             'order_type' => $order->order_type,
             'table_number' => $order->table_number,
             'customer_name' => $order->customer_name,
-            'items' => $order->items->map(fn ($item) => [
-                'name' => $item->item_name,
-                'quantity' => $item->quantity,
-                'unit_price' => (float) $item->unit_price,
-                'subtotal' => (float) $item->subtotal,
-            ])->all(),
+            'items' => $this->receiptItems($order->items),
             'subtotal' => (float) $order->subtotal,
             'tax_amount' => (float) $order->tax_amount,
             'tax_name' => $result['finance']['tax_name'],
@@ -667,6 +664,9 @@ class FnbCashierTerminal extends Component
         $this->resetFnbCart();
         $this->posStep = 'selection';
         $this->showReceiptModal = true;
+
+        // Struk langsung dicetak di aplikasi Club61 — sama dengan Bayar Otomatis (semua metode, satu alur).
+        $this->queueAutoPrint($order->id, 'pos.receipts.fnb-print', ['receipt' => $this->completedOrderData], 'startNewTransaction');
     }
 
     protected function resetFnbCart(): void
@@ -756,7 +756,7 @@ class FnbCashierTerminal extends Component
         $this->posStep = 'selection';
         $this->showReceiptModal = true;
         // Lunas lewat Bayar Otomatis → struk langsung dicetak di aplikasi Club61 (tanpa buka modal / tekan Cetak Struk).
-        $this->queueAutoPrint($order->id, 'pos.receipts.fnb', ['receipt' => $this->completedOrderData], 'startNewTransaction');
+        $this->queueAutoPrint($order->id, 'pos.receipts.fnb-print', ['receipt' => $this->completedOrderData], 'startNewTransaction');
     }
 
     /** Buka kembali struk transaksi lama dari daftar riwayat (rekonstruksi dari data tersimpan). */
@@ -785,6 +785,21 @@ class FnbCashierTerminal extends Component
     }
 
     /** Data struk dari order tersimpan (cetak ulang dari Riwayat & struk setelah QR Midtrans lunas). */
+    /** Baris struk + stasiun (BAR / KITCHEN, dari menu) & catatan item untuk slip pesanan bar / dapur. */
+    protected function receiptItems(\Illuminate\Support\Collection $items): array
+    {
+        $stations = FnbMenu::whereIn('id', $items->pluck('reference_id')->filter()->all())->pluck('station', 'id');
+
+        return $items->map(fn ($item) => [
+            'name' => $item->item_name,
+            'quantity' => $item->quantity,
+            'unit_price' => (float) $item->unit_price,
+            'subtotal' => (float) $item->subtotal,
+            'notes' => $item->notes,
+            'station' => strtoupper((string) ($stations[$item->reference_id] ?? 'BAR')) === 'KITCHEN' ? 'KITCHEN' : 'BAR',
+        ])->values()->all();
+    }
+
     protected function receiptDataFor(\App\Models\Pos\Order $order): array
     {
         $payment = $order->payments->firstWhere('status', 'SUCCESS') ?? $order->payments->first();
@@ -816,12 +831,7 @@ class FnbCashierTerminal extends Component
             'order_type' => $order->order_type,
             'table_number' => $order->table_number,
             'customer_name' => $order->customer_name,
-            'items' => $order->items->where('item_type', 'FNB')->map(fn ($item) => [
-                'name' => $item->item_name,
-                'quantity' => $item->quantity,
-                'unit_price' => (float) $item->unit_price,
-                'subtotal' => (float) $item->subtotal,
-            ])->values()->all(),
+            'items' => $this->receiptItems($order->items->where('item_type', 'FNB')),
             'subtotal' => (float) $order->subtotal,
             'tax_amount' => (float) $order->tax_amount,
             'tax_name' => \App\Models\Pos\ClubFinanceSetting::getSettings()->tax_name,

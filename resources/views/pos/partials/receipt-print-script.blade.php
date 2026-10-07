@@ -164,8 +164,9 @@
             return out;
         };
 
+        // el = satu struk atau beberapa (struk customer + slip dapur / bar): dikirim SEKALI, tiap slip diakhiri jarak sobek.
         window.club61PrintRawBt = function (el) {
-            const bytes = window.club61LayoutToEscPos(window.club61ReceiptLayout(el));
+            const bytes = [].concat(...(Array.isArray(el) ? el : [el]).map((one) => window.club61LayoutToEscPos(window.club61ReceiptLayout(one))));
             let binary = '';
             for (let i = 0; i < bytes.length; i += 4096) {
                 binary += String.fromCharCode.apply(null, bytes.slice(i, i + 4096));
@@ -223,7 +224,9 @@
          * {{ $paper::PC_COLUMNS }} karakter tepat selebar kepala print. Judul & TOTAL sedikit dipanjangkan ke atas (dobel tinggi di printer).
          */
         window.club61PrintBrowser = function (el) {
-            const layout = window.club61ReceiptLayout(el, {{ $paper::PC_COLUMNS }});
+            // Beberapa slip → satu lembar panjang, dipisah jarak sobek.
+            const gap = Array.from({ length: {{ $paper::FEED_LINES }} }, () => ({ text: '', bold: false, big: false, align: 'left' }));
+            const layout = [].concat(...(Array.isArray(el) ? el : [el]).map((one, i) => (i ? gap : []).concat(window.club61ReceiptLayout(one, {{ $paper::PC_COLUMNS }}))));
             const lineMm = {{ $paper::LINE_MM }};
             const bigMm = lineMm * {{ $paper::BIG_STRETCH_Y }};
             const contentMm = layout.reduce((n, l) => n + (l.big ? bigMm : lineMm), 0) + {{ $paper::FEED_LINES }} * lineMm;
@@ -296,7 +299,7 @@
 
         window.club61PrintReceipt = function (source) {
             const el = typeof source === 'string' ? document.querySelector(source) : source;
-            if (! el) { window.print(); return; }
+            if (! el || (Array.isArray(el) && ! el.length)) { window.print(); return; }
 
             if (window.club61PrintMode() === 'rawbt') {
                 window.club61PrintRawBt(el);
@@ -313,7 +316,9 @@
             host.style.cssText = 'position:fixed;left:-10000px;top:0;width:420px;pointer-events:none;';
             host.innerHTML = html;
             document.body.appendChild(host);
-            window.club61PrintReceipt(host.querySelector('[id^="printable-"], #fnbpos-receipt') || host.firstElementChild);
+            // Beberapa slip ([data-print-slip], mis. struk F&B + slip dapur & bar) dicetak berurutan dalam satu kali cetak.
+            const slips = Array.from(host.querySelectorAll('[data-print-slip]'));
+            window.club61PrintReceipt(slips.length ? slips : (host.querySelector('[id^="printable-"], #fnbpos-receipt') || host.firstElementChild));
             setTimeout(() => host.remove(), 20000);
         };
 

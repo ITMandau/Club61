@@ -334,6 +334,8 @@ class BookOfflineCourt extends Page
                 $this->cancelSettlement();
                 $this->completedOrderData = $receipt;
                 $this->showSuccessModal = true;
+                // Struk langsung dicetak di aplikasi Club61 — sama dengan Bayar Otomatis (semua metode, satu alur).
+                $this->queueAutoPrint($payment->order_id, 'filament.partials.walkin-receipt', ['receipt' => $receipt], 'closeSuccessModal');
 
                 return;
             }
@@ -1512,6 +1514,9 @@ class BookOfflineCourt extends Page
                 ->body("Order #{$result['order']->order_number} berhasil dibayar lunas dan e-tiket telah aktif.")
                 ->success()
                 ->send();
+
+            // Struk langsung dicetak di aplikasi Club61 — sama dengan Bayar Otomatis (semua metode, satu alur).
+            $this->queueAutoPrint($result['order']->id, 'filament.partials.walkin-receipt', ['receipt' => $this->completedOrderData], 'startNewTransaction');
 
             // Reset seleksi keranjang untuk transaksi berikutnya
             $this->resetWalkInCart();

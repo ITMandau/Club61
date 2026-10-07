@@ -11,7 +11,7 @@
         'LIVIN' => 'Livin Mandiri', 'LAINNYA' => 'QRIS Lainnya / Bank Lain', 'MIDTRANS_QRIS' => 'QRIS Otomatis (Kasir)',
     ];
 @endphp
-<div id="fnbpos-receipt" class="w-full bg-white rounded-2xl border-2 border-[#D4AF37] p-4 font-mono text-xs space-y-2">
+<div data-print-slip id="fnbpos-receipt" class="w-full bg-white rounded-2xl border-2 border-[#D4AF37] p-4 font-mono text-xs space-y-2">
     <div class="text-center font-serif font-black text-lg border-b border-dashed border-gray-400 pb-1 mb-1">CLUB 61 F&amp;B</div>
     <div class="text-center pb-2.5 mb-1.5 border-b border-dashed border-gray-400">
         <div class="text-[10px] uppercase tracking-widest text-gray-500 font-bold">Nomor Antrian</div>

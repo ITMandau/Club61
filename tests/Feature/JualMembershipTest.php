@@ -155,7 +155,9 @@ class JualMembershipTest extends TestCase
             ->set('qrisProvider', 'GOPAY_QRIS')
             ->set('qrisMode', 'MANUAL')->set('qrisRrn', '998877665544')
             ->set('qrisSenderName', 'Budi Santoso')
-            ->call('submitSale');
+            ->call('submitSale')
+            // Struk langsung dicetak di aplikasi Club61, sama dengan Bayar Otomatis.
+            ->assertDispatched('club61-auto-print', fn ($event, $params) => $params['next'] === 'closeReceipt' && str_contains($params['html'], 'printable-membership-receipt'));
 
         $order = Order::where('order_type', 'MEMBERSHIP')->latest('id')->first();
         $this->assertNotNull($order);

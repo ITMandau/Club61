@@ -665,7 +665,9 @@ class CashierShiftTest extends TestCase
             ->set('edcLast4', '9876')
             ->set('edcApprovalCode', 'AUTH8899')
             ->set('edcTraceNumber', 'TRC7766')
-            ->call('submitWalkInBooking');
+            ->call('submitWalkInBooking')
+            // Struk langsung dicetak di aplikasi Club61, sama dengan Bayar Otomatis.
+            ->assertDispatched('club61-auto-print', fn ($event, $params) => $params['next'] === 'startNewTransaction' && str_contains($params['html'], 'AUTH8899'));
 
         $orderDebit = Order::where('order_type', 'WALK_IN')->latest('id')->first();
         $this->assertNotNull($orderDebit);

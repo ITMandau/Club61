@@ -173,7 +173,9 @@ class FnbPosCheckoutTest extends TestCase
             ->call('submitFnbCheckout')
             ->assertSet('posStep', 'selection')
             ->assertSet('showReceiptModal', true)
-            ->assertSet('errorMessage', null);
+            ->assertSet('errorMessage', null)
+            // QRIS manual / EDC: struk langsung dicetak di aplikasi Club61, sama dengan Bayar Otomatis.
+            ->assertDispatched('club61-auto-print', fn ($event, $params) => $params['next'] === 'startNewTransaction' && str_contains($params['html'], 'fnbpos-receipt') && str_contains($params['html'], 'Meja 05'));
 
         $order = Order::where('order_type', 'DINE_IN')->firstOrFail();
         $this->assertSame('Meja 05', $order->table_number);
@@ -191,6 +193,61 @@ class FnbPosCheckoutTest extends TestCase
         $this->assertSame('QRIS', $payment->payment_method);
         $this->assertNotNull($payment->pos_shift_id);
         $this->assertSame('FNB_COUNTER', PosCashierShift::find($payment->pos_shift_id)->counter);
+    }
+
+    public function test_paid_order_prints_kitchen_and_bar_slips_with_item_notes(): void
+    {
+        $this->openFnbShift();
+        $this->actingAs($this->cashier);
+
+        $html = null;
+        Livewire::test(FnbCashierTerminal::class)
+            ->call('addToCart', $this->latte->id)
+            ->call('addToCart', $this->latte->id)
+            ->call('addToCart', $this->toast->id)
+            ->set("cart.{$this->latte->id}.notes", '  Less   sugar, tanpa es ')
+            ->set('tableNumber', '7')
+            ->call('proceedToPayment')
+            ->call('setPaymentMethod', 'QRIS')
+            ->set('qrisMode', 'MANUAL')->set('qrisRrn', '123456789012')
+            ->call('submitFnbCheckout')
+            ->assertDispatched('club61-auto-print', function ($event, $params) use (&$html) {
+                $html = $params['html'];
+
+                return true;
+            });
+
+        $order = Order::where('order_type', 'DINE_IN')->firstOrFail();
+        $this->assertSame('Less sugar, tanpa es', $order->items->firstWhere('reference_id', $this->latte->id)->notes);
+        $this->assertNull($order->items->firstWhere('reference_id', $this->toast->id)->notes);
+
+        // Satu kali cetak: struk customer → slip dapur → slip bar, masing-masing hanya berisi menu stasiunnya, tanpa harga.
+        $receiptAt = strpos($html, 'id="fnbpos-receipt"');
+        $kitchenAt = strpos($html, 'id="fnbpos-kot-kitchen"');
+        $barAt = strpos($html, 'id="fnbpos-kot-bar"');
+        $this->assertTrue($receiptAt !== false && $kitchenAt > $receiptAt && $barAt > $kitchenAt);
+        $kitchen = substr($html, $kitchenAt, $barAt - $kitchenAt);
+        $bar = substr($html, $barAt);
+        $this->assertStringContainsString('PESANAN DAPUR', $kitchen);
+        $this->assertStringContainsString('1x '.$this->toast->name, $kitchen);
+        $this->assertStringNotContainsString($this->latte->name, $kitchen);
+        $this->assertStringContainsString('PESANAN BAR', $bar);
+        $this->assertStringContainsString('2x '.$this->latte->name, $bar);
+        $this->assertStringContainsString('- Less sugar, tanpa es', $bar);
+        $this->assertStringNotContainsString($this->toast->name, $bar);
+        $this->assertStringContainsString('MEJA', $bar);
+        $this->assertStringNotContainsString('Rp ', $kitchen.$bar);
+
+        // Pesanan hanya minuman → tidak ada slip dapur.
+        Livewire::test(FnbCashierTerminal::class)
+            ->call('addToCart', $this->latte->id)
+            ->call('setOrderType', 'TAKE_AWAY')
+            ->call('proceedToPayment')
+            ->call('setPaymentMethod', 'QRIS')
+            ->set('qrisMode', 'MANUAL')->set('qrisRrn', '123456789013')
+            ->call('submitFnbCheckout')
+            ->assertDispatched('club61-auto-print', fn ($event, $params) => str_contains($params['html'], 'PESANAN BAR')
+                && str_contains($params['html'], 'BAWA PULANG') && ! str_contains($params['html'], 'PESANAN DAPUR'));
     }
 
     public function test_cash_payment_is_rejected(): void

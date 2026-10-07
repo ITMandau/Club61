@@ -18,6 +18,8 @@
         .fnbpos-page-btn { padding: 0.5rem 1rem; border-radius: 10px; font-size: 0.75rem; font-weight: 800; border: 1.5px solid #DFC387; background: rgba(255,255,255,0.95); color: #5C410F; cursor: pointer; }
         .fnbpos-page-btn:disabled { opacity: 0.4; cursor: not-allowed; }
         .fnbpos-cart-item { padding: 0.75rem; border-radius: 12px; background: rgba(255,255,255,0.95); border: 1.5px solid #DFC387; }
+        .fnbpos-note-input { width: 100%; margin-top: 0.5rem; padding: 0.4rem 0.6rem; border-radius: 8px; border: 1px solid #E8D5A8; background: #FFFDF7; font-size: 0.6875rem; color: #1F170D; outline: none; }
+        .fnbpos-note-input:focus { border-color: #B38622; box-shadow: 0 0 0 2px rgba(180,134,11,0.15); }
         .fnbpos-qty-btn { width: 32px; height: 32px; border-radius: 8px; font-size: 1rem; display: inline-flex; align-items: center; justify-content: center; font-weight: 900; cursor: pointer; user-select: none; background: #FAF2DE; border: 1px solid #D9BE84; color: #7A5818; }
         .fnbpos-pay-btn { padding: 0.85rem; border-radius: 14px; font-weight: 800; font-size: 0.8125rem; text-align: center; cursor: pointer; border: 1.5px solid #DFC387; background: rgba(255,255,255,0.95); color: #5C410F; }
         .fnbpos-pay-btn.active { background: linear-gradient(180deg, #F0DB9D 0%, #D4AF37 35%, #B38622 100%); border-color: #FBF0CE; color: #281A05; }
@@ -147,16 +149,20 @@
 
             <div class="flex-1 overflow-y-auto p-4 space-y-2.5">
                 @forelse($cart as $menuId => $item)
-                    <div class="fnbpos-cart-item flex items-center justify-between" wire:key="cart-{{ $menuId }}">
-                        <div class="flex-1 pr-2">
-                            <div class="text-xs font-bold text-[#1F170D]">{{ $item['name'] }}</div>
-                            <div class="text-[10px] text-[#7A5818] font-mono font-medium">Rp {{ number_format($item['price'], 0, ',', '.') }} x {{ $item['quantity'] }}</div>
+                    <div class="fnbpos-cart-item" wire:key="cart-{{ $menuId }}">
+                        <div class="flex items-center justify-between">
+                            <div class="flex-1 pr-2">
+                                <div class="text-xs font-bold text-[#1F170D]">{{ $item['name'] }}</div>
+                                <div class="text-[10px] text-[#7A5818] font-mono font-medium">Rp {{ number_format($item['price'], 0, ',', '.') }} x {{ $item['quantity'] }}</div>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <span wire:click="decrementCartItem('{{ $menuId }}')" class="fnbpos-qty-btn">-</span>
+                                <span class="text-sm font-bold w-6 text-center">{{ $item['quantity'] }}</span>
+                                <span wire:click="incrementCartItem('{{ $menuId }}')" class="fnbpos-qty-btn">+</span>
+                            </div>
                         </div>
-                        <div class="flex items-center gap-2">
-                            <span wire:click="decrementCartItem('{{ $menuId }}')" class="fnbpos-qty-btn">-</span>
-                            <span class="text-sm font-bold w-6 text-center">{{ $item['quantity'] }}</span>
-                            <span wire:click="incrementCartItem('{{ $menuId }}')" class="fnbpos-qty-btn">+</span>
-                        </div>
+                        {{-- Catatan untuk bar / dapur — ikut tercetak di slip pesanan stasiunnya. --}}
+                        <input type="text" wire:model.blur="cart.{{ $menuId }}.notes" maxlength="120" placeholder="Catatan (mis. less sugar, tanpa es)" class="fnbpos-note-input">
                     </div>
                 @empty
                     <div class="text-center py-10 text-xs text-[#9CA3AF]">Keranjang kosong. Klik menu di sebelah kiri.</div>
@@ -224,6 +230,9 @@
                         <div>
                             <div class="text-xs font-bold text-[#1F170D]">{{ $item["name"] }}</div>
                             <div class="text-[10px] text-[#7A5818] font-mono">Rp {{ number_format($item["price"], 0, ",", ".") }} x {{ $item["quantity"] }}</div>
+                            @if(trim($item["notes"] ?? "") !== "")
+                                <div class="text-[10px] italic text-[#8C6418]">Catatan: {{ $item["notes"] }}</div>
+                            @endif
                         </div>
                         <span class="font-mono text-xs font-extrabold text-[#8C6418]">Rp {{ number_format($item["price"] * $item["quantity"], 0, ",", ".") }}</span>
                     </div>
@@ -343,12 +352,15 @@
 
                 @include('pos.receipts.fnb', ['receipt' => $completedOrderData])
 
-                <div class="flex gap-3">
+                <div class="grid grid-cols-2 gap-3">
                     {{-- Struk hanya dicetak untuk transaksi lunas. --}}
                     @if(($completedOrderData['payment_status'] ?? 'PAID') === 'PAID')
                         <button type="button" onclick="club61PrintReceipt('#fnbpos-receipt')" class="fnbpos-pay-btn flex-1">Cetak Struk</button>
+                        {{-- Cetak ulang slip pesanan bar / dapur (tidak tampil di layar, hanya dicetak). --}}
+                        <template id="fnbpos-kot-template">@include('pos.receipts.fnb-kitchen', ['receipt' => $completedOrderData])</template>
+                        <button type="button" onclick="club61PrintReceiptHtml(document.getElementById('fnbpos-kot-template').innerHTML)" class="fnbpos-pay-btn flex-1">Cetak Pesanan Dapur/Bar</button>
                     @endif
-                    <button type="button" wire:click="{{ $posStep === 'history' ? 'closeReceiptModal' : 'startNewTransaction' }}" class="fnbpos-pay-btn active flex-1">{{ $posStep === 'history' ? 'Tutup' : 'Transaksi Baru' }}</button>
+                    <button type="button" wire:click="{{ $posStep === 'history' ? 'closeReceiptModal' : 'startNewTransaction' }}" class="fnbpos-pay-btn active col-span-2">{{ $posStep === 'history' ? 'Tutup' : 'Transaksi Baru' }}</button>
                 </div>
             </div>
         </div>

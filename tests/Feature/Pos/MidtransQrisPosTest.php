@@ -36,7 +36,8 @@ class MidtransQrisPosTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        Carbon::setTestNow(Carbon::parse(now()->addDays(3)->format('Y-m-d').' 10:00:00'));
+        // Hari kerja (Rabu) — akhir pekan memakai tarif prime, harga slot di tes ini tarif reguler.
+        Carbon::setTestNow(Carbon::parse(now()->addDays(3)->next(Carbon::WEDNESDAY)->format('Y-m-d').' 10:00:00'));
 
         \App\Services\Permission\Club61PermissionMatrix::syncAllPermissions('web');
         $this->cashier = User::factory()->cashier()->create(['is_active' => true]);
