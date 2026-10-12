@@ -20,6 +20,8 @@
 
         <!-- Scripts & Styles -->
         @vite(['resources/css/app.css', 'resources/js/app.js'])
+        {{-- Halaman dipulihkan dari cache Back/Forward (token form-nya basi) → ambil ulang dari server. --}}
+        <script>window.addEventListener('pageshow', function (e) { if (e.persisted) { window.location.reload(); } });</script>
     </head>
     {{-- theme="terracotta": palet logo baru (Terakota #662721, Espresso, Cream) — sementara baru halaman login. --}}
     @if($theme === 'terracotta')
@@ -34,6 +36,8 @@
             <div class="absolute -bottom-32 right-1/4 w-[700px] h-[500px] bg-[#D4AF37]/15 blur-3xl rounded-full"></div>
         </div>
     @endif
+
+        @include('partials.session-expired-notice')
 
         <!-- Main Content Area: Responsive container for desktop & mobile -->
         <main class="relative z-10 w-full py-6 sm:py-10 px-4 sm:px-6 lg:px-8 flex items-center justify-center min-h-screen">

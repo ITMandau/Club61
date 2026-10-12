@@ -76,8 +76,15 @@ class LoginRequest extends FormRequest
         if (! Auth::attempt($credentials, $this->boolean('remember'))) {
             $this->hitRateLimits();
 
+            // Beri tahu sebelum terkunci, supaya user sempat beralih ke "Lupa kata sandi?".
+            $remaining = RateLimiter::remaining($this->throttleKey(), self::MAX_ATTEMPTS_ACCOUNT_IP);
+            $message = trans('auth.failed');
+            if ($remaining > 0 && $remaining <= 2) {
+                $message .= ' '.trans_choice('auth.remaining', $remaining, ['count' => $remaining]);
+            }
+
             throw ValidationException::withMessages([
-                'email' => trans('auth.failed'),
+                'email' => $message,
             ]);
         }
 

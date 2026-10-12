@@ -259,6 +259,26 @@ class AuthenticationTest extends TestCase
         $this->assertGuest();
     }
 
+    public function test_failed_login_messages_are_in_indonesian_and_warn_before_lockout(): void
+    {
+        $user = User::factory()->create();
+        $wrong = fn () => $this->from('/login')->post('/login', ['email' => $user->email, 'password' => 'salah-terus']);
+
+        $wrong()->assertSessionHasErrors(['email' => 'Email / nomor HP atau kata sandi salah. Periksa lagi penulisannya (huruf besar-kecil pada kata sandi berpengaruh), lalu coba lagi.']);
+        $wrong();
+        $wrong();
+        $this->assertStringContainsString('Sisa 2 kali percobaan lagi', session('errors')->first('email'));
+        $wrong();
+        $this->assertStringContainsString('Sisa 1 kali percobaan lagi', session('errors')->first('email'));
+        $wrong();
+        $wrong()->assertSessionHasErrors('email');
+        $this->assertStringContainsString('Terlalu banyak percobaan masuk yang gagal', session('errors')->first('email'));
+
+        // Form kosong: pesan validasi juga bahasa Indonesia.
+        $this->from('/login')->post('/login', ['email' => '', 'password' => ''])
+            ->assertSessionHasErrors(['email' => 'Email wajib diisi.', 'password' => 'Kata sandi wajib diisi.']);
+    }
+
     public function test_users_can_logout(): void
     {
         $user = User::factory()->create();

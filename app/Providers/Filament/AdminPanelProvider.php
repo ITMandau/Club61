@@ -97,6 +97,11 @@ class AdminPanelProvider extends PanelProvider
                 'panels::body.end',
                 fn () => view('filament.confirm-dialog')
             )
+            // Sesi habis (419) saat aksi Livewire → dialog Club61 berbahasa Indonesia, bukan popup bawaan browser.
+            ->renderHook(
+                'panels::body.end',
+                fn () => view('partials.livewire-session-expired', ['filamentConfirm' => true])
+            )
             ->pages([
                 \App\Filament\Pages\Dashboard::class,
                 \App\Filament\Pages\Analytics::class,

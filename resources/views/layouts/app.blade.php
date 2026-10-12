@@ -20,6 +20,8 @@
     </head>
     <body class="min-h-full font-brand antialiased text-[#4F2F2A] bg-[#F7F0DB] selection:bg-[#662721] selection:text-[#F7F0DB] relative overflow-x-hidden flex flex-col">
 
+        @include('partials.session-expired-notice')
+
         <div class="min-h-screen flex flex-col relative z-10">
             @include('layouts.navigation')
 

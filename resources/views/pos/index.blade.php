@@ -207,5 +207,6 @@
     </div>
 
     @livewireScripts
+    @include('partials.livewire-session-expired')
 </body>
 </html>

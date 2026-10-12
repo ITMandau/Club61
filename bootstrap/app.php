@@ -75,6 +75,31 @@ return Application::configure(basePath: dirname(__DIR__))
             }
         });
 
+        // 4b. Form web kedaluwarsa (419 / CSRF): bukan tampilkan "PAGE EXPIRED", tapi kembalikan user ke form-nya
+        // dengan isian (tanpa kata sandi) + pesan, jadi tinggal kirim ulang. Contoh: halaman login yang lama terbuka
+        // di tab HP, atau tombol Back setelah login. Logout yang kedaluwarsa tetap dituntaskan (user memang mau keluar).
+        // Kalau browser tidak menyimpan cookie sesi sama sekali, redirect akan berulang tanpa hasil → tampilkan
+        // halaman errors/419 yang menyarankan cek cookie. Request Livewire ditangani di browser (livewire-session-expired).
+        $exceptions->render(function (HttpException $e, Request $request) {
+            if ($e->getStatusCode() !== 419 || $request->is('api/*') || $request->expectsJson() || $request->hasHeader('X-Livewire')) {
+                return null;
+            }
+            if (! $request->hasCookie(config('session.cookie'))) {
+                return null;
+            }
+            if ($request->routeIs('logout')) {
+                \Illuminate\Support\Facades\Auth::guard('web')->logout();
+                $request->session()->invalidate();
+                $request->session()->regenerateToken();
+
+                return redirect('/');
+            }
+
+            return redirect()->back()
+                ->withInput($request->except(['_token', 'password', 'password_confirmation', 'current_password']))
+                ->with('session_expired', 'Halaman ini terlalu lama terbuka sehingga sesinya habis. Data Anda belum terkirim — silakan periksa lalu kirim ulang.');
+        });
+
         // 5. Log Aktivitas: setiap percobaan membuka halaman / menjalankan aksi tanpa izin (403).
         // Dicatat di sini — SETELAH transaksi aksi yang ditolak di-rollback — supaya jejaknya tetap ada.
         $exceptions->respond(function (\Symfony\Component\HttpFoundation\Response $response, Throwable $e, Request $request) {
