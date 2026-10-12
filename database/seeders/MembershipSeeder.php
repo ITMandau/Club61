@@ -198,7 +198,7 @@ class MembershipSeeder extends Seeder
                 'balance_id' => $budiPadelBalance->id,
                 'change_type' => 'DECREMENT',
                 'quantity' => -2.00,
-                'notes' => 'Booking Lapangan 1 - Padel Panoramic (2 Jam)',
+                'notes' => 'Booking Court BCA (2 Jam)',
             ]);
 
             UserMembershipBalance::create([
@@ -326,7 +326,7 @@ class MembershipSeeder extends Seeder
                 'balance_id' => $rezaPadel->id,
                 'change_type' => 'DECREMENT',
                 'quantity' => -4.00,
-                'notes' => 'Reservasi Court 2 Indoor Match Play (4 Jam)',
+                'notes' => 'Reservasi Court Indosat (4 Jam)',
             ]);
 
             UserMembershipBalance::create([
@@ -424,8 +424,8 @@ class MembershipSeeder extends Seeder
                 'allocated_hours' => 20,
                 'used_hours' => 6,
                 'remaining_hours' => 14,
-                'last_played' => now()->subDays(3)->format('d M Y, 19:00 WIB (Court 1)'),
-                'next_schedule' => now()->addDays(2)->format('d M Y, 19:00 - 21:00 WIB (Court 1)'),
+                'last_played' => now()->subDays(3)->format('d M Y').', 19:00 WIB (Court BCA)',
+                'next_schedule' => now()->addDays(2)->format('d M Y').', 19:00 - 21:00 WIB (Court BCA)',
                 'status' => 'ACTIVE',
                 'notes' => 'Rutin tanding ganda malam hari sehabis kantor',
             ],
@@ -437,8 +437,8 @@ class MembershipSeeder extends Seeder
                 'allocated_hours' => 15,
                 'used_hours' => 4,
                 'remaining_hours' => 11,
-                'last_played' => now()->subDays(5)->format('d M Y, 17:00 WIB (Court 2)'),
-                'next_schedule' => now()->addDays(4)->format('d M Y, 17:00 - 19:00 WIB (Court 2)'),
+                'last_played' => now()->subDays(5)->format('d M Y').', 17:00 WIB (Court Indosat)',
+                'next_schedule' => now()->addDays(4)->format('d M Y').', 17:00 - 19:00 WIB (Court Indosat)',
                 'status' => 'ACTIVE',
                 'notes' => 'Sesi sore santai + sauna',
             ],
@@ -450,8 +450,8 @@ class MembershipSeeder extends Seeder
                 'allocated_hours' => 15,
                 'used_hours' => 2,
                 'remaining_hours' => 13,
-                'last_played' => now()->subDays(8)->format('d M Y, 08:00 WIB (Court 3)'),
-                'next_schedule' => now()->addDays(5)->format('d M Y, 08:00 - 10:00 WIB (Court 3)'),
+                'last_played' => now()->subDays(8)->format('d M Y').', 08:00 WIB (Court Iforte)',
+                'next_schedule' => now()->addDays(5)->format('d M Y').', 08:00 - 10:00 WIB (Court Iforte)',
                 'status' => 'ACTIVE',
                 'notes' => 'Sesi akhir pekan pagi',
             ],

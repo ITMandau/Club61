@@ -42,7 +42,7 @@
                                     CLUB 61 <span class="text-[#E6DAC0] font-alex font-normal text-4xl sm:text-5xl block">Padel Court</span>
                                 </h1>
                                 <p class="text-xs sm:text-sm text-emerald-100/85 mt-3 leading-relaxed">
-                                    Welcome back, <span class="font-bold text-white">{{ Auth::user()->name }}</span>. Panoramic padel courts at Indosat Building Medan, plus sauna and a cafe lounge.
+                                    Welcome back, <span class="font-bold text-white">{{ Auth::user()->name }}</span>. Padel courts at Gedung Indosat Medan, plus sauna and a cafe lounge.
                                 </p>
 
                                 <div class="mt-5 grid grid-cols-1 sm:flex sm:flex-wrap items-center gap-2.5">
@@ -63,7 +63,7 @@
                                 <div class="p-3.5 rounded-lg bg-white/10 border border-white/15">
                                     <div class="text-[10px] uppercase font-bold text-[#F7F0DB]/70">Courts</div>
                                     <div class="text-sm font-black text-white mt-0.5">{{ $activeCourtCount }} {{ \Illuminate\Support\Str::plural('court', $activeCourtCount) }} open</div>
-                                    <div class="text-[10px] text-[#F7F0DB]/60 mt-0.5">Indoor · Central AC</div>
+                                    <div class="text-[10px] text-[#F7F0DB]/60 mt-0.5">Gedung Indosat Medan</div>
                                 </div>
                                 <div class="p-3.5 rounded-lg bg-[#662721]/20 border border-[#662721]/40">
                                     <div class="text-[10px] uppercase font-bold text-[#F7F0DB]">Wellness</div>

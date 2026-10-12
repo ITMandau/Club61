@@ -6,7 +6,7 @@
             <div class="c61-eyebrow"><span class="dot"></span>Modul Fasilitas &bull; Venue Operations</div>
             <div class="c61-hero-title">Kelola Fasilitas Club &amp; Venue</div>
             <div class="c61-hero-sub">
-                Konfigurasi fasilitas premium: 4 Lapangan Padel Panoramic, Finnish Cedar Sauna, dan Social Cafe Lounge.
+                Konfigurasi fasilitas: Lapangan Padel, Sauna, dan Social Lounge.
             </div>
         </div>
 
@@ -24,7 +24,7 @@
                 <span class="c61-pill c61-pill-ok">Operasional Aktif</span>
             </div>
             <div class="c61-card-title" style="margin-top: 0.4rem;">4 Padel Arena</div>
-            <div class="c61-card-sub" style="line-height: 1.5;">Kaca Panoramic 12mm, Karpet Mondo Turf Resmi, Lampu LED 2000 Lux.</div>
+            <div class="c61-card-sub" style="line-height: 1.5;">Lantai profesional, pencahayaan LED standar turnamen.</div>
         </div>
 
         <div class="c61-kpi">

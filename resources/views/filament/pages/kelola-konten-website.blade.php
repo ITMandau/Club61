@@ -216,7 +216,7 @@
                         <div class="kkw-pair">
                             <div class="kkw-field">
                                 <label class="c61-label">Sub-teks <span class="kkw-tag kkw-tag-id">ID</span></label>
-                                <input type="text" wire:model="facilityCards.{{ $index }}.subtitle" class="c61-input" placeholder="+ Panoramic Courts" maxlength="60">
+                                <input type="text" wire:model="facilityCards.{{ $index }}.subtitle" class="c61-input" placeholder="Contoh: Artisan Cafe &amp; Bar" maxlength="60">
                             </div>
                             <div class="kkw-field">
                                 <label class="c61-label">Sub-teks <span class="kkw-tag kkw-tag-en">EN</span></label>
@@ -279,7 +279,7 @@
                         <div class="kkw-pair">
                             <div class="kkw-field">
                                 <label class="c61-label">Deskripsi Singkat <span class="kkw-tag kkw-tag-id">ID</span></label>
-                                <textarea wire:model="facilities.{{ $index }}.description" class="c61-textarea kkw-textarea-sm" placeholder="Lapangan padel panoramic full indoor ber-AC..."></textarea>
+                                <textarea wire:model="facilities.{{ $index }}.description" class="c61-textarea kkw-textarea-sm" placeholder="Lapangan padel, standar internasional."></textarea>
                             </div>
                             <div class="kkw-field">
                                 <label class="c61-label">Deskripsi Singkat <span class="kkw-tag kkw-tag-en">EN</span></label>
@@ -290,7 +290,7 @@
                         <div class="kkw-pair">
                             <div class="kkw-field">
                                 <label class="c61-label">Daftar Amenity (1 baris = 1 item) <span class="kkw-tag kkw-tag-id">ID</span></label>
-                                <textarea wire:model="facilities.{{ $index }}.amenities_text" class="c61-textarea kkw-textarea-md" placeholder="Lantai profesional&#10;Pencahayaan LED&#10;Kaca panoramic"></textarea>
+                                <textarea wire:model="facilities.{{ $index }}.amenities_text" class="c61-textarea kkw-textarea-md" placeholder="Lantai profesional&#10;Pencahayaan LED standar turnamen"></textarea>
                             </div>
                             <div class="kkw-field">
                                 <label class="c61-label">Daftar Amenity <span class="kkw-tag kkw-tag-en">EN</span></label>

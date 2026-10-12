@@ -44,7 +44,7 @@
                         Club 61 Padel Court Medan
                     </h2>
                     <p class="text-xs sm:text-sm text-emerald-100/80 mt-3 font-medium leading-relaxed">
-                        Medan's premier padel sporting venue featuring 3 tournament-standard panoramic courts (2 indoor AC, 1 outdoor), cedarwood Finnish sauna, and specialty cafe lounge.
+                        Medan's padel venue at Gedung Indosat: 3 international-standard padel courts, a sauna, and a specialty cafe lounge.
                     </p>
 
                     <div class="mt-6 flex flex-wrap items-center gap-3">
@@ -336,9 +336,9 @@
                                 <span class="text-[10px] font-black tracking-widest text-[#662721] uppercase">COURT</span>
                             </div>
                             <div>
-                                <h4 class="font-display font-black text-sm text-[#4F2F2A]">3 Panoramic Padel Courts</h4>
+                                <h4 class="font-display font-black text-sm text-[#4F2F2A]">3 Padel Courts</h4>
                                 <p class="text-xs text-[#7A5A52] mt-1.5 leading-relaxed">
-                                    12mm tempered glass without center pillars, Mondo Supercourt XN turf, anti-glare 1000 lux LED illumination, and climate-controlled central AC.
+                                    International-standard courts with professional-grade flooring and tournament-standard LED lighting.
                                 </p>
                             </div>
                         </div>
@@ -376,7 +376,7 @@
                             <div>
                                 <h4 class="font-display font-black text-sm text-[#4F2F2A]">Club 61 Cafe &amp; Lounge</h4>
                                 <p class="text-xs text-[#7A5A52] mt-1.5 leading-relaxed">
-                                    Artisan protein smoothie bar, specialty single-origin espresso, wholesome brunch menu, and panoramic court-viewing deck.
+                                    Artisan protein smoothie bar, specialty single-origin espresso, wholesome brunch menu, and a relaxed lounge to watch the matches.
                                 </p>
                             </div>
                         </div>
@@ -510,7 +510,7 @@
                                 <span class="text-[#E6DAC0] font-bold mt-0.5">&bull;</span>
                                 <div>
                                     <strong class="text-white block font-bold">Prioritas Reservasi Lapangan (H-7 s/d H-14)</strong>
-                                    <span class="text-[11px] text-emerald-100/70">Akses booking 3 panoramic courts lebih awal sebelum dibuka untuk umum.</span>
+                                    <span class="text-[11px] text-emerald-100/70">Akses booking lapangan lebih awal sebelum dibuka untuk umum.</span>
                                 </div>
                             </li>
                             <li class="flex items-start gap-2.5">

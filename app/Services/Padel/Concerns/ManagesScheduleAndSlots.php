@@ -140,7 +140,7 @@ trait ManagesScheduleAndSlots
                 'court_id' => $court->id,
                 'court_name' => $court->name,
                 'type' => $court->type,
-                'description' => $court->description ?: ($court->type === 'INDOOR' ? 'Indoor • Central AC' : 'Outdoor • Open Air Court'),
+                'description' => $court->description ?: ($court->type === 'INDOOR' ? 'Indoor' : 'Outdoor'),
                 'open_time' => $court->open_time ?: '06:00',
                 'close_time' => $court->close_time ?: '23:00',
                 'slots' => $slots,

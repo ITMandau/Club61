@@ -50,6 +50,11 @@
 
             {{-- ============ FORM MASUK ============ --}}
             <div class="order-1 lg:order-2 lg:col-span-5 rounded-xl bg-club-paper border border-club-line shadow-[0_24px_60px_-28px_rgba(79,47,42,0.45)] p-6 sm:p-9 flex flex-col">
+                <a href="{{ url('/') }}" class="self-start inline-flex items-center gap-1 -mt-1 mb-5 text-xs font-semibold text-club-muted hover:text-club-terra focus-visible:outline-none focus-visible:underline transition-colors">
+                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7"/></svg>
+                    Kembali ke beranda
+                </a>
+
                 <div class="mb-7">
                     <img src="{{ asset('images/identity/monogram-terracotta.png') }}" alt="" class="h-14 w-auto mb-5">
                     <h1 class="font-display font-semibold text-3xl sm:text-[2.1rem] leading-tight text-club-brown">Masuk ke Club 61</h1>

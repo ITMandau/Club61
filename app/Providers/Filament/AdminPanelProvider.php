@@ -119,6 +119,7 @@ class AdminPanelProvider extends PanelProvider
                 \App\Filament\Pages\BukuTransaksi::class,
                 \App\Filament\Pages\AntrianRefund::class,
                 \App\Filament\Pages\DaftarVoucher::class,
+                \App\Filament\Pages\ImportPenjualan::class,
             ])
             ->widgets([])
             ->middleware([

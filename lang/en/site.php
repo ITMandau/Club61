@@ -17,7 +17,7 @@ return [
     'btn_login_portal' => 'Log In to Club Portal',
     'btn_join_vip' => 'Join VIP Membership',
 
-    'stats_courts' => 'Indoor Courts',
+    'stats_courts' => 'Padel Courts',
     'stats_active_members' => 'Active Members',
     'stats_corporate_partners' => 'Corporate Partners',
     'stats_open_daily' => 'Open Every Day',

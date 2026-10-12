@@ -43,6 +43,9 @@ class Club61PermissionMatrix
         'process_refund_queue',
         // Daftar Voucher: saldo voucher customer = uang customer yang masih disimpan klub.
         'View:DaftarVoucher',
+        // Import penjualan soft opening: menulis order, booking, akun customer & Buku Transaksi langsung tanpa kasir.
+        'View:ImportPenjualan',
+        'import_sales_data',
     ];
 
     /**
@@ -314,6 +317,8 @@ class Club61PermissionMatrix
                             'view_ledger_invoice' => 'Lihat Invoice / Struk Salinan Admin dari Buku Transaksi',
                             'process_refund_queue' => 'Proses / Tolak Refund yang Menunggu (Antrian Refund)',
                             'View:DaftarVoucher' => 'Akses Halaman Daftar Voucher (semua voucher & saldo customer)',
+                            'View:ImportPenjualan' => 'Akses Halaman Import Penjualan (Excel)',
+                            'import_sales_data' => 'Import Data Penjualan Booking Padel & F&B dari Excel',
                         ],
                     ],
                 ],

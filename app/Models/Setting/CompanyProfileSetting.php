@@ -42,6 +42,10 @@ class CompanyProfileSetting extends Model
 
     public const CACHE_KEY = 'company_profile_settings';
 
+    public const DEFAULT_HERO_SUBTITLE = 'Fasilitas terpadu berstandar internasional di Gedung Indosat Medan: {court_count} Lapangan Padel.';
+
+    public const DEFAULT_HERO_SUBTITLE_EN = 'An internationally-standard integrated facility at Gedung Indosat Medan: {court_count} Padel Courts.';
+
     /**
      * Daftar tertutup icon_key yang boleh dipakai kartu fasilitas — sengaja bukan upload
      * SVG/HTML bebas dari staf (lihat komponen <x-company-profile.icon>), karena SVG mentah
@@ -84,13 +88,13 @@ class CompanyProfileSetting extends Model
                 ['id' => 1],
                 [
                     'hero_badge_text' => 'Medan Flagship Venue • Gedung Indosat • Open Daily',
-                    'hero_headline_line1' => 'The Sanctuary for',
-                    'hero_headline_highlight' => 'Padel Athletes',
-                    'hero_headline_line2' => 'in Medan.',
-                    'hero_subtitle' => 'Fasilitas terpadu berstandar internasional di Gedung Indosat Medan: {court_count} Lapangan Padel Panoramic Full Indoor ber-AC, Thermal Wellness Recovery (Sauna).',
+                    'hero_headline_line1' => 'Welcome to Club61',
+                    'hero_headline_highlight' => '-',
+                    'hero_headline_line2' => 'Your New Home on the court.',
+                    'hero_subtitle' => self::DEFAULT_HERO_SUBTITLE,
                     'court_count' => 3,
                     'facility_cards' => [
-                        ['icon_key' => 'arena', 'title' => 'Padel Arena', 'subtitle' => '+ Panoramic Courts'],
+                        ['icon_key' => 'arena', 'title' => 'Padel Arena', 'subtitle' => ''],
                         ['icon_key' => 'wellness', 'title' => 'Wellness Suite', 'subtitle' => 'Sauna'],
                         ['icon_key' => 'lounge', 'title' => 'Social Lounge', 'subtitle' => 'Artisan Cafe & Bar'],
                     ],

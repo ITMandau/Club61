@@ -93,7 +93,7 @@ class MasterData extends Page
         $this->editingCourtId = null;
         $this->courtName = '';
         $this->courtType = 'INDOOR';
-        $this->courtDescription = 'Indoor • Central AC';
+        $this->courtDescription = '';
         $this->hourlyRateRegular = 300000;
         $this->hourlyRatePrime = 450000;
         $this->courtOpenTime = '06:00';
@@ -115,7 +115,7 @@ class MasterData extends Page
         $this->editingCourtId = $court->id;
         $this->courtName = (string) $court->name;
         $this->courtType = (string) ($court->type ?: 'INDOOR');
-        $this->courtDescription = (string) ($court->description ?: ($court->type === 'INDOOR' ? 'Indoor • Central AC' : 'Outdoor • Open Air Court'));
+        $this->courtDescription = (string) ($court->description ?: ($court->type === 'INDOOR' ? 'Indoor' : 'Outdoor'));
         $this->hourlyRateRegular = (float) $court->hourly_rate_regular;
         $this->hourlyRatePrime = (float) $court->hourly_rate_prime;
         $this->courtOpenTime = (string) ($court->open_time ?: '06:00');

@@ -153,7 +153,7 @@
                                             <span class="text-[9px] text-[#7A5A52]">Indosat Building</span>
                                         </div>
                                         <p class="text-[11px] text-[#7A5A52] mt-1 leading-snug">
-                                            Experience 3 panoramic WPT-standard courts at Indosat Building Medan, complete with an exclusive lounge &amp; cafe.
+                                            Play on 3 international-standard padel courts at Gedung Indosat Medan, complete with a lounge &amp; cafe.
                                         </p>
                                     </div>
                                 </div>

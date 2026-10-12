@@ -17,7 +17,7 @@ return [
     'btn_login_portal' => 'Masuk ke Club Portal',
     'btn_join_vip' => 'Gabung Membership VIP',
 
-    'stats_courts' => 'Lapangan Indoor',
+    'stats_courts' => 'Lapangan Padel',
     'stats_active_members' => 'Member Aktif',
     'stats_corporate_partners' => 'Mitra Korporat',
     'stats_open_daily' => 'Buka Setiap Hari',
