@@ -188,8 +188,9 @@
     .pos-timeline .tl-th.is-now { background: var(--pos-terra); color: var(--pos-cream); }
     .pos-timeline .tl-corner { position: sticky; left: 0; z-index: 3; justify-content: flex-start; padding-left: 0.85rem; border-left: none; border-right: 1px solid var(--pos-line); text-transform: uppercase; letter-spacing: 0.06em; font-size: 0.625rem; }
     .pos-timeline .tl-court { position: sticky; left: 0; z-index: 2; background: #FFFFFF; padding: 0.45rem 0.6rem 0.45rem 0.85rem; border-right: 1px solid var(--pos-line); border-bottom: 1px solid var(--pos-line-soft); display: flex; flex-direction: column; justify-content: center; min-width: 0; }
-    .pos-timeline .tl-court .pos-court-name { font-size: 0.8125rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .pos-timeline .tl-court .pos-court-meta { font-size: 0.625rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    /* Nama lapangan tampil utuh satu baris — lebar kolom mengikuti nama terpanjang (lihat book-offline-court). */
+    .pos-timeline .tl-court .pos-court-name { font-size: 0.8125rem; white-space: nowrap; }
+    .pos-timeline .tl-court .pos-court-meta { font-size: 0.625rem; white-space: nowrap; }
     .pos-court-free { font-size: 0.625rem; font-weight: 800; color: #047857; margin-top: 0.1rem; }
     .pos-timeline .tl-cell { height: 54px; padding: 4px 3px; border-left: 1px solid var(--pos-line-soft); border-bottom: 1px solid var(--pos-line-soft); min-width: 0; }
     .pos-timeline .tl-cell.is-now { background: rgba(102,39,33,0.04); }
@@ -346,5 +347,9 @@
         .pos-kpi { flex: 1; min-width: 0; }
         .pos-receipt-stage { padding: 1rem; }
         .pos-form-grid { grid-template-columns: 1fr; }
+        /* HP: kolom lapangan dibatasi supaya jam tetap terlihat; nama panjang turun baris, tidak terpotong. */
+        .pos-timeline { --tl-court-w: 120px !important; --tl-court-max: 120px; }
+        .pos-timeline .tl-court .pos-court-name { white-space: normal; overflow-wrap: anywhere; }
+        .pos-timeline .tl-court .pos-court-meta { white-space: normal; }
     }
 </style>

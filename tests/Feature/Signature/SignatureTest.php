@@ -73,7 +73,7 @@ class SignatureTest extends TestCase
     public function test_page_creates_defaults_and_follows_permissions(): void
     {
         $this->actingAs($this->admin);
-        Livewire::test(Signature::class)->assertOk()->assertSee('Signature — Layar TV');
+        Livewire::test(Signature::class)->assertOk()->assertSee('Digital Signage');
 
         $this->assertSame(1, SignatureScreen::count());
         $this->assertSame(['PRESET_A', 'PRESET_B', 'PRESET_C'], SignatureTemplate::orderBy('layout')->pluck('layout')->all());

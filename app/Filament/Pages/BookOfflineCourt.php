@@ -374,6 +374,18 @@ class BookOfflineCourt extends Page
         $this->selectedSlots = [];
     }
 
+    /**
+     * Tanggal lampau tetap bisa dibuka untuk melihat siapa yang booking, tapi slotnya tidak bisa dipilih
+     * (begitu juga jam yang sudah lewat hari ini).
+     */
+    protected function isPastSlot(string $startTime): bool
+    {
+        $today = now()->format('Y-m-d');
+
+        return $this->bookingDate < $today
+            || ($this->bookingDate === $today && (int) substr($startTime, 0, 2) < (int) now()->format('H'));
+    }
+
     public function nextDay(): void
     {
         $this->bookingDate = Carbon::parse($this->bookingDate)->addDay()->format('Y-m-d');
@@ -397,6 +409,16 @@ class BookOfflineCourt extends Page
         if (isset($this->selectedSlots[$slotKey])) {
             unset($this->selectedSlots[$slotKey]);
         } else {
+            if ($this->isPastSlot($startTime)) {
+                Notification::make()
+                    ->title('Jadwal Sudah Lewat')
+                    ->body('Slot di jam atau tanggal yang sudah lewat tidak bisa dibooking.')
+                    ->warning()
+                    ->send();
+
+                return;
+            }
+
             $court = PadelCourt::find($courtId);
             if ($court) {
                 $cOpen = (int) substr($court->open_time ?: '06:00', 0, 2);
@@ -1103,15 +1125,12 @@ class BookOfflineCourt extends Page
         $conflicted = false;
         $validSlots = [];
 
-        $isToday = $this->bookingDate === now()->format('Y-m-d');
-        $currentHour = (int) now()->format('H');
-
         foreach ($draftSlots as $keySlot => $slot) {
             $startDt = "{$this->bookingDate} {$slot['start_time']}";
             $endDt = "{$this->bookingDate} {$slot['end_time']}";
-            $slotHour = (int) substr($slot['start_time'], 0, 2);
 
-            if ($isToday && $slotHour < $currentHour) {
+            // Termasuk draf dari tanggal yang sudah lewat (draf disimpan sampai 2 jam).
+            if ($this->isPastSlot($slot['start_time'])) {
                 $conflicted = true;
                 continue;
             }
@@ -2028,7 +2047,6 @@ class BookOfflineCourt extends Page
         $courts = PadelCourt::where('is_active', true)->orderBy('name')->get();
         $peakHours = app(\App\Services\Padel\PeakHourService::class); // jam peak diatur di Master Data
         $isToday = $this->bookingDate === now()->format('Y-m-d');
-        $currentHour = (int) now()->format('H');
 
         // Tarik seluruh booking pada tanggal aktif untuk evaluasi cepat
         $existingBookings = PadelBooking::with(['court', 'user'])
@@ -2104,8 +2122,6 @@ class BookOfflineCourt extends Page
                     $status = 'CLOSED';
                 } elseif (isset($this->selectedSlots[$slotKey])) {
                     $status = 'SELECTED';
-                } elseif ($isToday && $h < $currentHour) {
-                    $status = 'PAST';
                 } else {
                     $slotStartDt = "{$this->bookingDate} {$startTimeStr}";
                     $slotEndDt = "{$this->bookingDate} {$endTimeStr}";
@@ -2158,6 +2174,13 @@ class BookOfflineCourt extends Page
                     }
                 }
 
+                // Jam / tanggal yang sudah lewat: booking lunas & tagihan selisih tetap tampil (riwayat siapa yang main),
+                // slot kosong / hold jadi arsir dan tidak bisa dipilih.
+                if (in_array($status, ['AVAILABLE', 'LOCKED'], true) && $this->isPastSlot($startTimeStr)) {
+                    $status = 'PAST';
+                    $bookingDetail = null;
+                }
+
                 $courtRow['slots'][] = [
                     'slot_key' => $slotKey,
                     'hour' => $h,
@@ -2180,7 +2203,7 @@ class BookOfflineCourt extends Page
         $bookedSlotsAll = 0;
         foreach ($gridData as $courtRow) {
             foreach ($courtRow['slots'] as $slot) {
-                if ($slot['status'] === 'PAST') {
+                if ($slot['status'] === 'PAST' || $this->isPastSlot($slot['start_time'])) {
                     continue;
                 }
                 $totalSlotsAll++;

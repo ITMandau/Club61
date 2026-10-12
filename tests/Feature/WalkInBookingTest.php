@@ -419,6 +419,43 @@ class WalkInBookingTest extends TestCase
     }
 
     /**
+     * Tanggal lampau tetap bisa dibuka untuk melihat riwayat (siapa yang booking), tapi tidak bisa input booking baru.
+     */
+    public function test_past_dates_show_history_but_cannot_be_booked(): void
+    {
+        $this->court1->update(['name' => 'Court IM3 Platinum Arena Super Panjang']);
+        $yesterday = now()->subDay()->format('Y-m-d');
+        PadelBooking::create([
+            'booking_code' => 'BK-KEMARIN', 'user_id' => $this->customerUser->id, 'court_id' => $this->court1->id,
+            'booking_date' => $yesterday,
+            'start_time' => \Carbon\Carbon::parse("{$yesterday} 10:00:00"), 'end_time' => \Carbon\Carbon::parse("{$yesterday} 12:00:00"),
+            'court_fee' => 600000, 'total_amount' => 600000, 'status' => 'COMPLETED',
+        ]);
+
+        $page = \Livewire\Livewire::actingAs($this->cashier)->test(\App\Filament\Pages\BookOfflineCourt::class)
+            ->assertSee('Court IM3 Platinum Arena Super Panjang') // nama lapangan utuh, tidak dipotong
+            ->call('prevDay')
+            ->assertSet('bookingDate', $yesterday)
+            ->assertSee('Customer Biasa') // riwayat: siapa yang main kemarin tetap kelihatan
+            ->assertSee('hanya untuk melihat riwayat booking')
+            ->assertDontSee('Pilih: 14:00 - 15:00', false) // slot kosong kemarin tidak bisa dipilih
+            ->call('toggleSlot', $this->court2->id, $this->court2->name, '14:00:00', '15:00:00', 300000)
+            ->assertCount('selectedSlots', 0)
+            ->assertNotified('Jadwal Sudah Lewat');
+
+        // Jam yang sudah lewat hari ini juga ditolak walau dipanggil langsung.
+        \Carbon\Carbon::setTestNow(now()->setTime(15, 30));
+        $page->call('today')
+            ->assertDontSee('hanya untuk melihat riwayat booking')
+            ->call('toggleSlot', $this->court1->id, $this->court1->name, '16:00:00', '17:00:00', 300000)
+            ->assertCount('selectedSlots', 1)
+            ->call('toggleSlot', $this->court2->id, $this->court2->name, '10:00:00', '11:00:00', 300000)
+            ->assertCount('selectedSlots', 1)
+            ->assertNotified('Jadwal Sudah Lewat');
+        \Carbon\Carbon::setTestNow();
+    }
+
+    /**
      * Test 10: SlotConflictException ditangkap dengan benar saat slot sudah diambil.
      */
     public function test_walk_in_slot_conflict_throws_proper_exception(): void

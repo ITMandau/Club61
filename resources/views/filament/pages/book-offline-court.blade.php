@@ -208,7 +208,12 @@
                 $deadHour = collect($operationalHours)->keys()->mapWithKeys(fn ($i) => [$i => count($gridData) > 0 && collect($gridData)->every(
                     fn ($cr) => in_array($cr['slots'][$i]['status'] ?? 'CLOSED', ['PAST', 'CLOSED'], true))])->all();
                 $timelineColumns = collect($operationalHours)->keys()->map(fn ($i) => $deadHour[$i] ? '30px' : 'minmax(44px, 1fr)')->implode(' ');
-                $timelineMinWidth = 116 + collect($deadHour)->sum(fn ($dead) => $dead ? 30 : 44);
+                // Kolom lapangan selebar nama/keterangan terpanjang (tidak terpotong, tidak turun baris); di HP dibatasi via CSS.
+                $courtColWidth = (int) min(300, max(116, collect($gridData)->map(fn ($cr) => max(
+                    mb_strlen($cr['court']->name) * 8.6,
+                    mb_strlen($cr['court']->type . ' • Rp' . number_format($cr['court']->hourly_rate_regular / 1000, 0) . 'k') * 6.6,
+                ) + 30)->max() ?? 116));
+                $hoursMinWidth = collect($deadHour)->sum(fn ($dead) => $dead ? 30 : 44);
                 // Booking lunas yang berurutan (kode sama) digabung jadi satu blok, seperti kalender klub padel.
                 $courtSegments = collect($gridData)->map(function ($courtRow) {
                     $slots = $courtRow['slots'];
@@ -244,11 +249,14 @@
                     </div>
                 </div>
 
+                @if ($bookingDate < now()->format('Y-m-d'))
+                    <div class="pos-past-note">Tanggal sudah lewat &mdash; hanya untuk melihat riwayat booking, tidak bisa input booking baru.</div>
+                @endif
                 @if (empty($gridData))
                     <div class="pos-past-note">Belum ada lapangan aktif.</div>
                 @else
                 <div class="pos-timeline-scroll">
-                    <div class="pos-timeline" style="grid-template-columns: 116px {{ $timelineColumns ?: 'minmax(44px, 1fr)' }}; min-width: {{ $timelineMinWidth }}px;">
+                    <div class="pos-timeline" style="--tl-court-w: {{ $courtColWidth }}px; grid-template-columns: minmax(var(--tl-court-w), var(--tl-court-max, max-content)) {{ $timelineColumns ?: 'minmax(44px, 1fr)' }}; min-width: calc(var(--tl-court-w) + {{ $hoursMinWidth }}px);">
                         <div class="tl-th tl-corner">Lapangan</div>
                         @foreach ($operationalHours as $i => $oh)
                             <div class="tl-th {{ ($firstCourtSlots[$i]['is_prime'] ?? false) ? 'is-prime' : '' }} {{ $nowHour === $oh['hour'] ? 'is-now' : '' }}"
