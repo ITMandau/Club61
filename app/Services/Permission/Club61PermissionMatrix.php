@@ -420,6 +420,20 @@ class Club61PermissionMatrix
                     ],
                 ],
             ],
+
+            'signature' => [
+                'title' => '14. Signature (Layar TV Venue)',
+                'submodules' => [
+                    'signature_screen' => [
+                        'label' => 'Konten & Monitoring Layar TV',
+                        'actions' => [
+                            'View:Signature' => 'Akses Halaman Signature & Preview',
+                            'manage_signature' => 'Ubah Template, Konten, Running Text & Sponsor (draft)',
+                            'publish_signature' => 'Tayangkan ke TV, Kembalikan Versi & Buat Ulang Link Layar',
+                        ],
+                    ],
+                ],
+            ],
         ];
     }
 

@@ -134,6 +134,18 @@ Route::get('/admin/log-aktivitas/export', \App\Http\Controllers\Admin\ActivityLo
     ->middleware('auth')
     ->name('admin.log-aktivitas.export');
 
+// Signature (Modul 26) — layar TV venue. Link rahasia per layar, tanpa login, hanya baca.
+Route::middleware('throttle:120,1')->group(function () {
+    Route::get('/signature/{token}', [\App\Http\Controllers\SignatureController::class, 'player'])->name('signature.player');
+    Route::get('/signature/{token}/payload', [\App\Http\Controllers\SignatureController::class, 'payload'])->name('signature.payload');
+    Route::get('/signature/{token}/live', [\App\Http\Controllers\SignatureController::class, 'live'])->name('signature.live');
+});
+// Preview tampilan yang belum ditayangkan — izin View:Signature dicek di controller.
+Route::middleware('auth')->group(function () {
+    Route::get('/admin/signature/preview/{key}', [\App\Http\Controllers\SignatureController::class, 'preview'])->name('signature.preview');
+    Route::get('/admin/signature/preview/{key}/live', [\App\Http\Controllers\SignatureController::class, 'previewLive'])->name('signature.preview.live');
+});
+
 // Export Buku Transaksi (Modul 17) — route GET biasa, izin View:BukuTransaksi + export_ledger dicek di controller.
 Route::get('/admin/buku-transaksi/export', \App\Http\Controllers\Admin\LedgerExportController::class)
     ->middleware('auth')
