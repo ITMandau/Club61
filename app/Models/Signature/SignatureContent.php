@@ -2,9 +2,9 @@
 
 namespace App\Models\Signature;
 
+use App\Services\Signature\SignatureFileJanitor;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Support\Facades\Storage;
 
 /** Satu konten di library Signature: gambar, video, atau widget dari sistem. */
 class SignatureContent extends Model
@@ -32,17 +32,13 @@ class SignatureContent extends Model
 
     protected static function booted(): void
     {
-        // File lama dibuang begitu diganti / kontennya dihapus.
-        static::saving(function (self $content) {
-            if ($content->exists && $content->isDirty('file_path') && $content->getOriginal('file_path')) {
-                Storage::disk('public')->delete($content->getOriginal('file_path'));
+        // File lama dibuang saat diganti / kontennya dihapus — kecuali masih / baru saja tayang di TV (SignatureFileJanitor).
+        static::updated(function (self $content) {
+            if ($content->wasChanged('file_path')) {
+                app(SignatureFileJanitor::class)->release($content->getOriginal('file_path'));
             }
         });
-        static::deleting(function (self $content) {
-            if ($content->file_path) {
-                Storage::disk('public')->delete($content->file_path);
-            }
-        });
+        static::deleted(fn (self $content) => app(SignatureFileJanitor::class)->release($content->file_path));
     }
 
     public function playlistItems()

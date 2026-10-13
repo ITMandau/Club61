@@ -3,9 +3,9 @@
 namespace App\Models\Signature;
 
 use App\Models\Sponsor\SponsorOrganization;
+use App\Services\Signature\SignatureFileJanitor;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Support\Facades\Storage;
 
 /** Sponsor yang tampil di TV: brand (input manual) atau dari Sponsor Corporate. */
 class SignatureSponsor extends Model
@@ -23,16 +23,13 @@ class SignatureSponsor extends Model
 
     protected static function booted(): void
     {
-        static::saving(function (self $sponsor) {
-            if ($sponsor->exists && $sponsor->isDirty('logo_path') && $sponsor->getOriginal('logo_path')) {
-                Storage::disk('public')->delete($sponsor->getOriginal('logo_path'));
+        // Logo lama dibuang saat diganti / sponsornya dihapus — kecuali masih / baru saja tayang di TV.
+        static::updated(function (self $sponsor) {
+            if ($sponsor->wasChanged('logo_path')) {
+                app(SignatureFileJanitor::class)->release($sponsor->getOriginal('logo_path'));
             }
         });
-        static::deleting(function (self $sponsor) {
-            if ($sponsor->logo_path) {
-                Storage::disk('public')->delete($sponsor->logo_path);
-            }
-        });
+        static::deleted(fn (self $sponsor) => app(SignatureFileJanitor::class)->release($sponsor->logo_path));
     }
 
     public function organization()

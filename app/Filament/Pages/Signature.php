@@ -230,7 +230,13 @@ class Signature extends Page
     {
         $this->authorizePublish();
         $version = SignatureVersion::where('screen_id', $this->screenId)->findOrFail($versionId);
-        $new = app(SignatureService::class)->restore($version, auth()->user());
+        try {
+            $new = app(SignatureService::class)->restore($version, auth()->user());
+        } catch (\App\Services\Signature\MissingSignatureFilesException $e) {
+            Notification::make()->title("Versi {$version->version} tidak bisa dikembalikan")->body($e->getMessage())->danger()->persistent()->send();
+
+            return;
+        }
 
         Notification::make()->title("Versi {$version->version} ditayangkan ulang")->body("Tersimpan sebagai versi {$new->version}.")->success()->send();
     }
@@ -458,6 +464,21 @@ class Signature extends Page
 
     // ================================================================== KONTEN
 
+    /** Dihitung sekali per render (properti magic Filament dipanggil ulang tiap baris tabel). */
+    protected ?array $storageUsageCache = null;
+
+    public function getStorageUsageProperty(): array
+    {
+        return $this->storageUsageCache ??= app(\App\Services\Signature\SignatureFileJanitor::class)->usage();
+    }
+
+    public function formatBytes(int $bytes): string
+    {
+        return $bytes >= 1073741824
+            ? number_format($bytes / 1073741824, 2, ',', '.').' GB'
+            : number_format($bytes / 1048576, 1, ',', '.').' MB';
+    }
+
     public function getContentsProperty()
     {
         return SignatureContent::withCount('playlistItems')->orderByRaw("CASE WHEN type IN ('IMAGE','VIDEO') THEN 1 ELSE 0 END")->orderBy('name')->get();
@@ -486,6 +507,30 @@ class Signature extends Page
         $this->showContentModal = true;
     }
 
+    /**
+     * Batas ukuran video yang benar-benar bisa di-upload (MB): 200 MB dari aplikasi, dibatasi setting PHP server
+     * (`upload_max_filesize` / `post_max_size`). Dulu tertulis 200 MB padahal PHP menolak file di atas 40 MB.
+     */
+    public function getVideoMaxMbProperty(): int
+    {
+        $toMb = function (string|false $value): int {
+            $value = trim((string) $value);
+            if ($value === '' || $value === '0' || $value === '-1') {
+                return PHP_INT_MAX; // tanpa batas
+            }
+            $number = (float) $value;
+
+            return (int) floor(match (strtoupper(substr($value, -1))) {
+                'G' => $number * 1024,
+                'M' => $number,
+                'K' => $number / 1024,
+                default => $number / 1048576,
+            });
+        };
+
+        return max(1, min(200, $toMb(ini_get('upload_max_filesize')), $toMb(ini_get('post_max_size'))));
+    }
+
     public function saveContent(): void
     {
         $this->authorizeManage();
@@ -497,7 +542,7 @@ class Signature extends Page
             'contentName' => ['required', 'string', 'max:100'],
             'contentType' => ['required', Rule::in(SignatureContent::FILE_TYPES)],
             'contentUpload' => $type === 'VIDEO'
-                ? [$needsFile ? 'required' : 'nullable', 'file', 'max:204800', function ($attribute, $file, $fail) {
+                ? [$needsFile ? 'required' : 'nullable', 'file', 'max:'.($this->videoMaxMb * 1024), function ($attribute, $file, $fail) {
                     // Dicek dari isi file. Pustaka deteksi membaca MP4 sebagai video/mp4 atau application/mp4.
                     $mime = strtolower((string) $file->getMimeType());
                     $extension = strtolower((string) $file->getClientOriginalExtension());
@@ -511,7 +556,7 @@ class Signature extends Page
         ], [
             'contentName.required' => 'Nama konten wajib diisi.',
             'contentUpload.required' => $type === 'VIDEO' ? 'Pilih file video MP4.' : 'Pilih file gambar.',
-            'contentUpload.max' => $type === 'VIDEO' ? 'Ukuran video maksimal 200 MB.' : 'Ukuran gambar maksimal 10 MB.',
+            'contentUpload.max' => $type === 'VIDEO' ? "Ukuran video maksimal {$this->videoMaxMb} MB." : 'Ukuran gambar maksimal 10 MB.',
             'contentDuration.min' => 'Durasi minimal 3 detik.',
         ]);
 

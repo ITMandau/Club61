@@ -16,6 +16,8 @@ Artisan::command('inspire', function () {
 \Illuminate\Support\Facades\Schedule::command('pos:sweep-auto-payments')->everyFiveMinutes()->withoutOverlapping(10);
 // Retensi Log Aktivitas (Modul 16) — default simpan 24 bulan, atur lewat AUDIT_RETENTION_MONTHS.
 \Illuminate\Support\Facades\Schedule::command('audit:prune')->dailyAt('02:30')->withoutOverlapping();
+// Digital Signage: file yang tidak dipakai & tidak tayang di TV selama 7 hari (yang masih tayang tidak pernah dihapus).
+\Illuminate\Support\Facades\Schedule::command('signature:clean-files')->dailyAt('03:00')->withoutOverlapping();
 
 // Modul 17: cocokkan Buku Transaksi dengan pembayaran & refund kemarin (selisih → Log Aktivitas KRITIS).
 \Illuminate\Support\Facades\Schedule::command('ledger:verify')->dailyAt('01:15')->withoutOverlapping();

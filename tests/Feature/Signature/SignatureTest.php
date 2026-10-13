@@ -251,9 +251,10 @@ class SignatureTest extends TestCase
         $page->call('deleteContent', $clock->id);
         $this->assertNotNull($clock->fresh());
 
-        // Hapus konten upload → file & item playlist ikut hilang.
+        // Hapus konten upload → item playlist ikut hilang. Filenya masih dipakai versi yang sedang tayang di TV, jadi
+        // ditahan dulu (dihapus setelah 7 hari tidak tayang — SignatureFileJanitorTest).
         $page->call('deleteContent', $image->id);
-        Storage::disk('public')->assertMissing($image->file_path);
+        Storage::disk('public')->assertExists($image->file_path);
         $this->assertSame(2, $template->playlistItems()->count());
     }
 

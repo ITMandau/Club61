@@ -2,9 +2,9 @@
 
 namespace App\Models\Signature;
 
+use App\Services\Signature\SignatureFileJanitor;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Support\Facades\Storage;
 
 /** Susunan tampilan TV: layout (preset / custom), warna & font, running text, logo. */
 class SignatureTemplate extends Model
@@ -20,16 +20,13 @@ class SignatureTemplate extends Model
 
     protected static function booted(): void
     {
-        static::saving(function (self $template) {
-            if ($template->exists && $template->isDirty('logo_path') && $template->getOriginal('logo_path')) {
-                Storage::disk('public')->delete($template->getOriginal('logo_path'));
+        // Logo lama dibuang saat diganti / templatenya dihapus — kecuali masih / baru saja tayang di TV.
+        static::updated(function (self $template) {
+            if ($template->wasChanged('logo_path')) {
+                app(SignatureFileJanitor::class)->release($template->getOriginal('logo_path'));
             }
         });
-        static::deleting(function (self $template) {
-            if ($template->logo_path) {
-                Storage::disk('public')->delete($template->logo_path);
-            }
-        });
+        static::deleted(fn (self $template) => app(SignatureFileJanitor::class)->release($template->logo_path));
     }
 
     public function playlistItems()

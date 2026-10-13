@@ -51,6 +51,7 @@ class ActivityLogger
         'membership:sync-expired',
         'payment:reconcile-midtrans',
         'audit:prune',
+        'signature:clean-files',
     ];
 
     private const SENSITIVE_KEYS = [

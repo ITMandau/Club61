@@ -252,7 +252,12 @@
             <div class="c61-card-head">
                 <div>
                     <div class="c61-card-title">Library Konten</div>
-                    <div class="c61-card-sub">Gambar & video MP4 yang di-upload, plus widget dari sistem. Konten dipasang ke template lewat playlist.</div>
+                    <div class="c61-card-sub">Gambar & video MP4 yang di-upload, plus widget dari sistem. Konten dipasang ke template lewat playlist.
+                        Storage terpakai: <strong>{{ $this->formatBytes($this->storageUsage['total']) }}</strong>
+                        @if($this->storageUsage['pending'] > 0)
+                            (termasuk {{ $this->formatBytes($this->storageUsage['pending']) }} file lama yang masih tayang / menunggu 7 hari)
+                        @endif
+                    </div>
                 </div>
                 @if($this->canManage)
                     <button type="button" wire:click="openCreateContent" class="c61-btn c61-btn-primary">+ Tambah Konten</button>
@@ -273,7 +278,11 @@
                                         <div class="sg-thumb" style="display:flex; align-items:center; justify-content:center; font-size:0.625rem; font-weight:800; color:var(--c-muted);">LIVE</div>
                                     @endif
                                 </td>
-                                <td class="strong">{{ $content->name }}</td>
+                                <td class="strong">{{ $content->name }}
+                                    @if(isset($this->storageUsage['files'][$content->file_path]))
+                                        <div class="c61-hint" style="font-weight:600;">{{ $this->formatBytes($this->storageUsage['files'][$content->file_path]) }}</div>
+                                    @endif
+                                </td>
                                 <td><span class="c61-pill {{ in_array($content->type, \App\Models\Signature\SignatureContent::FILE_TYPES, true) ? 'c61-pill-cream' : 'c61-pill-info' }}">{{ \App\Models\Signature\SignatureContent::TYPES[$content->type] ?? $content->type }}</span></td>
                                 <td>{{ $content->type === 'VIDEO' ? 'Sampai selesai' : $content->duration_seconds.' detik' }}</td>
                                 <td>{{ $content->type === 'VIDEO' ? ($content->sound ? 'Ya · '.$content->volume.'%' : 'Mute') : '—' }}</td>
@@ -285,7 +294,7 @@
                                             <button type="button" wire:click="openEditContent('{{ $content->id }}')" class="c61-btn c61-btn-ghost c61-btn-sm">Edit</button>
                                             @if(in_array($content->type, \App\Models\Signature\SignatureContent::FILE_TYPES, true))
                                                 <button type="button" class="c61-btn c61-btn-danger c61-btn-sm"
-                                                    x-on:click="$dispatch('club61-confirm', { title: @js('Hapus '.$content->name.'?'), message: 'File dihapus dan konten dikeluarkan dari semua playlist template (draft).', confirmLabel: 'Ya, Hapus', tone: 'danger', onConfirm: () => $wire.deleteContent(@js($content->id)) })">Hapus</button>
+                                                    x-on:click="$dispatch('club61-confirm', { title: @js('Hapus '.$content->name.'?'), message: 'Konten dikeluarkan dari semua playlist template (draft). Kalau masih tayang di TV, tetap tayang sampai Tayangkan berikutnya — filenya dihapus otomatis setelah 7 hari tidak tayang.', confirmLabel: 'Ya, Hapus', tone: 'danger', onConfirm: () => $wire.deleteContent(@js($content->id)) })">Hapus</button>
                                             @endif
                                         </div>
                                     @endif
@@ -558,7 +567,7 @@
                             <label class="c61-label" for="sg-content-type">Jenis</label>
                             <select id="sg-content-type" wire:model.live="contentType" class="c61-select">
                                 <option value="IMAGE">Gambar (JPG / PNG / WEBP, maks 10 MB)</option>
-                                <option value="VIDEO">Video MP4 (maks 200 MB)</option>
+                                <option value="VIDEO">Video MP4 (maks {{ $this->videoMaxMb }} MB)</option>
                             </select>
                         </div>
                     @else
@@ -569,6 +578,9 @@
                         <div class="c61-field">
                             <label class="c61-label" for="sg-content-file">{{ $contentFilePath ? 'Ganti file (opsional)' : 'File' }}</label>
                             <input id="sg-content-file" type="file" wire:model="contentUpload" accept="{{ $contentType === 'VIDEO' ? 'video/mp4' : 'image/png,image/jpeg,image/webp' }}" class="c61-input" style="height:auto; padding:0.4rem;">
+                            @if($contentType === 'VIDEO')
+                                <div class="c61-hint">Maks {{ $this->videoMaxMb }} MB (batas server). Video lebih besar dikompres dulu ke 1080p.</div>
+                            @endif
                             <div wire:loading wire:target="contentUpload" class="c61-hint">Mengunggah… (video besar bisa beberapa menit)</div>
                             @error('contentUpload') <span class="sg-error">{{ $message }}</span> @enderror
                             @if($contentFilePath && ! $contentUpload)

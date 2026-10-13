@@ -240,9 +240,18 @@ class SignatureService
         return $this->storeVersion($screen, $this->buildPayload($screen), $user, $note ?: 'Tayangkan');
     }
 
-    /** Tayangkan ulang isi versi lama sebagai versi baru (riwayat tetap utuh). */
+    /**
+     * Tayangkan ulang isi versi lama sebagai versi baru (riwayat tetap utuh). Ditolak kalau ada file versi itu yang sudah
+     * dihapus (tidak tayang lebih dari SignatureFileJanitor::KEEP_AFTER_AIRING_DAYS hari) — TV akan menampilkan slide kosong.
+     */
     public function restore(SignatureVersion $version, User $user): SignatureVersion
     {
+        $missing = app(SignatureFileJanitor::class)->missingFiles((array) $version->payload);
+        if ($missing !== []) {
+            throw new MissingSignatureFilesException(count($missing).' file di versi '.$version->version.' sudah dihapus otomatis karena tidak tayang lebih dari '
+                .SignatureFileJanitor::KEEP_AFTER_AIRING_DAYS.' hari. Upload ulang kontennya di library, lalu tekan Tayangkan.');
+        }
+
         return $this->storeVersion($version->screen, $version->payload, $user, "Kembalikan ke versi {$version->version}");
     }
 
