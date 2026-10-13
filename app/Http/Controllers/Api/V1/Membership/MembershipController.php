@@ -204,7 +204,16 @@ class MembershipController extends Controller
                         'amount' => $grandTotal,
                         'payment_method' => strtoupper($paymentMethod),
                         'status' => 'PENDING',
-                        'payload_log' => $paymentResult['raw'] ?? null,
+                        // Sesi pertama dicatat supaya "lanjut bayar" dengan metode sama memakai sesi ini lagi.
+                        'payload_log' => \App\Services\Payment\SnapSessionGuard::record(
+                            is_array($paymentResult['raw'] ?? null) ? $paymentResult['raw'] : [],
+                            $orderNumber,
+                            $paymentMethod,
+                            (float) $grandTotal,
+                            $paymentResult['snap_token'] ?? null,
+                            $paymentResult['redirect_url'] ?? $paymentResult['payment_url'] ?? null,
+                            now()->addMinutes(app(\App\Services\Padel\BookingTimeService::class)->paymentWindowMinutes()),
+                        ),
                     ]);
                 }
 

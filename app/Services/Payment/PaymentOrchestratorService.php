@@ -116,6 +116,7 @@ class PaymentOrchestratorService
             // jadi omzet karena grand_total order masih menghitung tagihan selisihnya.
             if ($payment && $this->isPaymentForInactiveTarget($order, $payment)) {
                 $this->recordPaymentForClosedBill($order, $payment, $paymentDetails, $posShiftId);
+                $this->closeSiblingSessionsAfterCommit($payment->refresh(), $paymentGateway, $transactionId);
 
                 return;
             }
@@ -171,6 +172,8 @@ class PaymentOrchestratorService
                 if ($posShiftId && ! $order->pos_shift_id) {
                     $order->update(['pos_shift_id' => $posShiftId]);
                 }
+
+                $this->closeSiblingSessionsAfterCommit($payment, $paymentGateway, $transactionId);
 
                 // Set order payment_status = PAID sesuai fakta finansial bahwa uang sah diterima
                 $order->update(['payment_status' => 'PAID']);
@@ -267,6 +270,8 @@ class PaymentOrchestratorService
                 $order->update(['pos_shift_id' => $posShiftId]);
             }
 
+            $this->closeSiblingSessionsAfterCommit($payment, $paymentGateway, $transactionId);
+
             // 3. Evaluasi status finansial Order (PAID vs PARTIALLY_PAID)
             $totalPaid = (float) $order->payments()->where('status', 'SUCCESS')->sum('amount');
             $grandTotal = (float) $order->grand_total;
@@ -360,6 +365,21 @@ class PaymentOrchestratorService
             // transaksi yang sama: kalau pelunasan gagal & di-rollback, log-nya ikut hilang.
             $this->logPayment($order, $payment, $paymentDetails);
         });
+    }
+
+    /**
+     * Tagihan lunas lewat salah satu sesi Snap → sesi lain tagihan itu ditutup di Midtrans setelah commit, supaya VA /
+     * QR lama tidak bisa dibayar lagi (pembayaran ganda). Gagal di sini tidak menggagalkan pelunasan — rekonsiliasi
+     * berkala (SnapSessionGuard::sweepPaidSiblings) mengulanginya.
+     */
+    private function closeSiblingSessionsAfterCommit(Payment $payment, string $paymentGateway, ?string $transactionId): void
+    {
+        if (strtoupper($paymentGateway) !== 'MIDTRANS' || ! $transactionId || count(SnapSessionGuard::sessionsOf($payment)) < 2) {
+            return;
+        }
+
+        $paidBillId = $payment->id;
+        DB::afterCommit(fn () => rescue(fn () => app(SnapSessionGuard::class)->closeSiblings($paidBillId), null, false));
     }
 
     /** Tagihan ini pemilik order_id gateway tersebut (transaction_id-nya, atau salah satu sesi Snap-nya)? */

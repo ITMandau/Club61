@@ -12,6 +12,7 @@ use App\Services\Payment\MidtransService;
 use App\Services\Payment\OnlinePaymentMethodService;
 use App\Services\Payment\PaymentManager;
 use App\Services\Payment\PaymentOrchestratorService;
+use App\Services\Payment\SnapSessionGuard;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Symfony\Component\HttpKernel\Exception\HttpException;
@@ -69,6 +70,25 @@ class MembershipOnlinePaymentService
 
             $grandTotal = (float) $order->grand_total;
             $paymentMethod = app(OnlinePaymentMethodService::class)->assertSelectable($paymentMethod, $grandTotal);
+
+            // Satu tagihan = satu sesi yang bisa dibayar: metode sama → sesi yang sama; ganti metode → sesi lama
+            // ditutup dulu di Midtrans (SnapSessionGuard). Dulu tiap klik / checkout ganda membuka sesi baru.
+            $bill = Payment::where('order_id', $order->id)->where('status', 'PENDING')->latest()->lockForUpdate()->first();
+            $prepared = app(SnapSessionGuard::class)->prepare($bill, $paymentMethod, $grandTotal);
+            if ($prepared['action'] === SnapSessionGuard::PAID) {
+                $this->reconciler->settle($order, $prepared['session_id'], $prepared['status'] ?? []);
+
+                return $this->alreadyPaid($membership);
+            }
+            if ($prepared['action'] === SnapSessionGuard::REUSE) {
+                return [
+                    'order' => $order->fresh(),
+                    'membership' => $membership->fresh(['balances', 'plan']),
+                    'payment' => SnapSessionGuard::reusedPayment($prepared['session']),
+                    'already_paid' => false,
+                ];
+            }
+
             $sessionId = $order->order_number.'_'.time().strtoupper(Str::random(4));
 
             $paymentResult = $this->paymentManager->createPayment([
@@ -85,11 +105,15 @@ class MembershipOnlinePaymentService
 
             // Sesi baru dicatat PERMANEN di tagihan order — webhook / rekonsiliasi mencocokkan pembayaran ke tagihan
             // lewat midtrans_order_ids (PaymentOrchestratorService::ownsGatewayId).
-            $bill = Payment::where('order_id', $order->id)->where('status', 'PENDING')->latest()->lockForUpdate()->first();
-            $log = is_array($bill?->payload_log) ? $bill->payload_log : [];
-            $log['midtrans_order_id'] = $sessionId;
-            $log['midtrans_order_ids'] = array_values(array_unique(array_merge((array) ($log['midtrans_order_ids'] ?? []), [$sessionId])));
-            $log['snap_token'] = $paymentResult['snap_token'] ?? null;
+            $log = SnapSessionGuard::record(
+                is_array($bill?->payload_log) ? $bill->payload_log : [],
+                $sessionId,
+                $paymentMethod,
+                $grandTotal,
+                $paymentResult['snap_token'] ?? null,
+                $paymentResult['redirect_url'] ?? $paymentResult['payment_url'] ?? null,
+                now()->addMinutes(app(\App\Services\Padel\BookingTimeService::class)->paymentWindowMinutes()),
+            );
 
             $attributes = [
                 'payment_gateway' => 'MIDTRANS',

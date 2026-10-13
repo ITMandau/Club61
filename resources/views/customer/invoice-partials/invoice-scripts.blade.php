@@ -209,7 +209,8 @@
             },
 
             async payNow() {
-                if (!this.currentTicket) return;
+                // Klik beruntun (double tap) tidak boleh mengirim permintaan bayar kedua selagi yang pertama berjalan.
+                if (!this.currentTicket || this.isSubmittingPayment) return;
                 // Tagihan Rp0 tidak memakai metode bayar (server langsung melunasi) — jangan diblokir batas nominal metode.
                 const isFree = Number(this.amountToPay) <= 0;
                 if (! isFree && ! this.availableMethods.length) {
@@ -328,7 +329,7 @@
 
             async payMembership() {
                 const t = this.currentTicket;
-                if (!t || !t.can_pay_online) return;
+                if (!t || !t.can_pay_online || this.isSubmittingPayment) return;
                 if (! this.availableMethods.length) {
                     this.showNotice('Pembayaran Online Tidak Tersedia', 'Belum ada metode pembayaran online yang bisa dipakai untuk nominal ini. Silakan hubungi frontdesk.', 'error', 'Tutup');
                     return;

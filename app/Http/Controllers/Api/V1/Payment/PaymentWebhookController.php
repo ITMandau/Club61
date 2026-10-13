@@ -207,6 +207,10 @@ class PaymentWebhookController extends Controller
                 ]);
             } elseif ($status === 'CANCELLED') {
                 $this->handleGatewayCancellation($order, $incomingOrderId, (string) $request->input('transaction_status', ''), $safePayload);
+            } elseif ($status === 'PENDING' && strtolower($driver) === 'midtrans') {
+                // Customer memakai sesi yang seharusnya sudah mati (popup lama di tab lain, sesi sebelum ganti metode,
+                // atau tagihan yang sudah lunas) → VA / QR barunya langsung ditutup sebelum sempat dibayar.
+                app(\App\Services\Payment\SnapSessionGuard::class)->closeIfStale($order, $incomingOrderId);
             } elseif (in_array($rawStatus = (string) $request->input('transaction_status', ''), ['refund', 'partial_refund', 'chargeback', 'partial_chargeback'], true)) {
                 // Uang ditarik kembali di sisi Midtrans/bank (refund dari dashboard atau chargeback kartu) — sistem
                 // TIDAK otomatis membatalkan booking/membership, tapi wajib terlihat supaya ditindaklanjuti manual.

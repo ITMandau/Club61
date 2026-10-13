@@ -4,6 +4,7 @@ namespace App\Console\Commands;
 
 use App\Models\Pos\Order;
 use App\Services\Payment\MidtransReconciliationService;
+use App\Services\Payment\SnapSessionGuard;
 use Illuminate\Console\Command;
 
 /**
@@ -58,6 +59,13 @@ class ReconcileMidtransPayments extends Command
             $counts[MidtransReconciliationService::NOT_PAID],
             $counts[MidtransReconciliationService::ERROR],
         ));
+
+        // Sesi lain dari tagihan yang sudah lunas (48 jam): yang ternyata ikut dibayar tapi webhook-nya hilang
+        // dicatat sebagai pembayaran ganda + refund PENDING; yang masih menunggu bayar ditutup.
+        $duplicates = app(SnapSessionGuard::class)->sweepPaidSiblings($reconciler);
+        if ($duplicates > 0) {
+            $this->warn("Pembayaran ganda baru ditemukan: {$duplicates} (refund PENDING dibuat).");
+        }
 
         return self::SUCCESS;
     }

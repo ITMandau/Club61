@@ -228,7 +228,8 @@ class MembershipOnlinePaymentTest extends TestCase
         $membership = UserMembership::first();
         $this->app->forgetInstance(PaymentManager::class); // kembali ke driver bawaan (simulator di testing)
 
-        $this->postJson("/api/v1/membership/purchases/{$membership->id}/pay", ['payment_method' => 'QRIS'])
+        // Metode lain: metode yang sama memakai sesi yang sudah ada (SnapSessionGuard), bukan sesi simulator baru.
+        $this->postJson("/api/v1/membership/purchases/{$membership->id}/pay", ['payment_method' => 'BCA_VA'])
             ->assertOk()
             ->assertJsonPath('data.payment.is_mock', true);
 

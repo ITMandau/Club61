@@ -126,6 +126,17 @@ class AppServiceProvider extends ServiceProvider
             ];
         });
 
+        // 1b. Membuat / melanjutkan pembayaran online (10/menit/user): klik bayar beruntun tidak bisa membanjiri Midtrans.
+        RateLimiter::for('payment-throttle', function (Request $request) {
+            return Limit::perMinute(10)->by('pay:'.($request->user()?->id ?: $request->ip()))->response(function () {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Terlalu banyak permintaan pembayaran. Tunggu 1 menit, lalu lanjutkan pembayaran yang sudah terbuka.',
+                    'errors' => null,
+                ], 429);
+            });
+        });
+
         // 2. Rate Limiting Booking Padel (5 hit/menit/User) - Anti Calo & Bot
         RateLimiter::for('booking-throttle', function (Request $request) {
             return Limit::perMinute(5)->by($request->user()?->id ?: $request->ip())->response(function () {

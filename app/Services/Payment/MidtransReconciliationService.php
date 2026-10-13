@@ -234,7 +234,8 @@ class MidtransReconciliationService
         }
     }
 
-    private function settle(Order $order, string $gatewayOrderId, array $status): void
+    /** Lunasi satu sesi Midtrans dari data Status API — jalur yang sama dengan webhook (idempoten). */
+    public function settle(Order $order, string $gatewayOrderId, array $status): void
     {
         $grossAmount = (float) ($status['gross_amount'] ?? 0);
 

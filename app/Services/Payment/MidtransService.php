@@ -163,7 +163,8 @@ class MidtransService
     }
 
     /**
-     * Membatalkan transaksi di sisi gateway Midtrans (Core API Cancel).
+     * Membatalkan transaksi di sisi gateway Midtrans (Core API Cancel). Best-effort — pemanggil tidak memakai
+     * hasilnya untuk keputusan uang; yang butuh kepastian memakai closeTransaction().
      */
     public function cancelTransaction(string $orderId): bool
     {
@@ -172,22 +173,105 @@ class MidtransService
             return true;
         }
 
-        $url = ($this->isProduction ? 'https://api.midtrans.com/v2/' : 'https://api.sandbox.midtrans.com/v2/') . $orderId . '/cancel';
+        $response = $this->postAction($orderId, 'cancel');
+
+        return $response !== null && $this->actionAccepted($response);
+    }
+
+    public const CLOSE_CLOSED = 'CLOSED';
+
+    public const CLOSE_NOT_FOUND = 'NOT_FOUND';
+
+    public const CLOSE_PAID = 'PAID';
+
+    public const CLOSE_FAILED = 'FAILED';
+
+    /**
+     * Pastikan sesi pembayaran ini TIDAK BISA dibayar lagi (VA / QR-nya mati), lalu buktikan lewat Status API —
+     * jawaban API expire/cancel saja tidak dipercaya (Midtrans bisa membalas HTTP 200 dengan status_code gagal).
+     *
+     * @return array{result: string, status: ?array}
+     *   CLOSED    — sudah expire / cancel / deny / gagal di Midtrans
+     *   NOT_FOUND — Midtrans belum mengenal order_id ini (popup Snap belum memilih metode)
+     *   PAID      — ternyata SUDAH dibayar (status berisi data Status API) → jangan buka sesi baru
+     *   FAILED    — Midtrans tidak bisa dihubungi / masih pending setelah dicoba ditutup → jangan buka sesi baru
+     */
+    public function closeTransaction(string $orderId): array
+    {
+        // Mode mock / test tanpa server key: tidak ada transaksi sungguhan di Midtrans.
+        if (empty($this->serverKey)) {
+            return ['result' => self::CLOSE_NOT_FOUND, 'status' => null];
+        }
+
+        $status = $this->getTransactionStatus($orderId);
+        $state = $this->closeState($status);
+        if ($state !== null) {
+            return ['result' => $state, 'status' => $status];
+        }
+
+        // Masih pending → expire (pembayaran yang menunggu: VA, QRIS, e-wallet); cancel sebagai cadangan.
+        foreach (['expire', 'cancel'] as $action) {
+            $this->postAction($orderId, $action);
+            $status = $this->getTransactionStatus($orderId);
+            $state = $this->closeState($status);
+            if ($state !== null) {
+                return ['result' => $state, 'status' => $status];
+            }
+        }
+
+        Log::warning("[ALERT] Sesi Midtrans [{$orderId}] belum bisa ditutup (masih ".($status['transaction_status'] ?? 'tidak diketahui').').');
+
+        return ['result' => self::CLOSE_FAILED, 'status' => $status];
+    }
+
+    /** Status API → hasil penutupan; null = masih bisa dibayar (pending / challenge). */
+    private function closeState(?array $status): ?string
+    {
+        if ($status === null) {
+            return self::CLOSE_FAILED;
+        }
+        if ((string) ($status['status_code'] ?? '') === '404') {
+            return self::CLOSE_NOT_FOUND;
+        }
+        if (($status['transaction_status'] ?? null) === 'failure') {
+            return self::CLOSE_CLOSED;
+        }
+
+        return match (self::normalizeStatus((string) ($status['transaction_status'] ?? ''), $status['fraud_status'] ?? null)) {
+            'PAID' => self::CLOSE_PAID,
+            'PENDING', 'CHALLENGE' => null,
+            'CANCELLED' => self::CLOSE_CLOSED,
+            // refund / chargeback dll.: transaksi ini dulu dibayar — jangan dianggap aman untuk ditinggal.
+            default => self::CLOSE_FAILED,
+        };
+    }
+
+    private function postAction(string $orderId, string $action): ?\Illuminate\Http\Client\Response
+    {
+        $url = ($this->isProduction ? 'https://api.midtrans.com/v2/' : 'https://api.sandbox.midtrans.com/v2/')
+            .rawurlencode($orderId).'/'.$action;
 
         try {
-            $response = Http::withBasicAuth($this->serverKey, '')
-                ->withHeaders([
-                    'Content-Type' => 'application/json',
-                    'Accept' => 'application/json',
-                ])
+            return Http::withBasicAuth($this->serverKey, '')
+                ->acceptJson()
+                ->asJson()
                 ->timeout(5)
                 ->post($url);
-
-            return $response->successful();
         } catch (\Throwable $e) {
-            Log::warning("Gagal membatalkan transaksi Midtrans ({$orderId}): " . $e->getMessage());
-            return false;
+            Log::warning("Midtrans {$action} gagal ({$orderId}): ".$e->getMessage());
+
+            return null;
         }
+    }
+
+    /** Midtrans bisa membalas HTTP 200 dengan status_code gagal (412, 404, …) — cek isi responsnya. */
+    private function actionAccepted(\Illuminate\Http\Client\Response $response): bool
+    {
+        $code = (string) ($response->json('status_code') ?? '');
+
+        return $response->successful()
+            && ($code === '' || str_starts_with($code, '2') || $code === '407'
+                || in_array($response->json('transaction_status'), ['cancel', 'expire'], true));
     }
 
     /**

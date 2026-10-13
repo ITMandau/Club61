@@ -264,7 +264,7 @@ class AuthenticationTest extends TestCase
         $user = User::factory()->create();
         $wrong = fn () => $this->from('/login')->post('/login', ['email' => $user->email, 'password' => 'salah-terus']);
 
-        $wrong()->assertSessionHasErrors(['email' => 'Email / nomor HP atau kata sandi salah. Periksa lagi penulisannya , lalu coba lagi.']);
+        $wrong()->assertSessionHasErrors(['email' => 'Email / nomor HP atau kata sandi salah. Periksa lagi penulisannya, lalu coba lagi.']);
         $wrong();
         $wrong();
         $this->assertStringContainsString('Sisa 2 kali percobaan lagi', session('errors')->first('email'));

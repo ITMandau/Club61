@@ -27,12 +27,12 @@ Route::prefix('v1/padel')->group(function () {
         Route::post('/preview-membership-benefit', [PadelBookingController::class, 'previewMembershipBenefit']);
 
         // Checkout & Payment Initialization (Midtrans Snap)
-        Route::post('/checkout', [PadelBookingController::class, 'checkout']);
+        Route::post('/checkout', [PadelBookingController::class, 'checkout'])->middleware('throttle:payment-throttle');
 
         // Riwayat & E-Tiket Member
         Route::get('/my-bookings', [PadelBookingController::class, 'myBookings']);
         Route::get('/bookings/{id}/ticket', [PadelBookingController::class, 'ticket']);
-        Route::post('/bookings/{id}/retry-payment', [PadelBookingController::class, 'retryPayment']);
+        Route::post('/bookings/{id}/retry-payment', [PadelBookingController::class, 'retryPayment'])->middleware('throttle:payment-throttle');
         // Customer tidak bisa mengajukan refund sendiri (Modul 21) — pembatalan + refund diajukan staf di Kelola Pemesanan.
 
         // Voucher promo & voucher saldo (refund yang ditolak) milik customer.
