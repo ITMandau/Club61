@@ -126,6 +126,7 @@ trait ManagesCheckoutAndPayments
             // Voucher promo / voucher saldo (VoucherService: aturan sama dengan kasir). Kode tidak valid diabaikan —
             // halaman checkout sudah memvalidasinya lebih dulu lewat /vouchers/check.
             $voucherResult = app(\App\Services\Finance\VoucherService::class)->resolve($voucherCode, $user, $courtTotal + $equipmentTotal, lock: true);
+            $this->assertOneVoucherPerTransaction($sponsorBenefitResult, $voucherResult['voucher']);
             $discountAmount = $voucherResult['discount'];
             $appliedVoucherCode = $voucherResult['voucher']?->code;
 
@@ -1120,6 +1121,7 @@ trait ManagesCheckoutAndPayments
                 if ($voucherResult['error']) {
                     throw new HttpException(422, $voucherResult['error']);
                 }
+                $this->assertOneVoucherPerTransaction($sponsorBenefitResult, $voucherResult['voucher']);
 
                 $walkInFinanceCalc = app(\App\Services\Finance\TaxAndFeeService::class)->calculate(
                     subtotal: $courtTotal + $equipmentTotal,
@@ -1521,6 +1523,19 @@ trait ManagesCheckoutAndPayments
             'remaining_quota_after' => $simulatedRemaining,
             'rejected_reason' => null,
         ];
+    }
+
+    /**
+     * 1 transaksi = 1 voucher: voucher jam corporate TIDAK boleh digabung dengan kode promo (diskon) — customer memilih
+     * salah satu. Voucher saldo (CREDIT, hasil refund) tetap boleh karena itu uang customer sendiri, bukan diskon.
+     * Dicek di server (checkout online & kasir), jadi tidak bisa diakali dari browser / aplikasi. Wajib dipanggil di
+     * dalam transaksi checkout supaya jam voucher yang sudah dipotong ikut dibatalkan.
+     */
+    private function assertOneVoucherPerTransaction(array $sponsorBenefitResult, ?\App\Models\Pos\Voucher $voucher): void
+    {
+        if (($sponsorBenefitResult['benefit_type'] ?? 'NONE') !== 'NONE' && $voucher && ! $voucher->isCredit()) {
+            throw new HttpException(422, 'Voucher jam corporate tidak bisa digabung dengan kode promo. Pilih salah satu: matikan voucher corporate, atau hapus kode promonya.');
+        }
     }
 
     /**

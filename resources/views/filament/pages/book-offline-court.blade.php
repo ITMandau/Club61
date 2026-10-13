@@ -344,7 +344,7 @@
                             $coveredBy = collect([
                                 $this->membershipDiscountAmount > 0 ? 'kuota member' : null,
                                 $this->sponsorDiscountAmount > 0 ? 'jam corporate' : null,
-                                $appliedVoucherCode ? 'voucher '.$appliedVoucherCode : null,
+                                $appliedVoucherCode && $this->voucherDiscount > 0 ? 'voucher '.$appliedVoucherCode : null,
                             ])->filter()->implode(' + ');
                         @endphp
                         <div style="background:#ECFDF5; border:1px solid #A7F3D0; border-radius:12px; padding:0.9rem 1rem; color:#065F46; font-size:0.875rem; font-weight:700;">
@@ -860,7 +860,7 @@
                             @empty
                                 <span class="pos-confirm-muted">Tidak ada</span>
                             @endforelse
-                            @if ($appliedVoucherCode)
+                            @if ($appliedVoucherCode && ! $this->voucherResult['error'])
                                 <span class="pos-confirm-line">Voucher {{ $appliedVoucherCode }}</span>
                             @endif
                         </strong>
@@ -868,6 +868,15 @@
                 @endunless
                 <div class="pos-confirm-row"><span>Metode bayar</span><strong>{{ $confirmMethod }}</strong></div>
                 <div class="pos-confirm-total"><span>Total</span><strong>Rp {{ number_format($settleBill ? $settleBill['amount'] : $this->grandTotal, 0, ',', '.') }}</strong></div>
+                {{-- Ketentuan yang sama dengan checkout online — dibacakan kasir ke customer sebelum bayar. --}}
+                <div class="pos-confirm-policy">
+                    <b>Ketentuan booking</b>
+                    <ul>
+                        <li>Reschedule hanya bisa sampai <strong>H-3</strong> (3 hari sebelum jam main).</li>
+                        <li><strong>Tidak ada refund</strong> setelah booking dibayar.</li>
+                        <li>Salah pilih tanggal, lapangan, atau jam menjadi <strong>tanggung jawab pemesan</strong>.</li>
+                    </ul>
+                </div>
             </div>
 
             <x-slot name="footer">

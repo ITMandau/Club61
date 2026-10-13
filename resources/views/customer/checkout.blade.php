@@ -248,6 +248,9 @@
                                 Remove
                             </button>
                         </div>
+                        <div x-show="corporateVoucherOn && !promoApplied" class="text-[11px] leading-snug text-[#7A5A52]">
+                            Corporate voucher is on — promo codes can't be combined with it (credit vouchers still work).
+                        </div>
                         <div x-show="promoApplied" class="text-[11px] font-bold leading-snug" :class="promoDiscount > 0 ? 'text-emerald-700' : 'text-rose-600'">
                             <span x-show="promoDiscount > 0" x-text="(promoVoucher ? promoVoucher.code : '') + ' applied — you save Rp ' + formatNumber(promoDiscount)"></span>
                             <span x-show="promoDiscount <= 0">This voucher does not apply to the current total.</span>
@@ -308,7 +311,7 @@
                         </div>
                     </div>
 
-                    <button type="button" :disabled="isSubmitting || isExpired" @click="executePayment()"
+                    <button type="button" :disabled="isSubmitting || isExpired" @click="openPayConfirm()"
                             class="bk-tap hidden lg:flex w-full h-12 rounded-lg items-center justify-center gap-2 text-xs font-black uppercase tracking-wider transition-all bg-[#662721] hover:bg-[#511D18] text-[#F7F0DB] shadow-[0_8px_20px_rgba(79,47,42,0.18)]  active:scale-[0.98] disabled:opacity-60 disabled:cursor-not-allowed">
                         <span x-show="isSubmitting" class="w-4 h-4 border-2 border-[#4F2F2A] border-t-transparent rounded-full animate-spin"></span>
                         <span x-text="payButtonLabel"></span>
@@ -337,11 +340,71 @@
                     <div class="text-[11px] font-bold text-[#7A5A52] truncate" x-text="grandTotal > 0 ? (selectedMethod.name || 'Choose a payment method') : 'Fully covered'"></div>
                     <div class="font-black text-lg sm:text-xl leading-tight tabular-nums whitespace-nowrap" x-text="'Rp ' + formatNumber(grandTotal)"></div>
                 </div>
-                <button type="button" :disabled="isSubmitting || isExpired" @click="executePayment()"
+                <button type="button" :disabled="isSubmitting || isExpired" @click="openPayConfirm()"
                         class="bk-tap shrink-0 h-12 px-5 sm:px-7 rounded-lg flex items-center gap-2 text-xs sm:text-sm font-black uppercase tracking-wider whitespace-nowrap bg-[#662721] hover:bg-[#511D18] text-[#F7F0DB] shadow-[0_8px_20px_rgba(79,47,42,0.18)] active:scale-95 transition-transform disabled:opacity-60">
                     <span x-show="isSubmitting" class="w-4 h-4 border-2 border-[#4F2F2A] border-t-transparent rounded-full animate-spin"></span>
                     <span x-text="isSubmitting ? 'Processing…' : (grandTotal > 0 ? 'Pay Now' : 'Confirm')"></span>
                 </button>
+            </div>
+        </div>
+
+        {{-- Cek kembali pesanan + ketentuan sebelum ke Midtrans (bottom sheet di HP, dialog di layar lebar).
+             Di bawah modal lain (99999): waktu tahan habis / pemberitahuan tetap tampil di atasnya. --}}
+        <div x-show="payConfirm.show" style="display: none; z-index: 99998 !important;" class="fixed inset-0 flex items-end sm:items-center justify-center sm:p-4"
+             @keydown.escape.window="payConfirm.show = false">
+            <div x-show="payConfirm.show" x-transition.opacity.duration.200ms @click="payConfirm.show = false" class="absolute inset-0 bg-black/60 backdrop-blur-sm"></div>
+            <div x-show="payConfirm.show" role="dialog" aria-modal="true" aria-labelledby="co-confirm-title"
+                 x-transition:enter="transition ease-out duration-300" x-transition:enter-start="translate-y-full sm:translate-y-4 sm:opacity-0" x-transition:enter-end="translate-y-0 sm:opacity-100"
+                 x-transition:leave="transition ease-in duration-150" x-transition:leave-start="translate-y-0 sm:opacity-100" x-transition:leave-end="translate-y-full sm:translate-y-4 sm:opacity-0"
+                 class="relative w-full sm:max-w-lg max-h-[92vh] overflow-y-auto bg-white rounded-t-xl sm:rounded-xl border-t-2 sm:border-2 border-[#662721] shadow-2xl p-5 sm:p-6 pb-[calc(1.25rem+env(safe-area-inset-bottom,0px))] sm:pb-6 space-y-4">
+                <div class="sm:hidden mx-auto w-10 h-1.5 rounded-full bg-[#E6DAC0]"></div>
+                <div>
+                    <h3 id="co-confirm-title" class="font-display font-black text-lg">Check your booking</h3>
+                    <p class="text-xs text-[#7A5A52] mt-0.5">Make sure the date, court and time are right before you pay.</p>
+                </div>
+
+                <div class="rounded-lg border border-[#E6DAC0] divide-y divide-[#E6DAC0]">
+                    <template x-for="(item, idx) in bookingItems" :key="idx">
+                        <div class="flex items-start justify-between gap-3 px-4 py-3">
+                            <div class="min-w-0">
+                                <div class="text-sm font-extrabold truncate" x-text="item.court || 'Court'"></div>
+                                <div class="text-xs text-[#7A5A52]" x-text="formatDate(item.booking_date) + ' · ' + timeRange(item) + ' WIB'"></div>
+                                <div x-show="item.duration_hours" class="text-[11px] text-[#662721] font-semibold" x-text="item.duration_hours + (item.duration_hours === 1 ? ' hour' : ' hours')"></div>
+                            </div>
+                            <div class="text-sm font-black tabular-nums shrink-0" x-text="'Rp ' + formatNumber(item.price)"></div>
+                        </div>
+                    </template>
+                    <div class="flex items-center justify-between gap-3 px-4 py-3 bg-[#F7F0DB] rounded-b-lg">
+                        <div class="min-w-0">
+                            <div class="text-xs font-bold text-[#7A5A52]">Total to pay</div>
+                            <div class="text-[11px] text-[#7A5A52] truncate" x-text="grandTotal > 0 ? ('via ' + selectedMethod.name) : 'Fully covered — no payment needed'"></div>
+                        </div>
+                        <span class="text-base font-black tabular-nums shrink-0" x-text="'Rp ' + formatNumber(grandTotal)"></span>
+                    </div>
+                </div>
+
+                <div class="rounded-lg bg-amber-50 border border-amber-200 p-4 space-y-2 text-xs text-amber-900">
+                    <div class="font-extrabold uppercase tracking-wider text-[11px]">Booking policy</div>
+                    <ul class="space-y-1.5 list-disc pl-4 leading-relaxed">
+                        <li>Rescheduling is only possible up to <strong>H-3</strong> (3 days before your play time).</li>
+                        <li><strong>No refunds</strong> once the booking is paid.</li>
+                        <li>Mistakes in the chosen date, court or time are the <strong>booker's responsibility</strong>.</li>
+                    </ul>
+                </div>
+
+                <label class="flex items-start gap-3 cursor-pointer select-none">
+                    <input type="checkbox" x-model="payConfirm.agreed" class="mt-0.5 w-5 h-5 rounded border-[#CDBB9C] text-[#662721] focus:ring-[#662721]">
+                    <span class="text-sm text-[#4F2F2A]">I have checked my booking and agree to the booking policy.</span>
+                </label>
+
+                <div class="flex gap-2.5">
+                    <button type="button" @click="payConfirm.show = false"
+                            class="bk-tap flex-1 h-12 rounded-lg border border-[#E6DAC0] text-sm font-bold text-[#7A5A52] hover:bg-[#F7F0DB] transition-colors">Check again</button>
+                    <button type="button" :disabled="!payConfirm.agreed || isSubmitting || isExpired" @click="confirmAndPay()"
+                            :class="payConfirm.agreed ? 'bg-[#662721] hover:bg-[#511D18] text-[#F7F0DB] active:scale-[0.98]' : 'bg-[#EEE5D3] text-[#A08F86] cursor-not-allowed'"
+                            class="bk-tap flex-[1.4] h-12 rounded-lg text-sm font-black uppercase tracking-wider transition-all"
+                            x-text="grandTotal > 0 ? 'Yes, pay now' : 'Yes, confirm'"></button>
+                </div>
             </div>
         </div>
 
@@ -506,6 +569,7 @@
                 isCancellingCheckout: false,
                 isSubmitting: false,
                 createdBookingId: null,
+                payConfirm: { show: false, agreed: false },
 
                 showPaymentSuccessModal: false,
                 promoCode: '',
@@ -667,6 +731,22 @@
 
                 toggleSponsorVoucherBenefit() {
                     this.useSponsorVoucherBenefit = !this.useSponsorVoucherBenefit;
+                    // 1 transaksi 1 voucher: menyalakan voucher corporate melepas kode promo (voucher saldo tetap).
+                    if (this.useSponsorVoucherBenefit && this.promoIsDiscount) {
+                        const code = this.promoVoucher.code;
+                        this.removePromo();
+                        this.showNotice('Promo Code Removed', `${code} was removed — a promo code can't be combined with your corporate voucher. Turn the corporate voucher off if you'd rather use the promo code.`, 'info', 'Got It');
+                    }
+                },
+
+                /** Voucher jam corporate sedang dipakai di checkout ini. */
+                get corporateVoucherOn() {
+                    return !!(this.sponsorVoucherBenefit && this.useSponsorVoucherBenefit);
+                },
+
+                /** Kode promo diskon (bukan voucher saldo hasil refund) sedang dipasang. */
+                get promoIsDiscount() {
+                    return !!(this.promoApplied && this.promoVoucher && this.promoVoucher.type !== 'CREDIT');
                 },
 
                 async fetchFinanceSettings() {
@@ -732,6 +812,7 @@
                 },
 
                 async handleSessionExpired() {
+                    this.payConfirm.show = false;
                     this.showExpiredModal = true;
 
                     let bookingIds = [];
@@ -924,7 +1005,9 @@
                             body: JSON.stringify({ code, amount: this.voucherBase }),
                         });
                         const json = await res.json().catch(() => ({}));
-                        if (res.ok && json.success) {
+                        if (res.ok && json.success && this.corporateVoucherOn && json.data.type !== 'CREDIT') {
+                            this.showNotice('One Voucher Per Booking', 'Your corporate voucher is already on. A promo code can\'t be combined with it — turn off the corporate voucher first if you\'d rather use this promo code.', 'info', 'Got It');
+                        } else if (res.ok && json.success) {
                             this.promoCode = json.data.code;
                             this.promoVoucher = json.data;
                             this.promoApplied = true;
@@ -966,47 +1049,76 @@
                     return `${days[d.getDay()]}, ${d.getDate()} ${months[d.getMonth()]} ${d.getFullYear()}`;
                 },
 
+                get heldBookingIds() {
+                    return (this.holdData && Array.isArray(this.holdData.bookings)) ? this.holdData.bookings.map(b => b.id) : [];
+                },
+
                 /**
-                 * Request Snap Token & Execute Payment
+                 * Cek yang bisa gagal SEBELUM customer menyetujui ketentuan — jangan sampai sudah centang "setuju"
+                 * lalu ternyata metodenya diganti / slotnya tidak ada. Dipanggil lagi di executePayment().
                  */
-                async executePayment() {
-                    if (this.isSubmitting || this.isExpired) return;
+                paymentPrecheck() {
+                    if (this.isSubmitting || this.isExpired) return false;
+
+                    // Server juga menolaknya; dicegah di sini supaya customer tidak sampai menyetujui ketentuan dulu.
+                    if (this.corporateVoucherOn && this.promoIsDiscount) {
+                        this.showNotice('One Voucher Per Booking', 'A promo code can\'t be combined with your corporate voucher. Remove the promo code or turn off the corporate voucher.', 'info', 'Got It');
+                        return false;
+                    }
+
+                    if (this.heldBookingIds.length === 0) {
+                        this.showNotice(
+                            'Slot Reservation Not Found',
+                            'Court slot reservation data was not found. Please reselect your match schedule.',
+                            'error',
+                            'Select Schedule',
+                            () => {
+                                window.location.href = "{{ route('customer.booking') }}";
+                            }
+                        );
+                        return false;
+                    }
 
                     // Total bisa berubah (voucher, add-on) setelah metode dipilih — pastikan metodenya masih berlaku.
                     if (this.grandTotal > 0) {
                         if (! this.availableMethods.length) {
                             this.showNotice('Pembayaran Online Tidak Tersedia', 'Belum ada metode pembayaran online yang bisa dipakai untuk total tagihan ini. Silakan hubungi frontdesk.', 'error', 'Tutup');
-                            return;
+                            return false;
                         }
                         // Jangan diam-diam membayar dengan metode lain — beri tahu customer dulu, biar dia yang lanjutkan.
                         if (! this.availableMethods.some(m => m.code === this.selectedMethod.code)) {
                             const previous = this.selectedMethod.name;
                             this.ensureSelectedMethodAvailable();
                             this.showNotice('Metode Pembayaran Diganti', `${previous} tidak bisa dipakai untuk total tagihan ini. Metode diganti ke ${this.selectedMethod.name}. Periksa lagi lalu tekan bayar.`, 'info', 'Oke');
-                            return;
+                            return false;
                         }
                     }
+
+                    return true;
+                },
+
+                /** Pay Now: cek ulang pesanan + ketentuan booking dulu, baru ke Midtrans. Centang selalu mulai kosong. */
+                openPayConfirm() {
+                    if (!this.paymentPrecheck()) return;
+                    this.payConfirm = { show: true, agreed: false };
+                },
+
+                confirmAndPay() {
+                    if (!this.payConfirm.agreed || this.isSubmitting || this.isExpired) return;
+                    this.payConfirm.show = false;
+                    this.executePayment();
+                },
+
+                /**
+                 * Request Snap Token & Execute Payment
+                 */
+                async executePayment() {
+                    if (!this.payConfirm.agreed || !this.paymentPrecheck()) return;
 
                     this.isSubmitting = true;
 
                     try {
-                        let bookingIds = [];
-                        if (this.holdData && this.holdData.bookings && this.holdData.bookings.length > 0) {
-                            bookingIds = this.holdData.bookings.map(b => b.id);
-                        }
-
-                        if (bookingIds.length === 0) {
-                            this.showNotice(
-                                'Slot Reservation Not Found',
-                                'Court slot reservation data was not found. Please reselect your match schedule.',
-                                'error',
-                                'Select Schedule',
-                                () => {
-                                    window.location.href = "{{ route('customer.booking') }}";
-                                }
-                            );
-                            return;
-                        }
+                        const bookingIds = this.heldBookingIds;
 
                         const payload = {
                             booking_ids: bookingIds,

@@ -169,7 +169,7 @@
                         class="bk-tap shrink-0 w-10 h-10 rounded-lg border border-[#E6DAC0] text-[#9A3412] hover:bg-rose-50 flex items-center justify-center transition-colors">
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M6 18L18 6M6 6l12 12" /></svg>
                 </button>
-                <button type="button" :disabled="selectedSlots.length === 0 || isHolding" @click="openConfirm()"
+                <button type="button" :disabled="selectedSlots.length === 0 || isHolding" @click="proceedToHoldAndCart()"
                         :class="selectedSlots.length > 0
                             ? 'bg-[#662721] hover:bg-[#511D18] text-[#F7F0DB] shadow-[0_8px_20px_rgba(79,47,42,0.18)]  active:scale-95'
                             : 'bg-[#EEE5D3] text-[#A08F86] cursor-not-allowed'"
@@ -178,61 +178,6 @@
                     <span x-text="isHolding ? 'Reserving…' : 'Continue'"></span>
                     <svg x-show="!isHolding" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M13 7l5 5m0 0l-5 5m5-5H6" /></svg>
                 </button>
-            </div>
-        </div>
-
-        {{-- Cek kembali pesanan + ketentuan (bottom sheet di HP, dialog di layar lebar) --}}
-        <div x-show="confirmModal.show" style="display: none; z-index: 99998 !important;" class="fixed inset-0 flex items-end sm:items-center justify-center sm:p-4"
-             @keydown.escape.window="confirmModal.show = false">
-            <div x-show="confirmModal.show" x-transition.opacity.duration.200ms @click="confirmModal.show = false" class="absolute inset-0 bg-black/60 backdrop-blur-sm"></div>
-            <div x-show="confirmModal.show" role="dialog" aria-modal="true" aria-labelledby="bk-confirm-title"
-                 x-transition:enter="transition ease-out duration-300" x-transition:enter-start="translate-y-full sm:translate-y-4 sm:opacity-0" x-transition:enter-end="translate-y-0 sm:opacity-100"
-                 x-transition:leave="transition ease-in duration-150" x-transition:leave-start="translate-y-0 sm:opacity-100" x-transition:leave-end="translate-y-full sm:translate-y-4 sm:opacity-0"
-                 class="relative w-full sm:max-w-lg max-h-[92vh] overflow-y-auto bg-white rounded-t-xl sm:rounded-xl border-t-2 sm:border-2 border-[#662721] shadow-2xl p-5 sm:p-6 pb-[calc(1.25rem+env(safe-area-inset-bottom,0px))] sm:pb-6 space-y-4">
-                <div class="sm:hidden mx-auto w-10 h-1.5 rounded-full bg-[#E6DAC0]"></div>
-                <div>
-                    <h3 id="bk-confirm-title" class="font-display font-black text-lg">Check your booking</h3>
-                    <p class="text-xs text-[#7A5A52] mt-0.5">Make sure the date, court and time are right before you continue.</p>
-                </div>
-
-                <div class="rounded-lg border border-[#E6DAC0] divide-y divide-[#E6DAC0]">
-                    <template x-for="s in confirmSessions" :key="s.court_id + s.start_time">
-                        <div class="flex items-start justify-between gap-3 px-4 py-3">
-                            <div class="min-w-0">
-                                <div class="text-sm font-extrabold truncate" x-text="s.court"></div>
-                                <div class="text-xs text-[#7A5A52]" x-text="dateLabel(activeDate) + ' · ' + s.start_time + '–' + s.end_time + ' WIB'"></div>
-                                <div class="text-[11px] text-[#662721] font-semibold" x-text="s.duration_hours + (s.duration_hours === 1 ? ' hour' : ' hours')"></div>
-                            </div>
-                            <div class="text-sm font-black tabular-nums shrink-0" x-text="'Rp ' + formatNumber(s.price)"></div>
-                        </div>
-                    </template>
-                    <div class="flex items-center justify-between px-4 py-3 bg-[#F7F0DB] rounded-b-2xl">
-                        <span class="text-xs font-bold text-[#7A5A52]">Court total <span class="font-normal text-[#7A5A52]">(tax &amp; fees at checkout)</span></span>
-                        <span class="text-base font-black tabular-nums" x-text="'Rp ' + formatNumber(totalPrice)"></span>
-                    </div>
-                </div>
-
-                <div class="rounded-lg bg-amber-50 border border-amber-200 p-4 space-y-2 text-xs text-amber-900">
-                    <div class="font-extrabold uppercase tracking-wider text-[11px]">Booking policy</div>
-                    <ul class="space-y-1.5 list-disc pl-4 leading-relaxed">
-                        <li>Rescheduling is only possible up to <strong>H-3</strong> (3 days before your play time).</li>
-                        <li><strong>No refunds</strong> once the booking is paid.</li>
-                        <li>Mistakes in the chosen date, court or time are the <strong>booker's responsibility</strong>.</li>
-                    </ul>
-                </div>
-
-                <label class="flex items-start gap-3 cursor-pointer select-none">
-                    <input type="checkbox" x-model="confirmModal.agreed" class="mt-0.5 w-5 h-5 rounded border-[#CDBB9C] text-[#662721] focus:ring-[#662721]">
-                    <span class="text-sm text-[#4F2F2A]">I have checked my booking and agree to the booking policy.</span>
-                </label>
-
-                <div class="flex gap-2.5">
-                    <button type="button" @click="confirmModal.show = false"
-                            class="bk-tap flex-1 h-12 rounded-lg border border-[#E6DAC0] text-sm font-bold text-[#7A5A52] hover:bg-[#F7F0DB] transition-colors">Check again</button>
-                    <button type="button" :disabled="!confirmModal.agreed || isHolding" @click="confirmModal.show = false; proceedToHoldAndCart()"
-                            :class="confirmModal.agreed ? 'bg-[#662721] hover:bg-[#511D18] text-[#F7F0DB]  active:scale-[0.98]' : 'bg-[#EEE5D3] text-[#A08F86] cursor-not-allowed'"
-                            class="bk-tap flex-[1.4] h-12 rounded-lg text-sm font-black uppercase tracking-wider transition-all">Yes, continue</button>
-                </div>
             </div>
         </div>
 
@@ -281,7 +226,6 @@
                 narrow: !window.matchMedia('(min-width: 640px)').matches,
 
                 noticeModal: { show: false, title: '', message: '', type: 'info', buttonText: 'Got It', onClose: null },
-                confirmModal: { show: false, agreed: false },
 
                 showNotice(title, message, type = 'info', buttonText = 'Got It', onClose = null) {
                     this.noticeModal = { show: true, title, message, type, buttonText, onClose };
@@ -502,11 +446,6 @@
                 },
 
                 /** Isi popup cek ulang: per sesi, urut lapangan lalu jam. */
-                get confirmSessions() {
-                    return this.consolidateContiguousSlots(this.selectedSlots)
-                        .sort((a, b) => a.court.localeCompare(b.court) || a.start_time.localeCompare(b.start_time));
-                },
-
                 /** Ringkasan di bar bawah: baris 1 lapangan (atau jumlah sesi), baris 2 tanggal + jam. */
                 get selectionHeadline() {
                     const consolidated = this.consolidateContiguousSlots(this.selectedSlots);
@@ -539,14 +478,9 @@
                     return (Number.isInteger(k) ? k : k.toFixed(1)) + 'k';
                 },
 
-                /** Cek ulang pesanan + ketentuan sebelum slot ditahan. */
-                openConfirm() {
-                    if (this.selectedSlots.length === 0 || this.isHolding) return;
-                    this.confirmModal = { show: true, agreed: false };
-                },
-
+                // Cek ulang pesanan + ketentuan booking dipindah ke tombol Pay Now di checkout (sebelum ke Midtrans).
                 async proceedToHoldAndCart() {
-                    if (this.selectedSlots.length === 0) return;
+                    if (this.selectedSlots.length === 0 || this.isHolding) return;
                     this.isHolding = true;
 
                     try {

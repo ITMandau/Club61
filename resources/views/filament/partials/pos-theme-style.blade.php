@@ -266,6 +266,9 @@
     .pos-confirm-total { display: flex; justify-content: space-between; align-items: baseline; margin-top: 0.6rem; padding: 0.75rem 0.9rem; border-radius: 12px; background: #F7F0DB; }
     .pos-confirm-total span { font-weight: 800; color: #4F2F2A; }
     .pos-confirm-total strong { font-size: 1.375rem; font-weight: 900; color: #662721; font-variant-numeric: tabular-nums; }
+    .pos-confirm-policy { margin-top: 0.6rem; padding: 0.7rem 0.9rem; border-radius: 12px; background: #FFFBEB; border: 1px solid #FDE68A; color: #78350F; font-size: 0.78rem; line-height: 1.45; }
+    .pos-confirm-policy b { display: block; font-size: 0.68rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.3rem; }
+    .pos-confirm-policy ul { list-style: disc; padding-left: 1.1rem; margin: 0; display: flex; flex-direction: column; gap: 0.15rem; }
     .pos-confirm-actions { display: flex; justify-content: flex-end; gap: 0.5rem; width: 100%; }
     .pos-confirm-actions .pos-btn { height: 46px; padding: 0 1.2rem; }
     [x-cloak] { display: none !important; }

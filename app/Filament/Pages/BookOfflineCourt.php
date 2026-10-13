@@ -77,6 +77,8 @@ class BookOfflineCourt extends Page
     /** Toggle kasir: pakai voucher jam corporate customer untuk transaksi ini. */
     public bool $useSponsorVoucherBenefit = true;
 
+    private const VOUCHER_COMBINE_ERROR = 'Kode promo tidak bisa digabung dengan voucher jam corporate. Matikan voucher corporate kalau mau pakai kode promo ini.';
+
     // Form Walk-In Cepat
     public string $walkInName = '';
 
@@ -535,6 +537,20 @@ class BookOfflineCourt extends Page
     public function toggleSponsorVoucherBenefit(): void
     {
         $this->useSponsorVoucherBenefit = ! $this->useSponsorVoucherBenefit;
+        $this->benefitQuoteCache = null;
+        $this->voucherResultCache = null;
+        $this->financeCalculationCache = null;
+        $this->subtotalCache = null;
+
+        // Voucher corporate dinyalakan saat kode promo terpasang → kode promonya dilepas (1 transaksi 1 voucher).
+        if ($this->useSponsorVoucherBenefit && $this->appliedVoucherCode && $this->voucherResult['error'] === self::VOUCHER_COMBINE_ERROR) {
+            $code = $this->appliedVoucherCode;
+            $this->removeVoucher();
+            $this->voucherResultCache = null;
+            $this->financeCalculationCache = null;
+            Notification::make()->title('Kode Promo Dilepas')->body("{$code} dilepas — kode promo tidak bisa digabung dengan voucher jam corporate.")->warning()->send();
+        }
+
         $this->saveDraft();
     }
 
@@ -764,8 +780,15 @@ class BookOfflineCourt extends Page
 
         $customer = $this->selectedCustomerId ? User::find($this->selectedCustomerId) : null;
 
-        return $this->voucherResultCache = app(\App\Services\Finance\VoucherService::class)
+        $result = app(\App\Services\Finance\VoucherService::class)
             ->resolve($this->appliedVoucherCode, $customer, max(0, $this->courtTotal - $this->membershipDiscountAmount - $this->sponsorDiscountAmount) + $this->equipmentTotal);
+
+        // 1 transaksi 1 voucher (sama dengan server): kode promo tidak bisa digabung voucher jam corporate. Voucher saldo boleh.
+        if ($result['voucher'] && ! $result['voucher']->isCredit() && $this->sponsorDiscountAmount > 0) {
+            $result = ['voucher' => null, 'discount' => 0.0, 'error' => self::VOUCHER_COMBINE_ERROR];
+        }
+
+        return $this->voucherResultCache = $result;
     }
 
     public function getVoucherDiscountProperty(): float
