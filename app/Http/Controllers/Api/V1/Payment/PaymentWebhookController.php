@@ -300,13 +300,18 @@ class PaymentWebhookController extends Controller
             // Kartu membership yang menunggu pembayaran order ini ikut batal (dulu "Menunggu Pembayaran" selamanya).
             \App\Services\Membership\MembershipOnlinePaymentService::cancelForCancelledOrder($order);
 
-            foreach ($order->padelBookings as $booking) {
-                // Booking hasil reschedule tidak pernah ikut dibatalkan di sini (selalu sudah dibayar sebagian).
-                if (in_array($booking->status, ['PENDING_PAYMENT', 'LOCKED', 'PENDING'], true) && (int) $booking->reschedule_count === 0) {
-                    // Jam kuota member / voucher sponsor yang dipotong saat checkout dikembalikan (dulu hilang).
-                    app(\App\Services\Padel\PadelBookingService::class)->reverseBookingBenefits($booking);
-                    $booking->update(['status' => 'CANCELLED']);
-                }
+            // Dikunci & disaring status DI DATABASE: pembersih slot bisa menghanguskan booking yang sama di detik yang
+            // sama — dulu data booking lama dipakai, jadi jam kuota member / voucher sponsor dikembalikan dua kali.
+            // Booking hasil reschedule tidak pernah ikut dibatalkan di sini (selalu sudah dibayar sebagian).
+            $bookings = PadelBooking::whereIn('id', $order->padelBookings()->pluck('id'))
+                ->whereIn('status', ['PENDING_PAYMENT', 'LOCKED', 'PENDING'])
+                ->where('reschedule_count', 0)
+                ->lockForUpdate()
+                ->get();
+            foreach ($bookings as $booking) {
+                // Jam kuota member / voucher sponsor yang dipotong saat checkout dikembalikan (dulu hilang).
+                app(\App\Services\Padel\PadelBookingService::class)->reverseBookingBenefits($booking);
+                $booking->update(['status' => 'CANCELLED']);
             }
         });
     }

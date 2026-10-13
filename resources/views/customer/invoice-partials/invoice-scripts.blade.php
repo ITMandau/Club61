@@ -2,6 +2,8 @@
     function invoiceApp() {
         return {
             isLoading: true,
+            // Jam berjalan (diperbarui tiap detik) — tombol bayar langsung tertutup begitu batas bayar lewat.
+            nowTs: Date.now(),
             isPolling: false,
             pollCount: 0,
             maxPolls: 10,
@@ -228,6 +230,10 @@
                     this.showNotice('Reservation Inactive', 'This reservation has expired or has been cancelled and can no longer be processed. Please make a new booking.', 'error', 'Close');
                     return;
                 }
+                if (this.paymentWindowClosed(this.currentTicket)) {
+                    this.showNotice('Waktu Pembayaran Habis', 'Batas waktu pembayaran booking ini sudah habis dan slot sedang dilepas. Silakan buat booking baru.', 'error', 'Tutup');
+                    return;
+                }
                 this.isSubmittingPayment = true;
 
                 try {
@@ -261,7 +267,10 @@
                             this.openSnap(json.snap_token, json.redirect_url);
                         }
                     } else {
-                        this.showNotice('Payment Failed', json.message || 'Failed to process payment session.', 'error', 'Close');
+                        // Status booking bisa sudah berubah (batas bayar habis, sudah lunas lewat sesi lain) — muat ulang
+                        // kartunya supaya tampilan tidak tertahan di "Pay Now" sampai di-refresh.
+                        await this.loadTicket(this.currentTicket.id);
+                        this.showNotice(res.status === 422 ? 'Pembayaran Tidak Bisa Diproses' : 'Payment Failed', json.message || 'Failed to process payment session.', 'error', 'Close');
                     }
                 } catch(e) {
                     console.error('Error retry payment:', e);
@@ -537,6 +546,7 @@
             },
 
             async init() {
+                setInterval(() => { this.nowTs = Date.now(); }, 1000);
                 const urlParams = new URLSearchParams(window.location.search);
                 const lookupKey = urlParams.get('booking_id') || urlParams.get('order_id') || urlParams.get('booking_code') || urlParams.get('id');
                 const membershipLookupKey = urlParams.get('membership_id');
@@ -785,6 +795,17 @@
             },
 
             /**
+             * Batas bayar booking sudah lewat tapi server belum selesai melepas slot (pembersih otomatis menunggu
+             * jeda & konfirmasi Midtrans). Tombol bayar / ganti metode ditutup; polling yang memperbarui statusnya.
+             * Tagihan selisih reschedule tidak punya batas bayar.
+             */
+            paymentWindowClosed(t) {
+                if (!t || t.has_pending_delta || !['PENDING', 'PENDING_PAYMENT'].includes(t.status) || !t.expires_at) return false;
+                const exp = new Date(t.expires_at).getTime();
+                return !isNaN(exp) && this.nowTs >= exp;
+            },
+
+            /**
              * Cek status ke server (yang ikut menanyakan Midtrans) sampai lunas, batal, atau batas bayar lewat.
              * Dulu berhenti setelah 30 detik — customer VA yang transfer 1–3 menit kemudian tetap melihat
              * "menunggu pembayaran" sampai refresh. Tiap 3 detik di menit pertama, lalu tiap 10 detik; jeda saat
@@ -800,9 +821,11 @@
                 let busy = false;
                 const stopAt = () => {
                     const t = this.currentTicket;
-                    // Batas bayar dari server (+3 menit jeda notifikasi). Selisih reschedule tidak punya batas → 20 menit.
+                    // Batas bayar dari server + 20 menit: slot baru dilepas setelah jeda 3 menit, dan bisa sampai 15 menit
+                    // kalau Midtrans masih "pending". Dulu berhenti di +3 menit → tampilan tertahan di "Pay Now" sampai
+                    // di-refresh. Selisih reschedule tidak punya batas → 20 menit sejak mulai.
                     const exp = t && ['PENDING', 'PENDING_PAYMENT'].includes(t.status) && t.expires_at ? new Date(t.expires_at).getTime() : NaN;
-                    return isNaN(exp) ? startedAt + 20 * 60 * 1000 : exp + 3 * 60 * 1000;
+                    return isNaN(exp) ? startedAt + 20 * 60 * 1000 : exp + 20 * 60 * 1000;
                 };
                 const stop = () => {
                     clearInterval(this.pollingInterval);

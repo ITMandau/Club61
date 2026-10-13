@@ -280,6 +280,106 @@ class SnapSessionGuardTest extends TestCase
         $this->assertSame(SnapSessionGuard::DUPLICATE, $this->bill($booking)->payload_log['midtrans_sessions']['ORD-G1_A']['status']);
     }
 
+    public function test_retry_keeps_the_checkout_price_even_after_tax_settings_change(): void
+    {
+        $booking = $this->pendingBooking();
+
+        // Admin menyalakan pajak 10% setelah customer checkout — hanya berlaku untuk transaksi baru.
+        \App\Models\Pos\ClubFinanceSetting::first()->update(['is_tax_enabled' => true, 'tax_name' => 'PB1', 'tax_type' => 'PERCENTAGE', 'tax_rate' => 10.00, 'tax_channels' => 'ALL']);
+        \Illuminate\Support\Facades\Cache::forget(\App\Models\Pos\ClubFinanceSetting::CACHE_KEY);
+
+        $this->payNow($booking, 'BCA_VA')->assertOk()->assertJsonPath('grand_total', 200000);
+
+        $this->assertSame(200000, $this->created[0]['gross_amount']);
+        $this->assertEquals(200000, (float) Order::find($booking->order_id)->grand_total);
+        $this->assertEquals(0, (float) Order::find($booking->order_id)->tax_amount);
+    }
+
+    public function test_reconciliation_never_overwrites_a_bill_that_was_just_paid(): void
+    {
+        $booking = $this->pendingBooking();
+        $this->gateway['ORD-G1'] = 'expire';
+        $bill = $this->bill($booking);
+
+        // Webhook melunasi tagihan TEPAT setelah rekonsiliasi membaca tagihan yang masih PENDING.
+        $fired = false;
+        Payment::retrieved(function (Payment $p) use (&$fired, $bill) {
+            $inClose = collect(debug_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS, 40))->contains(fn ($f) => ($f['function'] ?? '') === 'closeAbandonedPayments');
+            if ($fired || ! $inClose || $p->id !== $bill->id) {
+                return;
+            }
+            $fired = true;
+            \Illuminate\Support\Facades\DB::table('payments')->where('id', $bill->id)->update(['status' => 'SUCCESS']);
+        });
+
+        app(\App\Services\Payment\MidtransReconciliationService::class)->reconcileOrder(Order::find($booking->order_id));
+
+        $this->assertTrue($fired);
+        $this->assertSame('SUCCESS', $bill->fresh()->status, 'dulu tertimpa FAILED dari data lama');
+    }
+
+    public function test_slot_cleaner_never_cancels_an_order_that_was_just_paid(): void
+    {
+        $booking = $this->pendingBooking();
+        $booking->update(['expires_at' => now()->subMinutes(10)]);
+        $this->gateway['ORD-G1'] = 'expire';
+
+        // Webhook melunasi order di sela proses: booking sudah dihanguskan, order belum dibatalkan.
+        $fired = false;
+        PadelBooking::retrieved(function (PadelBooking $b) use (&$fired, $booking) {
+            if ($fired || $b->id !== $booking->id || $b->status !== 'EXPIRED'
+                || ! collect(debug_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS))->pluck('function')->contains('releaseExpiredLocks')) {
+                return;
+            }
+            $fired = true;
+            \Illuminate\Support\Facades\DB::table('orders')->where('id', $booking->order_id)->update(['payment_status' => 'PAID']);
+            \Illuminate\Support\Facades\DB::table('payments')->where('order_id', $booking->order_id)->update(['status' => 'SUCCESS']);
+        });
+
+        app(\App\Services\Padel\PadelBookingService::class)->releaseExpiredLocks();
+
+        $this->assertTrue($fired);
+        $this->assertSame('EXPIRED', $booking->fresh()->status);
+        $this->assertSame('PAID', Order::find($booking->order_id)->payment_status, 'dulu tertimpa CANCELLED dari data lama');
+    }
+
+    public function test_invoice_turns_expired_as_soon_as_midtrans_confirms_the_session_expired(): void
+    {
+        $booking = $this->pendingBooking();
+        $booking->update(['expires_at' => now()->subSeconds(30)]);
+        $this->gateway['ORD-G1'] = 'expire';
+
+        // Dulu menunggu jeda 3 menit + scheduler tiap menit: "slot sedang dilepas" berputar 3–4 menit.
+        $this->actingAs($this->customer, 'sanctum')
+            ->getJson("/api/v1/padel/bookings/{$booking->id}/ticket?verify_payment=1")
+            ->assertOk()
+            ->assertJsonPath('data.status', 'EXPIRED');
+
+        $this->assertSame('CANCELLED', Order::find($booking->order_id)->payment_status);
+        $this->assertSame('FAILED', $this->bill($booking)->status);
+    }
+
+    public function test_slot_is_kept_during_the_grace_until_midtrans_confirms_the_session_ended(): void
+    {
+        $booking = $this->pendingBooking();
+        $booking->update(['expires_at' => now()->subSeconds(30)]);
+        $service = app(\App\Services\Padel\PadelBookingService::class);
+
+        // Midtrans masih "pending" (expire-nya bisa telat s/d 90 detik) → notifikasi bayar mungkin masih datang.
+        $this->gateway['ORD-G1'] = 'pending';
+        $this->assertSame(0, $service->releaseExpiredLocks());
+
+        // Sesi tidak dikenal Midtrans (404) belum pasti berakhir → tetap tunggu jeda.
+        unset($this->gateway['ORD-G1']);
+        \Illuminate\Support\Facades\Cache::flush();
+        $this->assertSame(0, $service->releaseExpiredLocks());
+        $this->assertSame('PENDING_PAYMENT', $booking->fresh()->status);
+
+        $this->travel(3)->minutes();
+        $this->assertSame(1, $service->releaseExpiredLocks());
+        $this->assertSame('EXPIRED', $booking->fresh()->status);
+    }
+
     public function test_membership_checkout_twice_with_the_same_method_reuses_the_session(): void
     {
         $plan = MembershipPlan::create(['code' => 'MBR-'.Str::random(5), 'name' => 'Silver', 'ownership_type' => 'INDIVIDUAL', 'duration_days' => 30, 'price' => 1_500_000, 'is_active' => true]);

@@ -5,6 +5,7 @@ namespace App\Services\Payment;
 use App\Models\Pos\Order;
 use App\Models\Pos\Payment;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
 /**
@@ -219,18 +220,28 @@ class MidtransReconciliationService
                 continue;
             }
 
-            // Tagihan selisih reschedule BUKAN keranjang yang boleh ditutup: customer tetap berutang dan
-            // booking-nya sudah dibayar sebagian. Sesi Snap yang tidak dibayar cukup dikembalikan jadi
-            // tagihan terbuka (bisa dibayar ulang via invoice / di kasir), rekonsiliasi berhenti menanyakannya.
-            if (($log['type'] ?? null) === 'RESCHEDULE_PRICE_DELTA') {
-                $log['snap_session_closed_by'] = $gatewaySaysFinal ? 'MIDTRANS_STATUS_FINAL' : 'MIDTRANS_NOT_PAID_AFTER_PAYMENT_WINDOW';
-                $payment->update(['payment_gateway' => 'CASHIER_POS', 'payload_log' => $log]);
+            // Ditulis dari data TERBARU yang dikunci: webhook bisa melunasi tagihan ini di sela pengecekan di atas
+            // (dulu tagihan yang baru SUCCESS tertimpa FAILED dari data lama).
+            DB::transaction(function () use ($payment, $gatewaySaysFinal) {
+                $fresh = Payment::whereKey($payment->id)->lockForUpdate()->first();
+                if (! $fresh || $fresh->status !== 'PENDING' || $fresh->payment_gateway !== 'MIDTRANS') {
+                    return;
+                }
+                $log = is_array($fresh->payload_log) ? $fresh->payload_log : [];
 
-                continue;
-            }
+                // Tagihan selisih reschedule BUKAN keranjang yang boleh ditutup: customer tetap berutang dan
+                // booking-nya sudah dibayar sebagian. Sesi Snap yang tidak dibayar cukup dikembalikan jadi
+                // tagihan terbuka (bisa dibayar ulang via invoice / di kasir), rekonsiliasi berhenti menanyakannya.
+                if (($log['type'] ?? null) === 'RESCHEDULE_PRICE_DELTA') {
+                    $log['snap_session_closed_by'] = $gatewaySaysFinal ? 'MIDTRANS_STATUS_FINAL' : 'MIDTRANS_NOT_PAID_AFTER_PAYMENT_WINDOW';
+                    $fresh->update(['payment_gateway' => 'CASHIER_POS', 'payload_log' => $log]);
 
-            $log['closed_by'] = $gatewaySaysFinal ? 'MIDTRANS_STATUS_FINAL' : 'MIDTRANS_NOT_PAID_AFTER_PAYMENT_WINDOW';
-            $payment->update(['status' => 'FAILED', 'payload_log' => $log]);
+                    return;
+                }
+
+                $log['closed_by'] = $gatewaySaysFinal ? 'MIDTRANS_STATUS_FINAL' : 'MIDTRANS_NOT_PAID_AFTER_PAYMENT_WINDOW';
+                $fresh->update(['status' => 'FAILED', 'payload_log' => $log]);
+            });
         }
     }
 

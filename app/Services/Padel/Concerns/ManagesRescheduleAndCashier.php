@@ -514,12 +514,8 @@ trait ManagesRescheduleAndCashier
                         $booking->member_hours_consumed = 0.00;
                     }
                     if ($quote['sponsor_benefit_dropped'] && $booking->sponsor_member_voucher_id && (float) $booking->sponsor_hours_consumed > 0) {
-                        $voucher = \App\Models\Sponsor\SponsorMemberVoucher::whereKey($booking->sponsor_member_voucher_id)->lockForUpdate()->first();
-                        if ($voucher) {
-                            $voucher->hours_used = max(0, (float) $voucher->hours_used - (float) $booking->sponsor_hours_consumed);
-                            $voucher->save();
-                        }
-                        $booking->sponsor_hours_consumed = 0.00;
+                        // Ke voucher asalnya masing-masing (booking bisa memakai beberapa voucher).
+                        $this->returnSponsorVoucherHours($booking);
                     }
                 };
 

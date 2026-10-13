@@ -110,8 +110,17 @@
                     </div>
                 </div>
 
+                <!-- Batas bayar sudah lewat: server sedang melepas slot (status ikut berubah otomatis lewat polling) -->
+                <div x-show="paymentWindowClosed(currentTicket)" class="p-3 rounded-lg bg-rose-50 border border-rose-200 flex items-start gap-3">
+                    <span class="w-4 h-4 mt-0.5 shrink-0 border-2 border-rose-500 border-t-transparent rounded-full animate-spin"></span>
+                    <div class="min-w-0">
+                        <div class="text-xs font-bold text-rose-800">Batas waktu pembayaran habis</div>
+                        <p class="text-[11px] text-rose-700 leading-snug mt-0.5">Slot sedang dilepas, jangan melakukan transaksi dengan QR / VA sebelumnya.</p>
+                    </div>
+                </div>
+
                 <!-- Metode pembayaran terpilih -->
-                <div class="p-3 rounded-lg bg-white border border-[#E6DAC0] flex items-center gap-3">
+                <div x-show="! paymentWindowClosed(currentTicket)" class="p-3 rounded-lg bg-white border border-[#E6DAC0] flex items-center gap-3">
                     <span class="w-11 h-8 shrink-0 rounded-lg bg-[#F7F0DB] border border-[#E6DAC0] flex items-center justify-center font-black text-[10px] text-[#662721]" x-text="selectedMethod.badge"></span>
                     <div class="flex-1 min-w-0">
                         <div class="font-bold text-xs leading-snug line-clamp-2" x-text="selectedMethod.name"></div>
@@ -145,7 +154,7 @@
                 </div>
 
                 <!-- Tombol bayar -->
-                <button type="button" @click="payNow()" :disabled="isSubmittingPayment"
+                <button type="button" x-show="! paymentWindowClosed(currentTicket)" @click="payNow()" :disabled="isSubmittingPayment"
                         class="bk-tap w-full h-12 rounded-lg flex items-center justify-center gap-2 text-xs font-black uppercase tracking-wider bg-[#662721] hover:bg-[#511D18] text-[#F7F0DB] shadow-md active:scale-[0.98] transition-transform disabled:opacity-60 disabled:cursor-not-allowed">
                     <span x-show="isSubmittingPayment" class="w-4 h-4 border-2 border-[#4F2F2A] border-t-transparent rounded-full animate-spin"></span>
                     <span class="whitespace-nowrap" x-text="isSubmittingPayment ? 'Processing…' : (selectedMethod.code === 'CASH' ? 'Confirm with front desk' : (currentTicket.has_pending_delta ? ('Pay balance Rp ' + formatNumber(currentTicket.unpaid_delta)) : 'Pay Now'))"></span>

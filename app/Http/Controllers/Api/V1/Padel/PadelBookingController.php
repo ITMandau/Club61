@@ -268,6 +268,12 @@ class PadelBookingController extends Controller
 
             if ($order && app(\App\Services\Payment\MidtransReconciliationService::class)->reconcileOrder($order, cacheSeconds: 10) === \App\Services\Payment\MidtransReconciliationService::PAID) {
                 $booking = $this->bookingService->getTicket($id, $request->user());
+            } elseif ($booking->expires_at && $booking->expires_at->isPast() && (int) $booking->reschedule_count === 0) {
+                // Batas bayar lewat: lepas slot sekarang kalau Midtrans sudah memastikan sesinya berakhir — tidak
+                // menunggu scheduler tiap menit, jadi halaman invoice langsung berubah jadi Expired.
+                if ($this->bookingService->releaseExpiredLocks() > 0) {
+                    $booking = $this->bookingService->getTicket($id, $request->user());
+                }
             }
         }
 

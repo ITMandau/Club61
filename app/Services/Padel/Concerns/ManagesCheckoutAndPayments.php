@@ -634,17 +634,30 @@ trait ManagesCheckoutAndPayments
                 channel: 'ONLINE',
                 module: 'PADEL'
             );
-            $taxAmount = $retryFinanceCalc['tax_amount'];
-            $adminFee = $retryFinanceCalc['admin_fee_amount'];
-            $totalServiceCharge = $adminFee;
-            $grandTotal = max(0, $retryFinanceCalc['taxable_amount'] + $taxAmount + $totalServiceCharge);
+            // Harga TERKUNCI sejak checkout: tagihan online yang sudah dibuat dibayar ulang dengan nominal yang sama.
+            // Perubahan pajak / biaya di admin hanya berlaku untuk transaksi baru. Dulu dihitung ulang tiap bayar ulang
+            // → sesi lama & baru beda nominal, dan membayar sesi lama yang lebih murah tetap mengaktifkan booking.
+            $priceLocked = (float) $order->grand_total > 0
+                && Payment::where('order_id', $order->id)->where('status', 'PENDING')->where('payment_gateway', 'MIDTRANS')->exists();
 
-            $order->update([
-                'subtotal' => $retryFinanceCalc['subtotal'],
-                'tax_amount' => $taxAmount,
-                'service_charge' => $totalServiceCharge,
-                'grand_total' => $grandTotal,
-            ]);
+            if ($priceLocked) {
+                $taxAmount = (float) $order->tax_amount;
+                $adminFee = (float) $order->service_charge;
+                $totalServiceCharge = $adminFee;
+                $grandTotal = (float) $order->grand_total;
+            } else {
+                $taxAmount = $retryFinanceCalc['tax_amount'];
+                $adminFee = $retryFinanceCalc['admin_fee_amount'];
+                $totalServiceCharge = $adminFee;
+                $grandTotal = max(0, $retryFinanceCalc['taxable_amount'] + $taxAmount + $totalServiceCharge);
+
+                $order->update([
+                    'subtotal' => $retryFinanceCalc['subtotal'],
+                    'tax_amount' => $taxAmount,
+                    'service_charge' => $totalServiceCharge,
+                    'grand_total' => $grandTotal,
+                ]);
+            }
 
             // Tagihan Rp0 (seluruhnya ditanggung kuota member / voucher jam corporate / voucher promo): langsung lunas,
             // jangan buka sesi Midtrans — Midtrans menolak gross_amount 0 dan customer tertahan di halaman invoice.
@@ -1515,13 +1528,11 @@ trait ManagesCheckoutAndPayments
      * koleksi booking lapangan padel — mirip applyMembershipBenefitToCourtBookings() di atas,
      * tapi sumber jamnya voucher yang dirilis PIC ke karyawan (bukan kartu membership pribadi).
      *
-     * Setiap voucher yang belum expired & masih ada sisa jam dianggap "usable", diurutkan yang
-     * PALING CEPAT EXPIRED dipakai lebih dulu (FIFO) supaya jam tidak hangus sia-sia. 1 booking
-     * BOLEH memotong dari lebih dari 1 voucher sekaligus kalau perlu (mis. voucher A sisa 0.5 jam,
-     * voucher B sisa 5 jam, booking butuh 1.5 jam) — kolom sponsor_member_voucher_id di booking
-     * cuma mencatat voucher PERTAMA yang kepotong untuk booking itu (buat tampilan/telusur, bukan
-     * audit trail lengkap; total jam yang benar-benar terpakai tetap akurat di kolom
-     * sponsor_hours_consumed & masing-masing voucher.hours_used).
+     * 1 TRANSAKSI = 1 VOUCHER (aturan umum voucher): jam beberapa voucher tidak digabung. Dipilih voucher yang paling
+     * cepat expired di antara yang sisa jamnya CUKUP menutup seluruh transaksi (supaya jam tidak hangus sia-sia); kalau
+     * tidak ada yang cukup, voucher dengan sisa jam terbanyak — kekurangannya dibayar normal. Dulu satu booking bisa
+     * memotong beberapa voucher sekaligus, dan saat batal seluruh jam dikembalikan ke voucher pertama (jam voucher
+     * lain hilang). Sekarang setiap booking hanya punya satu sumber (sponsor_member_voucher_id).
      *
      * All-or-nothing per booking: kalau total sisa jam voucher TIDAK CUKUP buat nutup 1 booking
      * penuh, booking itu dilewati (court_fee tidak berubah) — tidak ada potongan diskon parsial
@@ -1571,6 +1582,15 @@ trait ManagesCheckoutAndPayments
         if ($usable->isEmpty()) {
             return $noBenefit;
         }
+
+        // 1 transaksi = 1 voucher: yang paling cepat expired di antara yang cukup menutup semua jam transaksi ini,
+        // atau (kalau tidak ada yang cukup) yang sisa jamnya terbanyak.
+        $hoursNeededTotal = round(collect($bookings)->sum(fn ($b) => max(0.5, round(
+            \Carbon\Carbon::parse($b->start_time)->diffInMinutes(\Carbon\Carbon::parse($b->end_time)) / 60, 2
+        ))), 2);
+        $chosen = $usable->first(fn ($v) => $v->remainingHours() >= $hoursNeededTotal)
+            ?? $usable->sortByDesc(fn ($v) => $v->remainingHours())->first();
+        $usable = collect([$chosen]);
 
         $totalHoursConsumed = 0.0;
         $totalCourtDiscount = 0.0;

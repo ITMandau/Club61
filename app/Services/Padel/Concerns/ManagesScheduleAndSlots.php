@@ -444,16 +444,24 @@ trait ManagesScheduleAndSlots
      *     BookingTimeService::GATEWAY_UNCERTAIN_MAX_MINUTES setelah batas bayar booking itu (semua sesi Midtrans
      *     dibuat berakhir sebelum batas bayar, jadi "pending" setelahnya hanya notifikasi yang telat).
      *   - Expire / cancel / tidak dikenal Midtrans → dihanguskan seperti biasa.
+     * Selama jeda BookingTimeService::GRACE_MINUTES setelah batas bayar, booking hanya dihanguskan kalau Midtrans sudah
+     * memastikan SEMUA sesinya berakhir (tagihan Midtrans-nya tidak ada lagi yang PENDING). Dulu selalu menunggu jeda
+     * penuh — customer melihat "slot sedang dilepas" 3–4 menit padahal VA-nya sudah expire di Midtrans.
      */
     private function withoutBookingsPaidAtGateway(\Illuminate\Support\Collection $bookings): \Illuminate\Support\Collection
     {
         $reconciler = app(\App\Services\Payment\MidtransReconciliationService::class);
         $times = app(\App\Services\Padel\BookingTimeService::class);
         $decisions = [];
+        $gatewayClosed = [];
 
-        return $bookings->filter(function (PadelBooking $booking) use ($reconciler, $times, &$decisions) {
+        return $bookings->filter(function (PadelBooking $booking) use ($reconciler, $times, &$decisions, &$gatewayClosed) {
+            // Booking lama tanpa `expires_at` tidak pernah memakai jeda.
+            $inGrace = $booking->expires_at !== null
+                && now()->lt($booking->expires_at->copy()->addMinutes(\App\Services\Padel\BookingTimeService::GRACE_MINUTES));
+
             if (! $booking->order_id) {
-                return true;
+                return ! $inGrace;
             }
 
             if (! array_key_exists($booking->order_id, $decisions)) {
@@ -466,13 +474,18 @@ trait ManagesScheduleAndSlots
                 $decisions[$booking->order_id] = $hasGatewayPayment
                     ? $reconciler->reconcileOrder($order, cacheSeconds: 60)
                     : \App\Services\Payment\MidtransReconciliationService::NOT_PAID;
+
+                // Dibaca langsung dari database (bukan dari cache): tagihan Midtrans hanya ditutup FAILED setelah
+                // Midtrans bilang expire/cancel untuk semua sesinya — sesi yang sudah final tidak bisa dibayar lagi.
+                $gatewayClosed[$booking->order_id] = $hasGatewayPayment
+                    && ! \App\Models\Pos\Payment::where('order_id', $order->id)->where('status', 'PENDING')->exists();
             }
 
             return match ($decisions[$booking->order_id]) {
                 \App\Services\Payment\MidtransReconciliationService::PAID => false,
                 \App\Services\Payment\MidtransReconciliationService::PENDING,
                 \App\Services\Payment\MidtransReconciliationService::ERROR => now()->gt($times->paymentDeadlineFor($booking)->copy()->addMinutes(\App\Services\Padel\BookingTimeService::GATEWAY_UNCERTAIN_MAX_MINUTES)),
-                default => true,
+                default => ! $inGrace || $gatewayClosed[$booking->order_id],
             };
         })->values();
     }
@@ -501,20 +514,29 @@ trait ManagesScheduleAndSlots
         }
 
         if ($booking->sponsor_member_voucher_id && (float) $booking->sponsor_hours_consumed > 0) {
-            $sponsorVoucher = \App\Models\Sponsor\SponsorMemberVoucher::where('id', $booking->sponsor_member_voucher_id)
-                ->lockForUpdate()
-                ->first();
-            if ($sponsorVoucher) {
-                $sponsorVoucher->hours_used = max(0, (float) $sponsorVoucher->hours_used - (float) $booking->sponsor_hours_consumed);
-                $sponsorVoucher->save();
-            }
-            $booking->sponsor_hours_consumed = 0.00;
+            $this->returnSponsorVoucherHours($booking);
             $changed = true;
         }
 
         if ($changed) {
             $booking->save();
         }
+    }
+
+    /**
+     * Kembalikan jam voucher sponsor booking ini ke vouchernya (1 transaksi = 1 voucher, lihat
+     * applySponsorVoucherBenefitToCourtBookings), lalu nolkan pemakaiannya di booking (belum disimpan — pemanggil yang
+     * menyimpan). Wajib dipanggil di dalam transaksi DB.
+     */
+    public function returnSponsorVoucherHours(PadelBooking $booking): void
+    {
+        $voucher = \App\Models\Sponsor\SponsorMemberVoucher::whereKey($booking->sponsor_member_voucher_id)->lockForUpdate()->first();
+        if ($voucher) {
+            $voucher->hours_used = max(0, round((float) $voucher->hours_used - (float) $booking->sponsor_hours_consumed, 2));
+            $voucher->save();
+        }
+
+        $booking->sponsor_hours_consumed = 0.00;
     }
 
     /** Status booking yang menempati slot lapangan (setelah GC releaseExpiredLocks berjalan). */
@@ -530,8 +552,6 @@ trait ManagesScheduleAndSlots
         $times = app(\App\Services\Padel\BookingTimeService::class);
         $holdThreshold = now()->subMinutes($times->holdMinutes());
         $paymentThreshold = now()->subMinutes($times->paymentWindowMinutes());
-        // Jeda setelah batas bayar: notifikasi Midtrans bisa telat beberapa detik s/d 90 detik.
-        $paymentDeadlineWithGrace = now()->subMinutes(\App\Services\Padel\BookingTimeService::GRACE_MINUTES);
 
         $orderNumbersToCancel = [];
 
@@ -548,9 +568,10 @@ trait ManagesScheduleAndSlots
             })
             ->get();
 
-        // 2. Slot PENDING_PAYMENT / PENDING yang tidak dibayar sampai batas bayar (+ jeda)
+        // 2. Slot PENDING_PAYMENT / PENDING yang tidak dibayar sampai batas bayar. Selama jeda setelah batas bayar
+        //    hanya dilepas kalau Midtrans sudah memastikan semua sesinya berakhir (lihat withoutBookingsPaidAtGateway).
         $expiredPendingPayments = PadelBooking::whereIn('status', ['PENDING_PAYMENT', 'PENDING'])
-            ->where(fn ($q) => $q->where('expires_at', '<', $paymentDeadlineWithGrace)
+            ->where(fn ($q) => $q->where('expires_at', '<', now())
                 ->orWhere(fn ($legacy) => $legacy->whereNull('expires_at')->where('created_at', '<', $paymentThreshold)))
             ->where('reschedule_count', 0)
             ->where(function ($query) {
@@ -597,10 +618,14 @@ trait ManagesScheduleAndSlots
             $count++;
 
             if ($b->order_id) {
-                $order = \App\Models\Pos\Order::find($b->order_id);
-                if ($order && $order->payment_status !== 'PAID') {
-                    $order->update(['payment_status' => 'CANCELLED']);
-                    $orderNumbersToCancel[] = $order->order_number;
+                // Update BERSYARAT di database: webhook lunas bisa commit di sela pengecekan di atas — dulu order yang
+                // barusan PAID tertimpa CANCELLED dari data yang dibaca sebelumnya.
+                $cancelled = \App\Models\Pos\Order::whereKey($b->order_id)
+                    ->where('payment_status', '!=', 'PAID')
+                    ->whereDoesntHave('payments', fn ($q) => $q->where('status', 'SUCCESS'))
+                    ->update(['payment_status' => 'CANCELLED', 'updated_at' => now()]);
+                if ($cancelled) {
+                    $orderNumbersToCancel[] = \App\Models\Pos\Order::whereKey($b->order_id)->value('order_number');
                 }
             }
         }
