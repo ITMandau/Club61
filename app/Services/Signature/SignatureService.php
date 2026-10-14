@@ -18,6 +18,7 @@ use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
 
 /**
  * Modul 26 — Signature (layar TV venue).
@@ -57,6 +58,24 @@ class SignatureService
         ],
     ];
 
+    // ------------------------------------------------------------------ TEMPLATE CUSTOM (drag & drop)
+
+    public const CUSTOM_LAYOUT = 'CUSTOM';
+
+    public const CUSTOM_LABEL = 'Custom — susun sendiri (drag & drop)';
+
+    /** Kanvas editor custom: grid 24 × 24 di atas layar 16:9. Disimpan dalam satuan grid, dikirim ke TV dalam persen. */
+    public const GRID = 24;
+
+    public const MAX_ZONES = 6;
+
+    /** Jenis zona custom: label & batas ukuran (satuan grid) supaya isinya tetap terbaca di TV. */
+    public const ZONE_KINDS = [
+        'playlist' => ['label' => 'Zona konten', 'min_w' => 4, 'min_h' => 4, 'max_h' => self::GRID, 'max' => self::MAX_ZONES],
+        'side_panel' => ['label' => 'Panel samping', 'min_w' => 4, 'min_h' => 6, 'max_h' => self::GRID, 'max' => 2],
+        'ticker' => ['label' => 'Running text', 'min_w' => 6, 'min_h' => 2, 'max_h' => 4, 'max' => 1],
+    ];
+
     /** Font Google yang terbaca dari jauh (dimuat di halaman TV). */
     public const FONTS = ['Archivo', 'Source Serif 4', 'Montserrat', 'Poppins', 'Bebas Neue', 'JetBrains Mono'];
 
@@ -66,6 +85,15 @@ class SignatureService
         'accent' => '#662721',
         'text' => '#F7F0DB',
         'font' => 'Archivo',
+        'transition' => 'fade',
+    ];
+
+    /** Animasi pergantian konten di zona playlist (ringan, CSS — aman untuk browser Smart TV). */
+    public const TRANSITIONS = [
+        'fade' => 'Pudar (fade)',
+        'slide' => 'Geser dari kanan',
+        'zoom' => 'Zoom halus',
+        'none' => 'Tanpa animasi',
     ];
 
     public const DEFAULT_TICKER = [
@@ -137,12 +165,128 @@ class SignatureService
         return Str::lower(Str::random(48));
     }
 
+    // ================================================================== ZONA TEMPLATE
+
+    /**
+     * Rapikan & periksa susunan zona template custom (satuan grid). Dipakai saat simpan, Preview, dan saat menyusun
+     * tampilan TV — jadi data rusak / dikirim manual tidak pernah sampai ke TV.
+     *
+     * @return list<array{key: string, kind: string, x: int, y: int, w: int, h: int, sound?: bool}>
+     *
+     * @throws ValidationException pesan untuk admin di kunci `tplZones`
+     */
+    public static function normalizeCustomZones(mixed $zones): array
+    {
+        $fail = function (string $message): never {
+            throw ValidationException::withMessages(['tplZones' => $message]);
+        };
+
+        if (! is_array($zones) || $zones === []) {
+            $fail('Tambahkan minimal satu zona konten.');
+        }
+        if (count($zones) > self::MAX_ZONES) {
+            $fail('Maksimal '.self::MAX_ZONES.' zona per template.');
+        }
+
+        $clean = [];
+        $keys = [];
+        $counts = [];
+        $withSound = 0;
+        foreach (array_values($zones) as $zone) {
+            $kind = is_array($zone) ? ($zone['kind'] ?? null) : null;
+            $rule = is_string($kind) ? (self::ZONE_KINDS[$kind] ?? null) : null;
+            $key = is_array($zone) && is_string($zone['key'] ?? null) ? $zone['key'] : '';
+            if (! $rule || ! preg_match('/^[a-z0-9]{1,12}$/', $key) || isset($keys[$key])) {
+                $fail('Susunan zona tidak valid. Tutup editor lalu buka lagi.');
+            }
+            $keys[$key] = true;
+
+            $box = [];
+            foreach (['x', 'y', 'w', 'h'] as $field) {
+                $value = $zone[$field] ?? null;
+                if (! is_numeric($value) || (int) $value != $value) {
+                    $fail('Susunan zona tidak valid. Tutup editor lalu buka lagi.');
+                }
+                $box[$field] = (int) $value;
+            }
+            if ($box['x'] < 0 || $box['y'] < 0 || $box['x'] + $box['w'] > self::GRID || $box['y'] + $box['h'] > self::GRID) {
+                $fail('Ada zona yang keluar dari layar.');
+            }
+            if ($box['w'] < $rule['min_w'] || $box['h'] < $rule['min_h'] || $box['h'] > $rule['max_h']) {
+                $fail("{$rule['label']} minimal {$rule['min_w']} × {$rule['min_h']} kotak".($rule['max_h'] < self::GRID ? " dan tinggi maksimal {$rule['max_h']} kotak" : '').'.');
+            }
+
+            $counts[$kind] = ($counts[$kind] ?? 0) + 1;
+            if ($counts[$kind] > $rule['max']) {
+                $fail("Maksimal {$rule['max']} {$rule['label']} per template.");
+            }
+
+            $item = ['key' => $key, 'kind' => $kind] + $box;
+            if ($kind === 'playlist') {
+                $item['sound'] = (bool) ($zone['sound'] ?? false);
+                $withSound += (int) $item['sound'];
+            }
+            $clean[] = $item;
+        }
+
+        if (($counts['playlist'] ?? 0) === 0) {
+            $fail('Tambahkan minimal satu zona konten.');
+        }
+        if ($withSound > 1) {
+            $fail('Hanya satu zona yang boleh bersuara.');
+        }
+        foreach ($clean as $i => $a) {
+            foreach (array_slice($clean, $i + 1) as $b) {
+                if ($a['x'] < $b['x'] + $b['w'] && $b['x'] < $a['x'] + $a['w'] && $a['y'] < $b['y'] + $b['h'] && $b['y'] < $a['y'] + $a['h']) {
+                    $fail('Ada zona yang saling menumpuk.');
+                }
+            }
+        }
+
+        return $clean;
+    }
+
+    /** Zona dalam persen kanvas (untuk TV & gambar mini template): preset dari LAYOUTS, custom dari satuan grid. */
+    public static function layoutZones(string $layout, mixed $customZones = null): array
+    {
+        if ($layout === self::CUSTOM_LAYOUT) {
+            try {
+                $zones = self::normalizeCustomZones($customZones);
+            } catch (ValidationException) {
+                return self::LAYOUTS['PRESET_B']['zones'];
+            }
+            $percent = fn (int $units) => round($units * 100 / self::GRID, 4);
+
+            return array_map(fn (array $z) => array_merge($z, ['x' => $percent($z['x']), 'y' => $percent($z['y']), 'w' => $percent($z['w']), 'h' => $percent($z['h'])]), $zones);
+        }
+
+        return self::LAYOUTS[$layout]['zones'] ?? self::LAYOUTS['PRESET_B']['zones'];
+    }
+
+    /** Titik awal editor custom: susunan preset (persen) dibulatkan ke satuan grid; zona konten pertama bersuara. */
+    public static function presetAsCustom(string $layout): array
+    {
+        $grid = fn (float|int $percent) => (int) round($percent * self::GRID / 100);
+        $first = true;
+
+        return array_map(function (array $z) use ($grid, &$first) {
+            $zone = ['key' => $z['key'], 'kind' => $z['kind'], 'x' => $grid($z['x']), 'y' => $grid($z['y']), 'w' => $grid($z['w']), 'h' => $grid($z['h'])];
+            if ($z['kind'] === 'playlist') {
+                $zone['sound'] = $first;
+                $first = false;
+            }
+
+            return $zone;
+        }, self::LAYOUTS[$layout]['zones'] ?? self::LAYOUTS['PRESET_A']['zones']);
+    }
+
     // ================================================================== TAMPILAN (PAYLOAD)
 
     /**
      * Rangkum tampilan layar jadi satu JSON untuk TV / Preview.
      *
-     * @param  array|null  $draft  perubahan yang belum disimpan (Preview): ['screen' => [...], 'template' => [...], 'playlist' => [['content_id', 'duration']]]
+     * @param  array|null  $draft  perubahan yang belum disimpan (Preview): ['screen' => [...], 'template' => [...],
+     *                             'playlists' => ['zona' => [['content_id', 'duration']]]] ('playlist' lama = zona main)
      */
     public function buildPayload(SignatureScreen $screen, ?array $draft = null): array
     {
@@ -155,17 +299,34 @@ class SignatureService
             array_filter($draft['template'] ?? [], fn ($v) => $v !== null)
         );
 
-        $layout = isset(self::LAYOUTS[$template['layout'] ?? '']) ? $template['layout'] : 'PRESET_B';
-        $zones = self::LAYOUTS[$layout]['zones'];
+        $layout = ($template['layout'] ?? '') === self::CUSTOM_LAYOUT || isset(self::LAYOUTS[$template['layout'] ?? '']) ? $template['layout'] : 'PRESET_B';
+        $zones = self::layoutZones($layout, $template['zones'] ?? null);
 
-        if (isset($draft['playlist'])) {
-            $contents = SignatureContent::whereIn('id', array_column($draft['playlist'], 'content_id'))->get()->keyBy('id');
-            $items = collect($draft['playlist'])->map(fn ($row) => ($c = $contents[$row['content_id']] ?? null) ? [$c, $row['duration'] ?? null] : null)->filter();
+        // Isi playlist per zona: dari form (Preview) atau dari database.
+        if (isset($draft['playlist']) && ! isset($draft['playlists'])) {
+            $draft['playlists'] = ['main' => $draft['playlist']];
+        }
+        if (isset($draft['playlists'])) {
+            $rows = collect($draft['playlists'])->flatMap(fn ($list, $zone) => collect((array) $list)->map(fn ($row) => $row + ['zone' => (string) $zone]));
+            $contents = SignatureContent::whereIn('id', $rows->pluck('content_id')->filter()->all())->get()->keyBy('id');
+            $items = $rows->map(fn ($row) => ($c = $contents[$row['content_id'] ?? ''] ?? null) ? [$c, $row['duration'] ?? null, $row['zone']] : null)->filter();
         } else {
-            $items = collect($templateModel?->playlistItems ?? [])->filter(fn ($i) => $i->content)->map(fn ($i) => [$i->content, $i->duration_seconds]);
+            $items = collect($templateModel?->playlistItems ?? [])->filter(fn ($i) => $i->content)->map(fn ($i) => [$i->content, $i->duration_seconds, $i->zone_key]);
         }
 
-        $logoUrl = $template['logo_url'] ?? (! empty($template['logo_path']) ? $this->fileUrl($template['logo_path']) : '/images/identity/logo-cream.png');
+        $playlists = [];
+        foreach ($zones as $zone) {
+            if ($zone['kind'] !== 'playlist') {
+                continue;
+            }
+            // Konten nonaktif & YouTube tanpa ID yang sah dilewati (bukan dikirim kosong ke TV).
+            $playlists[$zone['key']] = $items
+                ->filter(fn ($item) => $item[2] === $zone['key'] && $item[0]->is_active && ($item[0]->type !== 'YOUTUBE' || SignatureContent::youtubeId('https://youtu.be/'.$item[0]->url)))
+                ->map(fn ($item) => $this->contentPayload($item[0], $item[1] === null || $item[1] === '' ? null : (int) $item[1]))
+                ->values()->all();
+        }
+
+        $logoUrl = $template['logo_url'] ?? (! empty($template['logo_path']) ? self::publicFileUrl($template['logo_path']) : '/images/identity/logo-cream.png');
 
         return [
             'generated_at' => now()->toIso8601String(),
@@ -183,15 +344,13 @@ class SignatureService
                 'ticker' => array_merge(self::DEFAULT_TICKER, array_filter((array) ($template['ticker'] ?? []), fn ($v) => $v !== null && $v !== '')),
                 'logo_url' => $logoUrl,
             ],
-            'playlists' => [
-                'main' => $items->filter(fn ($pair) => $pair[0]->is_active)->map(fn ($pair) => $this->contentPayload($pair[0], $pair[1]))->values()->all(),
-            ],
+            'playlists' => $playlists,
             'running_texts' => SignatureRunningText::where('is_active', true)->orderBy('sort_order')->orderBy('created_at')->get(['kind', 'text'])->map(fn ($t) => ['kind' => $t->kind, 'text' => $t->text])->all(),
             'sponsors' => SignatureSponsor::with('organization:id,name')->orderBy('sort_order')->orderBy('created_at')->get()
                 ->filter(fn (SignatureSponsor $s) => $s->isShowing() && $s->displayName() !== '')
                 ->map(fn (SignatureSponsor $s) => [
                     'name' => $s->displayName(),
-                    'logo_url' => $s->logo_path ? $this->fileUrl($s->logo_path) : null,
+                    'logo_url' => $s->logo_path ? self::publicFileUrl($s->logo_path) : null,
                     'duration' => max(3, (int) $s->duration_seconds),
                 ])->values()->all(),
             'hours' => $this->operatingHours(),
@@ -204,18 +363,21 @@ class SignatureService
             'id' => $content->id,
             'type' => $content->type,
             'name' => $content->name,
-            'url' => $content->file_path ? $this->fileUrl($content->file_path) : null,
+            'url' => $content->file_path ? self::publicFileUrl($content->file_path) : null,
+            // Hanya ID 11 karakter (divalidasi ulang) — TV menyusun sendiri alamat pemutarnya.
+            'youtube_id' => $content->type === 'YOUTUBE' ? SignatureContent::youtubeId('https://youtu.be/'.$content->url) : null,
             'duration' => max(3, (int) ($duration ?: $content->duration_seconds)),
-            'sound' => $content->type === 'VIDEO' && $content->sound,
+            'sound' => in_array($content->type, SignatureContent::PLAYABLE_TYPES, true) && $content->sound,
             'volume' => max(0, min(100, (int) $content->volume)),
         ];
     }
 
     /**
      * URL file upload TANPA nama host (/storage/...): snapshot yang ditayangkan tetap jalan walau APP_URL berbeda dari
-     * alamat yang dibuka TV (mis. IP lokal vs domain).
+     * alamat yang dibuka TV (mis. IP lokal vs domain). Dipakai juga gambar mini di halaman admin — dulu memakai URL
+     * absolut dari APP_URL, sehingga rusak saat admin dibuka lewat alamat lain (127.0.0.1:8000, ngrok).
      */
-    private function fileUrl(string $path): string
+    public static function publicFileUrl(string $path): string
     {
         $url = Storage::disk('public')->url($path);
 
@@ -235,16 +397,55 @@ class SignatureService
 
     // ================================================================== TAYANGKAN & VERSI
 
-    public function publish(SignatureScreen $screen, User $user, ?string $note = null): SignatureVersion
+    /** Riwayat versi yang disimpan per layar (yang sedang tayang tidak pernah dibuang). */
+    public const MAX_VERSIONS = 20;
+
+    /**
+     * Tayangkan draft saat ini. Versi baru hanya dibuat kalau tampilannya belum pernah ada: sama dengan yang sedang
+     * tayang → tidak ada perubahan; sama dengan versi lama di riwayat → versi itu yang ditayangkan lagi. Dulu setiap
+     * klik membuat versi baru walau isinya sama, sehingga riwayat penuh duplikat.
+     */
+    public function publish(SignatureScreen $screen, User $user, ?string $note = null): PublishResult
     {
-        return $this->storeVersion($screen, $this->buildPayload($screen), $user, $note ?: 'Tayangkan');
+        $payload = $this->buildPayload($screen);
+
+        return DB::transaction(function () use ($screen, $payload, $user, $note) {
+            $screen = SignatureScreen::whereKey($screen->id)->lockForUpdate()->firstOrFail();
+            $fingerprint = self::fingerprint($payload);
+
+            $same = SignatureVersion::where('screen_id', $screen->id)->orderByDesc('version')->get()
+                ->first(fn (SignatureVersion $v) => self::fingerprint((array) $v->payload) === $fingerprint);
+            if ($same) {
+                if ($same->id === $screen->published_version_id) {
+                    return new PublishResult($same, PublishResult::UNCHANGED);
+                }
+
+                return new PublishResult($this->putOnAir($screen, $same, $user, "menayangkan lagi versi {$same->version} (isi sama, tanpa versi baru)"), PublishResult::REUSED);
+            }
+
+            $number = (int) SignatureVersion::where('screen_id', $screen->id)->max('version') + 1;
+            $payload['version'] = $number;
+            $version = SignatureVersion::create([
+                'screen_id' => $screen->id,
+                'version' => $number,
+                'payload' => $payload,
+                'note' => mb_substr($note ?: 'Tayangkan', 0, 120),
+                'published_by_id' => $user->id,
+                'created_at' => now(),
+            ]);
+            $this->putOnAir($screen, $version, $user, "menayangkan versi baru {$number}");
+            $this->pruneVersions($screen);
+
+            return new PublishResult($version, PublishResult::CREATED);
+        });
     }
 
     /**
-     * Tayangkan ulang isi versi lama sebagai versi baru (riwayat tetap utuh). Ditolak kalau ada file versi itu yang sudah
-     * dihapus (tidak tayang lebih dari SignatureFileJanitor::KEEP_AFTER_AIRING_DAYS hari) — TV akan menampilkan slide kosong.
+     * Kembalikan ke versi lama = pindahkan tanda Tayang ke versi itu (tidak menyalinnya jadi versi baru). Ditolak kalau
+     * ada file versi itu yang sudah dihapus (tidak tayang lebih dari SignatureFileJanitor::KEEP_AFTER_AIRING_DAYS hari)
+     * — TV akan menampilkan slide kosong.
      */
-    public function restore(SignatureVersion $version, User $user): SignatureVersion
+    public function restore(SignatureVersion $version, User $user): PublishResult
     {
         $missing = app(SignatureFileJanitor::class)->missingFiles((array) $version->payload);
         if ($missing !== []) {
@@ -252,37 +453,52 @@ class SignatureService
                 .SignatureFileJanitor::KEEP_AFTER_AIRING_DAYS.' hari. Upload ulang kontennya di library, lalu tekan Tayangkan.');
         }
 
-        return $this->storeVersion($version->screen, $version->payload, $user, "Kembalikan ke versi {$version->version}");
+        return DB::transaction(function () use ($version, $user) {
+            $screen = SignatureScreen::whereKey($version->screen_id)->lockForUpdate()->firstOrFail();
+            if ($screen->published_version_id === $version->id) {
+                return new PublishResult($version, PublishResult::UNCHANGED);
+            }
+
+            return new PublishResult($this->putOnAir($screen, $version, $user, "dikembalikan ke versi {$version->version}", 'signature.restored'), PublishResult::REUSED);
+        });
     }
 
-    private function storeVersion(SignatureScreen $screen, array $payload, User $user, string $note): SignatureVersion
+    /** Pindahkan tanda Tayang: versi lama dicatat berhenti tayang (dasar aturan file 7 hari), versi ini mulai tayang. */
+    private function putOnAir(SignatureScreen $screen, SignatureVersion $version, User $user, string $what, string $event = 'signature.published'): SignatureVersion
     {
-        return DB::transaction(function () use ($screen, $payload, $user, $note) {
-            $screen = SignatureScreen::whereKey($screen->id)->lockForUpdate()->firstOrFail();
-            $number = (int) SignatureVersion::where('screen_id', $screen->id)->max('version') + 1;
-            $payload['version'] = $number;
+        if ($screen->published_version_id && $screen->published_version_id !== $version->id) {
+            SignatureVersion::whereKey($screen->published_version_id)->update(['aired_until' => now()]);
+        }
+        $version->update(['aired_at' => now(), 'aired_by_id' => $user->id, 'aired_until' => null]);
+        $screen->update(['published_version_id' => $version->id]);
 
-            $version = SignatureVersion::create([
-                'screen_id' => $screen->id,
-                'version' => $number,
-                'payload' => $payload,
-                'note' => mb_substr($note, 0, 120),
-                'published_by_id' => $user->id,
-                'created_at' => now(),
-            ]);
-            $screen->update(['published_version_id' => $version->id]);
+        $payload = (array) $version->payload;
+        ActivityLogger::record(
+            module: 'SIGNATURE',
+            event: $event,
+            description: "Layar {$screen->name} {$what}",
+            subject: $screen,
+            meta: ['versi' => $version->version, 'template' => $payload['template']['name'] ?? '-', 'jumlah_konten' => array_sum(array_map('count', (array) ($payload['playlists'] ?? [])))],
+            causer: $user,
+        );
 
-            ActivityLogger::record(
-                module: 'SIGNATURE',
-                event: 'signature.published',
-                description: "Layar {$screen->name} menayangkan versi {$number} ({$note})",
-                subject: $screen,
-                meta: ['versi' => $number, 'template' => $payload['template']['name'] ?? '-', 'jumlah_konten' => count($payload['playlists']['main'] ?? [])],
-                causer: $user,
-            );
+        return $version;
+    }
 
-            return $version;
-        });
+    /** Simpan MAX_VERSIONS versi terbaru per layar; yang sedang tayang selalu disimpan. */
+    private function pruneVersions(SignatureScreen $screen): void
+    {
+        $keep = SignatureVersion::where('screen_id', $screen->id)->orderByDesc('version')->limit(self::MAX_VERSIONS)->pluck('id')
+            ->push($screen->published_version_id)->filter()->all();
+        SignatureVersion::where('screen_id', $screen->id)->whereNotIn('id', $keep)->delete();
+    }
+
+    /** Sidik tampilan: isi payload tanpa nomor versi & waktu dibuat (dua tayangan dengan isi sama = sidik sama). */
+    private static function fingerprint(array $payload): string
+    {
+        unset($payload['version'], $payload['generated_at']);
+
+        return md5(json_encode($payload));
     }
 
     // ================================================================== PREVIEW

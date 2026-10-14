@@ -11,6 +11,7 @@ use App\Models\Signature\SignatureTemplate;
 use App\Models\Signature\SignatureVersion;
 use App\Models\Sponsor\SponsorOrganization;
 use App\Services\Media\SecureImageUploader;
+use App\Services\Signature\PublishResult;
 use App\Services\Signature\SignatureService;
 use BackedEnum;
 use Filament\Notifications\Notification;
@@ -79,10 +80,14 @@ class Signature extends Page
 
     public bool $tplRemoveLogo = false;
 
-    /** @var array<int, array{content_id: string, duration: int|string|null}> */
-    public array $tplPlaylist = [];
+    /** Playlist per zona konten: ['main' => [['content_id' => …, 'duration' => …], …], 'z2' => […]]. */
+    public array $tplPlaylists = ['main' => []];
 
-    public string $tplAddContentId = '';
+    /** Konten yang dipilih untuk ditambahkan, per zona. */
+    public array $tplAddContentIds = [];
+
+    /** Template custom: zona dalam satuan grid (SignatureService::normalizeCustomZones). */
+    public array $tplZones = [];
 
     // --- Konten ---
     public bool $showContentModal = false;
@@ -104,6 +109,9 @@ class Signature extends Page
     public int|string $contentVolume = 80;
 
     public bool $contentActive = true;
+
+    /** Link YouTube yang diketik admin (yang disimpan hanya ID videonya). */
+    public string $contentYoutube = '';
 
     // --- Running text ---
     public bool $showTextModal = false;
@@ -178,7 +186,8 @@ class Signature extends Page
 
     public function getVersionsProperty()
     {
-        return SignatureVersion::with('publishedBy:id,name')->where('screen_id', $this->screenId)->orderByDesc('version')->limit(10)->get(['id', 'screen_id', 'version', 'note', 'published_by_id', 'created_at']);
+        return SignatureVersion::with(['publishedBy:id,name', 'airedBy:id,name'])->where('screen_id', $this->screenId)->orderByDesc('version')
+            ->limit(SignatureService::MAX_VERSIONS)->get(['id', 'screen_id', 'version', 'note', 'published_by_id', 'created_at', 'aired_at', 'aired_by_id', 'aired_until']);
     }
 
     public function saveScreen(bool $notify = true): bool
@@ -221,9 +230,14 @@ class Signature extends Page
     {
         $this->authorizePublish();
         $this->saveScreen(notify: false);
-        $version = app(SignatureService::class)->publish($this->screen, auth()->user());
+        $result = app(SignatureService::class)->publish($this->screen, auth()->user());
+        $number = $result->version->version;
 
-        Notification::make()->title("Versi {$version->version} ditayangkan")->body('TV mengambil tampilan baru dalam ±15 detik.')->success()->send();
+        match ($result->outcome) {
+            PublishResult::UNCHANGED => Notification::make()->title('Tidak ada perubahan')->body("TV sudah menayangkan tampilan ini (versi {$number}).")->info()->send(),
+            PublishResult::REUSED => Notification::make()->title("Versi {$number} ditayangkan lagi")->body('Isinya sama dengan versi lama, jadi tidak dibuat versi baru. TV berganti dalam ±15 detik.')->success()->send(),
+            default => Notification::make()->title("Versi {$number} ditayangkan")->body('TV mengambil tampilan baru dalam ±15 detik.')->success()->send(),
+        };
     }
 
     public function restoreVersion(string $versionId): void
@@ -231,14 +245,16 @@ class Signature extends Page
         $this->authorizePublish();
         $version = SignatureVersion::where('screen_id', $this->screenId)->findOrFail($versionId);
         try {
-            $new = app(SignatureService::class)->restore($version, auth()->user());
+            $result = app(SignatureService::class)->restore($version, auth()->user());
         } catch (\App\Services\Signature\MissingSignatureFilesException $e) {
             Notification::make()->title("Versi {$version->version} tidak bisa dikembalikan")->body($e->getMessage())->danger()->persistent()->send();
 
             return;
         }
 
-        Notification::make()->title("Versi {$version->version} ditayangkan ulang")->body("Tersimpan sebagai versi {$new->version}.")->success()->send();
+        $result->outcome === PublishResult::UNCHANGED
+            ? Notification::make()->title("Versi {$version->version} sudah tayang")->info()->send()
+            : Notification::make()->title("Versi {$version->version} ditayangkan lagi")->body('TV berganti dalam ±15 detik.')->success()->send();
     }
 
     public function regenerateToken(): void
@@ -271,12 +287,186 @@ class Signature extends Page
         $this->resetTemplateForm();
         $this->editingTemplateId = $template->id;
         $this->tplName = $template->name;
-        $this->tplLayout = isset(SignatureService::LAYOUTS[$template->layout]) ? $template->layout : 'PRESET_A';
+        $this->tplLayout = $template->layout === SignatureService::CUSTOM_LAYOUT || isset(SignatureService::LAYOUTS[$template->layout]) ? $template->layout : 'PRESET_A';
+        $this->tplZones = $this->tplLayout === SignatureService::CUSTOM_LAYOUT ? array_values((array) $template->zones) : [];
         $this->tplTheme = array_merge(SignatureService::DEFAULT_THEME, $template->theme ?? []);
         $this->tplTicker = array_merge(SignatureService::DEFAULT_TICKER, $template->ticker ?? []);
         $this->tplLogoPath = $template->logo_path;
-        $this->tplPlaylist = $template->playlistItems->where('zone_key', 'main')->map(fn ($i) => ['content_id' => $i->content_id, 'duration' => $i->duration_seconds])->values()->all();
+        $this->tplPlaylists = $template->playlistItems->groupBy('zone_key')
+            ->map(fn ($items) => $items->map(fn ($i) => ['content_id' => $i->content_id, 'duration' => $i->duration_seconds])->values()->all())
+            ->all();
+        $this->syncPlaylistZones();
         $this->showTemplateModal = true;
+    }
+
+    /** Kunci zona konten pada susunan yang sedang diedit (preset: `main`). */
+    public function getPlaylistZoneKeysProperty(): array
+    {
+        $zones = $this->tplLayout === SignatureService::CUSTOM_LAYOUT ? $this->tplZones : (SignatureService::LAYOUTS[$this->tplLayout]['zones'] ?? []);
+
+        return array_values(array_map(fn ($z) => $z['key'], array_filter($zones, fn ($z) => ($z['kind'] ?? null) === 'playlist')));
+    }
+
+    /** Nama zona untuk admin: "Zona konten 1", "Zona konten 2", "Panel samping", "Running text". */
+    public function getZoneLabelsProperty(): array
+    {
+        $zones = $this->tplLayout === SignatureService::CUSTOM_LAYOUT ? $this->tplZones : (SignatureService::LAYOUTS[$this->tplLayout]['zones'] ?? []);
+        $labels = [];
+        $playlistNo = 0;
+        foreach ($zones as $zone) {
+            $kind = $zone['kind'] ?? '';
+            $labels[$zone['key'] ?? ''] = $kind === 'playlist'
+                ? 'Zona konten '.(++$playlistNo)
+                : (SignatureService::ZONE_KINDS[$kind]['label'] ?? $kind);
+        }
+
+        return $labels;
+    }
+
+    /** Setiap zona konten punya playlist (kosong boleh); playlist zona yang sudah dihapus ikut dibuang. */
+    protected function syncPlaylistZones(): void
+    {
+        $keys = $this->playlistZoneKeys;
+        $this->tplPlaylists = array_intersect_key($this->tplPlaylists, array_flip($keys)) + array_fill_keys($keys, []);
+        $this->tplPlaylists = array_map('array_values', $this->tplPlaylists);
+    }
+
+    // ------------------------------------------------------------------ editor template custom
+
+    /** Pilih susunan layar. Pertama kali pindah ke Custom, susunan preset yang sedang dipilih jadi titik awal. */
+    public function updatingTplLayout(string $value): void
+    {
+        if ($value === SignatureService::CUSTOM_LAYOUT && $this->tplZones === []) {
+            $this->tplZones = SignatureService::presetAsCustom($this->tplLayout);
+        }
+    }
+
+    public function updatedTplLayout(string $value): void
+    {
+        if ($value !== SignatureService::CUSTOM_LAYOUT && ! isset(SignatureService::LAYOUTS[$value])) {
+            $this->tplLayout = 'PRESET_A';
+        }
+        $this->syncPlaylistZones();
+    }
+
+    /** Tambah zona di tempat kosong pertama yang cukup. */
+    public function addZone(string $kind): void
+    {
+        $this->authorizeManage();
+        $rule = SignatureService::ZONE_KINDS[$kind] ?? null;
+        if (! $rule || $this->tplLayout !== SignatureService::CUSTOM_LAYOUT) {
+            return;
+        }
+        if (count($this->tplZones) >= SignatureService::MAX_ZONES) {
+            Notification::make()->title('Maksimal '.SignatureService::MAX_ZONES.' zona')->body('Hapus atau gabungkan zona lain dulu.')->warning()->send();
+
+            return;
+        }
+        if (collect($this->tplZones)->where('kind', $kind)->count() >= $rule['max']) {
+            Notification::make()->title("Maksimal {$rule['max']} {$rule['label']}")->warning()->send();
+
+            return;
+        }
+
+        $box = $this->findFreeBox($rule['min_w'], $rule['min_h']);
+        if (! $box) {
+            Notification::make()->title('Tidak ada tempat kosong')->body("Kecilkan zona lain dulu — {$rule['label']} butuh minimal {$rule['min_w']} × {$rule['min_h']} kotak.")->warning()->send();
+
+            return;
+        }
+
+        $used = array_column($this->tplZones, 'key');
+        $number = 1;
+        while (in_array('z'.$number, $used, true)) {
+            $number++;
+        }
+        $zone = ['key' => 'z'.$number, 'kind' => $kind] + $box;
+        if ($kind === 'playlist') {
+            $zone['sound'] = ! collect($this->tplZones)->contains(fn ($z) => ! empty($z['sound']));
+        }
+        $this->tplZones[] = $zone;
+        $this->syncPlaylistZones();
+        $this->dispatchZones();
+    }
+
+    public function removeZone(string $key): void
+    {
+        $this->authorizeManage();
+        $remaining = array_values(array_filter($this->tplZones, fn ($z) => ($z['key'] ?? null) !== $key));
+        if (! collect($remaining)->contains('kind', 'playlist')) {
+            Notification::make()->title('Minimal satu zona konten')->body('Template harus punya tempat untuk menayangkan konten.')->warning()->send();
+            $this->dispatchZones();
+
+            return;
+        }
+        $this->tplZones = $remaining;
+        $this->syncPlaylistZones();
+        $this->dispatchZones();
+    }
+
+    /**
+     * Posisi & ukuran baru dari editor drag & drop: [['key', 'x', 'y', 'w', 'h'], …]. Hanya posisi zona yang sudah ada
+     * yang diubah; susunan yang tidak sah (keluar layar, menumpuk, terlalu kecil) ditolak dan editor dikembalikan.
+     */
+    public function moveZones(array $layout): void
+    {
+        $this->authorizeManage();
+        $positions = collect($layout)->filter(fn ($row) => is_array($row) && is_string($row['key'] ?? null))->keyBy('key');
+        $moved = array_map(function (array $zone) use ($positions) {
+            $row = $positions->get($zone['key']);
+
+            return $row ? array_merge($zone, array_intersect_key($row, array_flip(['x', 'y', 'w', 'h']))) : $zone;
+        }, $this->tplZones);
+
+        try {
+            $this->tplZones = SignatureService::normalizeCustomZones($moved);
+            $this->resetValidation('tplZones');
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            Notification::make()->title('Susunan tidak bisa dipakai')->body($e->validator->errors()->first('tplZones'))->warning()->send();
+            $this->dispatchZones();
+        }
+    }
+
+    /** Hanya satu zona konten yang bersuara (browser TV memutar suara satu sumber). Kosong = semua tanpa suara. */
+    public function setSoundZone(string $key): void
+    {
+        $this->authorizeManage();
+        $this->tplZones = array_map(function (array $zone) use ($key) {
+            if (($zone['kind'] ?? null) === 'playlist') {
+                $zone['sound'] = $zone['key'] === $key;
+            }
+
+            return $zone;
+        }, $this->tplZones);
+    }
+
+    /** Zona untuk editor (posisi + nama tampilan). */
+    public function getEditorZonesProperty(): array
+    {
+        $labels = $this->zoneLabels;
+
+        return array_map(fn (array $z) => $z + ['label' => $labels[$z['key']] ?? $z['key']], $this->tplZones);
+    }
+
+    protected function dispatchZones(): void
+    {
+        $this->dispatch('sg-zones', zones: $this->editorZones);
+    }
+
+    /** Tempat kosong pertama (kiri-atas ke kanan-bawah) seukuran w × h satuan grid. */
+    protected function findFreeBox(int $w, int $h): ?array
+    {
+        $grid = SignatureService::GRID;
+        for ($y = 0; $y + $h <= $grid; $y++) {
+            for ($x = 0; $x + $w <= $grid; $x++) {
+                $free = collect($this->tplZones)->every(fn ($z) => $x >= $z['x'] + $z['w'] || $z['x'] >= $x + $w || $y >= $z['y'] + $z['h'] || $z['y'] >= $y + $h);
+                if ($free) {
+                    return ['x' => $x, 'y' => $y, 'w' => $w, 'h' => $h];
+                }
+            }
+        }
+
+        return null;
     }
 
     public function duplicateTemplate(string $templateId): void
@@ -312,27 +502,28 @@ class Signature extends Page
         Notification::make()->title('Template dihapus')->success()->send();
     }
 
-    public function addPlaylistItem(): void
+    public function addPlaylistItem(string $zone = 'main'): void
     {
-        if ($this->tplAddContentId !== '' && SignatureContent::whereKey($this->tplAddContentId)->exists()) {
-            $this->tplPlaylist[] = ['content_id' => $this->tplAddContentId, 'duration' => null];
+        $contentId = (string) ($this->tplAddContentIds[$zone] ?? '');
+        if (in_array($zone, $this->playlistZoneKeys, true) && $contentId !== '' && SignatureContent::whereKey($contentId)->exists()) {
+            $this->tplPlaylists[$zone][] = ['content_id' => $contentId, 'duration' => null];
         }
-        $this->tplAddContentId = '';
+        $this->tplAddContentIds[$zone] = '';
     }
 
-    public function movePlaylistItem(int $index, int $direction): void
+    public function movePlaylistItem(int $index, int $direction, string $zone = 'main'): void
     {
         $target = $index + $direction;
-        if (! isset($this->tplPlaylist[$index], $this->tplPlaylist[$target])) {
+        if (! isset($this->tplPlaylists[$zone][$index], $this->tplPlaylists[$zone][$target])) {
             return;
         }
-        [$this->tplPlaylist[$index], $this->tplPlaylist[$target]] = [$this->tplPlaylist[$target], $this->tplPlaylist[$index]];
+        [$this->tplPlaylists[$zone][$index], $this->tplPlaylists[$zone][$target]] = [$this->tplPlaylists[$zone][$target], $this->tplPlaylists[$zone][$index]];
     }
 
-    public function removePlaylistItem(int $index): void
+    public function removePlaylistItem(int $index, string $zone = 'main'): void
     {
-        unset($this->tplPlaylist[$index]);
-        $this->tplPlaylist = array_values($this->tplPlaylist);
+        unset($this->tplPlaylists[$zone][$index]);
+        $this->tplPlaylists[$zone] = array_values($this->tplPlaylists[$zone] ?? []);
     }
 
     public function saveTemplate(): void
@@ -349,6 +540,7 @@ class Signature extends Page
             $data = [
                 'name' => trim($this->tplName),
                 'layout' => $this->tplLayout,
+                'zones' => $this->tplLayout === SignatureService::CUSTOM_LAYOUT ? SignatureService::normalizeCustomZones($this->tplZones) : null,
                 'theme' => $this->cleanTheme(),
                 'ticker' => $this->cleanTicker(),
                 'logo_path' => $logo,
@@ -357,15 +549,18 @@ class Signature extends Page
                 ? tap(SignatureTemplate::findOrFail($this->editingTemplateId))->update($data)
                 : SignatureTemplate::create($data);
 
-            $template->playlistItems()->where('zone_key', 'main')->delete();
-            foreach (array_values($this->tplPlaylist) as $order => $row) {
-                SignaturePlaylistItem::create([
-                    'template_id' => $template->id,
-                    'zone_key' => 'main',
-                    'content_id' => $row['content_id'],
-                    'sort_order' => $order + 1,
-                    'duration_seconds' => ($row['duration'] ?? '') === '' || $row['duration'] === null ? null : (int) $row['duration'],
-                ]);
+            // Semua zona disimpan ulang; playlist zona yang sudah dihapus dari susunan ikut hilang.
+            $template->playlistItems()->delete();
+            foreach ($this->playlistZoneKeys as $zone) {
+                foreach (array_values($this->tplPlaylists[$zone] ?? []) as $order => $row) {
+                    SignaturePlaylistItem::create([
+                        'template_id' => $template->id,
+                        'zone_key' => $zone,
+                        'content_id' => $row['content_id'],
+                        'sort_order' => $order + 1,
+                        'duration_seconds' => ($row['duration'] ?? '') === '' || $row['duration'] === null ? null : (int) $row['duration'],
+                    ]);
+                }
             }
         });
 
@@ -383,6 +578,7 @@ class Signature extends Page
             'id' => $this->editingTemplateId,
             'name' => $this->tplName,
             'layout' => $this->tplLayout,
+            'zones' => $this->tplLayout === SignatureService::CUSTOM_LAYOUT ? SignatureService::normalizeCustomZones($this->tplZones) : null,
             'theme' => $this->cleanTheme(),
             'ticker' => $this->cleanTicker(),
             'logo_path' => $this->tplRemoveLogo ? null : $this->tplLogoPath,
@@ -391,9 +587,14 @@ class Signature extends Page
             $template['logo_url'] = $this->tplLogoUpload->temporaryUrl();
         }
 
+        $playlists = [];
+        foreach ($this->playlistZoneKeys as $zone) {
+            $playlists[$zone] = array_map(fn ($row) => ['content_id' => $row['content_id'], 'duration' => ($row['duration'] ?? '') === '' ? null : $row['duration']], array_values($this->tplPlaylists[$zone] ?? []));
+        }
+
         $this->openPreview(app(SignatureService::class)->buildPayload($this->screen, [
             'template' => $template,
-            'playlist' => array_map(fn ($row) => ['content_id' => $row['content_id'], 'duration' => ($row['duration'] ?? '') === '' ? null : $row['duration']], array_values($this->tplPlaylist)),
+            'playlists' => $playlists,
         ]));
     }
 
@@ -405,14 +606,20 @@ class Signature extends Page
     protected function validateTemplate(): void
     {
         $color = ['required', 'regex:/^#[0-9A-Fa-f]{6}$/'];
+        if ($this->tplLayout === SignatureService::CUSTOM_LAYOUT) {
+            // Pesan ditampilkan di bawah editor (kunci tplZones).
+            $this->tplZones = SignatureService::normalizeCustomZones($this->tplZones);
+        }
+        $this->syncPlaylistZones();
         $this->validate([
             'tplName' => ['required', 'string', 'max:80'],
-            'tplLayout' => ['required', Rule::in(array_keys(SignatureService::LAYOUTS))],
+            'tplLayout' => ['required', Rule::in([...array_keys(SignatureService::LAYOUTS), SignatureService::CUSTOM_LAYOUT])],
             'tplTheme.background' => $color,
             'tplTheme.panel' => $color,
             'tplTheme.accent' => $color,
             'tplTheme.text' => $color,
             'tplTheme.font' => ['required', Rule::in(SignatureService::FONTS)],
+            'tplTheme.transition' => ['required', Rule::in(array_keys(SignatureService::TRANSITIONS))],
             'tplTicker.font' => ['required', Rule::in(SignatureService::FONTS)],
             'tplTicker.font_size' => ['required', 'integer', 'min:20', 'max:120'],
             'tplTicker.speed' => ['required', 'integer', 'min:20', 'max:600'],
@@ -421,15 +628,17 @@ class Signature extends Page
             'tplTicker.color' => $color,
             'tplTicker.separator' => ['nullable', 'string', 'max:5'],
             'tplLogoUpload' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:4096'],
-            'tplPlaylist' => ['array', 'max:50'],
-            'tplPlaylist.*.content_id' => ['required', 'exists:signature_contents,id'],
-            'tplPlaylist.*.duration' => ['nullable', 'integer', 'min:3', 'max:3600'],
+            'tplPlaylists' => ['array', 'max:'.SignatureService::MAX_ZONES],
+            'tplPlaylists.*' => ['array', 'max:50'],
+            'tplPlaylists.*.*.content_id' => ['required', 'exists:signature_contents,id'],
+            'tplPlaylists.*.*.duration' => ['nullable', 'integer', 'min:3', 'max:3600'],
         ], [
             'tplName.required' => 'Nama template wajib diisi.',
             'tplTheme.*.regex' => 'Warna harus format #RRGGBB.',
             'tplTicker.background.regex' => 'Warna harus format #RRGGBB.',
             'tplTicker.color.regex' => 'Warna harus format #RRGGBB.',
-            'tplPlaylist.*.duration.min' => 'Durasi minimal 3 detik.',
+            'tplPlaylists.*.max' => 'Maksimal 50 konten per zona.',
+            'tplPlaylists.*.*.duration.min' => 'Durasi minimal 3 detik.',
         ]);
     }
 
@@ -444,8 +653,9 @@ class Signature extends Page
         $this->tplLogoUpload = null;
         $this->tplLogoPath = null;
         $this->tplRemoveLogo = false;
-        $this->tplPlaylist = [];
-        $this->tplAddContentId = '';
+        $this->tplZones = [];
+        $this->tplPlaylists = ['main' => []];
+        $this->tplAddContentIds = [];
     }
 
     protected function cleanTheme(): array
@@ -481,7 +691,7 @@ class Signature extends Page
 
     public function getContentsProperty()
     {
-        return SignatureContent::withCount('playlistItems')->orderByRaw("CASE WHEN type IN ('IMAGE','VIDEO') THEN 1 ELSE 0 END")->orderBy('name')->get();
+        return SignatureContent::withCount('playlistItems')->orderByRaw("CASE WHEN type IN ('IMAGE','VIDEO','YOUTUBE') THEN 1 ELSE 0 END")->orderBy('name')->get();
     }
 
     public function openCreateContent(): void
@@ -500,6 +710,7 @@ class Signature extends Page
         $this->contentName = $content->name;
         $this->contentType = $content->type;
         $this->contentFilePath = $content->file_path;
+        $this->contentYoutube = $content->type === 'YOUTUBE' && $content->url ? 'https://youtu.be/'.$content->url : '';
         $this->contentDuration = $content->duration_seconds;
         $this->contentSound = $content->sound;
         $this->contentVolume = $content->volume;
@@ -540,28 +751,38 @@ class Signature extends Page
 
         $this->validate([
             'contentName' => ['required', 'string', 'max:100'],
-            'contentType' => ['required', Rule::in(SignatureContent::FILE_TYPES)],
-            'contentUpload' => $type === 'VIDEO'
-                ? [$needsFile ? 'required' : 'nullable', 'file', 'max:'.($this->videoMaxMb * 1024), function ($attribute, $file, $fail) {
+            'contentType' => ['required', Rule::in(SignatureContent::LIBRARY_TYPES)],
+            'contentUpload' => match ($type) {
+                'VIDEO' => [$needsFile ? 'required' : 'nullable', 'file', 'max:'.($this->videoMaxMb * 1024), function ($attribute, $file, $fail) {
                     // Dicek dari isi file. Pustaka deteksi membaca MP4 sebagai video/mp4 atau application/mp4.
                     $mime = strtolower((string) $file->getMimeType());
                     $extension = strtolower((string) $file->getClientOriginalExtension());
                     if (! in_array($mime, ['video/mp4', 'application/mp4', 'video/x-m4v'], true) || ! in_array($extension, ['mp4', 'm4v'], true)) {
                         $fail('Video harus format MP4.');
                     }
+                }],
+                'IMAGE' => [$needsFile ? 'required' : 'nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:10240'],
+                default => ['nullable'], // YouTube: file yang sempat dipilih sebelum ganti jenis diabaikan
+            },
+            'contentYoutube' => $type === 'YOUTUBE'
+                ? ['required', 'string', 'max:500', function ($attribute, $value, $fail) {
+                    if (! SignatureContent::youtubeId($value)) {
+                        $fail('Link YouTube tidak valid. Contoh: https://youtu.be/xxxxxxxxxxx atau https://www.youtube.com/watch?v=xxxxxxxxxxx');
+                    }
                 }]
-                : [$type === 'IMAGE' && $needsFile ? 'required' : 'nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:10240'],
+                : ['nullable'],
             'contentDuration' => ['required', 'integer', 'min:3', 'max:3600'],
             'contentVolume' => ['required', 'integer', 'min:0', 'max:100'],
         ], [
             'contentName.required' => 'Nama konten wajib diisi.',
             'contentUpload.required' => $type === 'VIDEO' ? 'Pilih file video MP4.' : 'Pilih file gambar.',
             'contentUpload.max' => $type === 'VIDEO' ? "Ukuran video maksimal {$this->videoMaxMb} MB." : 'Ukuran gambar maksimal 10 MB.',
+            'contentYoutube.required' => 'Tempel link video YouTube.',
             'contentDuration.min' => 'Durasi minimal 3 detik.',
         ]);
 
         $path = $this->contentFilePath;
-        if ($this->contentUpload) {
+        if ($this->contentUpload && in_array($type, SignatureContent::FILE_TYPES, true)) {
             $path = $type === 'VIDEO'
                 ? $this->contentUpload->store('signature/videos', 'public')
                 : SecureImageUploader::store($this->contentUpload, 'signature/images');
@@ -570,10 +791,11 @@ class Signature extends Page
         $data = [
             'name' => trim($this->contentName),
             'duration_seconds' => (int) $this->contentDuration,
-            'sound' => $type === 'VIDEO' && $this->contentSound,
+            'sound' => in_array($type, SignatureContent::PLAYABLE_TYPES, true) && $this->contentSound,
             'volume' => (int) $this->contentVolume,
             'is_active' => $this->contentActive,
-            'file_path' => $path,
+            'file_path' => $type === 'YOUTUBE' ? null : $path,
+            'url' => $type === 'YOUTUBE' ? SignatureContent::youtubeId($this->contentYoutube) : null,
         ];
         $editing ? $editing->update($data) : SignatureContent::create($data + ['type' => $type]);
 
@@ -599,7 +821,7 @@ class Signature extends Page
     {
         $this->authorizeManage();
         $content = SignatureContent::findOrFail($contentId);
-        if (! in_array($content->type, SignatureContent::FILE_TYPES, true)) {
+        if (! in_array($content->type, SignatureContent::LIBRARY_TYPES, true)) {
             Notification::make()->title('Widget sistem tidak bisa dihapus')->body('Nonaktifkan saja kalau tidak dipakai.')->warning()->send();
 
             return;
@@ -625,6 +847,7 @@ class Signature extends Page
         $this->contentSound = false;
         $this->contentVolume = 80;
         $this->contentActive = true;
+        $this->contentYoutube = '';
     }
 
     // ================================================================== RUNNING TEXT

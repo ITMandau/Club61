@@ -50,7 +50,8 @@ class WalkInBenefitRp0Test extends TestCase
         $this->court = PadelCourt::create([
             'name' => 'Court Rp0', 'type' => 'INDOOR', 'hourly_rate_regular' => 300000, 'hourly_rate_prime' => 450000, 'is_active' => true,
         ]);
-        $this->date = now()->addDays(3)->format('Y-m-d');
+        // Selalu hari kerja (Rabu): dulu "hari ini + 3" jatuh ke Sabtu setiap Rabu → tarif prime weekend, test gagal.
+        $this->date = now()->addDays(3)->next(Carbon::WEDNESDAY)->format('Y-m-d');
 
         PosCashierShift::create([
             'shift_number' => 'SFT-RP0-0001', 'counter' => 'PADEL_FRONTDESK', 'status' => 'OPEN',

@@ -52,7 +52,7 @@ class SignatureFileJanitorTest extends TestCase
 
     private function publish(): SignatureVersion
     {
-        return app(SignatureService::class)->publish($this->screen->fresh(), $this->admin);
+        return app(SignatureService::class)->publish($this->screen->fresh(), $this->admin)->version;
     }
 
     private function sweep(): array

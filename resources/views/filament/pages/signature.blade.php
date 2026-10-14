@@ -19,7 +19,27 @@
         .sg-mini div { position: absolute; display: flex; align-items: center; justify-content: center; font-size: 0.625rem; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; box-sizing: border-box; border: 1px solid rgba(255,255,255,0.15); }
         .sg-swatches { display: flex; gap: 0.35rem; }
         .sg-swatches span { width: 18px; height: 18px; border-radius: 5px; border: 1px solid rgba(0,0,0,0.12); }
-        .sg-layouts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.6rem; }
+        .sg-layouts { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0.6rem; }
+        @media (max-width: 720px) { .sg-layouts { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+        /* Editor template custom (Gridstack) */
+        .sg-zone-tools { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; margin-bottom: 0.6rem; }
+        /* flex-shrink 0: isi modal = flex kolom yang di-scroll; tanpa ini kanvas (overflow hidden) dipepetkan jadi tinggi 0. */
+        .sg-canvas { position: relative; flex-shrink: 0; width: 100%; aspect-ratio: 16 / 9; min-height: 220px; border-radius: 12px; overflow: hidden; border: 1px solid var(--c-line); }
+        .sg-canvas-status { position: absolute; top: 0; right: 0; bottom: 0; left: 0; display: flex; align-items: center; justify-content: center; padding: 1rem; text-align: center; color: #F7F0DB; font-size: 0.8125rem; font-weight: 700; }
+        .sg-canvas .grid-stack { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
+        /* overflow hidden: Gridstack bawaannya overflow-y auto → zona pendek (running text) memunculkan scrollbar. */
+        .sg-canvas .grid-stack-item-content { overflow: hidden !important; border-radius: 8px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.15rem; text-align: center; color: #F7F0DB; font-size: 0.75rem; cursor: move; user-select: none; border: 1.5px solid rgba(255,255,255,0.35); }
+        .sg-canvas .grid-stack-item-content strong { font-weight: 800; }
+        .sg-canvas .grid-stack-item-content span { font-family: var(--font-mono); font-size: 0.625rem; opacity: 0.75; }
+        .sg-canvas .sg-zone-playlist > .grid-stack-item-content { background: rgba(102,39,33,0.85); }
+        .sg-canvas .sg-zone-side_panel > .grid-stack-item-content { background: rgba(42,26,22,0.92); }
+        .sg-canvas .sg-zone-ticker > .grid-stack-item-content { background: rgba(180,83,9,0.9); }
+        .sg-zone-list { display: flex; flex-direction: column; gap: 0.4rem; margin-top: 0.6rem; }
+        .sg-zone-row { display: flex; align-items: center; gap: 0.6rem; padding: 0.45rem 0.6rem; border: 1px solid var(--c-line-soft); border-radius: 10px; background: var(--c-paper); }
+        .sg-zone-dot { width: 12px; height: 12px; border-radius: 4px; flex-shrink: 0; }
+        .sg-zone-dot.sg-zone-playlist { background: #662721; }
+        .sg-zone-dot.sg-zone-side_panel { background: #2A1A16; }
+        .sg-zone-dot.sg-zone-ticker { background: #B45309; }
         .sg-layout { border: 1.5px solid var(--c-line); border-radius: 12px; padding: 0.5rem; cursor: pointer; display: flex; flex-direction: column; gap: 0.4rem; font-size: 0.6875rem; font-weight: 700; color: var(--c-brown); background: #FFFFFF; }
         .sg-layout.is-on { border-color: var(--c-terra); box-shadow: 0 0 0 3px rgba(102,39,33,0.12); }
         .sg-color { display: flex; gap: 0.4rem; align-items: center; }
@@ -44,7 +64,7 @@
     @php
         $screen = $this->screen;
         $published = $screen->publishedVersion;
-        $layoutBoxes = fn (string $layout) => \App\Services\Signature\SignatureService::LAYOUTS[$layout]['zones'] ?? [];
+        $layoutBoxes = fn (string $layout, $zones = null) => \App\Services\Signature\SignatureService::layoutZones($layout, $zones);
         $zoneLabel = ['playlist' => 'Konten', 'side_panel' => 'Panel', 'ticker' => 'Running text'];
     @endphp
 
@@ -151,7 +171,7 @@
                     </div>
                     <div class="c61-card-body">
                         @if($published)
-                            <div class="c61-hint" style="margin-top:0;">Ditayangkan {{ $published->created_at->setTimezone('Asia/Jakarta')->format('d/m/Y H:i') }} oleh {{ $published->publishedBy?->name ?? '-' }} · {{ count($published->payload['playlists']['main'] ?? []) }} konten di playlist.</div>
+                            <div class="c61-hint" style="margin-top:0;">Ditayangkan {{ ($published->aired_at ?? $published->created_at)->setTimezone('Asia/Jakarta')->format('d/m/Y H:i') }} oleh {{ ($published->airedBy ?? $published->publishedBy)?->name ?? '-' }} · {{ array_sum(array_map('count', (array) ($published->payload['playlists'] ?? []))) }} konten di playlist.</div>
                         @else
                             <div class="c61-hint" style="margin-top:0;">TV menampilkan pesan "Belum ada tampilan" sampai Tayangkan ditekan.</div>
                         @endif
@@ -159,7 +179,12 @@
                 </div>
 
                 <div class="c61-card">
-                    <div class="c61-card-head"><div class="c61-card-title">Riwayat Versi</div></div>
+                    <div class="c61-card-head">
+                        <div>
+                            <div class="c61-card-title">Riwayat Versi</div>
+                            <div class="c61-card-sub">Versi baru hanya dibuat kalau tampilannya berubah. Kembalikan = tayangkan lagi versi itu. Disimpan {{ \App\Services\Signature\SignatureService::MAX_VERSIONS }} versi terakhir.</div>
+                        </div>
+                    </div>
                     <div class="c61-table-wrap">
                         <table class="c61-table">
                             <thead><tr><th>Versi</th><th>Keterangan</th><th>Aksi</th></tr></thead>
@@ -168,15 +193,21 @@
                                     <tr wire:key="sg-version-{{ $version->id }}">
                                         <td class="code">v{{ $version->version }}</td>
                                         <td>
+                                            @php $airing = $published && $published->id === $version->id; @endphp
                                             <div class="strong">{{ $version->note }}</div>
-                                            <div class="sub">{{ $version->created_at->setTimezone('Asia/Jakarta')->format('d/m/Y H:i') }} · {{ $version->publishedBy?->name ?? '-' }}</div>
+                                            <div class="sub">Dibuat {{ $version->created_at->setTimezone('Asia/Jakarta')->format('d/m/Y H:i') }} · {{ $version->publishedBy?->name ?? '-' }}</div>
+                                            @if($airing && $version->aired_at && $version->aired_at->ne($version->created_at))
+                                                <div class="sub">Tayang lagi sejak {{ $version->aired_at->setTimezone('Asia/Jakarta')->format('d/m/Y H:i') }} · {{ $version->airedBy?->name ?? '-' }}</div>
+                                            @elseif(! $airing && $version->aired_until)
+                                                <div class="sub">Terakhir tayang {{ $version->aired_until->setTimezone('Asia/Jakarta')->format('d/m/Y H:i') }}</div>
+                                            @endif
                                         </td>
                                         <td>
-                                            @if($published && $published->id === $version->id)
+                                            @if($airing)
                                                 <span class="c61-pill c61-pill-ok">Tayang</span>
                                             @elseif($this->canPublish)
                                                 <button type="button" class="c61-btn c61-btn-ghost c61-btn-sm"
-                                                    x-on:click="$dispatch('club61-confirm', { title: @js('Tayangkan ulang versi '.$version->version.'?'), message: 'Tampilan versi itu dikirim lagi ke TV sebagai versi baru.', confirmLabel: 'Ya, Kembalikan', onConfirm: () => $wire.restoreVersion(@js($version->id)) })">Kembalikan</button>
+                                                    x-on:click="$dispatch('club61-confirm', { title: @js('Tayangkan lagi versi '.$version->version.'?'), message: 'TV kembali menayangkan versi itu (tidak membuat versi baru). Draft yang sedang diedit tidak berubah.', confirmLabel: 'Ya, Kembalikan', onConfirm: () => $wire.restoreVersion(@js($version->id)) })">Kembalikan</button>
                                             @endif
                                         </td>
                                     </tr>
@@ -201,7 +232,7 @@
             <div class="c61-card-head">
                 <div>
                     <div class="c61-card-title">Template</div>
-                    <div class="c61-card-sub">Susunan layar, warna, font, logo, running text, dan playlist konten. Template custom drag &amp; drop menyusul di Tahap 2.</div>
+                    <div class="c61-card-sub">Susunan layar (3 preset atau custom drag &amp; drop), warna, font, transisi, logo, running text, dan playlist konten.</div>
                 </div>
                 @if($this->canManage)
                     <button type="button" wire:click="openCreateTemplate" class="c61-btn c61-btn-primary">+ Tambah Template</button>
@@ -213,13 +244,13 @@
                         @php $theme = array_merge(\App\Services\Signature\SignatureService::DEFAULT_THEME, $template->theme ?? []); $tick = array_merge(\App\Services\Signature\SignatureService::DEFAULT_TICKER, $template->ticker ?? []); @endphp
                         <div class="sg-card" wire:key="sg-template-{{ $template->id }}">
                             <div class="sg-mini" style="background: {{ $theme['background'] }};">
-                                @foreach($layoutBoxes($template->layout) as $zone)
+                                @foreach($layoutBoxes($template->layout, $template->zones) as $zone)
                                     <div style="left:{{ $zone['x'] }}%; top:{{ $zone['y'] }}%; width:{{ $zone['w'] }}%; height:{{ $zone['h'] }}%; background: {{ $zone['kind'] === 'ticker' ? $tick['background'] : ($zone['kind'] === 'side_panel' ? $theme['panel'] : $theme['background']) }}; color: {{ $zone['kind'] === 'ticker' ? $tick['color'] : $theme['text'] }};">{{ $zoneLabel[$zone['kind']] ?? '' }}</div>
                                 @endforeach
                             </div>
                             <div>
                                 <div class="sg-card-title">{{ $template->name }}</div>
-                                <div class="c61-hint" style="margin-top:0.15rem;">{{ \App\Services\Signature\SignatureService::LAYOUTS[$template->layout]['label'] ?? $template->layout }} · {{ $template->playlist_items_count }} konten</div>
+                                <div class="c61-hint" style="margin-top:0.15rem;">{{ $template->layout === \App\Services\Signature\SignatureService::CUSTOM_LAYOUT ? 'Custom · '.count((array) $template->zones).' zona' : (\App\Services\Signature\SignatureService::LAYOUTS[$template->layout]['label'] ?? $template->layout) }} · {{ $template->playlist_items_count }} konten</div>
                             </div>
                             <div style="display:flex; align-items:center; justify-content:space-between; gap:0.5rem;">
                                 <div class="sg-swatches">
@@ -271,9 +302,11 @@
                             <tr wire:key="sg-content-{{ $content->id }}">
                                 <td>
                                     @if($content->type === 'IMAGE' && $content->file_path)
-                                        <img src="{{ Storage::disk('public')->url($content->file_path) }}" alt="" class="sg-thumb">
+                                        <img src="{{ \App\Services\Signature\SignatureService::publicFileUrl($content->file_path) }}" alt="" class="sg-thumb">
                                     @elseif($content->type === 'VIDEO')
                                         <div class="sg-thumb" style="display:flex; align-items:center; justify-content:center; font-size:0.625rem; font-weight:800; color:var(--c-terra);">MP4</div>
+                                    @elseif($content->type === 'YOUTUBE' && $content->url)
+                                        <img src="https://i.ytimg.com/vi/{{ $content->url }}/mqdefault.jpg" alt="" class="sg-thumb" referrerpolicy="no-referrer">
                                     @else
                                         <div class="sg-thumb" style="display:flex; align-items:center; justify-content:center; font-size:0.625rem; font-weight:800; color:var(--c-muted);">LIVE</div>
                                     @endif
@@ -283,18 +316,19 @@
                                         <div class="c61-hint" style="font-weight:600;">{{ $this->formatBytes($this->storageUsage['files'][$content->file_path]) }}</div>
                                     @endif
                                 </td>
-                                <td><span class="c61-pill {{ in_array($content->type, \App\Models\Signature\SignatureContent::FILE_TYPES, true) ? 'c61-pill-cream' : 'c61-pill-info' }}">{{ \App\Models\Signature\SignatureContent::TYPES[$content->type] ?? $content->type }}</span></td>
-                                <td>{{ $content->type === 'VIDEO' ? 'Sampai selesai' : $content->duration_seconds.' detik' }}</td>
-                                <td>{{ $content->type === 'VIDEO' ? ($content->sound ? 'Ya · '.$content->volume.'%' : 'Mute') : '—' }}</td>
+                                @php $playable = in_array($content->type, \App\Models\Signature\SignatureContent::PLAYABLE_TYPES, true); @endphp
+                                <td><span class="c61-pill {{ in_array($content->type, \App\Models\Signature\SignatureContent::LIBRARY_TYPES, true) ? 'c61-pill-cream' : 'c61-pill-info' }}">{{ \App\Models\Signature\SignatureContent::TYPES[$content->type] ?? $content->type }}</span></td>
+                                <td>{{ match ($content->type) { 'VIDEO' => 'Sampai selesai', 'YOUTUBE' => 'Sampai selesai (maks '.$content->duration_seconds.' dtk)', default => $content->duration_seconds.' detik' } }}</td>
+                                <td>{{ $playable ? ($content->sound ? 'Ya · '.$content->volume.'%' : 'Mute') : '—' }}</td>
                                 <td>{{ $content->playlist_items_count }} template</td>
                                 <td><span class="c61-pill {{ $content->is_active ? 'c61-pill-ok' : 'c61-pill-gray' }}">{{ $content->is_active ? 'Aktif' : 'Nonaktif' }}</span></td>
                                 <td>
                                     @if($this->canManage)
                                         <div class="c61-actions">
                                             <button type="button" wire:click="openEditContent('{{ $content->id }}')" class="c61-btn c61-btn-ghost c61-btn-sm">Edit</button>
-                                            @if(in_array($content->type, \App\Models\Signature\SignatureContent::FILE_TYPES, true))
+                                            @if(in_array($content->type, \App\Models\Signature\SignatureContent::LIBRARY_TYPES, true))
                                                 <button type="button" class="c61-btn c61-btn-danger c61-btn-sm"
-                                                    x-on:click="$dispatch('club61-confirm', { title: @js('Hapus '.$content->name.'?'), message: 'Konten dikeluarkan dari semua playlist template (draft). Kalau masih tayang di TV, tetap tayang sampai Tayangkan berikutnya — filenya dihapus otomatis setelah 7 hari tidak tayang.', confirmLabel: 'Ya, Hapus', tone: 'danger', onConfirm: () => $wire.deleteContent(@js($content->id)) })">Hapus</button>
+                                                    x-on:click="$dispatch('club61-confirm', { title: @js('Hapus '.$content->name.'?'), message: @js($content->type === 'YOUTUBE' ? 'Konten dikeluarkan dari semua playlist template (draft). Kalau masih tayang di TV, tetap tayang sampai Tayangkan berikutnya.' : 'Konten dikeluarkan dari semua playlist template (draft). Kalau masih tayang di TV, tetap tayang sampai Tayangkan berikutnya — filenya dihapus otomatis setelah 7 hari tidak tayang.'), confirmLabel: 'Ya, Hapus', tone: 'danger', onConfirm: () => $wire.deleteContent(@js($content->id)) })">Hapus</button>
                                             @endif
                                         </div>
                                     @endif
@@ -369,7 +403,7 @@
                             <tr wire:key="sg-sponsor-{{ $sponsor->id }}">
                                 <td>
                                     @if($sponsor->logo_path)
-                                        <img src="{{ Storage::disk('public')->url($sponsor->logo_path) }}" alt="" class="sg-thumb" style="object-fit:contain; background:#FFFFFF;">
+                                        <img src="{{ \App\Services\Signature\SignatureService::publicFileUrl($sponsor->logo_path) }}" alt="" class="sg-thumb" style="object-fit:contain; background:#FFFFFF;">
                                     @else
                                         <div class="sg-thumb"></div>
                                     @endif
@@ -426,7 +460,59 @@
                                 <span>{{ $layout['label'] }}</span>
                             </label>
                         @endforeach
+                        @php $isCustom = $tplLayout === \App\Services\Signature\SignatureService::CUSTOM_LAYOUT; @endphp
+                        <label class="sg-layout {{ $isCustom ? 'is-on' : '' }}">
+                            <input type="radio" wire:model.live="tplLayout" value="{{ \App\Services\Signature\SignatureService::CUSTOM_LAYOUT }}" style="display:none;">
+                            <div class="sg-mini sg-mini-custom" style="background: {{ $tplTheme['background'] ?? '#1E120F' }};">
+                                <div style="left:0; top:0; width:100%; height:100%; border:1.5px dashed rgba(255,255,255,0.45); color: {{ $tplTheme['text'] ?? '#F7F0DB' }};">Drag &amp; drop</div>
+                            </div>
+                            <span>{{ \App\Services\Signature\SignatureService::CUSTOM_LABEL }}</span>
+                        </label>
                     </div>
+
+                    @if($isCustom)
+                        @php
+                            $kindCounts = collect($tplZones)->countBy('kind');
+                            $maxZones = \App\Services\Signature\SignatureService::MAX_ZONES;
+                            $labels = $this->zoneLabels;
+                        @endphp
+                        <div class="sg-section">Susun zona — geser untuk memindah, tarik sudut kanan bawah untuk mengubah ukuran</div>
+                        <div class="sg-zone-tools">
+                            <span class="c61-pill c61-pill-cream">{{ count($tplZones) }} / {{ $maxZones }} zona</span>
+                            @foreach(\App\Services\Signature\SignatureService::ZONE_KINDS as $kind => $rule)
+                                <button type="button" wire:click="addZone('{{ $kind }}')" class="c61-btn c61-btn-ghost c61-btn-sm"
+                                    @disabled(count($tplZones) >= $maxZones || ($kindCounts[$kind] ?? 0) >= $rule['max'])>+ {{ $rule['label'] }}</button>
+                            @endforeach
+                        </div>
+                        {{-- Kanvas 16:9 = layar TV. Dikelola Gridstack (wire:ignore); perubahan dikirim ke server lewat moveZones(). --}}
+                        <div wire:ignore wire:key="sg-zone-editor-{{ $editingTemplateId ?? 'new' }}"
+                             x-data="window.sgZoneEditor(@js($this->editorZones), @js(\App\Services\Signature\SignatureService::GRID), @js(\App\Services\Signature\SignatureService::ZONE_KINDS), @js(['js' => \Illuminate\Support\Facades\Vite::asset('resources/js/signature-editor.js'), 'css' => \Illuminate\Support\Facades\Vite::asset('resources/css/signature-editor.css')]))"
+                             x-on:sg-zones.window="load($event.detail.zones)"
+                             class="sg-canvas" style="background: {{ $tplTheme['background'] ?? '#1E120F' }};">
+                            <div class="grid-stack" x-ref="grid"></div>
+                            <div class="sg-canvas-status" x-show="status !== 'ready'" x-text="status === 'error' ? 'Editor gagal dimuat. Muat ulang halaman (Ctrl + F5) lalu buka template lagi.' : 'Memuat editor…'"></div>
+                        </div>
+                        @error('tplZones') <span class="sg-error">{{ $message }}</span> @enderror
+
+                        <div class="sg-zone-list">
+                            @foreach($tplZones as $zone)
+                                <div class="sg-zone-row" wire:key="sg-zone-row-{{ $zone['key'] }}">
+                                    <span class="sg-zone-dot sg-zone-{{ $zone['kind'] }}"></span>
+                                    <div style="min-width:0; flex:1;">
+                                        <div class="sg-pl-name">{{ $labels[$zone['key']] ?? $zone['key'] }}</div>
+                                        <div class="sg-pl-type">{{ round($zone['w'] * 100 / \App\Services\Signature\SignatureService::GRID) }}% × {{ round($zone['h'] * 100 / \App\Services\Signature\SignatureService::GRID) }}% layar</div>
+                                    </div>
+                                    @if($zone['kind'] === 'playlist')
+                                        <label class="sg-switch" style="font-size:0.75rem;">
+                                            <input type="radio" name="sg-sound-zone" wire:click="setSoundZone('{{ $zone['key'] }}')" @checked(! empty($zone['sound']))> Bersuara
+                                        </label>
+                                    @endif
+                                    <button type="button" wire:click="removeZone('{{ $zone['key'] }}')" class="c61-icon-btn is-danger" aria-label="Hapus zona">&times;</button>
+                                </div>
+                            @endforeach
+                            <div class="c61-hint">Hanya satu zona yang bersuara. Widget seperti Monitoring Lapangan paling jelas di zona yang besar.</div>
+                        </div>
+                    @endif
 
                     <div class="sg-section">Warna &amp; font</div>
                     <div class="sg-grid-2">
@@ -449,6 +535,15 @@
                                     <option value="{{ $font }}">{{ $font }}</option>
                                 @endforeach
                             </select>
+                        </div>
+                        <div class="c61-field">
+                            <label class="c61-label" for="sg-theme-transition">Transisi antar konten</label>
+                            <select id="sg-theme-transition" wire:model="tplTheme.transition" class="c61-select">
+                                @foreach(\App\Services\Signature\SignatureService::TRANSITIONS as $value => $label)
+                                    <option value="{{ $value }}">{{ $label }}</option>
+                                @endforeach
+                            </select>
+                            @error('tplTheme.transition') <span class="sg-error">{{ $message }}</span> @enderror
                         </div>
                         <div class="c61-field">
                             <label class="c61-label" for="sg-tpl-logo">Logo (kosong = logo Club 61)</label>
@@ -499,44 +594,52 @@
                         @endforeach
                     </div>
 
-                    <div class="sg-section">Playlist konten (zona utama) — tayang bergantian sesuai urutan</div>
-                    @php $contentMap = $this->contents->keyBy('id'); @endphp
-                    <div class="sg-playlist">
-                        @forelse($tplPlaylist as $i => $row)
-                            @php $item = $contentMap[$row['content_id']] ?? null; @endphp
-                            <div class="sg-pl-row" wire:key="sg-pl-{{ $i }}-{{ $row['content_id'] }}">
-                                <span class="sg-pl-no">{{ $i + 1 }}</span>
-                                <div style="min-width:0;">
-                                    <div class="sg-pl-name c61-truncate">{{ $item?->name ?? 'Konten terhapus' }}</div>
-                                    <div class="sg-pl-type">{{ $item ? (\App\Models\Signature\SignatureContent::TYPES[$item->type] ?? $item->type) : '' }}{{ $item && ! $item->is_active ? ' · nonaktif (dilewati)' : '' }}</div>
+                    @php
+                        $contentMap = $this->contents->keyBy('id');
+                        $playlistZones = $this->playlistZoneKeys;
+                        $zoneNames = $this->zoneLabels;
+                    @endphp
+                    @foreach($playlistZones as $zoneKey)
+                        @php $rows = $tplPlaylists[$zoneKey] ?? []; @endphp
+                        <div class="sg-section">Playlist {{ count($playlistZones) > 1 ? '— '.($zoneNames[$zoneKey] ?? $zoneKey) : 'konten' }} · tayang bergantian sesuai urutan</div>
+                        <div class="sg-playlist" wire:key="sg-playlist-{{ $zoneKey }}">
+                            @forelse($rows as $i => $row)
+                                @php $item = $contentMap[$row['content_id']] ?? null; @endphp
+                                <div class="sg-pl-row" wire:key="sg-pl-{{ $zoneKey }}-{{ $i }}-{{ $row['content_id'] }}">
+                                    <span class="sg-pl-no">{{ $i + 1 }}</span>
+                                    <div style="min-width:0;">
+                                        <div class="sg-pl-name c61-truncate">{{ $item?->name ?? 'Konten terhapus' }}</div>
+                                        <div class="sg-pl-type">{{ $item ? (\App\Models\Signature\SignatureContent::TYPES[$item->type] ?? $item->type) : '' }}{{ $item && ! $item->is_active ? ' · nonaktif (dilewati)' : '' }}</div>
+                                    </div>
+                                    <div>
+                                        @if($item?->type === 'VIDEO')
+                                            <span class="c61-hint" style="margin-top:0;">Sampai selesai</span>
+                                        @else
+                                            <input type="number" min="3" max="3600" wire:model="tplPlaylists.{{ $zoneKey }}.{{ $i }}.duration" placeholder="{{ $item?->type === 'YOUTUBE' ? 'maks ' : '' }}{{ $item?->duration_seconds ?? 15 }} dtk" class="c61-input" style="height:32px;" aria-label="Durasi detik">
+                                        @endif
+                                        @error('tplPlaylists.'.$zoneKey.'.'.$i.'.duration') <span class="sg-error">{{ $message }}</span> @enderror
+                                    </div>
+                                    <div class="sg-pl-btns">
+                                        <button type="button" wire:click="movePlaylistItem({{ $i }}, -1, '{{ $zoneKey }}')" class="c61-icon-btn" @disabled($i === 0) aria-label="Naik">&uarr;</button>
+                                        <button type="button" wire:click="movePlaylistItem({{ $i }}, 1, '{{ $zoneKey }}')" class="c61-icon-btn" @disabled($i === count($rows) - 1) aria-label="Turun">&darr;</button>
+                                        <button type="button" wire:click="removePlaylistItem({{ $i }}, '{{ $zoneKey }}')" class="c61-icon-btn is-danger" aria-label="Hapus">&times;</button>
+                                    </div>
                                 </div>
-                                <div>
-                                    @if($item?->type === 'VIDEO')
-                                        <span class="c61-hint" style="margin-top:0;">Sampai selesai</span>
-                                    @else
-                                        <input type="number" min="3" max="3600" wire:model="tplPlaylist.{{ $i }}.duration" placeholder="{{ $item?->duration_seconds ?? 15 }} dtk" class="c61-input" style="height:32px;" aria-label="Durasi detik">
-                                    @endif
-                                    @error('tplPlaylist.'.$i.'.duration') <span class="sg-error">{{ $message }}</span> @enderror
-                                </div>
-                                <div class="sg-pl-btns">
-                                    <button type="button" wire:click="movePlaylistItem({{ $i }}, -1)" class="c61-icon-btn" @disabled($i === 0) aria-label="Naik">&uarr;</button>
-                                    <button type="button" wire:click="movePlaylistItem({{ $i }}, 1)" class="c61-icon-btn" @disabled($i === count($tplPlaylist) - 1) aria-label="Turun">&darr;</button>
-                                    <button type="button" wire:click="removePlaylistItem({{ $i }})" class="c61-icon-btn is-danger" aria-label="Hapus">&times;</button>
-                                </div>
-                            </div>
-                        @empty
-                            <div class="c61-note">Playlist kosong — TV menampilkan Monitoring Lapangan terus-menerus.</div>
-                        @endforelse
-                    </div>
-                    <div class="sg-add">
-                        <select wire:model="tplAddContentId" class="c61-select" aria-label="Pilih konten">
-                            <option value="">Pilih konten untuk ditambahkan…</option>
-                            @foreach($this->contents as $content)
-                                <option value="{{ $content->id }}">{{ $content->name }} ({{ \App\Models\Signature\SignatureContent::TYPES[$content->type] ?? $content->type }})</option>
-                            @endforeach
-                        </select>
-                        <button type="button" wire:click="addPlaylistItem" class="c61-btn c61-btn-ghost">+ Tambah</button>
-                    </div>
+                            @empty
+                                <div class="c61-note">Playlist kosong — zona ini menampilkan Monitoring Lapangan terus-menerus.</div>
+                            @endforelse
+                        </div>
+                        @error('tplPlaylists.'.$zoneKey) <span class="sg-error">{{ $message }}</span> @enderror
+                        <div class="sg-add">
+                            <select wire:model="tplAddContentIds.{{ $zoneKey }}" class="c61-select" aria-label="Pilih konten">
+                                <option value="">Pilih konten untuk ditambahkan…</option>
+                                @foreach($this->contents as $content)
+                                    <option value="{{ $content->id }}">{{ $content->name }} ({{ \App\Models\Signature\SignatureContent::TYPES[$content->type] ?? $content->type }})</option>
+                                @endforeach
+                            </select>
+                            <button type="button" wire:click="addPlaylistItem('{{ $zoneKey }}')" class="c61-btn c61-btn-ghost">+ Tambah</button>
+                        </div>
+                    @endforeach
                 </div>
                 <div class="c61-modal-foot">
                     <button type="button" wire:click="closeTemplateModal" class="c61-btn c61-btn-ghost">Batal</button>
@@ -549,7 +652,12 @@
 
     {{-- ===================== MODAL: KONTEN ===================== --}}
     @if($showContentModal)
-        @php $isFile = in_array($contentType, \App\Models\Signature\SignatureContent::FILE_TYPES, true); @endphp
+        @php
+            $isFile = in_array($contentType, \App\Models\Signature\SignatureContent::FILE_TYPES, true);
+            $isLibrary = in_array($contentType, \App\Models\Signature\SignatureContent::LIBRARY_TYPES, true);
+            $isPlayable = in_array($contentType, \App\Models\Signature\SignatureContent::PLAYABLE_TYPES, true);
+            $youtubeId = $contentType === 'YOUTUBE' ? \App\Models\Signature\SignatureContent::youtubeId($contentYoutube) : null;
+        @endphp
         <div class="c61-modal-backdrop">
             <div class="c61-modal" style="max-width:560px;">
                 <div class="c61-modal-head">
@@ -568,6 +676,7 @@
                             <select id="sg-content-type" wire:model.live="contentType" class="c61-select">
                                 <option value="IMAGE">Gambar (JPG / PNG / WEBP, maks 10 MB)</option>
                                 <option value="VIDEO">Video MP4 (maks {{ $this->videoMaxMb }} MB)</option>
+                                <option value="YOUTUBE">Video YouTube (link, tanpa upload)</option>
                             </select>
                         </div>
                     @else
@@ -585,22 +694,35 @@
                             @error('contentUpload') <span class="sg-error">{{ $message }}</span> @enderror
                             @if($contentFilePath && ! $contentUpload)
                                 @if($contentType === 'IMAGE')
-                                    <img src="{{ Storage::disk('public')->url($contentFilePath) }}" alt="" style="margin-top:0.6rem; max-width:100%; max-height:160px; border-radius:10px; border:1px solid var(--c-line);">
+                                    <img src="{{ \App\Services\Signature\SignatureService::publicFileUrl($contentFilePath) }}" alt="" style="margin-top:0.6rem; max-width:100%; max-height:160px; border-radius:10px; border:1px solid var(--c-line);">
                                 @else
-                                    <video src="{{ Storage::disk('public')->url($contentFilePath) }}" controls muted style="margin-top:0.6rem; max-width:100%; max-height:180px; border-radius:10px;"></video>
+                                    <video src="{{ \App\Services\Signature\SignatureService::publicFileUrl($contentFilePath) }}" controls muted style="margin-top:0.6rem; max-width:100%; max-height:180px; border-radius:10px;"></video>
                                 @endif
                             @endif
                         </div>
                     @endif
 
+                    @if($contentType === 'YOUTUBE')
+                        <div class="c61-field">
+                            <label class="c61-label" for="sg-content-youtube">Link YouTube</label>
+                            <input id="sg-content-youtube" type="url" wire:model.live.debounce.600ms="contentYoutube" class="c61-input" maxlength="500" placeholder="https://www.youtube.com/watch?v=… atau https://youtu.be/…">
+                            @error('contentYoutube') <span class="sg-error">{{ $message }}</span> @enderror
+                            @if($youtubeId)
+                                <img src="https://i.ytimg.com/vi/{{ $youtubeId }}/mqdefault.jpg" alt="" referrerpolicy="no-referrer" style="margin-top:0.6rem; width:240px; max-width:100%; border-radius:10px; border:1px solid var(--c-line);">
+                            @endif
+                            <span class="c61-hint">Butuh internet stabil di TV; bisa muncul iklan / logo YouTube. Untuk konten tetap (promo, profil venue) lebih aman upload MP4.</span>
+                        </div>
+                    @endif
+
                     <div class="sg-grid-2">
                         <div class="c61-field">
-                            <label class="c61-label" for="sg-content-duration">{{ $contentType === 'VIDEO' ? 'Durasi (cadangan, detik)' : 'Durasi tampil (detik)' }}</label>
+                            <label class="c61-label" for="sg-content-duration">{{ match ($contentType) { 'VIDEO' => 'Durasi (cadangan, detik)', 'YOUTUBE' => 'Durasi maksimal (detik)', default => 'Durasi tampil (detik)' } }}</label>
                             <input id="sg-content-duration" type="number" min="3" max="3600" wire:model="contentDuration" class="c61-input">
                             @if($contentType === 'VIDEO') <span class="c61-hint">Video diputar sampai selesai.</span> @endif
+                            @if($contentType === 'YOUTUBE') <span class="c61-hint">Diputar sampai selesai; dipotong kalau lebih lama dari ini (wajib untuk live streaming).</span> @endif
                             @error('contentDuration') <span class="sg-error">{{ $message }}</span> @enderror
                         </div>
-                        @if($contentType === 'VIDEO')
+                        @if($isPlayable)
                             <div class="c61-field">
                                 <label class="c61-label" for="sg-content-volume">Volume (%)</label>
                                 <input id="sg-content-volume" type="number" min="0" max="100" wire:model="contentVolume" class="c61-input">
@@ -609,7 +731,7 @@
                         @endif
                     </div>
                     <div style="display:flex; flex-direction:column; gap:0.6rem;">
-                        @if($contentType === 'VIDEO')
+                        @if($isPlayable)
                             <label class="sg-switch" for="sg-content-sound"><input id="sg-content-sound" type="checkbox" wire:model="contentSound"> Video ini bersuara</label>
                         @endif
                         <label class="sg-switch" for="sg-content-active"><input id="sg-content-active" type="checkbox" wire:model="contentActive"> Aktif (konten nonaktif dilewati playlist)</label>
@@ -617,7 +739,7 @@
                 </div>
                 <div class="c61-modal-foot">
                     <button type="button" wire:click="closeContentModal" class="c61-btn c61-btn-ghost">Batal</button>
-                    <button type="button" wire:click="{{ $isFile ? 'saveContent' : 'saveWidget' }}" wire:loading.attr="disabled" wire:target="contentUpload,saveContent" class="c61-btn c61-btn-primary">Simpan</button>
+                    <button type="button" wire:click="{{ $isLibrary ? 'saveContent' : 'saveWidget' }}" wire:loading.attr="disabled" wire:target="contentUpload,saveContent" class="c61-btn c61-btn-primary">Simpan</button>
                 </div>
             </div>
         </div>
@@ -695,7 +817,7 @@
                         <label class="c61-label" for="sg-sponsor-logo">Logo (PNG transparan paling bagus, maks 4 MB)</label>
                         <input id="sg-sponsor-logo" type="file" wire:model="sponsorLogoUpload" accept="image/png,image/jpeg,image/webp" class="c61-input" style="height:auto; padding:0.4rem;">
                         @if($sponsorLogoPath && ! $sponsorLogoUpload)
-                            <img src="{{ Storage::disk('public')->url($sponsorLogoPath) }}" alt="" style="margin-top:0.6rem; max-height:80px; max-width:220px; object-fit:contain;">
+                            <img src="{{ \App\Services\Signature\SignatureService::publicFileUrl($sponsorLogoPath) }}" alt="" style="margin-top:0.6rem; max-height:80px; max-width:220px; object-fit:contain;">
                         @endif
                         @error('sponsorLogoUpload') <span class="sg-error">{{ $message }}</span> @enderror
                     </div>
@@ -747,4 +869,127 @@
             </div>
         </div>
     @endif
+
+    {{-- Gridstack.js (editor template custom) — hanya dimuat di halaman ini. Editor juga memuatnya sendiri kalau tag ini
+         tidak dijalankan (navigasi SPA panel admin). --}}
+    @vite(['resources/css/signature-editor.css', 'resources/js/signature-editor.js'])
+
+    @script
+    <script>
+        /**
+         * Editor zona template custom. Server (Livewire) = sumber kebenaran: editor menggambar zona dari server,
+         * mengirim posisi baru lewat moveZones(), dan menggambar ulang saat server mengirim event `sg-zones`
+         * (tambah / hapus zona / susunan ditolak). Label zona dipasang lewat textContent (bukan HTML).
+         */
+        // Pastikan Gridstack (JS + CSS) termuat. import() dengan URL yang sama dengan tag Vite di atas = modul yang sama
+        // (tidak dijalankan dua kali); dipakai kalau tag itu tidak dieksekusi saat pindah halaman lewat SPA admin.
+        window.sgLoadGridStack = function (assets) {
+            if (! document.querySelector('link[data-sg-gridstack], link[href="' + assets.css + '"]')) {
+                const link = document.createElement('link');
+                link.rel = 'stylesheet';
+                link.href = assets.css;
+                link.setAttribute('data-sg-gridstack', '');
+                document.head.appendChild(link);
+            }
+            if (window.Club61GridStack) {
+                return Promise.resolve(window.Club61GridStack);
+            }
+
+            return import(assets.js).then(() => window.Club61GridStack);
+        };
+
+        window.sgZoneEditor = function (initialZones, gridSize, kinds, assets) {
+            return {
+                grid: null,
+                observer: null,
+                syncing: false,
+                timer: null,
+                status: 'loading',
+                zones: initialZones,
+
+                init() {
+                    window.sgLoadGridStack(assets).then((GridStack) => {
+                        if (! GridStack) {
+                            throw new Error('Gridstack tidak tersedia');
+                        }
+                        this.status = 'ready';
+                        this.grid = GridStack.init({
+                            column: gridSize,
+                            maxRow: gridSize,
+                            minRow: gridSize,
+                            float: true,
+                            margin: 3,
+                            animate: false,
+                            // Pegangan ubah ukuran selalu terlihat (bukan hanya saat kursor di atas zona).
+                            alwaysShowResizeHandle: true,
+                            cellHeight: this.cellHeight(),
+                        }, this.$refs.grid);
+                        this.load(this.zones);
+                        this.grid.on('change', () => this.push());
+                        if (window.ResizeObserver) {
+                            this.observer = new ResizeObserver(() => this.grid && this.grid.cellHeight(this.cellHeight()));
+                            this.observer.observe(this.$el);
+                        }
+                    }).catch((error) => {
+                        console.error('Editor zona Digital Signage gagal dimuat', error);
+                        this.status = 'error';
+                    });
+                },
+
+                destroy() {
+                    if (this.observer) { this.observer.disconnect(); }
+                    if (this.grid) { this.grid.destroy(false); }
+                },
+
+                // Tinggi satu baris = tinggi kanvas 16:9 / jumlah baris (24 baris memenuhi kanvas persis).
+                cellHeight() {
+                    return Math.max(4, (this.$el.clientHeight || this.$el.clientWidth * 9 / 16) / gridSize);
+                },
+
+                load(zones) {
+                    this.zones = zones || [];
+                    if (! this.grid) { return; }
+                    this.syncing = true;
+                    // Kosongkan dulu, di luar batchUpdate: removeAll() di dalam batch tidak membuang elemen lama
+                    // (zona yang dihapus tetap tampil di kanvas). Sisa elemen dibuang manual.
+                    this.grid.removeAll(false, false);
+                    this.$refs.grid.querySelectorAll('.grid-stack-item').forEach((el) => el.remove());
+                    this.grid.batchUpdate();
+                    this.zones.forEach((zone) => {
+                        const rule = kinds[zone.kind] || {};
+                        const item = document.createElement('div');
+                        item.className = 'grid-stack-item sg-zone-' + zone.kind;
+                        const content = document.createElement('div');
+                        content.className = 'grid-stack-item-content';
+                        const name = document.createElement('strong');
+                        name.textContent = zone.label;
+                        const size = document.createElement('span');
+                        size.textContent = zone.w + ' × ' + zone.h;
+                        content.appendChild(name);
+                        content.appendChild(size);
+                        item.appendChild(content);
+                        this.$refs.grid.appendChild(item);
+                        this.grid.makeWidget(item, { id: zone.key, x: zone.x, y: zone.y, w: zone.w, h: zone.h, minW: rule.min_w, minH: rule.min_h, maxH: rule.max_h });
+                    });
+                    this.grid.batchUpdate(false);
+                    this.syncing = false;
+                },
+
+                push() {
+                    if (this.syncing) { return; }
+                    clearTimeout(this.timer);
+                    this.timer = setTimeout(() => {
+                        const layout = this.grid.engine.nodes.map((n) => {
+                            const size = n.el && n.el.querySelector('.grid-stack-item-content span');
+                            if (size) { size.textContent = n.w + ' × ' + n.h; }
+
+                            return { key: String(n.id), x: n.x, y: n.y, w: n.w, h: n.h };
+                        });
+                        $wire.moveZones(layout);
+                    }, 150);
+                },
+            };
+        };
+    </script>
+    @endscript
 </div>

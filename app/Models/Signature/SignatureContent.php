@@ -6,7 +6,7 @@ use App\Services\Signature\SignatureFileJanitor;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Model;
 
-/** Satu konten di library Signature: gambar, video, atau widget dari sistem. */
+/** Satu konten di library Signature: gambar, video, video YouTube, atau widget dari sistem. */
 class SignatureContent extends Model
 {
     use HasUlids;
@@ -14,14 +14,57 @@ class SignatureContent extends Model
     public const TYPES = [
         'IMAGE' => 'Gambar',
         'VIDEO' => 'Video MP4',
+        'YOUTUBE' => 'Video YouTube',
         'MONITORING' => 'Monitoring Lapangan',
         'SCHEDULE' => 'Jadwal Hari Ini',
         'SPONSOR' => 'Sponsor',
         'CLOCK' => 'Jam & Tanggal',
     ];
 
-    /** Jenis yang berupa file upload (sisanya widget dari sistem). */
+    /** Jenis yang berupa file upload. */
     public const FILE_TYPES = ['IMAGE', 'VIDEO'];
+
+    /** Konten buatan admin (bisa diedit penuh & dihapus); sisanya widget dari sistem. */
+    public const LIBRARY_TYPES = ['IMAGE', 'VIDEO', 'YOUTUBE'];
+
+    /** Diputar sampai selesai (bukan durasi tetap) dan bisa bersuara. */
+    public const PLAYABLE_TYPES = ['VIDEO', 'YOUTUBE'];
+
+    /** Host link YouTube yang diterima — link lain ditolak supaya halaman sembarang tidak bisa tampil di TV. */
+    private const YOUTUBE_HOSTS = ['youtube.com', 'www.youtube.com', 'm.youtube.com', 'music.youtube.com', 'youtu.be', 'www.youtube-nocookie.com', 'youtube-nocookie.com'];
+
+    /**
+     * ID video (11 karakter) dari link YouTube: watch?v=, youtu.be/, shorts/, embed/, live/. Null = bukan link YouTube
+     * yang sah. Yang disimpan hanya ID-nya, jadi isi kolom `url` tidak pernah dipakai mentah sebagai alamat.
+     */
+    public static function youtubeId(?string $link): ?string
+    {
+        $link = trim((string) $link);
+        if ($link === '') {
+            return null;
+        }
+        if (! preg_match('#^https?://#i', $link)) {
+            $link = 'https://'.$link;
+        }
+
+        $parts = parse_url($link);
+        $host = strtolower($parts['host'] ?? '');
+        if (! in_array($host, self::YOUTUBE_HOSTS, true)) {
+            return null;
+        }
+
+        $path = $parts['path'] ?? '';
+        if ($host === 'youtu.be') {
+            $candidate = explode('/', ltrim($path, '/'))[0] ?? '';
+        } elseif (preg_match('#^/(?:shorts|embed|live|v)/([^/?]+)#', $path, $m)) {
+            $candidate = $m[1];
+        } else {
+            parse_str($parts['query'] ?? '', $query);
+            $candidate = is_string($query['v'] ?? null) ? $query['v'] : '';
+        }
+
+        return preg_match('/^[A-Za-z0-9_-]{11}$/', $candidate) ? $candidate : null;
+    }
 
     protected $fillable = ['name', 'type', 'file_path', 'url', 'duration_seconds', 'sound', 'volume', 'is_active'];
 

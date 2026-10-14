@@ -19,9 +19,20 @@
         #sig-root { position: fixed; top: 0; right: 0; bottom: 0; left: 0; background: #000; }
         #stage { position: absolute; top: 50%; left: 50%; width: 1920px; height: 1080px; transform-origin: center center; background: var(--bg); color: var(--text); font-family: var(--font); overflow: hidden; }
         .zone { position: absolute; overflow: hidden; }
-        .slide { position: absolute; top: 0; right: 0; bottom: 0; left: 0; opacity: 0; transition: opacity 700ms ease; display: flex; }
+        .slide { position: absolute; top: 0; right: 0; bottom: 0; left: 0; opacity: 0; -webkit-transition: opacity 700ms ease; transition: opacity 700ms ease; display: flex; }
         .slide.on { opacity: 1; }
+        /* Transisi antar konten (pengaturan template). Prefix -webkit- untuk browser Smart TV lama. */
+        .tr-slide .slide { opacity: 1; -webkit-transform: translateX(100%); transform: translateX(100%); -webkit-transition: -webkit-transform 800ms cubic-bezier(.2,.8,.2,1); transition: transform 800ms cubic-bezier(.2,.8,.2,1); }
+        .tr-slide .slide.on { -webkit-transform: translateX(0); transform: translateX(0); }
+        .tr-slide .slide.off { -webkit-transform: translateX(-100%); transform: translateX(-100%); }
+        .tr-zoom .slide { -webkit-transform: scale(1.08); transform: scale(1.08); -webkit-transition: opacity 700ms ease, -webkit-transform 900ms ease; transition: opacity 700ms ease, transform 900ms ease; }
+        .tr-zoom .slide.on { -webkit-transform: scale(1); transform: scale(1); }
+        .tr-zoom .slide.off { -webkit-transform: scale(.94); transform: scale(.94); }
+        .tr-none .slide { -webkit-transition: none; transition: none; }
         .slide img, .slide video { width: 100%; height: 100%; object-fit: contain; background: #000; }
+        /* YouTube: pemutar memenuhi slide; tidak bisa diklik (TV tanpa mouse, kontrol disembunyikan). */
+        .yt { position: absolute; top: 0; right: 0; bottom: 0; left: 0; background: #000; pointer-events: none; }
+        .yt iframe { width: 100%; height: 100%; border: 0; display: block; }
         .muted { opacity: .7; }
 
         /* Monitoring lapangan */
@@ -163,6 +174,7 @@
     var isPreview = root.getAttribute('data-preview') === '1';
     var POLL_MS = 12000;
 
+    var TRANSITIONS = { fade: 1, slide: 1, zoom: 1, none: 1 };
     var DAYS = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
     var MONTHS = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
 
@@ -179,7 +191,7 @@
         widgets: [],
         toastQueue: [],
         toastBusy: false,
-        currentVideo: null,
+        soundMedia: null,
         tickerText: null
     };
 
@@ -233,7 +245,10 @@
         if (state.ticker && state.ticker.anim) { clearInterval(state.ticker.anim); }
         state.ticker = null;
         state.widgets = [];
-        state.currentVideo = null;
+        // Pemutar YouTube lama dihentikan sebelum tampilan dibangun ulang (versi baru ditayangkan).
+        var oldSlides = stage.querySelectorAll('.slide');
+        for (var s = 0; s < oldSlides.length; s++) { dropSlide(oldSlides[s]); }
+        state.soundMedia = null;
         state.tickerText = null;
         stage.innerHTML = '';
 
@@ -245,6 +260,7 @@
         applyTheme(p);
 
         var zones = p.template.zones || [];
+        var transition = TRANSITIONS[p.template.theme.transition] ? p.template.theme.transition : 'fade';
         for (var i = 0; i < zones.length; i++) {
             var z = zones[i];
             var box = el('div', 'zone');
@@ -253,7 +269,10 @@
             box.style.width = z.w + '%';
             box.style.height = z.h + '%';
             stage.appendChild(box);
-            if (z.kind === 'playlist') { startPlaylist(box, (p.playlists && p.playlists[z.key]) || []); }
+            if (z.kind === 'playlist') {
+                box.className = 'zone tr-' + transition;
+                startPlaylist(box, (p.playlists && p.playlists[z.key]) || [], zoneHasSound(z));
+            }
             else if (z.kind === 'side_panel') { buildSidePanel(box); }
             else if (z.kind === 'ticker') { buildTicker(box); }
         }
@@ -274,11 +293,13 @@
     }
 
     // ------------------------------------------------------------------ playlist
-    function startPlaylist(box, items) {
+    // zoneSound: hanya satu zona yang boleh bersuara (template custom bisa punya beberapa zona playlist).
+    function startPlaylist(box, items, zoneSound) {
         // Playlist kosong → monitoring lapangan (mode bawaan TV).
         if (!items.length) { items = [{ type: 'MONITORING', duration: 3600 }]; }
         var index = -1;
         var current = null;
+        var single = items.length === 1;
 
         function next() {
             index = (index + 1) % items.length;
@@ -286,6 +307,8 @@
             var slide = el('div', 'slide');
             box.appendChild(slide);
             var advanceAfter = Math.max(3, item.duration || 10) * 1000;
+            // Lanjut ke konten berikutnya hanya kalau slide ini masih yang tampil (timer lama tidak boleh melompati).
+            var done = function () { if (current === slide && !single) { next(); } };
 
             if (item.type === 'IMAGE') {
                 var img = el('img');
@@ -298,20 +321,27 @@
                 video.setAttribute('playsinline', '');
                 video.preload = 'auto';
                 video.volume = Math.max(0, Math.min(1, (item.volume || 80) / 100));
-                video.muted = !wantsSound(item);
-                video.loop = items.length === 1;
-                video._item = item;
+                video.muted = !(zoneSound && wantsSound(item));
+                video.loop = single;
                 slide.appendChild(video);
-                state.currentVideo = video;
-                video.onended = function () { if (items.length > 1) { show(); } };
-                video.onerror = function () { later(show, 1500); };
+                slide._media = { kind: 'video', node: video, item: item, sound: zoneSound };
+                if (zoneSound) { state.soundMedia = slide._media; }
+                video.onended = done;
+                video.onerror = function () { later(done, 1500); };
                 var played = video.play();
                 if (played && played['catch']) {
                     played['catch'](function () { video.muted = true; video.play(); });
                 }
                 advanceAfter = null; // video pindah saat selesai
                 // Pengaman: video rusak / macet tidak boleh menahan playlist selamanya.
-                later(function () { if (state.currentVideo === video && items.length > 1 && (video.paused || video.readyState < 2)) { show(); } }, 15000);
+                later(function () { if (video.paused || video.readyState < 2) { done(); } }, 15000);
+            } else if (item.type === 'YOUTUBE' && item.youtube_id) {
+                playYoutube(slide, item, zoneSound, single, done);
+                advanceAfter = null; // pindah saat videonya selesai…
+                // …atau saat durasi maksimal tercapai (live streaming tidak pernah selesai), dan
+                // pengaman: tidak mulai main dalam 15 detik (internet putus / video dihapus) → dilewati.
+                later(done, Math.max(3, item.duration || 300) * 1000);
+                later(function () { if (!slide._media || !slide._media.started) { done(); } }, 15000);
             } else {
                 renderWidgetInto(slide, item.type);
             }
@@ -319,22 +349,84 @@
             setTimeout(function () { slide.className = 'slide on'; }, 30);
             if (current) {
                 var old = current;
-                old.className = 'slide';
+                old.className = 'slide off';
                 setTimeout(function () { dropSlide(old); }, 900);
             }
             current = slide;
 
-            if (advanceAfter && items.length > 1) { later(show, advanceAfter); }
+            if (advanceAfter && !single) { later(done, advanceAfter); }
         }
-        function show() { next(); }
         next();
     }
 
     function dropSlide(slide) {
-        var v = slide.querySelector('video');
-        if (v) { v.pause(); v.removeAttribute('src'); v.load(); if (state.currentVideo === v) { state.currentVideo = null; } }
+        var m = slide._media;
+        if (m && m.kind === 'video') { m.node.pause(); m.node.removeAttribute('src'); m.node.load(); }
+        if (m && m.kind === 'youtube') { m.dead = true; if (m.player && m.player.destroy) { try { m.player.destroy(); } catch (e) {} } }
+        if (m && state.soundMedia === m) { state.soundMedia = null; }
         state.widgets = state.widgets.filter(function (w) { return w.node !== slide; });
         if (slide.parentNode) { slide.parentNode.removeChild(slide); }
+    }
+
+    // ------------------------------------------------------------------ YouTube
+    // IFrame API YouTube dimuat sekali, hanya kalau playlist berisi YouTube. Yang dikirim server hanya ID video
+    // (11 karakter, sudah divalidasi) — alamat pemutar disusun di sini, dari domain youtube-nocookie.
+    var yt = { loading: false, queue: [] };
+    function withYoutube(cb) {
+        if (window.YT && window.YT.Player) { cb(); return; }
+        yt.queue.push(cb);
+        if (yt.loading) { return; }
+        yt.loading = true;
+        var previous = window.onYouTubeIframeAPIReady;
+        window.onYouTubeIframeAPIReady = function () {
+            if (typeof previous === 'function') { try { previous(); } catch (e) {} }
+            var queue = yt.queue;
+            yt.queue = [];
+            for (var i = 0; i < queue.length; i++) { queue[i](); }
+        };
+        var script = document.createElement('script');
+        script.src = 'https://www.youtube.com/iframe_api';
+        script.async = true;
+        // Internet putus: slide YouTube dilewati oleh pengaman 15 detik; dicoba lagi di putaran berikutnya.
+        script.onerror = function () { yt.loading = false; yt.queue = []; if (script.parentNode) { script.parentNode.removeChild(script); } };
+        document.head.appendChild(script);
+    }
+
+    function playYoutube(slide, item, zoneSound, loop, done) {
+        var holder = el('div', 'yt');
+        var target = el('div');
+        holder.appendChild(target);
+        slide.appendChild(holder);
+        var media = { kind: 'youtube', player: null, item: item, sound: zoneSound, started: false, dead: false };
+        slide._media = media;
+        if (zoneSound) { state.soundMedia = media; }
+
+        withYoutube(function () {
+            if (media.dead) { return; }
+            media.player = new window.YT.Player(target, {
+                host: 'https://www.youtube-nocookie.com',
+                videoId: item.youtube_id,
+                width: '100%',
+                height: '100%',
+                playerVars: { autoplay: 1, mute: 1, controls: 0, disablekb: 1, fs: 0, rel: 0, iv_load_policy: 3, playsinline: 1, cc_load_policy: 0, modestbranding: 1 },
+                events: {
+                    onReady: function (e) {
+                        if (media.dead) { return; }
+                        e.target.setVolume(Math.max(0, Math.min(100, item.volume || 80)));
+                        // Mulai tanpa suara (aturan autoplay browser); suara dinyalakan setelah OK ditekan di remote.
+                        if (zoneSound && wantsSound(item)) { e.target.unMute(); }
+                        e.target.playVideo();
+                    },
+                    onStateChange: function (e) {
+                        if (e.data === 1) { media.started = true; }
+                        if (e.data === 0) {
+                            if (loop) { e.target.seekTo(0); e.target.playVideo(); } else { done(); }
+                        }
+                    },
+                    onError: function () { later(done, 1500); }
+                }
+            });
+        });
     }
 
     // ------------------------------------------------------------------ widget
@@ -721,11 +813,23 @@
     }
 
     // ------------------------------------------------------------------ suara
+    // Ada video (MP4 / YouTube) bersuara di zona yang boleh bersuara?
     function needsSound() {
         var p = state.payload;
         if (!p || !p.screen.sound_enabled) { return false; }
-        var items = (p.playlists && p.playlists.main) || [];
-        for (var i = 0; i < items.length; i++) { if (items[i].type === 'VIDEO' && items[i].sound) { return true; } }
+        var zones = (p.template && p.template.zones) || [];
+        for (var z = 0; z < zones.length; z++) {
+            if (zones[z].kind !== 'playlist' || !zoneHasSound(zones[z])) { continue; }
+            var items = (p.playlists && p.playlists[zones[z].key]) || [];
+            for (var i = 0; i < items.length; i++) { if ((items[i].type === 'VIDEO' || items[i].type === 'YOUTUBE') && items[i].sound) { return true; } }
+        }
+        return false;
+    }
+    // Template lama / preset tidak punya pengaturan suara per zona → zona playlist pertama yang bersuara.
+    function zoneHasSound(zone) {
+        if (typeof zone.sound === 'boolean') { return zone.sound; }
+        var zones = state.payload.template.zones || [];
+        for (var i = 0; i < zones.length; i++) { if (zones[i].kind === 'playlist') { return zones[i] === zone; } }
         return false;
     }
     function wantsSound(item) { return !!(state.soundUnlocked && state.payload.screen.sound_enabled && item.sound); }
@@ -733,8 +837,11 @@
     function unlockSound() {
         if (state.soundUnlocked) { return; }
         state.soundUnlocked = true;
-        var v = state.currentVideo;
-        if (v && v._item && wantsSound(v._item)) { v.muted = false; v.play(); }
+        var m = state.soundMedia;
+        if (m && wantsSound(m.item)) {
+            if (m.kind === 'video') { m.node.muted = false; m.node.play(); }
+            if (m.kind === 'youtube' && m.player && m.player.unMute) { m.player.unMute(); }
+        }
         refreshSoundHint();
     }
     document.addEventListener('keydown', unlockSound);

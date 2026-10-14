@@ -8,7 +8,7 @@
 | :--- | :--- |
 | **Kode Dokumen** | `PRD-MODUL-26-SIGNATURE` |
 | **Versi** | `v0.1.0-DRAFT` |
-| **Status** | **Tahap 1 selesai (12 Okt 2026), memakai usulan default §8 sambil menunggu konfirmasi PM.** Belum termasuk dari Tahap 1: QR booking di kartu lapangan kosong (sementara teks "Booking sekarang di front desk") dan cache offline lewat service worker (sementara cache browser + tanda "Koneksi terputus"). Tahap 2 belum dikerjakan. |
+| **Status** | **Tahap 1 selesai (12 Okt 2026), memakai usulan default §8 sambil menunggu konfirmasi PM. Tahap 2 selesai (13 Okt 2026): konten YouTube, transisi antar konten, template custom drag & drop.** Dicoret owner (13 Okt 2026): jadwal tayang per konten, konten link halaman, QR booking di kartu lapangan kosong (tetap teks "Booking sekarang di front desk"), dan cache offline lewat service worker (tetap cache browser + tanda "Koneksi terputus"). File upload: yang masih tayang tidak pernah dihapus; yang dibuang dari library dihapus setelah 7 hari tidak tayang (§9). |
 | **Sumber Requirement** | Sketsa owner (12 Okt 2026): template (3 layout), slider, running text, konten video / gambar / YouTube / link halaman, sponsor, monitoring lapangan di TV 96 inch. |
 | **Dependensi Teknis** | `PRD_MODUL_02_PADEL_BOOKING.md` (jadwal & check-in), `PRD_MODUL_12_SPONSOR_CORPORATE_ACCOUNT.md` (data Sponsor Corporate), `PRD_MODUL_09_DYNAMIC_RBAC_FILAMENT_SHIELD.md` (hak akses), `PRD_MODUL_16_ACTIVITY_AUDIT_LOG.md` (log perubahan). |
 | **Prinsip Utama** | **SEMUA ISI ADALAH "JENIS KONTEN"** (ide baru = jenis konten baru, template & layar tidak berubah); **TV HANYA MENAMPILKAN VERSI YANG SUDAH DITAYANGKAN** (edit = draft); **DATA PRIBADI MINIMUM** di layar publik; **TV TETAP JALAN SAAT INTERNET PUTUS**. |
@@ -71,7 +71,8 @@ Semua tampilan diatur dari admin tanpa mengubah kode: template, warna, konten, r
 
 - **Tambah, edit, duplikat, hapus** template. Template yang sedang tayang tidak bisa dihapus.
 - **Warna per template:** latar, aksen, teks, latar running text; logo & font (pilihan font web yang terbaca dari jauh).
-- **Template custom (Tahap 2):** kanvas 16:9 dengan grid; zona digeser & diubah ukurannya (drag & drop, Gridstack.js); posisi disimpan dalam persen → hasil di TV sama dengan editor.
+- **Template custom (Tahap 2):** kanvas 16:9 dengan grid 24 × 24; zona digeser & diubah ukurannya (drag & drop, Gridstack.js). Jenis zona: **zona konten** (playlist sendiri per zona), **panel samping** (maks 2), **running text** (maks 1). **Maksimal 6 zona**, minimal 1 zona konten, tidak boleh menumpuk / keluar layar, ukuran minimum per jenis; **hanya satu zona yang bersuara**. Posisi disimpan dalam satuan grid dan dikirim ke TV dalam persen → hasil di TV sama dengan editor. Mulai custom = salinan preset yang sedang dipilih.
+- **Transisi antar konten (Tahap 2):** per template — pudar, geser dari kanan, zoom halus, atau tanpa animasi (CSS ringan untuk Smart TV).
 
 ### 4.3 Konten
 | Jenis | Keterangan | Tahap |
@@ -82,10 +83,10 @@ Semua tampilan diatur dari admin tanpa mengubah kode: template, warna, konten, r
 | Jadwal Hari Ini | Daftar slot terisi / kosong per lapangan. | 1 |
 | Sponsor | Logo & nama sponsor bergantian (§4.6). | 1 |
 | Jam & Tanggal | Untuk panel samping. | 1 |
-| YouTube | Link YouTube; autoplay. Bisa muncul iklan / logo YouTube & butuh internet stabil → untuk konten tetap disarankan upload MP4. | 2 |
-| Link Halaman | Halaman web di dalam layar. Banyak situs menolak ditampilkan di dalam situs lain; yang pasti jalan: halaman Club 61 sendiri / situs yang mengizinkan. | 2 |
+| YouTube | Link YouTube (watch / youtu.be / shorts / embed / live); yang disimpan **hanya ID video** — link dari domain lain ditolak. Diputar lewat youtube-nocookie sampai selesai atau sampai **durasi maksimal** (wajib untuk live streaming); gagal mulai dalam 15 detik (internet putus / video dihapus) → dilewati. Bisa muncul iklan / logo YouTube & butuh internet stabil → untuk konten tetap disarankan upload MP4. | 2 |
+| ~~Link Halaman~~ | Dicoret owner (13 Okt 2026) — hanya link YouTube. | — |
 
-Pengaturan per konten: **durasi tampil**, **suara & volume** (video), **aktif / nonaktif**, **jadwal tayang** (jam / hari / periode — Tahap 2).
+Pengaturan per konten: **durasi tampil**, **suara & volume** (video MP4 & YouTube), **aktif / nonaktif**. ~~Jadwal tayang per konten~~ dicoret owner (13 Okt 2026).
 
 ### 4.4 Monitoring Lapangan
 Per lapangan, diperbarui otomatis tiap 10–15 detik:
@@ -163,7 +164,7 @@ Owner memilih **Smart TV langsung** (tanpa Android box / mini PC). Konsekuensiny
 | Tahap | Isi | Perkiraan |
 | :--- | :--- | :--- |
 | **1** | Menu Signature; Layar (link rahasia, status online, mode kosong → monitoring); 3 preset + warna / logo / font; konten gambar & MP4 + suara per konten; widget Monitoring Lapangan, Jadwal Hari Ini, Sponsor, Jam; notifikasi booking / check-in; running text manual + otomatis; sponsor dinamis; **Draft → Preview → Tayangkan** + riwayat versi; uji di Smart TV | ± 6–7 hari kerja |
-| **2** | Editor template custom drag & drop (Gridstack.js); konten YouTube & link halaman; jadwal tayang per jam / hari / periode; transisi animasi tambahan | ± 4–5 hari kerja |
+| **2** | Editor template custom drag & drop (Gridstack.js, maks 6 zona); konten YouTube; transisi animasi tambahan. ~~Link halaman, jadwal tayang, QR booking, cache offline~~ dicoret owner. | Selesai 13 Okt 2026 |
 
 ---
 
@@ -186,5 +187,7 @@ Owner memilih **Smart TV langsung** (tanpa Android box / mini PC). Konsekuensiny
 - **Data:** `signature_screens`, `signature_templates` (layout zona dalam persen + tema), `signature_contents`, `signature_playlist_items`, `signature_running_texts`, `signature_sponsors` (jenis `BRAND` / `CORPORATE` → `sponsor_organizations`), `signature_versions` (snapshot JSON tiap Tayangkan; draft vs published).
 - **Upload:** gambar lewat `SecureImageUploader` (re-encode); video disimpan di disk `public` dengan validasi tipe `video/mp4` & batas ukuran (perlu cek `upload_max_filesize` / `post_max_size` server).
 - **Cache di TV:** konten di-cache di browser (Cache Storage / service worker kalau browser TV mendukung) supaya playlist tetap jalan saat offline.
-- **Gridstack.js:** v14.0.0 (21 Sep 2026), MIT, 0 dependency, ± 620 rb unduhan / minggu, repo aktif — dipasang lewat npm, hanya di halaman editor admin.
+- **Gridstack.js:** v14.0.0 (21 Sep 2026), MIT, 0 dependency, ± 620 rb unduhan / minggu, repo aktif — dipasang lewat npm (versi dikunci), dimuat hanya di halaman Signature lewat entry Vite `resources/js/signature-editor.js`. Label zona dipasang lewat textContent (opsi `content` Gridstack tidak dipakai).
+- **Zona custom:** `signature_templates.layout = CUSTOM`, `zones` = daftar zona satuan grid; aturan di `SignatureService::normalizeCustomZones()` (dipakai simpan, Preview, dan saat menyusun tampilan TV). Playlist per zona di `signature_playlist_items.zone_key`.
+- **File upload:** `SignatureFileJanitor` — file yang dipakai library atau tayang di versi mana pun dalam 7 hari terakhir disimpan; selain itu langsung dihapus saat diganti / dihapus, dan disapu tiap malam (`signature:clean-files`, 03:00). "Kembalikan versi" ditolak kalau file versi itu sudah dihapus. Batas upload video = min(200 MB, `upload_max_filesize`, `post_max_size`).
 - **Audit:** Tayangkan, Kembalikan versi, buat ulang link layar, hapus template → `ActivityLogger`.

@@ -227,11 +227,11 @@ class SignatureTest extends TestCase
         $page->call('openCreateTemplate')
             ->set('tplName', 'Promo Malam')
             ->set('tplLayout', 'PRESET_C')
-            ->set('tplAddContentId', $image->id)->call('addPlaylistItem')
-            ->set('tplAddContentId', $clock->id)->call('addPlaylistItem')
-            ->set('tplAddContentId', $video->id)->call('addPlaylistItem')
+            ->set('tplAddContentIds.main', $image->id)->call('addPlaylistItem')
+            ->set('tplAddContentIds.main', $clock->id)->call('addPlaylistItem')
+            ->set('tplAddContentIds.main', $video->id)->call('addPlaylistItem')
             ->call('movePlaylistItem', 2, -1)
-            ->set('tplPlaylist.2.duration', 20)
+            ->set('tplPlaylists.main.2.duration', 20)
             ->set('tplTicker.speed', 200)
             ->call('saveTemplate')
             ->assertHasNoErrors();
@@ -294,10 +294,12 @@ class SignatureTest extends TestCase
         $page->call('publish');
         $first = SignatureVersion::where('version', 1)->sole();
 
+        // Kembalikan = versi 1 tayang lagi, tidak disalin jadi versi baru.
         $page->call('restoreVersion', $first->id);
-        $this->assertSame(3, $screen->fresh()->publishedVersion->version);
-        $this->assertSame($first->payload['template']['name'], $screen->fresh()->publishedVersion->payload['template']['name']);
-        $this->assertSame(3, \App\Models\Audit\ActivityLog::where('event', 'signature.published')->count());
+        $this->assertSame(1, $screen->fresh()->publishedVersion->version);
+        $this->assertSame(2, SignatureVersion::count());
+        $this->assertSame(2, \App\Models\Audit\ActivityLog::where('event', 'signature.published')->count());
+        $this->assertSame(1, \App\Models\Audit\ActivityLog::where('event', 'signature.restored')->count());
 
         $oldToken = $screen->fresh()->token;
         $page->call('regenerateToken');

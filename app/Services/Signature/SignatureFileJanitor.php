@@ -18,8 +18,7 @@ use Illuminate\Support\Facades\Storage;
  * memunculkan slide kosong. Sekarang:
  *   - file yang masih dipakai library, sedang tayang, atau berhenti tayang < KEEP_AFTER_AIRING_DAYS hari → disimpan;
  *   - selain itu langsung dihapus saat diganti / dihapus, dan disapu tiap malam (`signature:clean-files`).
- * Satu versi tayang sejak dibuat sampai versi berikutnya di layar yang sama dibuat (setiap Tayangkan / Kembalikan
- * membuat versi baru), jadi tanggal terakhir tayang dihitung dari riwayat versi — tanpa tabel tambahan.
+ * Masa tayang tiap versi dicatat di signature_versions.aired_until (diisi saat tanda Tayang pindah ke versi lain).
  */
 class SignatureFileJanitor
 {
@@ -126,9 +125,8 @@ class SignatureFileJanitor
     }
 
     /**
-     * File yang sedang tayang atau berhenti tayang kurang dari KEEP_AFTER_AIRING_DAYS hari lalu. Per layar: semua versi
-     * yang dibuat sejak batas itu, versi terakhir sebelum batas (masih tayang sampai versi berikutnya dibuat), dan
-     * versi yang ditunjuk layar.
+     * File yang sedang tayang atau berhenti tayang kurang dari KEEP_AFTER_AIRING_DAYS hari lalu: versi yang ditunjuk
+     * layar, versi yang berhenti tayang (aired_until) sejak batas itu, dan — pengaman — versi yang dibuat sejak batas itu.
      *
      * @return array<string, true>
      */
@@ -136,19 +134,10 @@ class SignatureFileJanitor
     {
         $since = now()->subDays(self::KEEP_AFTER_AIRING_DAYS);
 
-        $boundaries = SignatureVersion::where('created_at', '<', $since)
-            ->groupBy('screen_id')
-            ->selectRaw('screen_id, MAX(version) AS version')
-            ->get();
-
         $versions = SignatureVersion::query()
-            ->where(function ($query) use ($since, $boundaries) {
-                $query->where('created_at', '>=', $since)
-                    ->orWhereIn('id', SignatureScreen::whereNotNull('published_version_id')->select('published_version_id'));
-                foreach ($boundaries as $boundary) {
-                    $query->orWhere(fn ($q) => $q->where('screen_id', $boundary->screen_id)->where('version', $boundary->version));
-                }
-            })
+            ->where(fn ($query) => $query->whereIn('id', SignatureScreen::whereNotNull('published_version_id')->select('published_version_id'))
+                ->orWhere('aired_until', '>=', $since)
+                ->orWhere('created_at', '>=', $since))
             ->get(['id', 'payload']);
 
         $paths = [];
