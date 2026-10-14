@@ -123,7 +123,9 @@ class RefundQueueService
             return;
         }
 
-        PadelBooking::whereKey($refund->padel_booking_id)->where('status', 'REFUND_PENDING')->update(['status' => $status]);
+        if (PadelBooking::whereKey($refund->padel_booking_id)->where('status', 'REFUND_PENDING')->update(['status' => $status])) {
+            app(\App\Services\Realtime\RealtimeSignal::class)->bookings([$refund->padel_booking_id]);
+        }
     }
 
     /** Email ke customer setelah transaksi tersimpan; gagal kirim tidak membatalkan penolakan. */

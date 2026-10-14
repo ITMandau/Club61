@@ -179,6 +179,13 @@ class Signature extends Page
         return SignatureScreen::with(['template', 'publishedVersion.publishedBy'])->findOrFail($this->screenId);
     }
 
+    /** Status Online di kartu Layar TV saat realtime tidak tersambung (dipanggil tiap 60 dtk, tanpa render ulang halaman). */
+    #[\Livewire\Attributes\Renderless]
+    public function screenLastSeen(): ?string
+    {
+        return SignatureScreen::find($this->screenId)?->last_seen_at?->toIso8601String();
+    }
+
     public function getPlayerUrlProperty(): string
     {
         return route('signature.player', SignatureScreen::whereKey($this->screenId)->value('token'));

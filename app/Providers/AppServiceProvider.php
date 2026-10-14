@@ -35,6 +35,8 @@ class AppServiceProvider extends ServiceProvider
 
         // State log aktivitas per request/command (batch id, command yang sedang jalan).
         $this->app->scoped(\App\Services\Audit\AuditContext::class);
+        // Sinyal realtime yang terkumpul selama satu request / job / command (lihat registerRealtime).
+        $this->app->scoped(\App\Services\Realtime\RealtimeSignal::class);
 
         // Filament tidak punya login page sendiri lagi (AdminPanelProvider), jadi begitu staf
         // logout dari /admin, arahkan langsung ke satu-satunya pintu login (/login) — bukan ke
@@ -65,6 +67,7 @@ class AppServiceProvider extends ServiceProvider
         Gate::policy(\App\Models\Sponsor\SponsorOrganization::class, \App\Policies\Sponsor\SponsorOrganizationPolicy::class);
 
         $this->registerActivityLog();
+        $this->registerRealtime();
 
         // Satu sumber data company profile dipakai ulang di halaman depan publik (welcome)
         // DAN panel kiri halaman login — supaya fakta venue (jumlah lapangan, daftar
@@ -147,6 +150,21 @@ class AppServiceProvider extends ServiceProvider
                 ], 429);
             });
         });
+    }
+
+    /**
+     * Update realtime (Reverb): perubahan booking / lapangan dikumpulkan selama request, job, atau command, lalu
+     * dikirim sekali di akhir — setelah respons terkirim ke user. Panel admin memakai Echo bawaan Filament.
+     */
+    private function registerRealtime(): void
+    {
+        \App\Models\Padel\PadelBooking::observe(\App\Observers\PadelBookingObserver::class);
+        \App\Models\Padel\PadelCourt::observe(\App\Observers\PadelCourtObserver::class);
+
+        $flush = fn () => $this->app->make(\App\Services\Realtime\RealtimeSignal::class)->flush();
+        $this->app->terminating($flush);
+        \Illuminate\Support\Facades\Queue::after($flush);
+        \Illuminate\Support\Facades\Queue::failing($flush);
     }
 
     /**

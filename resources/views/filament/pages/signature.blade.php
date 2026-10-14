@@ -101,11 +101,12 @@
                         <div class="c61-card-title">Layar TV</div>
                         <div class="c61-card-sub">Buka link di browser Smart TV lalu biarkan layar penuh. Link ini tanpa login — jangan dibagikan.</div>
                     </div>
-                    @if($screen->isOnline())
-                        <span class="c61-pill c61-pill-ok">Online</span>
-                    @else
-                        <span class="c61-pill c61-pill-gray">{{ $screen->last_seen_at ? 'Offline sejak '.$screen->last_seen_at->setTimezone('Asia/Jakarta')->format('d/m H:i') : 'Belum pernah dibuka' }}</span>
-                    @endif
+                    {{-- Status ikut berubah tanpa refresh: sinyal "seen" dari TV lewat realtime, atau dicek tiap 60 dtk tanpa Reverb. --}}
+                    <span wire:key="sg-screen-status-{{ $screen->id }}"
+                          x-data="club61ScreenStatus({ id: @js($screen->id), seenAt: @js($screen->last_seen_at?->toIso8601String()), serverNow: @js(now()->toIso8601String()) })"
+                          x-bind:class="online ? 'c61-pill c61-pill-ok' : 'c61-pill c61-pill-gray'"
+                          x-text="label"
+                          class="c61-pill {{ $screen->isOnline() ? 'c61-pill-ok' : 'c61-pill-gray' }}">{{ $screen->isOnline() ? 'Online' : ($screen->last_seen_at ? 'Offline sejak '.$screen->last_seen_at->setTimezone('Asia/Jakarta')->format('d/m H:i') : 'Belum pernah dibuka') }}</span>
                 </div>
                 <div class="c61-card-body">
                     <div class="c61-field">

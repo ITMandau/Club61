@@ -1,4 +1,6 @@
-<div class="c61 cmd-wrap" wire:poll.10s>
+<div class="c61 cmd-wrap">
+    {{-- Realtime: refresh saat ada booking / check-in di tanggal yang dibuka; tanpa Reverb → tiap 10 dtk seperti dulu. 60 dtk jaga-jaga untuk status per jam. --}}
+    <div hidden x-data="club61LiveRefresh({ dateProp: 'selectedDate', fallback: 10, safety: 60 })"></div>
     @include('filament.partials.c61-admin-style')
     {{-- Gaya khusus papan monitoring (matriks lapangan × jam). Status slot memakai warna yang konsisten dengan POS Walk-In. --}}
     <style>

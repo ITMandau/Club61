@@ -471,6 +471,8 @@ class SignatureService
         }
         $version->update(['aired_at' => now(), 'aired_by_id' => $user->id, 'aired_until' => null]);
         $screen->update(['published_version_id' => $version->id]);
+        // TV langsung memuat tampilan baru (tanpa menunggu jadwal polling).
+        app(\App\Services\Realtime\RealtimeSignal::class)->signaturePublished();
 
         $payload = (array) $version->payload;
         ActivityLogger::record(

@@ -90,6 +90,14 @@
     .slot-delta { background: #FEF3C7; border: 1.5px solid #D97706; color: #92400E; }
     .slot-delta.is-active { background: #D97706; color: #FFFFFF; }
     .slot-past { background: #FAF8F3; border: 1px solid #F3EEE2; color: #C9BDB3; cursor: not-allowed; justify-content: center; }
+    /* Dipilih kasir tapi keburu diambil orang lain — klik untuk melepas dari pilihan. */
+    .slot-taken { background: #FEF2F2; border: 1.5px solid #DC2626; color: #B91C1C; }
+    .pos-slot-chip.is-taken { border-color: #FCA5A5; background: #FEF2F2; }
+    .pos-slot-taken-note { font-size: 0.5625rem; font-weight: 800; color: #B91C1C; }
+    /* Slot ditahan untuk transaksi ini (layar bayar). */
+    .pos-hold-banner { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; background: #FFFBEB; border: 1px solid #FCD34D; border-radius: 12px; padding: 0.7rem 1rem; color: #92400E; font-size: 0.8125rem; font-weight: 700; }
+    .pos-hold-banner .t { font-variant-numeric: tabular-nums; font-weight: 900; font-size: 0.9375rem; }
+    .pos-hold-banner.is-expired { background: #FEF2F2; border-color: #FCA5A5; color: #B91C1C; }
 
     /* ===== Transaksi walk-in terakhir (di bawah jadwal, ikut scroll) ===== */
     .pos-grid-footer { padding: 0.9rem 1rem 1rem; border-top: 1px solid var(--pos-line); }

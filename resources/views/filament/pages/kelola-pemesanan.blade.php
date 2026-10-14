@@ -1,4 +1,6 @@
 <div class="c61">
+    {{-- Realtime: daftar & hitungan tab ikut berubah saat ada booking / bayar / check-in / batal; tanpa Reverb → tiap 30 dtk. --}}
+    <div hidden x-data="club61LiveRefresh({ fallback: 30 })"></div>
     @include('filament.partials.c61-admin-style')
     <style>
         .kp-dimmed { opacity: 0.5; pointer-events: none; transition: opacity 0.12s ease; }

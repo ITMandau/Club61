@@ -1030,22 +1030,36 @@ trait ManagesCheckoutAndPayments
         ?string $voucherCode = null,
         ?float $expectedGrandTotal = null,
         // null = voucher jam corporate milik customer dipakai otomatis (sama dengan online), 'NONE' = kasir mematikannya.
-        ?string $sponsorVoucherId = null
+        ?string $sponsorVoucherId = null,
+        // Slot yang sudah ditahan kasir saat "Lanjut ke Pembayaran" (atas nama $holder). Masih sah → dipakai & dipindah
+        // ke customer; habis / tidak cocok → slot ditahan ulang seperti biasa (bisa bentrok kalau sudah diambil orang).
+        ?array $heldBookingIds = null,
+        ?User $holder = null
     ): array {
         // 100% Cashless: pembayaran tunai tidak diperbolehkan sama sekali di loket walk-in.
         if (in_array(strtoupper($paymentMethod), ['CASH', 'TUNAI'])) {
             throw new HttpException(422, 'Pembayaran tunai (CASH) tidak diperbolehkan. Venue Club 61 beroperasi 100% Cashless.');
         }
 
-        // 1. Hold batch slots untuk customer (melempar SlotConflictException jika tabrakan)
-        $holdResult = $this->holdBatchSlots($slots, $bookingDate, $customer);
-        $bookingIds = collect($holdResult['bookings'])->pluck('id')->toArray();
+        // 1. Pakai slot yang sudah ditahan kasir, atau hold batch slots untuk customer (SlotConflictException jika tabrakan)
+        $useHeld = $heldBookingIds && $holder && $this->walkInHoldIsValid($heldBookingIds, $holder, $slots, $bookingDate);
+        if ($useHeld) {
+            $bookingIds = array_values(array_unique($heldBookingIds));
+        } else {
+            $holdResult = $this->holdBatchSlots($slots, $bookingDate, $customer);
+            $bookingIds = collect($holdResult['bookings'])->pluck('id')->toArray();
+        }
 
         // Checkout gagal (bukti EDC dipakai ulang, stok habis, shift belum dibuka, dll.) → lepas lagi slot yang barusan
         // ditahan. Dulu slot tetap terkunci selama waktu tahan (sampai 30 menit) dan kasir yang mencoba ulang mendapat
-        // "slot sedang di-hold pemain lain".
+        // "slot sedang di-hold pemain lain". Slot yang ditahan kasir sebelumnya TIDAK dilepas: kasir membetulkan isian
+        // lalu menekan Bayar lagi tanpa kehilangan slotnya.
         try {
-            return DB::transaction(function () use ($customer, $bookingIds, $equipments, $paymentMethod, $cashier, $autoCheckIn, $paymentMeta, $membershipBalanceId, $voucherCode, $expectedGrandTotal, $sponsorVoucherId) {
+            return DB::transaction(function () use ($customer, $bookingIds, $equipments, $paymentMethod, $cashier, $autoCheckIn, $paymentMeta, $membershipBalanceId, $voucherCode, $expectedGrandTotal, $sponsorVoucherId, $useHeld, $holder) {
+                if ($useHeld) {
+                    $this->claimWalkInHold($bookingIds, $holder, $customer);
+                }
+
                 $bookings = PadelBooking::with('court')
                     ->whereIn('id', $bookingIds)
                     ->where('user_id', $customer->id)
@@ -1294,6 +1308,7 @@ trait ManagesCheckoutAndPayments
                         'status' => 'CHECKED_IN',
                         'checked_in_at' => now(),
                     ]);
+                    app(\App\Services\Realtime\RealtimeSignal::class)->bookings(PadelBooking::where('order_id', $order->id)->pluck('id'));
                 }
 
                 $updatedBookings = PadelBooking::with(['court', 'equipments.equipment'])
@@ -1312,13 +1327,88 @@ trait ManagesCheckoutAndPayments
                 ];
             });
         } catch (\Throwable $e) {
-            try {
-                $this->releaseSlots($bookingIds, $customer, onlyLocked: true);
-            } catch (\Throwable $releaseError) {
-                report($releaseError); // jangan menutupi error checkout aslinya
+            if (! $useHeld) {
+                try {
+                    $this->releaseSlots($bookingIds, $customer, onlyLocked: true);
+                } catch (\Throwable $releaseError) {
+                    report($releaseError); // jangan menutupi error checkout aslinya
+                }
             }
 
             throw $e;
+        }
+    }
+
+    /**
+     * Slot walk-in yang ditahan kasir masih bisa dipakai: milik kasir itu, masih LOCKED & belum lewat waktu tahan, belum
+     * punya order, dan persis sama dengan jam yang akan dibayar (lapangan, tanggal, tiap jamnya).
+     */
+    public function walkInHoldIsValid(array $bookingIds, User $holder, array $slots, string $bookingDate): bool
+    {
+        $bookingIds = array_values(array_unique(array_filter($bookingIds)));
+        if ($bookingIds === []) {
+            return false;
+        }
+
+        $bookings = PadelBooking::whereIn('id', $bookingIds)->get();
+        if ($bookings->count() !== count($bookingIds)) {
+            return false;
+        }
+
+        foreach ($bookings as $booking) {
+            if ((string) $booking->user_id !== (string) $holder->id
+                || $booking->status !== 'LOCKED'
+                || $booking->order_id
+                || (int) $booking->reschedule_count > 0
+                || ! $booking->expires_at || $booking->expires_at->lte(now())
+                || $booking->booking_date->format('Y-m-d') !== $bookingDate) {
+                return false;
+            }
+        }
+
+        $held = [];
+        foreach ($bookings as $booking) {
+            for ($t = $booking->start_time->copy(); $t->lt($booking->end_time); $t->addHour()) {
+                $held[] = $booking->court_id.'|'.$t->format('Y-m-d H:i');
+            }
+        }
+        $wanted = [];
+        foreach ($slots as $slot) {
+            $end = \Carbon\Carbon::parse("{$bookingDate} {$slot['end_time']}");
+            for ($t = \Carbon\Carbon::parse("{$bookingDate} {$slot['start_time']}"); $t->lt($end); $t->addHour()) {
+                $wanted[] = $slot['court_id'].'|'.$t->format('Y-m-d H:i');
+            }
+        }
+        sort($held);
+        sort($wanted);
+
+        return $held === $wanted;
+    }
+
+    /**
+     * Pindahkan slot yang ditahan kasir ke customer di dalam transaksi checkout. Dicek ulang dengan kunci baris: di sela
+     * pengecekan awal, waktu tahan bisa saja habis lalu slotnya dilepas pembersih jadwal.
+     */
+    protected function claimWalkInHold(array $bookingIds, User $holder, User $customer): void
+    {
+        $bookings = PadelBooking::whereIn('id', $bookingIds)
+            ->where('user_id', $holder->id)
+            ->where('status', 'LOCKED')
+            ->whereNull('order_id')
+            ->where('expires_at', '>', now())
+            ->lockForUpdate()
+            ->get();
+
+        if ($bookings->count() !== count($bookingIds)) {
+            throw new HttpException(409, 'Waktu tahan slot habis. Tekan Bayar sekali lagi — slot ditahan ulang kalau masih kosong.');
+        }
+
+        foreach ($bookings as $booking) {
+            $booking->forceFill([
+                'user_id' => $customer->id,
+                // Kode QR tiket mengikuti pemiliknya (sama seperti booking yang langsung dibuat atas nama customer).
+                'qr_code_hash' => hash_hmac('sha256', $booking->booking_code.$customer->id.$booking->court_id.$booking->start_time->toISOString(), config('app.key')),
+            ])->save();
         }
     }
 

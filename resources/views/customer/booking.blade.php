@@ -209,8 +209,19 @@
         </div>
     </div>
 
+    {{-- Update realtime (Reverb): jadwal tanggal yang dibuka ikut berubah saat ada yang booking. Tanpa Reverb → tiap 60 dtk saat tab terlihat. --}}
+    @php($realtime = \App\Support\Realtime::client())
+    @if ($realtime)
+        <script src="{{ asset('js/club61-live.js') }}?v={{ filemtime(public_path('js/club61-live.js')) }}"></script>
+        <script>window.BK_REALTIME = @json($realtime);</script>
+    @endif
     <script>
         function bookingCourtApp() {
+            // Di luar state Alpine (tidak perlu reaktif).
+            let live = null;
+            let liveRefreshTimer = null;
+            let fetchSeq = 0;
+
             return {
                 courts: [],
                 dateTabs: [],
@@ -243,6 +254,7 @@
                 init() {
                     this.generateDateTabs();
                     this.fetchSchedule();
+                    this.startLiveUpdates();
                     window.matchMedia('(min-width: 640px)').addEventListener('change', (e) => { this.narrow = !e.matches; });
                     // Bar ringkasan berubah tinggi (1 → 3 baris saat ada pilihan); ruang bawah halaman ikut tingginya.
                     if (window.ResizeObserver && this.$refs.bar) {
@@ -352,20 +364,63 @@
                     });
                 },
 
-                async fetchSchedule() {
-                    this.isLoading = true;
+                /** silent = pembaruan otomatis (realtime / polling cadangan): tanpa spinner, pilihan customer dipertahankan. */
+                async fetchSchedule(silent = false) {
+                    const seq = ++fetchSeq;
+                    const date = this.activeDate;
+                    if (!silent) this.isLoading = true;
                     try {
-                        const res = await fetch(`/api/v1/padel/schedule?date=${this.activeDate}`, { headers: { 'Accept': 'application/json' } });
+                        const res = await fetch(`/api/v1/padel/schedule?date=${date}`, { headers: { 'Accept': 'application/json' } });
                         const json = await res.json();
+                        // Jawaban lama (tanggal sudah diganti / ada permintaan yang lebih baru) diabaikan.
+                        if (seq !== fetchSeq || date !== this.activeDate) return;
                         if (json.success) {
                             this.courts = json.data.courts || [];
                             this.buildMatrixRows(this.courts);
+                            if (silent) this.dropTakenSelections();
                         }
                     } catch (e) {
                         console.error('Failed to fetch court schedule:', e);
                     } finally {
-                        this.isLoading = false;
+                        if (seq === fetchSeq) this.isLoading = false;
                     }
+                },
+
+                /** Jam yang dipilih customer tapi baru saja diambil orang lain dilepas dari pilihan, dengan pemberitahuan. */
+                dropTakenSelections() {
+                    const taken = this.selectedSlots.filter(sel => {
+                        const court = this.courts.find(c => c.court_id === sel.court_id);
+                        const slot = court ? court.slots.find(s => s.local_start === sel.start_time) : null;
+                        return !slot || slot.status !== 'AVAILABLE';
+                    });
+                    if (taken.length === 0) return;
+                    this.selectedSlots = this.selectedSlots.filter(sel => !taken.includes(sel));
+                    this.showNotice('Slot just taken', `${taken.map(s => `${s.court} ${s.time}`).join(', ')} was just booked by someone else and has been removed from your selection.`, 'info');
+                },
+
+                /** Realtime (Reverb) kalau tersedia; kalau tidak / koneksi putus → ambil ulang tiap 60 dtk selama tab terlihat. */
+                startLiveUpdates() {
+                    const refreshSoon = () => {
+                        clearTimeout(liveRefreshTimer);
+                        liveRefreshTimer = setTimeout(() => { if (!this.isHolding) this.fetchSchedule(true); }, 250);
+                    };
+                    const connected = () => !!(live && live.connected());
+
+                    live = window.Club61Live && window.BK_REALTIME ? window.Club61Live.connect(window.BK_REALTIME) : null;
+                    if (live) {
+                        live.on('booking-board', 'board.changed', (data) => {
+                            const dates = data.dates || [];
+                            if (dates.includes('*') || dates.includes(this.activeDate)) refreshSoon();
+                        });
+                        live.onState((isConnected) => { if (isConnected) refreshSoon(); });
+                    }
+
+                    setInterval(() => {
+                        if (document.visibilityState === 'visible' && !connected()) refreshSoon();
+                    }, 60000);
+                    document.addEventListener('visibilitychange', () => {
+                        if (document.visibilityState === 'visible' && !connected()) refreshSoon();
+                    });
                 },
 
                 /** Baris grid = jam; kolom = semua lapangan aktif. */

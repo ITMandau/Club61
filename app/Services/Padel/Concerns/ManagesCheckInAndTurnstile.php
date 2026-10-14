@@ -6,6 +6,7 @@ use App\Models\Padel\CourtEquipment;
 use App\Models\Padel\PadelBooking;
 use App\Models\Padel\PadelBookingEquipment;
 use App\Models\User;
+use App\Services\Realtime\RealtimeSignal;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Symfony\Component\HttpKernel\Exception\HttpException;
@@ -44,6 +45,7 @@ trait ManagesCheckInAndTurnstile
             if ($booking->status === 'PAID') {
                 PadelBooking::whereKey($booking->id)->where('status', 'PAID')->whereNull('checked_in_at')->update(['status' => 'EXPIRED']);
                 Cache::forget('kelola_pemesanan_tab_counts');
+                app(RealtimeSignal::class)->bookingDates($booking->booking_date);
             }
             throw new HttpException(400, "Tiket kedaluwarsa (Expired). Sesi bermain pada pukul {$booking->start_time->format('H:i')} - {$booking->end_time->format('H:i')} WIB telah selesai.");
         }
@@ -121,6 +123,7 @@ trait ManagesCheckInAndTurnstile
                 throw new HttpException(409, 'Status tiket baru saja berubah (dipindah jadwal / dibatalkan). Scan ulang tiketnya.');
             }
             $booking->forceFill(['status' => 'CHECKED_IN', 'checked_in_at' => $now])->syncOriginal();
+            app(RealtimeSignal::class)->bookingDates($booking->booking_date);
 
             $this->deductRentalEquipmentStock($booking);
 
@@ -274,6 +277,7 @@ trait ManagesCheckInAndTurnstile
         }
         $booking->refresh();
         Cache::forget('kelola_pemesanan_tab_counts');
+        app(RealtimeSignal::class)->bookingDates($booking->booking_date);
 
         \App\Services\Audit\ActivityLogger::record(
             module: 'PADEL',
@@ -356,6 +360,10 @@ trait ManagesCheckInAndTurnstile
 
         if ($expiredCount > 0 || $completedCount > 0 || $releasedLocks > 0) {
             Cache::forget('kelola_pemesanan_tab_counts');
+        }
+        // Update massal di atas tidak lewat observer model → layar jadwal diberi tahu manual.
+        if ($expiredCount > 0 || $completedCount > 0) {
+            app(RealtimeSignal::class)->bookings($noShows->keys()->merge($finished->keys()));
         }
 
         return [

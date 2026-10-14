@@ -15,10 +15,13 @@
         async toPayment() {
             if (this.busy) return;
             this.busy = true;
+            const slotsBefore = Object.keys(this.$wire.selectedSlots || {}).length;
             try { await this.$wire.proceedToPayment(); } finally { this.busy = false; }
             // Validasi server gagal → kembali ke layar yang perlu dilengkapi.
             if (this.$wire.posStep === 'selection') {
-                if (! Object.keys(this.$wire.selectedSlots || {}).length && ! this.$wire.settleBill) this.step = 1;
+                const slotsAfter = Object.keys(this.$wire.selectedSlots || {}).length;
+                // Slot keburu diambil customer lain (dihapus dari pilihan) → tampilkan jadwal untuk pilih jam lain.
+                if ((! slotsAfter || slotsAfter < slotsBefore) && ! this.$wire.settleBill) this.step = 1;
                 else if (this.customerMissing()) this.step = 2;
             }
         },
@@ -76,6 +79,10 @@
             @endif
         </div>
     </div>
+
+    {{-- Realtime: slot yang baru dibooking / di-hold kasir lain / online langsung tampil terisi (hanya di langkah pilih
+         jadwal); tanpa Reverb → tiap 30 dtk. --}}
+    <div hidden x-data="club61LiveRefresh({ dateProp: 'bookingDate', fallback: 30, when: () => $wire.posStep === 'selection' })"></div>
 
     {{-- ============================
      TOOLBAR: Tanggal + ringkasan hari ini
@@ -286,6 +293,13 @@
                                             <svg width="13" height="13" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7" /></svg>
                                             <span class="prc">{{ $rate }}</span>
                                         </button>
+                                    @elseif($st === 'TAKEN')
+                                        <button type="button"
+                                            wire:click="toggleSlot('{{ $court->id }}', '{{ addslashes($court->name) }}', '{{ $slot['start_time'] }}', '{{ $slot['end_time'] }}', {{ $slot['rate'] }})"
+                                            class="slot-btn slot-taken"
+                                            title="Baru saja diambil customer lain — klik untuk melepas dari pilihan">
+                                            <span class="lbl">Diambil</span>
+                                        </button>
                                     @elseif($st === 'AVAILABLE')
                                         <button type="button"
                                             wire:click="toggleSlot('{{ $court->id }}', '{{ addslashes($court->name) }}', '{{ $slot['start_time'] }}', '{{ $slot['end_time'] }}', {{ $slot['rate'] }})"
@@ -338,6 +352,17 @@
                 </div>
 
                 <div class="pos-terminal-body">
+                    {{-- Slot sudah ditahan untuk transaksi ini (customer online melihatnya "In checkout"). --}}
+                    @if (! $settleBill && $heldUntil)
+                        <div wire:key="hold-banner-{{ $heldUntil }}" class="pos-hold-banner"
+                            x-data="{ left: {{ max(0, (int) now()->diffInSeconds(\Illuminate\Support\Carbon::parse($heldUntil), false)) }}, init() { this.t = setInterval(() => { if (this.left > 0) this.left--; }, 1000); }, destroy() { clearInterval(this.t); } }"
+                            x-bind:class="{ 'is-expired': left <= 0 }">
+                            <span x-show="left > 0">Slot sudah ditahan untuk customer ini. Selesaikan pembayaran sebelum waktu habis.</span>
+                            <span x-show="left <= 0" x-cloak>Waktu tahan habis. Saat Bayar, slot ditahan ulang kalau masih kosong.</span>
+                            <span class="t" x-show="left > 0" x-text="String(Math.floor(left / 60)).padStart(2, '0') + ':' + String(left % 60).padStart(2, '0')"></span>
+                        </div>
+                    @endif
+
                     {{-- Form metode pembayaran bersama (dipakai juga oleh Kasir F&B) --}}
                     @if (! $settleBill && $this->grandTotal <= 0)
                         @php
@@ -557,12 +582,15 @@
                     @else
                         <div style="display:flex; flex-direction:column; gap:0.3rem;">
                             @foreach ($selectedSlots as $sKey => $s)
-                                <div wire:key="selected-slot-{{ $sKey }}" class="pos-slot-chip">
+                                <div wire:key="selected-slot-{{ $sKey }}" class="pos-slot-chip {{ in_array($sKey, $takenSlotKeys, true) ? 'is-taken' : '' }}">
                                     <div>
                                         <div style="font-weight:800; font-size:0.6875rem; color:#4F2F2A;">
                                             {{ $s['court_name'] }}</div>
                                         <div style="font-size:0.5625rem; color:#662721;">{{ $s['time_label'] }} WIB
                                         </div>
+                                        @if (in_array($sKey, $takenSlotKeys, true))
+                                            <div class="pos-slot-taken-note">Baru diambil customer lain — hapus &amp; pilih jam lain</div>
+                                        @endif
                                     </div>
                                     <div style="display:flex; align-items:center; gap:0.4rem;">
                                         <span

@@ -603,6 +603,7 @@ trait ManagesScheduleAndSlots
             if (! $expired) {
                 continue;
             }
+            app(\App\Services\Realtime\RealtimeSignal::class)->bookingDates($b->booking_date);
 
             $currLock = $b->start_time->copy();
             $endLock = $b->end_time->copy();

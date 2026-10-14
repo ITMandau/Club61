@@ -163,6 +163,12 @@
     <div id="stage"></div>
 </div>
 <script>window.SIG_INITIAL = @json($payload);</script>
+{{-- Update realtime (Reverb): data live diambil begitu ada booking / check-in / tayangan baru. Tanpa Reverb → polling 12 dtk. --}}
+@php($realtime = \App\Support\Realtime::client())
+@if($realtime)
+<script src="{{ asset('js/club61-live.js') }}?v={{ filemtime(public_path('js/club61-live.js')) }}"></script>
+<script>window.SIG_REALTIME = @json($realtime);</script>
+@endif
 <script>
 (function () {
     'use strict';
@@ -172,7 +178,8 @@
     var payloadUrl = root.getAttribute('data-payload-url') || '';
     var liveUrl = root.getAttribute('data-live-url');
     var isPreview = root.getAttribute('data-preview') === '1';
-    var POLL_MS = 12000;
+    var POLL_MS = 12000;        // tanpa realtime / koneksi realtime putus
+    var POLL_LIVE_MS = 60000;   // realtime tersambung: cukup untuk status per jam & heartbeat; perubahan datang lewat event
 
     var TRANSITIONS = { fade: 1, slide: 1, zoom: 1, none: 1 };
     var DAYS = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
@@ -880,13 +887,53 @@
                 renderClosed();
                 handleEvents(data.events || []);
             }
-            setTimeout(pollLive, POLL_MS);
+            pollDone();
         }, function () {
             if (state.status && state.liveAt) {
                 state.status.textContent = 'Koneksi terputus — data terakhir ' + timeText(new Date(state.liveAt + state.serverOffset));
                 state.status.style.display = 'block';
             }
-            setTimeout(pollLive, POLL_MS);
+            pollDone();
+        });
+    }
+
+    // Satu polling dalam satu waktu. Event yang datang saat polling berjalan → diulang sekali sesudahnya.
+    var poll = { running: false, again: false, timer: null, eventTimer: null };
+    function startPoll() {
+        clearTimeout(poll.timer);
+        if (poll.running) { poll.again = true; return; }
+        poll.running = true;
+        poll.again = false;
+        pollLive();
+    }
+    function pollDone() {
+        if (!poll.running) { return; }
+        poll.running = false;
+        clearTimeout(poll.timer);
+        poll.timer = setTimeout(startPoll, poll.again ? 500 : (live && live.connected() ? POLL_LIVE_MS : POLL_MS));
+    }
+    // Booking walk-in 3 jam = beberapa sinyal beruntun → cukup sekali ambil data.
+    function pollSoon() {
+        clearTimeout(poll.eventTimer);
+        poll.eventTimer = setTimeout(startPoll, 300);
+    }
+
+    // ------------------------------------------------------------------ realtime (Reverb)
+    var live = window.Club61Live && window.SIG_REALTIME ? window.Club61Live.connect(window.SIG_REALTIME) : null;
+    if (live) {
+        live.on('booking-board', 'board.changed', function (data) {
+            var today = state.live && state.live.server_time ? state.live.server_time.substr(0, 10) : null;
+            var dates = data.dates || [];
+            for (var i = 0; i < dates.length; i++) {
+                if (dates[i] === '*' || dates[i] === today || !today) { pollSoon(); return; }
+            }
+        });
+        live.on('signature', 'signature.changed', function (data) {
+            if (data.kind === 'published') { pollSoon(); }
+        });
+        // Tersambung lagi → ambil data sekali (mengejar perubahan selama putus). Putus → kembali polling 12 dtk.
+        live.onState(function (connected) {
+            if (connected) { pollSoon(); } else if (!poll.running) { clearTimeout(poll.timer); poll.timer = setTimeout(startPoll, POLL_MS); }
         });
     }
 
@@ -908,6 +955,9 @@
         }
         var clocks = stage.querySelectorAll('.clock-time, .side-time');
         for (var j = 0; j < clocks.length; j++) { clocks[j].textContent = timeText(now()); }
+        // Sesi main berganti tiap jam pas: status lapangan langsung diperbarui, tidak menunggu polling 60 dtk.
+        var t = now();
+        if (t.getMinutes() === 0 && t.getSeconds() === 3) { startPoll(); }
     }, 1000);
 
     // TV menyala berhari-hari: muat ulang halaman tiap 6 jam supaya memori browser TV tetap lega.
@@ -916,7 +966,7 @@
     window.addEventListener('resize', fitStage);
     fitStage();
     build();
-    pollLive();
+    startPoll();
 })();
 </script>
 </body>

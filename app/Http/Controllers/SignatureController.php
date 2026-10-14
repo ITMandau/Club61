@@ -46,6 +46,7 @@ class SignatureController extends Controller
         // TV melapor "masih hidup" (status Online / Offline di admin) — paling sering sekali per 50 detik.
         if (! $screen->last_seen_at || $screen->last_seen_at->lt(now()->subSeconds(50))) {
             $screen->forceFill(['last_seen_at' => now()])->saveQuietly();
+            app(\App\Services\Realtime\RealtimeSignal::class)->signatureScreenSeen($screen->id, $screen->last_seen_at);
         }
 
         $payload = $screen->publishedVersion?->payload;
