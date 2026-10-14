@@ -223,6 +223,14 @@ class SignatureTest extends TestCase
             ->set('contentUpload', UploadedFile::fake()->create('palsu.mp4', 10, 'text/plain'))
             ->call('saveContent')->assertHasErrors('contentUpload');
 
+        // Video di atas 100 MB ditolak (storage server tidak cepat penuh).
+        $this->assertSame(100, Signature::VIDEO_MAX_MB);
+        $this->assertLessThanOrEqual(Signature::VIDEO_MAX_MB, $page->instance()->videoMaxMb);
+        $page->call('openCreateContent')->set('contentName', 'Video Kebesaran')->set('contentType', 'VIDEO')
+            ->set('contentUpload', UploadedFile::fake()->create('besar.mp4', 101 * 1024, 'video/mp4'))
+            ->assertHasErrors('contentUpload');
+        $this->assertFalse(SignatureContent::where('name', 'Video Kebesaran')->exists());
+
         // Playlist: gambar 8 dtk → video → jam 20 dtk.
         $page->call('openCreateTemplate')
             ->set('tplName', 'Promo Malam')

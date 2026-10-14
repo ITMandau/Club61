@@ -43,6 +43,9 @@ class Signature extends Page
 
     public const TABS = ['screen' => 'Layar & Tayangan', 'templates' => 'Template', 'contents' => 'Konten', 'texts' => 'Running Text', 'sponsors' => 'Sponsor'];
 
+    /** Batas ukuran satu video (MB) — cukup untuk 1080p ±1–2 menit, supaya storage server tidak cepat penuh. */
+    public const VIDEO_MAX_MB = 100;
+
     public string $activeTab = 'screen';
 
     /** URL halaman Preview yang sedang dibuka (modal). */
@@ -726,7 +729,7 @@ class Signature extends Page
     }
 
     /**
-     * Batas ukuran video yang benar-benar bisa di-upload (MB): 200 MB dari aplikasi, dibatasi setting PHP server
+     * Batas ukuran video yang benar-benar bisa di-upload (MB): VIDEO_MAX_MB dari aplikasi, dibatasi setting PHP server
      * (`upload_max_filesize` / `post_max_size`). Dulu tertulis 200 MB padahal PHP menolak file di atas 40 MB.
      */
     public function getVideoMaxMbProperty(): int
@@ -746,7 +749,7 @@ class Signature extends Page
             });
         };
 
-        return max(1, min(200, $toMb(ini_get('upload_max_filesize')), $toMb(ini_get('post_max_size'))));
+        return max(1, min(self::VIDEO_MAX_MB, $toMb(ini_get('upload_max_filesize')), $toMb(ini_get('post_max_size'))));
     }
 
     public function saveContent(): void

@@ -174,7 +174,7 @@ Owner memilih **Smart TV langsung** (tanpa Android box / mini PC). Konsekuensiny
 | :--- | :--- | :--- |
 | 1 | Di monitoring lapangan, nama customer tampil **lengkap**, **inisial**, atau hanya **"Booked"**? (No. HP & email tidak pernah tampil.) | Nama lengkap — bisa diganti kapan saja di pengaturan. |
 | 2 | Jam tayang TV: menyala sesuai jam operasional (06:00–23:00) saja? | Ya — di luar jam operasional tampil logo + "Sampai jumpa besok". |
-| 3 | Batas ukuran video per file? | 200 MB, resolusi 1080p. |
+| 3 | Batas ukuran video per file? | 100 MB (diturunkan dari 200 MB supaya storage tidak cepat penuh), resolusi 1080p. |
 | 4 | Siapa yang boleh mengubah & menayangkan konten: admin saja, atau perlu role Marketing? | super_admin & admin. |
 | 5 | Running text otomatis "Selamat bermain {nama}" saat check-in — boleh menampilkan nama? | Ikut keputusan no. 1. |
 
@@ -189,5 +189,5 @@ Owner memilih **Smart TV langsung** (tanpa Android box / mini PC). Konsekuensiny
 - **Cache di TV:** konten di-cache di browser (Cache Storage / service worker kalau browser TV mendukung) supaya playlist tetap jalan saat offline.
 - **Gridstack.js:** v14.0.0 (21 Sep 2026), MIT, 0 dependency, ± 620 rb unduhan / minggu, repo aktif — dipasang lewat npm (versi dikunci), dimuat hanya di halaman Signature lewat entry Vite `resources/js/signature-editor.js`. Label zona dipasang lewat textContent (opsi `content` Gridstack tidak dipakai).
 - **Zona custom:** `signature_templates.layout = CUSTOM`, `zones` = daftar zona satuan grid; aturan di `SignatureService::normalizeCustomZones()` (dipakai simpan, Preview, dan saat menyusun tampilan TV). Playlist per zona di `signature_playlist_items.zone_key`.
-- **File upload:** `SignatureFileJanitor` — file yang dipakai library atau tayang di versi mana pun dalam 7 hari terakhir disimpan; selain itu langsung dihapus saat diganti / dihapus, dan disapu tiap malam (`signature:clean-files`, 03:00). "Kembalikan versi" ditolak kalau file versi itu sudah dihapus. Batas upload video = min(200 MB, `upload_max_filesize`, `post_max_size`).
+- **File upload:** `SignatureFileJanitor` — file yang dipakai library atau tayang di versi mana pun dalam 7 hari terakhir disimpan; selain itu langsung dihapus saat diganti / dihapus, dan disapu tiap malam (`signature:clean-files`, 03:00). "Kembalikan versi" ditolak kalau file versi itu sudah dihapus. Batas upload video = min(100 MB (`Signature::VIDEO_MAX_MB`), `upload_max_filesize`, `post_max_size`).
 - **Audit:** Tayangkan, Kembalikan versi, buat ulang link layar, hapus template → `ActivityLogger`.
