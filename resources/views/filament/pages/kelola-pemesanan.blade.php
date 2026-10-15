@@ -229,8 +229,9 @@
                                         </button>
                                     @endif
 
-                                    @if ($this->canSettle && $this->canOpenPos && (($b->status === 'LOCKED' && $pendingAmount > 0) || $b->status === 'PENDING_PAYMENT'))
-                                        {{-- Pembayaran tidak dieksekusi di sini: buka POS Walk-In langsung di tagihan ini. --}}
+                                    @if ($this->canSettle && $this->canOpenPos && $b->status === 'LOCKED' && $b->reschedule_count > 0 && $pendingAmount > 0)
+                                        {{-- Hanya selisih reschedule yang bisa dibayar di kasir. Booking online belum dibayar wajib dibayar online
+                                             (bayar di kasir = booking walk-in baru). Pembayaran tidak dieksekusi di sini: buka POS di tagihan ini. --}}
                                         <a href="{{ \App\Filament\Pages\BookOfflineCourt::getUrl(['tagihan' => $b->id]) }}"
                                             title="Bayar di POS Walk-In (Rp {{ number_format($pendingAmount ?: $b->total_amount, 0, ',', '.') }})"
                                             class="c61-icon-btn is-solid">

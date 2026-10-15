@@ -137,7 +137,7 @@
                         <section class="bk-fade-up rounded-xl bg-white/95 border border-[#662721] shadow-[0_12px_35px_rgba(79,47,42,0.16)] p-4 sm:p-5">
                             <div class="flex items-center justify-between gap-3 mb-3">
                                 <div class="text-[11px] font-extrabold uppercase tracking-wider text-[#662721]">Next match</div>
-                                <span class="shrink-0 px-2.5 py-0.5 rounded-full text-[11px] font-bold border whitespace-nowrap" :class="statusPillClass(activeMatch.status)" x-text="statusLabel(activeMatch.status)"></span>
+                                <span class="shrink-0 px-2.5 py-0.5 rounded-full text-[11px] font-bold border whitespace-nowrap" :class="statusPillClass(activeMatch.status)" x-text="statusLabel(activeMatch.status, activeMatch)"></span>
                             </div>
                             <div class="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4">
                                 <div class="flex items-center gap-3 flex-1 min-w-0">
@@ -211,7 +211,7 @@
                                         <div class="text-xs font-bold tabular-nums whitespace-nowrap" x-text="'Rp ' + formatNumber(item.total_amount)"></div>
                                         <div class="text-[10px] font-bold whitespace-nowrap"
                                              :class="statusTone(item.status) === 'ok' ? 'text-emerald-700' : (statusTone(item.status) === 'bad' ? 'text-rose-600' : 'text-amber-700')"
-                                             x-text="statusLabel(item.status)"></div>
+                                             x-text="statusLabel(item.status, item)"></div>
                                     </div>
                                 </a>
                             </template>
@@ -239,7 +239,7 @@
                                             <td class="py-3 pr-3 text-[#7A5A52] whitespace-nowrap tabular-nums" x-text="formatDate(item.start_time) + ' · ' + formatTime(item.start_time) + '–' + formatTime(item.end_time)"></td>
                                             <td class="py-3 pr-3 font-bold text-right whitespace-nowrap tabular-nums" x-text="'Rp ' + formatNumber(item.total_amount)"></td>
                                             <td class="py-3 text-right">
-                                                <span class="px-2 py-0.5 rounded-full text-[10px] font-bold border whitespace-nowrap" :class="statusPillClass(item.status)" x-text="statusLabel(item.status)"></span>
+                                                <span class="px-2 py-0.5 rounded-full text-[10px] font-bold border whitespace-nowrap" :class="statusPillClass(item.status)" x-text="statusLabel(item.status, item)"></span>
                                             </td>
                                         </tr>
                                     </template>
@@ -501,7 +501,11 @@
                     return this.bookings.filter(b => b.status === 'PAID' || b.status === 'CONFIRMED' || b.status === 'COMPLETED').length;
                 },
 
-                statusLabel(status) {
+                // Booking yang dipindah jadwal dan selisihnya belum lunas tetap LOCKED di database → "Balance due", bukan "In checkout".
+                statusLabel(status, booking = null) {
+                    if (status === 'LOCKED' && booking && Number(booking.reschedule_count) > 0) {
+                        return 'Balance due';
+                    }
                     const map = {
                         PAID: 'Paid', CONFIRMED: 'Confirmed', CHECKED_IN: 'Checked in', COMPLETED: 'Completed',
                         PENDING: 'Awaiting payment', PENDING_PAYMENT: 'Awaiting payment', LOCKED: 'In checkout',

@@ -54,7 +54,7 @@
                     <div class="text-xs font-bold tabular-nums whitespace-nowrap" x-text="'Rp ' + formatNumber(item.type === 'MEMBERSHIP' ? item.grand_total : item.total_amount)"></div>
                     <div class="text-[10px] font-bold whitespace-nowrap"
                          :class="statusTone(item.status) === 'ok' ? 'text-emerald-700' : (statusTone(item.status) === 'bad' ? 'text-rose-600' : 'text-amber-700')"
-                         x-text="statusLabel(item.status)"></div>
+                         x-text="statusLabel(item.status, item)"></div>
                 </div>
             </a>
         </template>

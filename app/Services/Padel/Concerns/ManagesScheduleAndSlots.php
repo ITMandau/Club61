@@ -112,7 +112,10 @@ trait ManagesScheduleAndSlots
                 } elseif ($dateStr < $todayStr || ($dateStr === $todayStr && $hour < $currentHour)) {
                     $status = 'PAST';
                 } elseif ($collidingBooking) {
-                    $status = in_array($collidingBooking->status, ['LOCKED', 'PENDING_PAYMENT', 'PENDING']) ? 'LOCKED' : 'BOOKED';
+                    // Booking yang dipindah jadwal & selisihnya belum lunas (LOCKED + reschedule_count) sudah dipesan —
+                    // tampil "Booked", bukan "In checkout" seperti keranjang yang sedang dibayar.
+                    $isRescheduleBalance = $collidingBooking->status === 'LOCKED' && (int) $collidingBooking->reschedule_count > 0;
+                    $status = ! $isRescheduleBalance && in_array($collidingBooking->status, ['LOCKED', 'PENDING_PAYMENT', 'PENDING']) ? 'LOCKED' : 'BOOKED';
                 } elseif ($isCacheLocked) {
                     $status = 'LOCKED';
                 } else {

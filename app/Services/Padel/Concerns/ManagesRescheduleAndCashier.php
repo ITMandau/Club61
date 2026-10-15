@@ -659,8 +659,10 @@ trait ManagesRescheduleAndCashier
     }
 
     /**
-     * Pelunasan pembayaran oleh kasir/admin di meja frontdesk (Cashier Settle Module).
-     * Dapat melunasi booking berstatus PENDING_PAYMENT maupun tagihan sisa LOCKED.
+     * Pelunasan oleh kasir/admin di meja frontdesk (Cashier Settle Module) — HANYA tagihan selisih reschedule
+     * (booking LOCKED yang sudah dipindah jadwal). Booking online yang belum dibayar wajib dibayar customer lewat
+     * pembayaran online; mau bayar di kasir = booking walk-in baru. Dulu booking online PENDING_PAYMENT bisa
+     * dilunasi di kasir → customer bisa menahan slot lewat booking online tanpa pernah membayar.
      *
      * Nominal yang dilunasi SELALU sisa tagihan sebenarnya (tagihan PENDING, atau grand_total dikurangi
      * yang sudah dibayar) — dulu kalau nominal tidak diisi, sistem mencatat seluruh grand_total order
@@ -684,7 +686,10 @@ trait ManagesRescheduleAndCashier
                 ->lockForUpdate()
                 ->firstOrFail();
 
-            if (! in_array($booking->status, ['PENDING_PAYMENT', 'LOCKED', 'PENDING'])) {
+            if (in_array($booking->status, ['PENDING_PAYMENT', 'PENDING'], true) || ($booking->status === 'LOCKED' && (int) $booking->reschedule_count < 1)) {
+                throw new HttpException(400, "Booking online {$booking->booking_code} belum dibayar dan hanya bisa dibayar customer lewat pembayaran online. Kalau customer mau bayar di kasir, buat booking walk-in baru.");
+            }
+            if ($booking->status !== 'LOCKED') {
                 throw new HttpException(400, "Booking dengan status {$booking->status} tidak dapat dilunasi via kasir.");
             }
 

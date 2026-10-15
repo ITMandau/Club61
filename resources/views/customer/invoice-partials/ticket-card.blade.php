@@ -23,7 +23,7 @@
             <span class="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wider bg-[#E6DAC0]/20 text-[#F7F0DB] border border-[#E6DAC0]/40">E-Ticket · Padel</span>
             <span :class="statusTone(currentTicket.status) === 'ok' ? 'bg-emerald-500 text-white' : (statusTone(currentTicket.status) === 'bad' ? 'bg-rose-500 text-white' : 'bg-amber-400 text-[#4F2F2A]')"
                   class="px-2.5 py-0.5 rounded-full text-[11px] font-black whitespace-nowrap shadow-sm"
-                  x-text="statusLabel(currentTicket.status)"></span>
+                  x-text="statusLabel(currentTicket.status, currentTicket)"></span>
         </div>
         <h2 class="mt-2 font-display font-black text-xl sm:text-2xl leading-tight break-words" x-text="currentTicket.court ? currentTicket.court.name : 'Court'"></h2>
         <div class="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-[#F7F0DB]/90">
@@ -88,7 +88,7 @@
                     <h4 class="font-bold text-sm" x-text="closedTicketTitle(currentTicket)"></h4>
                     <p class="text-xs text-[#7A5A52] mt-1 leading-relaxed" x-text="closedTicketMessage(currentTicket)"></p>
                 </div>
-                <span class="inline-block px-2.5 py-0.5 rounded-full text-[11px] font-bold border" :class="statusPillClass(currentTicket.status)" x-text="statusLabel(currentTicket.status)"></span>
+                <span class="inline-block px-2.5 py-0.5 rounded-full text-[11px] font-bold border" :class="statusPillClass(currentTicket.status)" x-text="statusLabel(currentTicket.status, currentTicket)"></span>
                 <a href="{{ route('customer.booking') }}"
                    class="bk-tap w-full h-12 rounded-lg flex items-center justify-center gap-2 text-xs font-black uppercase tracking-wider bg-[#662721] hover:bg-[#511D18] text-[#F7F0DB] shadow-md active:scale-[0.98] transition-transform">
                     Book again

@@ -892,23 +892,28 @@ class PadelBookingApiTest extends TestCase
     }
 
     /**
-     * 19. Test Modul Pelunasan Kasir Frontdesk (Cashier Settle).
+     * 19. Booking online yang belum dibayar TIDAK bisa dilunasi di kasir — wajib dibayar online (bayar di kasir = booking
+     * walk-in baru). Dulu bisa, sehingga customer bisa menahan slot lewat booking online tanpa pernah membayar.
+     * Selisih reschedule tetap bisa dilunasi di kasir (lihat ReschedulePaymentTest / PaymentOrchestrationIntegrityTest).
      */
-    public function test_cashier_can_settle_pending_payment_booking(): void
+    public function test_cashier_cannot_settle_unpaid_online_booking(): void
     {
-        $booking = PadelBooking::create([
-            'booking_code' => 'BK-PAD-CASH01',
+        $date = now()->addDays(2)->format('Y-m-d');
+        $make = fn (string $code, string $status, string $hour) => PadelBooking::create([
+            'booking_code' => $code,
             'user_id' => $this->customer->id,
             'court_id' => $this->court1->id,
-            'booking_date' => now()->addDays(2)->format('Y-m-d'),
-            'start_time' => Carbon::parse(now()->addDays(2)->format('Y-m-d') . ' 17:00'),
-            'end_time' => Carbon::parse(now()->addDays(2)->format('Y-m-d') . ' 18:00'),
+            'booking_date' => $date,
+            'start_time' => Carbon::parse("{$date} {$hour}"),
+            'end_time' => Carbon::parse("{$date} {$hour}")->addHour(),
             'court_fee' => 300000,
             'total_amount' => 300000,
-            'status' => 'PENDING_PAYMENT',
+            'status' => $status,
         ]);
+        $unpaid = $make('BK-PAD-CASH01', 'PENDING_PAYMENT', '17:00');
+        $cartHold = $make('BK-PAD-CASH02', 'LOCKED', '19:00'); // keranjang online (belum checkout), bukan selisih reschedule
 
-        $shift = PosCashierShift::create([
+        PosCashierShift::create([
             'shift_number' => 'SFT-PADEL-' . now()->format('Ymd') . '-0001',
             'counter' => 'PADEL_FRONTDESK',
             'status' => 'OPEN',
@@ -919,27 +924,30 @@ class PadelBookingApiTest extends TestCase
         ]);
 
         $service = app(\App\Services\Padel\PadelBookingService::class);
-        $result = $service->adminSettleCashierPayment(
-            bookingId: $booking->id,
-            paymentMethod: 'QRIS',
-            amountReceived: 300000,
-            cashierUser: $this->cashier,
-            paymentProof: ['qris_rrn' => 'RRNTEST0001'],
-        );
+        foreach ([$unpaid, $cartHold] as $booking) {
+            try {
+                $service->adminSettleCashierPayment(
+                    bookingId: $booking->id,
+                    paymentMethod: 'QRIS',
+                    amountReceived: 300000,
+                    cashierUser: $this->cashier,
+                    paymentProof: ['qris_rrn' => 'RRNTEST0001'],
+                );
+                $this->fail("{$booking->booking_code} seharusnya ditolak di kasir");
+            } catch (\Symfony\Component\HttpKernel\Exception\HttpException $e) {
+                $this->assertStringContainsString('hanya bisa dibayar customer lewat pembayaran online', $e->getMessage());
+            }
+            $this->assertSame($booking->status, $booking->fresh()->status);
+        }
 
-        $this->assertTrue($result['success']);
-        $this->assertEquals('PAID', $result['booking']->status);
-        $this->assertNotNull($result['booking']->qr_code_hash);
+        $this->assertDatabaseMissing('payments', ['payment_gateway' => 'CASHIER_POS']);
 
-        // Verifikasi data payment tercatat untuk Analytics Kasir
-        $this->assertDatabaseHas('payments', [
-            'order_id' => $result['booking']->order_id,
-            'pos_shift_id' => $shift->id,
-            'payment_gateway' => 'CASHIER_POS',
-            'payment_method' => 'QRIS',
-            'amount' => 300000,
-            'status' => 'SUCCESS',
-        ]);
+        // Layar kasir: link "?tagihan=" untuk booking online belum dibayar ditolak dengan pemberitahuan.
+        $this->actingAs($this->cashier);
+        \Livewire\Livewire::test(\App\Filament\Pages\BookOfflineCourt::class)
+            ->call('startSettlement', $unpaid->id)
+            ->assertSet('settleBill', null)
+            ->assertNotified('Dibayar Online Saja');
     }
 }
 

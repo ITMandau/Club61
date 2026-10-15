@@ -46,7 +46,7 @@
         </template>
         <div class="flex items-center justify-between gap-3">
             <span class="min-w-0">Status</span>
-            <span class="shrink-0 px-2 py-0.5 rounded-full text-[11px] font-bold border whitespace-nowrap" :class="statusPillClass(ticket.status)" x-text="statusLabel(ticket.status)"></span>
+            <span class="shrink-0 px-2 py-0.5 rounded-full text-[11px] font-bold border whitespace-nowrap" :class="statusPillClass(ticket.status)" x-text="statusLabel(ticket.status, ticket)"></span>
         </div>
 
         <div class="pt-3 border-t border-[#E6DAC0] flex items-center justify-between gap-3">
@@ -98,6 +98,6 @@
     <div class="p-3 rounded-lg bg-[#F7F0DB] border border-[#E6DAC0] flex items-center gap-2.5">
         <span class="w-10 h-7 shrink-0 rounded-md bg-white border border-[#E6DAC0] flex items-center justify-center font-black text-[9px] text-[#662721]" x-text="selectedMethod.badge"></span>
         <span class="flex-1 min-w-0 text-xs font-bold text-[#4F2F2A] truncate" x-text="selectedMethod.code === 'CASH' ? 'Cash at the front desk' : selectedMethod.name"></span>
-        <span class="shrink-0 px-2 py-0.5 rounded-full text-[10px] font-bold border whitespace-nowrap" :class="statusPillClass(ticket.status)" x-text="statusLabel(ticket.status)"></span>
+        <span class="shrink-0 px-2 py-0.5 rounded-full text-[10px] font-bold border whitespace-nowrap" :class="statusPillClass(ticket.status)" x-text="statusLabel(ticket.status, ticket)"></span>
     </div>
 </div>

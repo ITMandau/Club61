@@ -896,8 +896,12 @@
                 return isoString.substring(11, 16) || isoString;
             },
 
-            // Label status yang ramah dibaca (bukan kode mentah seperti PENDING_PAYMENT).
-            statusLabel(status) {
+            // Label status yang ramah dibaca (bukan kode mentah seperti PENDING_PAYMENT). Booking yang dipindah jadwal dan
+            // selisihnya belum lunas tetap LOCKED di database, tapi bagi customer itu "Balance due", bukan "In checkout".
+            statusLabel(status, ticket = null) {
+                if (status === 'LOCKED' && ticket && (ticket.has_pending_delta || Number(ticket.reschedule_count) > 0)) {
+                    return 'Balance due';
+                }
                 const map = {
                     PAID: 'Paid', CONFIRMED: 'Confirmed', CHECKED_IN: 'Checked in', COMPLETED: 'Completed', ACTIVE: 'Active',
                     PENDING: 'Awaiting payment', PENDING_PAYMENT: 'Awaiting payment', UNPAID: 'Unpaid', PARTIALLY_PAID: 'Partly paid',

@@ -256,6 +256,7 @@ class ReschedulePaymentTest extends TestCase
         $schedule = $this->getJson("/api/v1/padel/schedule?date={$this->date}")->assertOk()->json('data.courts.0.slots');
         $slots = collect($schedule)->keyBy('local_start');
         $this->assertNotSame('AVAILABLE', $slots['18:00']['status'], 'Slot hasil reschedule tidak boleh tampil kosong');
+        $this->assertSame('BOOKED', $slots['18:00']['status'], 'Sudah dipesan (menunggu pelunasan selisih) — bukan "In checkout" seperti keranjang');
         $this->assertSame('AVAILABLE', $slots['10:00']['status'], 'Jadwal lama harus kosong lagi');
 
         $other = User::factory()->customer()->create();

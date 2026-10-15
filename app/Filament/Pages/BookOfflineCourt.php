@@ -194,7 +194,16 @@ class BookOfflineCourt extends Page
         }
 
         $booking = PadelBooking::with(['user', 'court', 'order.payments'])->find($bookingId);
-        if (! $booking || ! in_array($booking->status, ['LOCKED', 'PENDING_PAYMENT', 'PENDING'], true)) {
+        // Kasir hanya melunasi selisih reschedule. Booking online yang belum dibayar wajib dibayar online —
+        // customer yang mau bayar di kasir dibuatkan booking walk-in baru (supaya slot tidak bisa ditahan tanpa bayar).
+        if ($booking && (in_array($booking->status, ['PENDING_PAYMENT', 'PENDING'], true) || ($booking->status === 'LOCKED' && (int) $booking->reschedule_count < 1))) {
+            Notification::make()->title('Dibayar Online Saja')
+                ->body("Booking {$booking->booking_code} dibuat online dan belum dibayar — customer menyelesaikannya lewat pembayaran online. Kalau customer mau bayar di kasir, buat booking walk-in baru.")
+                ->warning()->send();
+
+            return;
+        }
+        if (! $booking || $booking->status !== 'LOCKED') {
             Notification::make()->title('Tidak Ada Tagihan')->body('Booking ini tidak punya tagihan yang perlu dilunasi.')->info()->send();
 
             return;
@@ -236,7 +245,7 @@ class BookOfflineCourt extends Page
             'phone' => $booking->user?->phone,
             'court' => $booking->court?->name ?? '-',
             'schedule' => $booking->start_time->format('d M Y, H:i').' - '.$booking->end_time->format('H:i').' WIB',
-            'type' => $booking->status === 'LOCKED' ? 'Selisih Reschedule' : 'Booking Belum Dibayar',
+            'type' => 'Selisih Reschedule',
             'schedule_before' => $pending?->payload_log['schedule_before'] ?? null,
             'amount' => $amount,
         ];
