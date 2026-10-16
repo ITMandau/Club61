@@ -262,6 +262,9 @@
                             // Tagihan Rp0 (ditanggung kuota member / voucher jam corporate): lunas tanpa Midtrans.
                             await this.loadTicket(this.currentTicket.id);
                             this.showNotice('Booking Confirmed', json.message || 'Your booking is fully covered and confirmed.', 'success', 'OK');
+                        } else if (json.driver === 'doku' && json.payment_url) {
+                            // DOKU Checkout: halaman bayar DOKU; setelah bayar DOKU mengembalikan customer ke invoice ini.
+                            window.location.href = json.payment_url;
                         } else if (json.snap_token) {
                             this.lastSnapToken = json.snap_token;
                             this.openSnap(json.snap_token, json.redirect_url);

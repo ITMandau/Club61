@@ -12,6 +12,10 @@ Artisan::command('inspire', function () {
 // Cadangan webhook Midtrans: order yang sudah dibayar tapi notifikasinya tidak sampai tetap lunas otomatis.
 // Mutex 10 menit (default 24 jam): kalau proses mati di tengah jalan (deploy/OOM), rekonsiliasi tidak ikut mati seharian.
 \Illuminate\Support\Facades\Schedule::command('payment:reconcile-midtrans')->everyFiveMinutes()->withoutOverlapping(10);
+// Cadangan webhook DOKU (Modul 27): notifikasi yang belum tuntas & tagihan DOKU yang masih menunggu. Tanpa kunci = dilewati.
+\Illuminate\Support\Facades\Schedule::command('payment:reconcile-doku')->everyFiveMinutes()->withoutOverlapping(10);
+// Jejak notifikasi DOKU disimpan 90 hari.
+\Illuminate\Support\Facades\Schedule::command('model:prune', ['--model' => [\App\Models\Payment\DokuNotification::class]])->dailyAt('02:45')->withoutOverlapping();
 // Bayar Otomatis kasir (QR / VA) yang ditinggal sampai kedaluwarsa → order ikut dibatalkan (bukan UNPAID selamanya).
 \Illuminate\Support\Facades\Schedule::command('pos:sweep-auto-payments')->everyFiveMinutes()->withoutOverlapping(10);
 // Retensi Log Aktivitas (Modul 16) — default simpan 24 bulan, atur lewat AUDIT_RETENTION_MONTHS.

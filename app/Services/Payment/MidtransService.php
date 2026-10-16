@@ -102,8 +102,9 @@ class MidtransService
         }
 
         if (!empty($params['payment_method'])) {
-            // Pemetaan dari katalog resmi (OnlinePaymentCatalog) — satu sumber dengan halaman checkout & validasi.
-            $enabledPayments = OnlinePaymentCatalog::midtransChannels((string) $params['payment_method']);
+            // Pemetaan dari katalog resmi (metode bawaan) / kanal pilihan admin (metode tambahan, hanya kode resmi) —
+            // satu sumber dengan halaman checkout & validasi.
+            $enabledPayments = app(OnlinePaymentMethodService::class)->midtransChannels((string) $params['payment_method']);
 
             if ($enabledPayments) {
                 $payload['enabled_payments'] = $enabledPayments;

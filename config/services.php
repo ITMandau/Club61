@@ -51,4 +51,15 @@ return [
         'verify_webhook_with_status_api' => env('MIDTRANS_VERIFY_WEBHOOK_STATUS', true),
     ],
 
+    // DOKU Checkout (Modul 27). false / kunci kosong = DOKU tidak bisa dipilih untuk tagihan baru (OnlineGatewayRouter);
+    // tagihan DOKU yang sudah ada tetap dicek sampai selesai. Kunci hanya di .env, tidak pernah ditulis ke log.
+    'doku' => [
+        'enabled' => (bool) env('DOKU_ENABLED', false),
+        'client_id' => env('DOKU_CLIENT_ID'),
+        'secret_key' => env('DOKU_SECRET_KEY'),
+        'is_production' => (bool) env('DOKU_IS_PRODUCTION', false),
+        // Opsional: path harus sama dengan URL notifikasi yang didaftarkan di dashboard DOKU.
+        'notification_url' => env('DOKU_NOTIFICATION_URL'),
+    ],
+
 ];

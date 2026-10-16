@@ -112,7 +112,8 @@ class MembershipController extends Controller
 
                 // Sebelum order dibuat: metode harus aktif & sesuai batas nominal (mis. QRIS maks Rp10 juta —
                 // paket Corporate Rp25 juta dulu tetap menawarkan QRIS lalu gagal di Midtrans).
-                $paymentMethod = app(\App\Services\Payment\OnlinePaymentMethodService::class)->assertSelectable($validated['payment_method'], $grandTotal);
+                $onlineGateway = app(\App\Services\Payment\OnlineGatewayRouter::class)->onlineGateway();
+                $paymentMethod = app(\App\Services\Payment\OnlinePaymentMethodService::class)->assertSelectable($validated['payment_method'], $grandTotal, $onlineGateway);
 
                 // Buat Order resmi
                 $order = Order::create([
@@ -168,17 +169,15 @@ class MembershipController extends Controller
                 // menolak (jumlah item ≠ total) dan customer mendapat error 500.
                 $itemDetails = MembershipOnlinePaymentService::itemDetails($order, $plan->name, $calc['tax_name'] ?? null, $calc['admin_fee_name'] ?? null);
 
-                // Panggil Payment Gateway Manager
-                $paymentResult = $this->paymentManager->createPayment([
-                    'order_id' => $orderNumber,
-                    'gross_amount' => (int) $grandTotal,
-                    'item_details' => $itemDetails,
-                    'customer_details' => [
-                        'first_name' => $user->name,
-                        'email' => $user->email,
-                        'phone' => $user->phone ?? '081261617233',
-                    ],
-                    'payment_method' => $paymentMethod,
+                // Midtrans (Snap / mock simulator) atau DOKU Checkout — gateway tagihan baru pilihan admin.
+                $paymentResult = app(\App\Services\Payment\OnlineGatewayRouter::class)->createSession($onlineGateway, [
+                    'order_number' => $orderNumber,
+                    'session_id' => $orderNumber,
+                    'amount' => (int) $grandTotal,
+                    'items' => $itemDetails,
+                    'customer' => ['name' => $user->name, 'email' => $user->email, 'phone' => $user->phone ?? '081261617233'],
+                    'method' => $paymentMethod,
+                    'callback_url' => route('customer.invoice', ['membership_id' => $membership->id]),
                 ]);
 
                 $isMock = $paymentResult['is_mock'] ?? false;
@@ -197,21 +196,19 @@ class MembershipController extends Controller
                 } else {
                     Payment::create([
                         'order_id' => $order->id,
-                        'payment_gateway' => 'MIDTRANS',
-                        'transaction_id' => $orderNumber,
+                        'payment_gateway' => $paymentResult['gateway'],
+                        'transaction_id' => $paymentResult['session_id'],
                         'snap_token' => $paymentResult['snap_token'] ?? null,
                         'payment_url' => $paymentResult['payment_url'] ?? $paymentResult['redirect_url'] ?? null,
                         'amount' => $grandTotal,
                         'payment_method' => strtoupper($paymentMethod),
                         'status' => 'PENDING',
                         // Sesi pertama dicatat supaya "lanjut bayar" dengan metode sama memakai sesi ini lagi.
-                        'payload_log' => \App\Services\Payment\SnapSessionGuard::record(
+                        'payload_log' => \App\Services\Payment\OnlineGatewayRouter::recordSession(
                             is_array($paymentResult['raw'] ?? null) ? $paymentResult['raw'] : [],
-                            $orderNumber,
+                            $paymentResult,
                             $paymentMethod,
                             (float) $grandTotal,
-                            $paymentResult['snap_token'] ?? null,
-                            $paymentResult['redirect_url'] ?? $paymentResult['payment_url'] ?? null,
                             now()->addMinutes(app(\App\Services\Padel\BookingTimeService::class)->paymentWindowMinutes()),
                         ),
                     ]);
@@ -220,7 +217,8 @@ class MembershipController extends Controller
                 return [
                     'order' => $order->fresh(),
                     'membership' => $membership->fresh(['balances', 'plan']),
-                    'payment' => $paymentResult,
+                    // Data internal sesi DOKU (Request-Id untuk pembatalan, token) tidak dikirim ke browser.
+                    'payment' => \Illuminate\Support\Arr::except($paymentResult, ['request_id', 'token_id', 'expires_at']),
                 ];
             });
 
@@ -350,9 +348,9 @@ class MembershipController extends Controller
     {
         $user = $request->user();
 
-        // Polling halaman invoice setelah bayar: tanya Midtrans juga, supaya kartu tetap aktif walau webhook tidak sampai.
+        // Polling halaman invoice setelah bayar: tanya gateway juga, supaya kartu tetap aktif walau webhook tidak sampai.
         if ($request->boolean('verify_payment') && ($pending = $this->onlinePayments->pendingPurchase($user)) && $pending->order) {
-            app(\App\Services\Payment\MidtransReconciliationService::class)->reconcileOrder($pending->order, cacheSeconds: 10);
+            app(\App\Services\Payment\OnlineGatewayRouter::class)->reconcileOrder($pending->order, cacheSeconds: 10);
         }
 
         $purchases = UserMembership::with(['plan', 'order.payments' => fn ($q) => $q->latest()])

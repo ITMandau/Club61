@@ -136,6 +136,8 @@ Route::get('/admin/log-aktivitas/export', \App\Http\Controllers\Admin\ActivityLo
 
 // Signature (Modul 26) — layar TV venue. Link rahasia per layar, tanpa login, hanya baca.
 Route::middleware('throttle:120,1')->group(function () {
+    // Alamat pendek untuk diketik di browser TV (sandbox.club61.id/tv/xxxxxxxxxx). /signature/{token} tetap berlaku.
+    Route::get('/tv/{token}', [\App\Http\Controllers\SignatureController::class, 'player'])->name('signature.tv');
     Route::get('/signature/{token}', [\App\Http\Controllers\SignatureController::class, 'player'])->name('signature.player');
     Route::get('/signature/{token}/payload', [\App\Http\Controllers\SignatureController::class, 'payload'])->name('signature.payload');
     Route::get('/signature/{token}/live', [\App\Http\Controllers\SignatureController::class, 'live'])->name('signature.live');

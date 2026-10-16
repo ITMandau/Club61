@@ -419,16 +419,9 @@ trait ManagesScheduleAndSlots
             return $c;
         });
 
-        // Panggil Midtrans Cancel API secara non-blocking di luar transaksi DB
+        // Batalkan sesi di gateway (best-effort) di luar transaksi DB
         if (! empty($orderNumbersToCancel)) {
-            $midtrans = app(\App\Services\Payment\MidtransService::class);
-            foreach (array_unique($orderNumbersToCancel) as $orderNumber) {
-                try {
-                    $midtrans->cancelTransaction($orderNumber);
-                } catch (\Throwable $e) {
-                    // Best-effort
-                }
-            }
+            app(\App\Services\Payment\OnlineGatewayRouter::class)->cancelOrderSessions($orderNumbersToCancel);
         }
 
         return $count;
@@ -453,7 +446,7 @@ trait ManagesScheduleAndSlots
      */
     private function withoutBookingsPaidAtGateway(\Illuminate\Support\Collection $bookings): \Illuminate\Support\Collection
     {
-        $reconciler = app(\App\Services\Payment\MidtransReconciliationService::class);
+        $reconciler = app(\App\Services\Payment\OnlineGatewayRouter::class);
         $times = app(\App\Services\Padel\BookingTimeService::class);
         $decisions = [];
         $gatewayClosed = [];
@@ -469,14 +462,12 @@ trait ManagesScheduleAndSlots
 
             if (! array_key_exists($booking->order_id, $decisions)) {
                 $order = \App\Models\Pos\Order::find($booking->order_id);
-                $hasGatewayPayment = $order && \App\Models\Pos\Payment::where('order_id', $order->id)
-                    ->where('payment_gateway', 'MIDTRANS')
-                    ->exists();
+                $hasGatewayPayment = $order && $reconciler->hasGatewayPayment($order);
 
                 // Cache 60 detik: fungsi ini ikut terpanggil dari endpoint publik (jadwal/hold slot).
                 $decisions[$booking->order_id] = $hasGatewayPayment
                     ? $reconciler->reconcileOrder($order, cacheSeconds: 60)
-                    : \App\Services\Payment\MidtransReconciliationService::NOT_PAID;
+                    : \App\Services\Payment\OnlineGatewayRouter::NOT_PAID;
 
                 // Dibaca langsung dari database (bukan dari cache): tagihan Midtrans hanya ditutup FAILED setelah
                 // Midtrans bilang expire/cancel untuk semua sesinya — sesi yang sudah final tidak bisa dibayar lagi.
@@ -485,9 +476,9 @@ trait ManagesScheduleAndSlots
             }
 
             return match ($decisions[$booking->order_id]) {
-                \App\Services\Payment\MidtransReconciliationService::PAID => false,
-                \App\Services\Payment\MidtransReconciliationService::PENDING,
-                \App\Services\Payment\MidtransReconciliationService::ERROR => now()->gt($times->paymentDeadlineFor($booking)->copy()->addMinutes(\App\Services\Padel\BookingTimeService::GATEWAY_UNCERTAIN_MAX_MINUTES)),
+                \App\Services\Payment\OnlineGatewayRouter::PAID => false,
+                \App\Services\Payment\OnlineGatewayRouter::PENDING,
+                \App\Services\Payment\OnlineGatewayRouter::ERROR => now()->gt($times->paymentDeadlineFor($booking)->copy()->addMinutes(\App\Services\Padel\BookingTimeService::GATEWAY_UNCERTAIN_MAX_MINUTES)),
                 default => ! $inGrace || $gatewayClosed[$booking->order_id],
             };
         })->values();
@@ -651,16 +642,9 @@ trait ManagesScheduleAndSlots
             );
         }
 
-        // Panggil Midtrans Cancel API di luar DB lock
+        // Batalkan sesi di gateway (best-effort) di luar DB lock
         if (! empty($orderNumbersToCancel)) {
-            $midtrans = app(\App\Services\Payment\MidtransService::class);
-            foreach (array_unique($orderNumbersToCancel) as $orderNumber) {
-                try {
-                    $midtrans->cancelTransaction($orderNumber);
-                } catch (\Throwable $e) {
-                    // Best-effort
-                }
-            }
+            app(\App\Services\Payment\OnlineGatewayRouter::class)->cancelOrderSessions($orderNumbersToCancel);
         }
 
         return $count;

@@ -25,6 +25,8 @@ class Club61PermissionMatrix
         'manage_online_payment_methods',
         // Lama tahan slot & batas bayar online (salah atur = slot ditahan terlalu lama / customer kehabisan waktu bayar).
         'manage_booking_time_limits',
+        // Gateway untuk tagihan baru (Midtrans / DOKU): salah pilih = uang masuk ke akun gateway yang berbeda.
+        'manage_payment_gateway',
         'manage_court_pricing',
         'View:RoleResource',
         'view_roles',
@@ -373,6 +375,7 @@ class Club61PermissionMatrix
                             'View:MetodePembayaranOnline' => 'Akses Halaman Metode Pembayaran Online',
                             'manage_online_payment_methods' => 'Kelola Metode Pembayaran Online (aktif, nama, urutan, batas nominal)',
                             'manage_booking_time_limits' => 'Atur Waktu Tahan Slot & Batas Waktu Bayar Online',
+                            'manage_payment_gateway' => 'Pilih Gateway Pembayaran (Midtrans / DOKU) untuk Online & QR Kasir',
                         ],
                     ],
                     'membership_plans' => [
@@ -422,7 +425,7 @@ class Club61PermissionMatrix
             ],
 
             'signature' => [
-                'title' => '14. Signature (Layar TV Venue)',
+                'title' => '14. Digital Signage',
                 'submodules' => [
                     'signature_screen' => [
                         'label' => 'Konten & Monitoring Layar TV',

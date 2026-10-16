@@ -182,7 +182,7 @@ Owner memilih **Smart TV langsung** (tanpa Android box / mini PC). Konsekuensiny
 
 ## 9. Catatan Teknis untuk Tim Dev
 
-- **Halaman TV:** route publik `/signature/{token}` (token acak panjang, bisa dibuat ulang), tanpa login, hanya baca. Data monitoring lewat endpoint JSON per token dengan **polling 10–15 detik** (tanpa Reverb / WebSocket), throttled.
+- **Halaman TV:** route publik `/tv/{kode}` (alamat pendek yang ditampilkan di admin) dan `/signature/{token}` (alamat lama, tetap berlaku), tanpa login, hanya baca. Sejak 16 Okt 2026 kode baru 10 karakter tanpa huruf/angka yang mirip (`abcdefghjkmnpqrstuvwxyz23456789`) supaya bisa diketik pakai remote; link lama 48 karakter tetap berlaku sampai **Buat Ulang Link**. Tombol OK di remote juga meminta **layar penuh** (Fullscreen API) selain menyalakan suara; preview admin tidak. Data monitoring lewat endpoint JSON per token dengan **polling 10–15 detik** (tanpa Reverb / WebSocket), throttled.
 - **Sumber data monitoring:** jadwal booking padel yang sama dengan layar kasir walk-in (status `PAID` / `CHECKED_IN`, jam main, nama customer) — dihitung di server, hanya field tampilan yang dikirim.
 - **Data:** `signature_screens`, `signature_templates` (layout zona dalam persen + tema), `signature_contents`, `signature_playlist_items`, `signature_running_texts`, `signature_sponsors` (jenis `BRAND` / `CORPORATE` → `sponsor_organizations`), `signature_versions` (snapshot JSON tiap Tayangkan; draft vs published).
 - **Upload:** gambar lewat `SecureImageUploader` (re-encode); video disimpan di disk `public` dengan validasi tipe `video/mp4` & batas ukuran (perlu cek `upload_max_filesize` / `post_max_size` server).

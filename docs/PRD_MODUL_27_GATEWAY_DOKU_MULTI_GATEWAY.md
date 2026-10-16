@@ -7,8 +7,8 @@
 | Metadata Dokumen | Spesifikasi |
 | :--- | :--- |
 | **Kode Dokumen** | `PRD-MODUL-27-GATEWAY-DOKU-MULTI-GATEWAY` |
-| **Versi** | `v0.1.0-DRAFT` |
-| **Status** | **Draft, menunggu review (15 Okt 2026).** Keputusan yang sudah disepakati ada di §3. Asumsi yang wajib dibuktikan di sandbox DOKU sebelum coding Tahap 2 ada di §13. |
+| **Versi** | `v0.3.0` |
+| **Status** | **Tahap 1 & 2 selesai di kode (15 Okt 2026)** — lihat §15b & §15c. Uji bayar sungguhan di sandbox DOKU (asumsi §15) belum dilakukan; DOKU baru boleh dipilih di production setelah itu. Keputusan yang sudah disepakati ada di §3. |
 | **Sumber Requirement** | Aktivasi Midtrans belum selesai. PM memutuskan menambah DOKU sebagai gateway kedua. Belum pasti permanen atau sementara, jadi gateway dibuat **bisa dipilih** dan dua-duanya bisa aktif. |
 | **Dependensi Teknis** | `PRD_MODUL_10_UNIFIED_PAYMENT_GATEWAY.md` (orchestrator & Midtrans), `PRD_MODUL_02_PADEL_BOOKING.md`, `PRD_MODUL_05_MEMBERSHIP_SYSTEM.md`, `PRD_MODUL_11_WALK_IN_OFFLINE_BOOKING.md` (kasir), `PRD_MODUL_17_BUKU_TRANSAKSI_TERPADU.md`, `PRD_MODUL_21_REFUND_NO_SHOW_PEMBAYARAN_BERMASALAH.md`. |
 | **Prinsip Utama** | **KODE DOKU TERPISAH DARI MIDTRANS**; **SATU INTI "TANDAI LUNAS" UNTUK SEMUA GATEWAY**; **TAGIHAN SELALU DIURUS GATEWAY YANG MEMBUATNYA**; **SATU TAGIHAN = SATU SESI BAYAR HIDUP**; **CEGAH DOBEL BAYAR, REFUND HANYA PAYUNG**. |
@@ -165,7 +165,7 @@ Pengarah membaca `payments.payment_gateway` tagihan, lalu meneruskan ke service 
 | BNI VA | `bni_va` | `VIRTUAL_ACCOUNT_BNI` |
 | BRI VA | `bri_va` | `VIRTUAL_ACCOUNT_BRI` |
 | CIMB VA | `cimb_va` | `VIRTUAL_ACCOUNT_BANK_CIMB` |
-| VA Bank Lain (Permata, BSI) | `permata_va`, `other_va` | `VIRTUAL_ACCOUNT_BANK_PERMATA` + kode BSI (dicek di sandbox) |
+| VA Bank Lain (Permata, BSI) | `permata_va`, `other_va` | `VIRTUAL_ACCOUNT_BANK_PERMATA`, `VIRTUAL_ACCOUNT_BANK_SYARIAH_MANDIRI` (BSI, dari dokumentasi resmi) |
 | Kartu kredit | `credit_card` | — (tidak dipakai) |
 
 ---
@@ -230,8 +230,8 @@ Pengarah membaca `payments.payment_gateway` tagihan, lalu meneruskan ke service 
 | Redirect palsu | Redirect tidak pernah dipakai sebagai bukti bayar. |
 | Kunci bocor | Kunci hanya di `.env`. Tidak pernah ditulis ke log / `payload_log` / `doku_notifications`; header `Signature` tidak disimpan. |
 | Salah lingkungan | `DOKU_IS_PRODUCTION` menentukan base URL. Override URL notifikasi tidak berlaku di production (sama dengan Midtrans). |
-| Mode mock | Token mock DOKU hanya di `testing` / `local` tanpa kunci. Server tanpa kunci → checkout ditolak. |
-| Respons DOKU | Tanda tangan respons diverifikasi kalau ada (`Response-Timestamp`). |
+| Mode mock | Tidak ada mock DOKU: DOKU hanya bisa dipilih kalau kunci terisi; tanpa kunci → Midtrans / checkout ditolak (§15c). |
+| Respons DOKU | Tanda tangan respons tidak diverifikasi (rumus tidak terdokumentasi); dipercaya lewat TLS ke domain DOKU + pencocokan invoice & nominal (§15c). |
 
 ### 10.1 Masalah umum payment gateway & penanganannya
 
@@ -334,6 +334,50 @@ Alasan: booking online yang bisa dilunasi di kasir menjadi celah menahan slot ta
 | POS (`?tagihan=` / `startSettlement`) | Booking online belum dibayar (`PENDING_PAYMENT` / `PENDING` / keranjang `LOCKED` tanpa reschedule) → ditolak dengan pemberitahuan "Dibayar Online Saja". Label tagihan selalu "Selisih Reschedule". |
 | Server (`adminSettleCashierPayment`) | Menolak yang sama dengan HTTP 400 — tidak bisa ditembus lewat request langsung. |
 | Test | `PadelBookingApiTest::test_cashier_cannot_settle_unpaid_online_booking` (baru). Dua test lama yang menyimulasikan selisih reschedule dengan `PENDING_PAYMENT` / tanpa `reschedule_count` disamakan dengan data asli `adminRescheduleBooking`. Full suite 838 lulus. |
+
+---
+
+### 15b. Hasil Tahap 1 — pengarah + metode dari admin (15 Okt 2026)
+
+Perilaku Midtrans tidak berubah: semua jalur pengarah diteruskan ke service Midtrans yang sama. Full suite 854 lulus (838 lama + 16 baru).
+
+| Bagian | Isi |
+| :--- | :--- |
+| Pengarah | `app/Services/Payment/OnlineGatewayRouter.php`: `reconcileOrder`, `hasOnlinePaymentAttempt`, `hasGatewayPayment`, `prepareSession`, `settlePreparedSession`, `cancelSessions`, `gatewayLabel`, `onlineGateway()`, `posQrisGateway()`. Hasil beberapa gateway digabung: PAID → PENDING → ERROR → NOT_PAID. Service gateway diambil saat dipanggil (mock / binding tetap terpakai). DOKU belum terpasang → selalu jatuh ke Midtrans walau tersimpan DOKU. |
+| Titik yang dialihkan | Pembersih slot (`ManagesScheduleAndSlots`), kasir (`ManagesRescheduleAndCashier`, `BookOfflineCourt`), Kelola Pemesanan (pesan & tooltip pakai nama gateway), tutup sesi setelah kasir (`PaymentOrchestratorService`), invoice (`PadelBookingController`, `MembershipController`), membership (`MembershipOnlinePaymentService`), checkout padel (`ManagesCheckoutAndPayments`: siapkan sesi & lunasi sesi lama). `SnapSessionGuard::record` / `reusedPayment` tetap dipakai langsung (format sesi Midtrans) — dipilih per gateway di Tahap 2. |
+| Tidak disentuh | `MidtransReconciliationService`, `SnapSessionGuard`, `PaymentWebhookController`, `PosMidtransQrisService`, `payment:reconcile-midtrans`. `MidtransService` hanya 1 baris: kanal Snap dibaca lewat `OnlinePaymentMethodService::midtransChannels` supaya metode tambahan admin terpetakan. |
+| Metode | Migrasi `2026_10_15_100001`: kolom `kind`, `midtrans_channels`, `doku_channels`, `is_custom` (metode bawaan diisi dari katalog; kanal bawaan tetap dibaca dari katalog & dikunci di model). Katalog memuat daftar kode resmi (`MIDTRANS_CHANNELS`, `DOKU_CHANNELS`, dicek dari dokumentasi 15 Okt 2026). Kode DOKU bawaan: QRIS `QRIS`, BCA `VIRTUAL_ACCOUNT_BCA`, Mandiri `VIRTUAL_ACCOUNT_BANK_MANDIRI`, BNI `VIRTUAL_ACCOUNT_BNI`, BRI `VIRTUAL_ACCOUNT_BRI`, CIMB `VIRTUAL_ACCOUNT_BANK_CIMB`, VA Bank Lain `VIRTUAL_ACCOUNT_BANK_PERMATA` + `VIRTUAL_ACCOUNT_BANK_SYARIAH_MANDIRI` (BSI), kartu tidak ada. |
+| Tambah Metode | Tombol **Tambah Metode** (izin `manage_online_payment_methods`): jenis QRIS / VA saja, kanal dari daftar resmi, satu kanal = satu metode, minimal satu kanal, QRIS maks. Rp10 juta, kode otomatis dari nama (mis. `DANAMON_VA`, tidak bentrok dengan kode bawaan / kasir), dibuat **nonaktif**. Kanal metode tambahan bisa diedit; jenisnya tidak. Semua validasi diulang di server. |
+| Penyaringan | Metode tanpa kanal di gateway yang dipakai disembunyikan dari customer (`available`, `forFrontend`, `assertSelectable`) dan dari kasir (`forPos` ikut gateway QR kasir). Nonaktifkan metode ditolak kalau tidak tersisa metode yang bisa dibayar lewat gateway aktif. |
+| Pilihan gateway | Tabel `payment_gateway_settings` (`online_gateway`, `pos_qris_gateway`, migrasi `2026_10_15_100002`), tombol **Gateway Pembayaran** dengan izin baru `manage_payment_gateway` (khusus super_admin), gateway yang belum siap tidak bisa dipilih (alasannya ditampilkan), tercatat di Log Aktivitas (CRITICAL). Kartu info halaman menampilkan gateway yang dipakai. |
+| Config | `config/services.php` blok `doku` + `.env.example` (`DOKU_ENABLED`, `DOKU_CLIENT_ID`, `DOKU_SECRET_KEY`, `DOKU_IS_PRODUCTION`, `DOKU_NOTIFICATION_URL`). Belum dipakai sampai Tahap 2. |
+| Test | `tests/Feature/Payment/OnlineGatewayRouterTest.php` (16 test). Dua test lama hanya disesuaikan teks tooltip ("Cek Status Pembayaran ke Gateway"). |
+
+Catatan untuk Tahap 2: tagihan baru membuat sesi lewat `onlineGateway()` (sekarang `PaymentManager` + Snap), `gatewaysOf()` mengenali tagihan DOKU dari `payment_gateway` / `payload_log.doku_invoice_ids`, `cancelSessions()` menerima gateway DOKU, `assertSelectable` untuk bayar ulang tagihan lama memakai gateway tagihan itu.
+
+### 15c. Hasil Tahap 2 — DOKU online (15 Okt 2026)
+
+Full suite 877 lulus (854 lama + 23 `tests/Feature/Payment/DokuGatewayTest.php`); semua HTTP DOKU di-fake.
+
+| Bagian | Isi |
+| :--- | :--- |
+| File DOKU | `app/Services/Payment/Doku/`: `DokuSignature`, `DokuClient`, `DokuCheckoutService`, `DokuSessionGuard`, `DokuReconciliationService`, `DokuNotificationProcessor`. `DokuNotificationController` (route `POST /api/v1/payments/doku/notification`, throttle 300/menit), model `App\Models\Payment\DokuNotification` + migrasi `2026_10_15_120001`, command `payment:reconcile-doku` (tiap 5 menit) & prune 90 hari, log `storage/logs/doku.log`. |
+| Tanda tangan | Rumus dari dokumentasi + contoh kode PHP Jokul: komponen digabung `\n` tanpa baris baru di akhir, `Digest` hanya untuk request ber-body, body dikirim mentah (Digest = byte yang dikirim). Notifikasi: `Client-Id` harus sama, `Request-Target` = path route kita, `hash_equals`. |
+| Bikin tagihan | Invoice `{nomor order}-DK-{waktu}{acak}` (maks. 64, huruf/angka/strip, tidak dipakai ulang). Satu metode per sesi, `payment_due_date` = sisa waktu bayar, jumlah `line_items` = nominal. Koneksi putus → diulang sekali dengan `Request-Id` sama (DOKU membalas respons asli, 409). Respons harus berisi URL `https://*.doku.com`, selain itu ditolak (503, checkout di-rollback). |
+| Webhook | Verifikasi → simpan (unik `Request-Id`, tanpa data pribadi customer & header Signature) → balas 200 → proses setelah respons. SUCCESS dikonfirmasi ke API status + invoice & nominal dicocokkan; belum sinkron → `retry`, tagihan belum tersimpan → `unmatched`, keduanya diproses ulang rekonsiliasi. EXPIRED hanya menandai sesi aktif (sesi lunas / ganda tidak pernah diturunkan). Nominal beda → `[ALERT]`, tidak dilunasi otomatis. |
+| Anti-dobel | `DokuSessionGuard` meniru `SnapSessionGuard`: metode sama → sesi dipakai lagi; ganti metode → sesi lama dibatalkan (Cancel API dengan `original_request_id`) lalu dibuktikan lewat API status; belum terbukti → 503, tidak ada sesi kedua; sesi lama ternyata lunas → dilunasi, tidak ada sesi baru; maks. 6 sesi; sesi saudara ditutup setelah lunas & disapu 48 jam (bayar ganda → `DUPLICATE` + refund PENDING). |
+| Pengarah | DOKU terpasang. Order tanpa jejak DOKU = Midtrans saja (perilaku lama); order hanya-DOKU tidak ditanyakan ke Midtrans. Tagihan yang sudah punya sesi diurus gateway pembuatnya selama masih bisa dipakai; DOKU dimatikan → bayar ulang pindah ke Midtrans setelah sesi DOKU ditutup & dibuktikan. QR kasir tetap Midtrans (Tahap 3). |
+| Titik yang disambung | Checkout padel, bayar ulang, selisih reschedule, checkout & lanjut bayar membership, pembatalan membership, pembatalan booking / slot hangus (`cancelOrderSessions`), tutup tagihan selisih, pelunasan kasir (sesi DOKU dibatalkan, id kasir sendiri), `ownsGatewayId`, penutupan sesi saudara, Buku Transaksi (nomor VA & kanal DOKU), teks admin / kasir tanpa "Midtrans" tetap. |
+| Halaman customer | DOKU memakai **redirect** ke halaman bayar DOKU (callback ke invoice). Cabang DOKU di checkout diletakkan SEBELUM cabang "tanpa snap_token = sudah lunas". Data internal sesi (`request_id`, token) tidak dikirim ke browser. |
+
+**Keputusan yang berbeda dari draft:**
+- **Redirect, bukan popup.** Dokumentasi DOKU tidak menyediakan callback selesai / tutup untuk popup JS; redirect juga tidak memuat skrip pihak ketiga.
+- **Tidak ada mode mock DOKU.** DOKU hanya bisa dipilih kalau kunci terisi, jadi tidak ada jalur "lunas tanpa uang".
+- **"Catat dulu baru panggil DOKU" (§10.1 no. 3) diganti.** Checkout membuat sesi di dalam transaksi yang mengunci slot; membongkarnya berisiko. Pengganti: notifikasi yang datang sebelum sesi tersimpan disimpan sebagai `unmatched` dan diproses ulang, dan rekonsiliasi status menangkap pembayarannya begitu sesi tersimpan.
+- **VA BTN, BNC & BPD (BJB) dikeluarkan dari daftar kanal DOKU** — Cancel API DOKU tidak mendukungnya, sesi lama tidak bisa ditutup saat ganti metode.
+- **Tanda tangan respons DOKU tidak diverifikasi** — dokumentasi tidak memberi rumus yang bisa diuji; kepercayaan pada respons = TLS ke `api(-sandbox).doku.com` + pencocokan invoice & nominal.
+
+**Wajib dibuktikan di sandbox sebelum production** (§15): status API untuk order yang dibatalkan (kode menganggap tertutup hanya kalau `transaction.status` EXPIRED / `order.status` ORDER_EXPIRED — kalau DOKU melaporkan status lain, ganti metode akan selalu ditolak 503 dan perlu disesuaikan); jawaban API status untuk invoice tidak dikenal (diasumsikan HTTP 404); isi notifikasi QRIS & tiap VA; perilaku `override_notification_url`; tanda tangan lewat Nginx sandbox.
 
 ---
 

@@ -291,6 +291,27 @@ class SignatureTest extends TestCase
         $this->assertContains('Didukung oleh Bank BCA, PT Indosat.', $this->getJson("/signature/{$screen->token}/live")->json('ticker'));
     }
 
+    public function test_screen_link_is_short_enough_to_type_and_old_links_keep_working(): void
+    {
+        $screen = $this->service()->ensureDefaults();
+
+        // Kode baru: 10 karakter, tanpa huruf/angka yang mirip (0/o, 1/l/i) supaya bisa diketik pakai remote.
+        $this->assertMatchesRegularExpression('/^[abcdefghjkmnpqrstuvwxyz23456789]{10}$/', $screen->token);
+        $this->get("/tv/{$screen->token}")->assertOk()->assertSee(route('signature.live', $screen->token), false);
+        $this->actingAs($this->admin);
+        $this->assertSame(url("/tv/{$screen->token}"), Livewire::test(Signature::class)->instance()->playerUrl);
+
+        // Layar yang masih memakai link lama (48 karakter) tetap tampil sampai link dibuat ulang.
+        $legacy = str_repeat('ab12', 12);
+        $screen->update(['token' => $legacy]);
+        $this->get("/signature/{$legacy}")->assertOk();
+        $this->get("/tv/{$legacy}")->assertOk();
+        $this->get('/tv/abc')->assertNotFound();
+
+        // Tombol OK di remote juga meminta layar penuh (bukan cuma suara).
+        $this->get("/tv/{$legacy}")->assertSee('requestFullscreen', false)->assertSee('webkitRequestFullscreen', false);
+    }
+
     public function test_versions_can_be_restored_and_link_regenerated(): void
     {
         $this->actingAs($this->admin);

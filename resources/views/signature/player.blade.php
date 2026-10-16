@@ -840,7 +840,31 @@
         return false;
     }
     function wantsSound(item) { return !!(state.soundUnlocked && state.payload.screen.sound_enabled && item.sound); }
-    function refreshSoundHint() { if (state.soundHint) { state.soundHint.style.display = needsSound() && !state.soundUnlocked ? 'block' : 'none'; } }
+    // Layar penuh: browser hanya mengizinkan setelah ada tombol yang ditekan (OK di remote) — dicoba di setiap tekan
+    // sampai berhasil, termasuk setelah halaman dimuat ulang. Preview admin tidak pernah dibuat layar penuh.
+    function fullscreenRequest() {
+        var root = document.documentElement;
+        return root.requestFullscreen || root.webkitRequestFullscreen || root.mozRequestFullScreen || root.msRequestFullscreen || null;
+    }
+    function isFullscreen() {
+        return !!(document.fullscreenElement || document.webkitFullscreenElement || document.mozFullScreenElement || document.msFullscreenElement);
+    }
+    function needsFullscreen() { return !isPreview && fullscreenRequest() !== null && !isFullscreen(); }
+    function enterFullscreen() {
+        if (!needsFullscreen()) { return; }
+        try {
+            var result = fullscreenRequest().call(document.documentElement);
+            if (result && typeof result.then === 'function') { result.then(null, function () {}); }
+        } catch (e) { /* browser menolak — dicoba lagi di tekan berikutnya */ }
+    }
+    function refreshSoundHint() {
+        if (!state.soundHint) { return; }
+        var sound = needsSound() && !state.soundUnlocked;
+        var full = needsFullscreen();
+        state.soundHint.textContent = sound && full ? 'Tekan OK pada remote untuk layar penuh & suara'
+            : (full ? 'Tekan OK pada remote untuk layar penuh' : 'Tekan OK pada remote untuk mengaktifkan suara');
+        state.soundHint.style.display = sound || full ? 'block' : 'none';
+    }
     function unlockSound() {
         if (state.soundUnlocked) { return; }
         state.soundUnlocked = true;
@@ -854,6 +878,11 @@
     document.addEventListener('keydown', unlockSound);
     document.addEventListener('click', unlockSound);
     document.addEventListener('touchstart', unlockSound);
+    document.addEventListener('keydown', enterFullscreen);
+    document.addEventListener('click', enterFullscreen);
+    document.addEventListener('touchstart', enterFullscreen);
+    document.addEventListener('fullscreenchange', refreshSoundHint);
+    document.addEventListener('webkitfullscreenchange', refreshSoundHint);
 
     // ------------------------------------------------------------------ jam tutup
     function renderClosed() {

@@ -296,27 +296,28 @@ trait ManagesCheckoutAndPayments
                 ];
                 $initialStatus = 'PAID';
             } else {
-                // Metode harus aktif & sesuai batas nominal (mis. QRIS maks Rp10 juta) — dicek di server, bukan cuma
-                // disaring di halaman. Gagal di sini = seluruh checkout di-rollback (booking tetap LOCKED, bisa dicoba lagi).
-                $paymentMethod = app(\App\Services\Payment\OnlinePaymentMethodService::class)->assertSelectable($paymentMethod, (float) $grandTotal);
+                // Gateway tagihan baru = pilihan admin (Midtrans / DOKU), lewat pengarah.
+                $onlineRouter = app(\App\Services\Payment\OnlineGatewayRouter::class);
+                $onlineGateway = $onlineRouter->onlineGateway();
 
-                // Batas bayar dihitung SEJAK KLIK BAYAR dan dipakai dua-duanya: expiry sesi Midtrans & pelepasan slot.
+                // Metode harus aktif, punya kanal di gateway itu & sesuai batas nominal (mis. QRIS maks Rp10 juta) — dicek
+                // di server, bukan cuma disaring di halaman. Gagal di sini = seluruh checkout di-rollback (booking tetap LOCKED).
+                $paymentMethod = app(\App\Services\Payment\OnlinePaymentMethodService::class)->assertSelectable($paymentMethod, (float) $grandTotal, $onlineGateway);
+
+                // Batas bayar dihitung SEJAK KLIK BAYAR dan dipakai dua-duanya: expiry sesi gateway & pelepasan slot.
                 $bookingTimes = app(\App\Services\Padel\BookingTimeService::class);
                 $paymentDeadline = $bookingTimes->paymentExpiresAt();
 
-                // Panggil Payment Manager (Midtrans & Mock Simulator)
-                $paymentManager = app(\App\Services\Payment\PaymentManager::class);
-                $paymentResult = $paymentManager->createPayment([
-                    'order_id' => $orderNumber,
+                // Midtrans (Snap / mock simulator) atau DOKU Checkout.
+                $paymentResult = $onlineRouter->createSession($onlineGateway, [
+                    'order_number' => $orderNumber,
+                    'session_id' => $orderNumber,
                     'expiry_minutes' => $bookingTimes->paymentWindowMinutes(),
-                    'gross_amount' => (int) $grandTotal,
-                    'item_details' => $midtransItems,
-                    'customer_details' => [
-                        'first_name' => $user->name,
-                        'email' => $user->email,
-                        'phone' => $user->phone ?? '081261617233',
-                    ],
-                    'payment_method' => $paymentMethod,
+                    'amount' => (int) $grandTotal,
+                    'items' => $midtransItems,
+                    'customer' => ['name' => $user->name, 'email' => $user->email, 'phone' => $user->phone ?? '081261617233'],
+                    'method' => $paymentMethod,
+                    'callback_url' => route('customer.invoice', ['booking_id' => $bookings->first()->id, 'order_id' => $orderNumber]),
                 ]);
 
                 // Tentukan status awal transaksi: PAID seketika hanya kalau gateway mock aktif (simulator),
@@ -361,24 +362,23 @@ trait ManagesCheckoutAndPayments
                     'payload_log' => $paymentResult['raw'] ?? null,
                 ]);
             } else {
-                // Simpan record pembayaran awal PENDING dengan transaction_id = orderNumber
+                // Simpan record pembayaran awal PENDING dengan transaction_id = id sesi (Midtrans: orderNumber,
+                // DOKU: invoice sesi).
                 Payment::create([
                     'order_id' => $order->id,
-                    'payment_gateway' => 'MIDTRANS',
-                    'transaction_id' => $orderNumber,
+                    'payment_gateway' => $paymentResult['gateway'],
+                    'transaction_id' => $paymentResult['session_id'],
                     'snap_token' => $paymentResult['snap_token'] ?? null,
                     'payment_url' => $paymentResult['payment_url'] ?? $paymentResult['redirect_url'] ?? null,
                     'amount' => (float) $grandTotal,
                     'payment_method' => strtoupper($paymentMethod),
                     'status' => 'PENDING',
                     // Sesi pertama dicatat supaya "Pay Now" berikutnya dengan metode sama memakai sesi ini lagi.
-                    'payload_log' => \App\Services\Payment\SnapSessionGuard::record(
+                    'payload_log' => \App\Services\Payment\OnlineGatewayRouter::recordSession(
                         is_array($paymentResult['raw'] ?? null) ? $paymentResult['raw'] : [],
-                        $orderNumber,
+                        $paymentResult,
                         $paymentMethod,
                         (float) $grandTotal,
-                        $paymentResult['snap_token'] ?? null,
-                        $paymentResult['redirect_url'] ?? $paymentResult['payment_url'] ?? null,
                         $paymentDeadline,
                     ),
                 ]);
@@ -390,7 +390,7 @@ trait ManagesCheckoutAndPayments
                     ? 'Pembayaran berhasil dikonfirmasi. E-Tiket aktif.'
                     : 'Sesi transaksi pembayaran berhasil dibuat. Silakan selesaikan pembayaran.',
                 'data' => [
-                    'driver' => $paymentResult['driver'] ?? $paymentManager->getDefaultDriver(),
+                    'driver' => $paymentResult['driver'] ?? app(\App\Services\Payment\PaymentManager::class)->getDefaultDriver(),
                     'order_id' => $orderNumber,
                     'booking_id' => $primaryBooking->id,
                     'snap_token' => $paymentResult['snap_token'] ?? null,
@@ -525,14 +525,16 @@ trait ManagesCheckoutAndPayments
                 $deltaAmount = (float) $pendingSupplementalPayment->amount;
                 $chargeTotal = max(0, $deltaAmount);
                 $newGatewayFee = 0;
-                $paymentMethod = app(\App\Services\Payment\OnlinePaymentMethodService::class)->assertSelectable($paymentMethod, (float) $chargeTotal);
+                $onlineRouter = app(\App\Services\Payment\OnlineGatewayRouter::class);
+                $onlineGateway = $onlineRouter->targetGatewayFor($pendingSupplementalPayment);
+                $paymentMethod = app(\App\Services\Payment\OnlinePaymentMethodService::class)->assertSelectable($paymentMethod, (float) $chargeTotal, $onlineGateway);
 
-                // Satu tagihan selisih = satu sesi yang bisa dibayar (lihat SnapSessionGuard).
-                $prepared = app(\App\Services\Payment\SnapSessionGuard::class)->prepare($pendingSupplementalPayment, $paymentMethod, (float) $chargeTotal);
-                if ($prepared['action'] === \App\Services\Payment\SnapSessionGuard::PAID) {
+                // Satu tagihan selisih = satu sesi yang bisa dibayar (lihat SnapSessionGuard / DokuSessionGuard).
+                $prepared = $onlineRouter->prepareSession($pendingSupplementalPayment, $paymentMethod, (float) $chargeTotal, $onlineGateway);
+                if ($prepared['action'] === \App\Services\Payment\OnlineGatewayRouter::SESSION_PAID) {
                     return $this->settledDuringRetry($order, $prepared);
                 }
-                if ($prepared['action'] === \App\Services\Payment\SnapSessionGuard::REUSE) {
+                if ($prepared['action'] === \App\Services\Payment\OnlineGatewayRouter::SESSION_REUSE) {
                     return $this->reusedSessionResponse($order, $prepared, (float) $chargeTotal, $paymentMethod, ['gateway_fee' => $newGatewayFee]);
                 }
 
@@ -559,34 +561,30 @@ trait ManagesCheckoutAndPayments
                     ];
                 }
 
-                $paymentManager = app(\App\Services\Payment\PaymentManager::class);
-                $paymentResult = $paymentManager->createPayment([
-                    'order_id' => $suffixedOrderId,
-                    'gross_amount' => (int) $chargeTotal,
-                    'item_details' => $midtransItems,
-                    'customer_details' => [
-                        'first_name' => $user->name,
-                        'email' => $user->email,
-                        'phone' => $user->phone ?? '081261617233',
-                    ],
-                    'payment_method' => $paymentMethod,
+                $paymentResult = $onlineRouter->createSession($onlineGateway, [
+                    'order_number' => $orderNumber,
+                    'session_id' => $suffixedOrderId,
+                    'amount' => (int) $chargeTotal,
+                    'items' => $midtransItems,
+                    'customer' => ['name' => $user->name, 'email' => $user->email, 'phone' => $user->phone ?? '081261617233'],
+                    'method' => $paymentMethod,
+                    'callback_url' => route('customer.invoice', ['booking_id' => $booking->id]),
                 ]);
+                $suffixedOrderId = $paymentResult['session_id'];
 
                 Cache::put("order_bookings:{$suffixedOrderId}", $bookings->pluck('id')->toArray(), 86400);
 
-                $deltaLog = \App\Services\Payment\SnapSessionGuard::record(
+                $deltaLog = \App\Services\Payment\OnlineGatewayRouter::recordSession(
                     is_array($pendingSupplementalPayment->payload_log) ? $pendingSupplementalPayment->payload_log : [],
-                    $suffixedOrderId,
+                    $paymentResult,
                     $paymentMethod,
                     (float) $chargeTotal,
-                    $paymentResult['snap_token'] ?? null,
-                    $paymentResult['redirect_url'] ?? $paymentResult['payment_url'] ?? null,
                     now()->addMinutes(app(\App\Services\Padel\BookingTimeService::class)->paymentWindowMinutes()),
                 );
                 $deltaLog['gateway_fee'] = $newGatewayFee;
 
                 $pendingSupplementalPayment->update([
-                    'payment_gateway' => 'MIDTRANS',
+                    'payment_gateway' => $paymentResult['gateway'],
                     'payment_method' => $paymentMethod,
                     'payload_log' => $deltaLog,
                 ]);
@@ -594,10 +592,12 @@ trait ManagesCheckoutAndPayments
                 return [
                     'success' => true,
                     'is_cash' => false,
+                    'driver' => $paymentResult['driver'] ?? 'midtrans',
                     'order_id' => $order->order_number,
                     'suffixed_order_id' => $suffixedOrderId,
                     'snap_token' => $paymentResult['snap_token'] ?? null,
                     'redirect_url' => $paymentResult['redirect_url'] ?? null,
+                    'payment_url' => $paymentResult['payment_url'] ?? null,
                     'grand_total' => $chargeTotal,
                     'gateway_fee' => $newGatewayFee,
                     'payment_method' => $paymentMethod,
@@ -639,7 +639,7 @@ trait ManagesCheckoutAndPayments
             // Perubahan pajak / biaya di admin hanya berlaku untuk transaksi baru. Dulu dihitung ulang tiap bayar ulang
             // → sesi lama & baru beda nominal, dan membayar sesi lama yang lebih murah tetap mengaktifkan booking.
             $priceLocked = (float) $order->grand_total > 0
-                && Payment::where('order_id', $order->id)->where('status', 'PENDING')->where('payment_gateway', 'MIDTRANS')->exists();
+                && Payment::where('order_id', $order->id)->where('status', 'PENDING')->whereIn('payment_gateway', ['MIDTRANS', 'DOKU'])->exists();
 
             if ($priceLocked) {
                 $taxAmount = (float) $order->tax_amount;
@@ -690,17 +690,18 @@ trait ManagesCheckoutAndPayments
                 ];
             }
 
-            $paymentMethod = app(\App\Services\Payment\OnlinePaymentMethodService::class)->assertSelectable($paymentMethod, (float) $grandTotal);
-
             // Satu tagihan = satu sesi yang bisa dibayar: metode sama → sesi yang sama dipakai lagi; ganti metode →
-            // sesi lama ditutup dulu di Midtrans (lihat SnapSessionGuard). Dulu tiap klik membuka sesi baru dan sesi
-            // lama tetap hidup → customer bisa membayar dua kali.
+            // sesi lama ditutup dulu di gateway-nya (SnapSessionGuard / DokuSessionGuard). Dulu tiap klik membuka sesi
+            // baru dan sesi lama tetap hidup → customer bisa membayar dua kali.
             $pendingPayment = Payment::where('order_id', $order->id)->where('status', 'PENDING')->latest()->lockForUpdate()->first();
-            $prepared = app(\App\Services\Payment\SnapSessionGuard::class)->prepare($pendingPayment, $paymentMethod, (float) $grandTotal);
-            if ($prepared['action'] === \App\Services\Payment\SnapSessionGuard::PAID) {
+            $onlineRouter = app(\App\Services\Payment\OnlineGatewayRouter::class);
+            $onlineGateway = $onlineRouter->targetGatewayFor($pendingPayment);
+            $paymentMethod = app(\App\Services\Payment\OnlinePaymentMethodService::class)->assertSelectable($paymentMethod, (float) $grandTotal, $onlineGateway);
+            $prepared = $onlineRouter->prepareSession($pendingPayment, $paymentMethod, (float) $grandTotal, $onlineGateway);
+            if ($prepared['action'] === \App\Services\Payment\OnlineGatewayRouter::SESSION_PAID) {
                 return $this->settledDuringRetry($order, $prepared);
             }
-            if ($prepared['action'] === \App\Services\Payment\SnapSessionGuard::REUSE) {
+            if ($prepared['action'] === \App\Services\Payment\OnlineGatewayRouter::SESSION_REUSE) {
                 return $this->reusedSessionResponse($order, $prepared, (float) $grandTotal, $paymentMethod, ['service_charge' => $totalServiceCharge, 'gateway_fee' => $totalServiceCharge]);
             }
 
@@ -775,46 +776,44 @@ trait ManagesCheckoutAndPayments
                 $midtransItems[$targetIdx]['price'] += $diff;
             }
 
-            // Panggil Payment Manager
-            $paymentManager = app(\App\Services\Payment\PaymentManager::class);
-            $paymentResult = $paymentManager->createPayment([
-                'order_id' => $suffixedOrderId,
+            // Midtrans (Snap / mock simulator) atau DOKU Checkout — sisa waktu bayar saja (tidak diperpanjang).
+            $paymentResult = $onlineRouter->createSession($onlineGateway, [
+                'order_number' => $orderNumber,
+                'session_id' => $suffixedOrderId,
                 'expiry_minutes' => $expiryMinutes,
-                'gross_amount' => (int) $grandTotal,
-                'item_details' => $midtransItems,
-                'customer_details' => [
-                    'first_name' => $user->name,
-                    'email' => $user->email,
-                    'phone' => $user->phone ?? '081261617233',
-                ],
-                'payment_method' => $paymentMethod,
+                'amount' => (int) $grandTotal,
+                'items' => $midtransItems,
+                'customer' => ['name' => $user->name, 'email' => $user->email, 'phone' => $user->phone ?? '081261617233'],
+                'method' => $paymentMethod,
+                'callback_url' => route('customer.invoice', ['booking_id' => $booking->id, 'order_id' => $order->order_number]),
             ]);
+            $suffixedOrderId = $paymentResult['session_id'];
 
             // Petakan suffixed order id ke bookings di Cache selama 24 jam
             Cache::put("order_bookings:{$suffixedOrderId}", $bookings->pluck('id')->toArray(), 86400);
 
-            // Simpan PERMANEN order_id yang dikirim ke Midtrans — cache di atas hilang dalam 24 jam,
-            // padahal rekonsiliasi (MidtransReconciliationService) butuh id persis ini untuk
-            // menanyakan status pembayaran kalau webhook-nya tidak pernah sampai.
+            // Simpan PERMANEN id sesi yang dikirim ke gateway — cache di atas hilang dalam 24 jam, padahal rekonsiliasi
+            // (Midtrans / DOKU) butuh id persis ini untuk menanyakan status pembayaran kalau webhook-nya tidak sampai.
             $sessionExpiresAt = now()->addMinutes($expiryMinutes);
             if ($pendingPayment) {
-                $log = \App\Services\Payment\SnapSessionGuard::record(
+                $log = \App\Services\Payment\OnlineGatewayRouter::recordSession(
                     is_array($pendingPayment->payload_log) ? $pendingPayment->payload_log : [],
-                    $suffixedOrderId,
+                    $paymentResult,
                     $paymentMethod,
                     (float) $grandTotal,
-                    $paymentResult['snap_token'] ?? null,
-                    $paymentResult['redirect_url'] ?? $paymentResult['payment_url'] ?? null,
                     $sessionExpiresAt,
                 );
                 $updates = ['payload_log' => $log];
-                if ($pendingPayment->payment_gateway === 'MIDTRANS') {
+                if (in_array($pendingPayment->payment_gateway, ['MIDTRANS', 'DOKU'], true)) {
+                    // Tagihan online pindah ke gateway sesi baru (sesi gateway lama sudah ditutup di prepareSession).
+                    $updates['payment_gateway'] = $paymentResult['gateway'];
                     // Nominal ikut grand_total yang baru dihitung ulang di atas (pajak/biaya bisa berubah sejak checkout).
                     // Tagihan kasir TIDAK diubah nominalnya — itu yang ditagih kasir kalau customer batal bayar online.
                     $updates['amount'] = (float) $grandTotal;
                     // Metode yang SEKARANG dipilih customer — dulu tetap metode lama sampai webhook lunas masuk.
                     $updates['payment_method'] = $paymentMethod;
-                    $updates['snap_token'] = $paymentResult['snap_token'] ?? $pendingPayment->snap_token;
+                    // Sesi DOKU tidak punya token Snap — token Snap lama tidak boleh tertinggal di tagihan DOKU.
+                    $updates['snap_token'] = $paymentResult['gateway'] === 'DOKU' ? null : ($paymentResult['snap_token'] ?? $pendingPayment->snap_token);
                     $updates['payment_url'] = $paymentResult['payment_url'] ?? $paymentResult['redirect_url'] ?? $pendingPayment->payment_url;
                 } else {
                     // Tagihan kasir (bayar nanti) tetap tagihan kasir; percobaan bayar online cukup dicatat.
@@ -828,32 +827,26 @@ trait ManagesCheckoutAndPayments
                 // rekonsiliasi tidak pernah menanyakannya dan uang customer tidak terdeteksi.
                 Payment::create([
                     'order_id' => $order->id,
-                    'payment_gateway' => 'MIDTRANS',
+                    'payment_gateway' => $paymentResult['gateway'],
                     'transaction_id' => $suffixedOrderId,
                     'snap_token' => $paymentResult['snap_token'] ?? null,
                     'payment_url' => $paymentResult['payment_url'] ?? $paymentResult['redirect_url'] ?? null,
                     'amount' => (float) $grandTotal,
                     'payment_method' => $paymentMethod,
                     'status' => 'PENDING',
-                    'payload_log' => \App\Services\Payment\SnapSessionGuard::record(
-                        [],
-                        $suffixedOrderId,
-                        $paymentMethod,
-                        (float) $grandTotal,
-                        $paymentResult['snap_token'] ?? null,
-                        $paymentResult['redirect_url'] ?? $paymentResult['payment_url'] ?? null,
-                        $sessionExpiresAt,
-                    ),
+                    'payload_log' => \App\Services\Payment\OnlineGatewayRouter::recordSession([], $paymentResult, $paymentMethod, (float) $grandTotal, $sessionExpiresAt),
                 ]);
             }
 
             return [
                 'success' => true,
                 'is_cash' => false,
+                'driver' => $paymentResult['driver'] ?? 'midtrans',
                 'order_id' => $order->order_number,
                 'suffixed_order_id' => $suffixedOrderId,
                 'snap_token' => $paymentResult['snap_token'] ?? null,
                 'redirect_url' => $paymentResult['redirect_url'] ?? null,
+                'payment_url' => $paymentResult['payment_url'] ?? null,
                 'grand_total' => $grandTotal,
                 'service_charge' => $totalServiceCharge,
                 'gateway_fee' => $totalServiceCharge,
@@ -866,7 +859,7 @@ trait ManagesCheckoutAndPayments
     /** Sesi sebelumnya ternyata sudah dibayar (webhook belum sampai) → lunasi sekarang, jangan buka sesi baru. */
     private function settledDuringRetry(Order $order, array $prepared): array
     {
-        app(\App\Services\Payment\MidtransReconciliationService::class)->settle($order, $prepared['session_id'], $prepared['status'] ?? []);
+        app(\App\Services\Payment\OnlineGatewayRouter::class)->settlePreparedSession($order, $prepared);
 
         return [
             'success' => true,
@@ -879,18 +872,20 @@ trait ManagesCheckoutAndPayments
         ];
     }
 
-    /** Metode & nominal sama, sesi terakhir masih berlaku → kembalikan sesi itu (token Snap yang sama). */
+    /** Metode & nominal sama, sesi terakhir masih berlaku → kembalikan sesi itu (token Snap / halaman DOKU yang sama). */
     private function reusedSessionResponse(Order $order, array $prepared, float $amount, string $paymentMethod, array $extra = []): array
     {
-        $session = $prepared['session'];
+        $reused = \App\Services\Payment\OnlineGatewayRouter::reusedPayment($prepared);
 
         return array_merge([
             'success' => true,
             'is_cash' => false,
+            'driver' => $reused['driver'],
             'order_id' => $order->order_number,
             'suffixed_order_id' => $prepared['session_id'],
-            'snap_token' => $session['snap_token'] ?? null,
-            'redirect_url' => $session['redirect_url'] ?? null,
+            'snap_token' => $reused['snap_token'] ?? null,
+            'redirect_url' => $reused['redirect_url'] ?? null,
+            'payment_url' => $reused['payment_url'] ?? null,
             'grand_total' => $amount,
             'payment_method' => $paymentMethod,
             'reused_session' => true,

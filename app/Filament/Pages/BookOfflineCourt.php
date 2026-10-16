@@ -211,19 +211,20 @@ class BookOfflineCourt extends Page
 
         // Customer sudah / sedang bayar online? Jangan sampai ditagih dua kali.
         $order = $booking->order_id ? \App\Models\Pos\Order::find($booking->order_id) : null;
-        $reconciler = app(\App\Services\Payment\MidtransReconciliationService::class);
+        $reconciler = app(\App\Services\Payment\OnlineGatewayRouter::class);
         if ($order && $reconciler->hasOnlinePaymentAttempt($order)) {
             $online = $reconciler->reconcileOrder($order);
-            if ($online === \App\Services\Payment\MidtransReconciliationService::PAID) {
+            $gatewayName = $reconciler->gatewayLabel($order);
+            if ($online === \App\Services\Payment\OnlineGatewayRouter::PAID) {
                 Notification::make()->title('Sudah Dibayar Online')
-                    ->body("Customer sudah membayar tagihan {$booking->booking_code} via Midtrans. Tiket otomatis aktif — jangan terima pembayaran lagi.")
+                    ->body("Customer sudah membayar tagihan {$booking->booking_code} via {$gatewayName}. Tiket otomatis aktif — jangan terima pembayaran lagi.")
                     ->success()->persistent()->send();
 
                 return;
             }
-            if ($online === \App\Services\Payment\MidtransReconciliationService::PENDING) {
+            if ($online === \App\Services\Payment\OnlineGatewayRouter::PENDING) {
                 Notification::make()->title('Customer Sedang Bayar Online')
-                    ->body('Midtrans masih menunggu pembayaran customer. Minta customer menyelesaikan atau membatalkan pembayaran online-nya dulu supaya tidak ditagih dua kali.')
+                    ->body("{$gatewayName} masih menunggu pembayaran customer. Minta customer menyelesaikan atau membatalkan pembayaran online-nya dulu supaya tidak ditagih dua kali.")
                     ->warning()->persistent()->send();
 
                 return;
@@ -345,7 +346,7 @@ class BookOfflineCourt extends Page
 
         Cache::forget('kelola_pemesanan_tab_counts');
 
-        if (($result['settled_via'] ?? null) === 'MIDTRANS') {
+        if (in_array($result['settled_via'] ?? null, ['MIDTRANS', 'DOKU'], true)) {
             Notification::make()->title('Sudah Dibayar Online')->body($result['message'])->warning()->persistent()->send();
         } else {
             Notification::make()->title('Pelunasan Berhasil')

@@ -191,7 +191,7 @@ class Signature extends Page
 
     public function getPlayerUrlProperty(): string
     {
-        return route('signature.player', SignatureScreen::whereKey($this->screenId)->value('token'));
+        return route('signature.tv', SignatureScreen::whereKey($this->screenId)->value('token'));
     }
 
     public function getVersionsProperty()

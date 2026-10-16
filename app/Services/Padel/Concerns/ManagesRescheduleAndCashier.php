@@ -705,27 +705,32 @@ trait ManagesRescheduleAndCashier
             // Customer pernah membuka pembayaran Midtrans untuk tagihan ini? Tanya Midtrans DULU. Tanpa ini,
             // kasir bisa menerima uang lagi padahal customer sudah membayar online (terjadi: tagihan selisih
             // Rp 309.000 lunas di Midtrans 16:36, lalu di-settle EDC di kasir 16:39 = customer bayar dua kali).
-            $reconciler = app(\App\Services\Payment\MidtransReconciliationService::class);
+            $reconciler = app(\App\Services\Payment\OnlineGatewayRouter::class);
             if ($reconciler->hasOnlinePaymentAttempt($order)) {
+                $paidBefore = Payment::where('order_id', $order->id)->where('status', 'SUCCESS')->pluck('id')->all();
                 $online = $reconciler->reconcileOrder($order);
+                $gatewayName = $reconciler->gatewayLabel($order);
 
-                if ($online === \App\Services\Payment\MidtransReconciliationService::PAID) {
+                if ($online === \App\Services\Payment\OnlineGatewayRouter::PAID) {
                     Cache::forget('kelola_pemesanan_tab_counts');
+                    // Gateway yang benar-benar menerima pelunasan barusan (MIDTRANS / DOKU).
+                    $settledVia = (string) (Payment::where('order_id', $order->id)->where('status', 'SUCCESS')->whereNotIn('id', $paidBefore)
+                        ->whereIn('payment_gateway', ['MIDTRANS', 'DOKU'])->value('payment_gateway') ?? \Illuminate\Support\Arr::last($reconciler->gatewaysOf($order)));
 
                     return [
                         'success' => true,
-                        'settled_via' => 'MIDTRANS',
-                        'message' => 'Customer SUDAH membayar tagihan ini via Midtrans — tiket otomatis aktif. JANGAN terima pembayaran lagi di kasir.',
+                        'settled_via' => $settledVia,
+                        'message' => 'Customer SUDAH membayar tagihan ini via '.\App\Services\Payment\OnlineGatewayRouter::label($settledVia).' — tiket otomatis aktif. JANGAN terima pembayaran lagi di kasir.',
                         'booking' => $booking->fresh(['court', 'order', 'user']),
                     ];
                 }
 
-                if ($online === \App\Services\Payment\MidtransReconciliationService::PENDING) {
-                    throw new HttpException(409, 'Customer sedang membayar tagihan ini lewat Midtrans (menunggu pembayaran). Minta customer menyelesaikan atau membatalkan pembayaran online-nya dulu, supaya tidak ditagih dua kali.');
+                if ($online === \App\Services\Payment\OnlineGatewayRouter::PENDING) {
+                    throw new HttpException(409, "Customer sedang membayar tagihan ini lewat {$gatewayName} (menunggu pembayaran). Minta customer menyelesaikan atau membatalkan pembayaran online-nya dulu, supaya tidak ditagih dua kali.");
                 }
 
-                if ($online === \App\Services\Payment\MidtransReconciliationService::ERROR) {
-                    throw new HttpException(503, 'Status pembayaran online customer belum bisa dipastikan (Midtrans tidak merespons). Coba lagi sebentar — jangan terima pembayaran dulu supaya tidak dobel.');
+                if ($online === \App\Services\Payment\OnlineGatewayRouter::ERROR) {
+                    throw new HttpException(503, "Status pembayaran online customer belum bisa dipastikan ({$gatewayName} tidak merespons). Coba lagi sebentar — jangan terima pembayaran dulu supaya tidak dobel.");
                 }
             }
 
@@ -974,6 +979,7 @@ trait ManagesRescheduleAndCashier
 
         $closed = 0.0;
         $gatewayIds = [];
+        $dokuInvoices = [];
         foreach (Payment::where('order_id', $order->id)->where('status', 'PENDING')->lockForUpdate()->get() as $bill) {
             $log = $this->billPayload($bill);
             if (($log['booking_id'] ?? null) !== $booking->id) {
@@ -981,6 +987,7 @@ trait ManagesRescheduleAndCashier
             }
 
             $gatewayIds = array_merge($gatewayIds, (array) ($log['midtrans_order_ids'] ?? []));
+            $dokuInvoices = array_merge($dokuInvoices, \App\Services\Payment\Doku\DokuSessionGuard::sessionsOf($bill));
             $log['closed_by'] = $closedBy;
             $log['closed_at'] = now()->toIso8601String();
             $bill->update(['status' => 'FAILED', 'payload_log' => $log]);
@@ -1003,12 +1010,12 @@ trait ManagesRescheduleAndCashier
         if ($gatewayIds !== []) {
             // Setelah commit & di luar lock: panggilan HTTP tidak boleh menahan transaksi. Kalau gagal pun aman —
             // pembayaran yang telat masuk ke tagihan FAILED otomatis dibuatkan refund (PaymentOrchestratorService).
-            DB::afterCommit(function () use ($gatewayIds) {
-                $midtrans = app(\App\Services\Payment\MidtransService::class);
-                foreach ($gatewayIds as $id) {
-                    $midtrans->cancelTransaction($id);
-                }
-            });
+            DB::afterCommit(fn () => app(\App\Services\Payment\OnlineGatewayRouter::class)->cancelSessions($gatewayIds));
+        }
+
+        $dokuInvoices = array_values(array_unique($dokuInvoices));
+        if ($dokuInvoices !== []) {
+            DB::afterCommit(fn () => app(\App\Services\Payment\OnlineGatewayRouter::class)->cancelSessions($dokuInvoices, \App\Services\Payment\OnlineGatewayRouter::DOKU));
         }
 
         return $closed;

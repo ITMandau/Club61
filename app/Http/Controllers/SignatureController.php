@@ -80,7 +80,8 @@ class SignatureController extends Controller
 
     private function screen(string $token): SignatureScreen
     {
-        abort_unless(preg_match('/^[a-z0-9]{32,64}$/', $token) === 1, 404);
+        // Kode pendek baru (10 karakter, SignatureService::TOKEN_LENGTH) & link lama 48 karakter sama-sama berlaku.
+        abort_unless(preg_match('/^[a-z0-9]{'.SignatureService::TOKEN_LENGTH.',64}$/', $token) === 1, 404);
 
         return SignatureScreen::with('publishedVersion')->where('token', $token)->firstOrFail();
     }

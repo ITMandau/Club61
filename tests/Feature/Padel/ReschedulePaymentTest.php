@@ -511,7 +511,7 @@ class ReschedulePaymentTest extends TestCase
             ->assertSee('Total Kurang Bayar')
             ->assertSee('Biaya layanan')
             ->assertSee('Bayar di Kasir')
-            ->assertSee('Bayar Online (Midtrans)')
+            ->assertSee('Bayar Online</b>: customer membayar dari halaman invoice-nya', false)
             ->assertDontSee('Nomor RRN')
             ->assertDontSee('Approval Code')
             ->set('rescheduleDeltaChannel', 'CASHIER')
@@ -769,7 +769,7 @@ class ReschedulePaymentTest extends TestCase
         $this->actingAs($this->admin);
 
         Livewire::test(KelolaPemesanan::class)
-            ->assertSeeHtml('Cek Status Pembayaran ke Midtrans')
+            ->assertSeeHtml('Cek Status Pembayaran ke Gateway')
             ->assertSee('Tagihan Selisih');
     }
 

@@ -96,9 +96,11 @@ class LedgerTransactionPresenter
             'Kartu' => ! empty($edc['card_last_4']) ? trim(($edc['card_type'] ?? '').' '.($edc['card_issuer'] ?? '').' •••'.$edc['card_last_4']) : null,
             'Approval Code' => $edc['approval_code'] ?? null,
             'Trace Number' => $edc['trace_number'] ?? null,
-            'Nomor VA' => $log['va_numbers'][0]['va_number'] ?? $log['permata_va_number'] ?? null,
+            'Nomor VA' => $log['va_numbers'][0]['va_number'] ?? $log['permata_va_number'] ?? $log['doku_payment']['va_number'] ?? null,
             'ID Midtrans' => is_string($log['transaction_id'] ?? null) ? $log['transaction_id'] : null,
             'Tipe Midtrans' => is_string($log['payment_type'] ?? null) ? $log['payment_type'] : null,
+            'Kanal DOKU' => $log['doku_payment']['channel'] ?? null,
+            'Approval Code DOKU' => $log['doku_payment']['approval_code'] ?? null,
             'Dilunasi oleh' => $log['settled_by_name'] ?? $log['cashier_name'] ?? null,
         ], fn ($v) => filled($v) && is_scalar($v));
     }

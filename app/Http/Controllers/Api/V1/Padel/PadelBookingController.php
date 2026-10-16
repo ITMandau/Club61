@@ -266,7 +266,7 @@ class PadelBookingController extends Controller
         if ($request->boolean('verify_payment') && $awaitingPayment && $booking->order_id) {
             $order = \App\Models\Pos\Order::find($booking->order_id);
 
-            if ($order && app(\App\Services\Payment\MidtransReconciliationService::class)->reconcileOrder($order, cacheSeconds: 10) === \App\Services\Payment\MidtransReconciliationService::PAID) {
+            if ($order && app(\App\Services\Payment\OnlineGatewayRouter::class)->reconcileOrder($order, cacheSeconds: 10) === \App\Services\Payment\OnlineGatewayRouter::PAID) {
                 $booking = $this->bookingService->getTicket($id, $request->user());
             } elseif ($booking->expires_at && $booking->expires_at->isPast() && (int) $booking->reschedule_count === 0) {
                 // Batas bayar lewat: lepas slot sekarang kalau Midtrans sudah memastikan sesinya berakhir — tidak

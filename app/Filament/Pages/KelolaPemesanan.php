@@ -339,7 +339,7 @@ class KelolaPemesanan extends Page
                 ->title('Reschedule Berhasil')
                 ->body((! empty($result['benefit_dropped_reason']) ? 'Benefit gugur: '.$result['benefit_dropped_reason'].' ' : '').match (true) {
                     ($result['total_charge'] ?? 0) > 0 => 'Jadwal dipindahkan & slot ditahan. Selisih '.$rupiah($result['total_charge']).($this->rescheduleDeltaChannel === 'ONLINE'
-                        ? ' dibayar customer via Midtrans dari halaman invoice-nya.'
+                        ? ' dibayar customer lewat pembayaran online dari halaman invoice-nya.'
                         : ' dilunasi di POS Walk-In (klik slot "Bayar" di grid jadwal) saat customer datang.').' QR & check-in terkunci sampai lunas.',
                     ($result['forfeited'] ?? 0) > 0 => 'Jadwal dipindahkan ke jam lebih murah. Selisih '.$rupiah($result['forfeited']).' hangus sesuai kebijakan (tidak dikembalikan).',
                     default => 'Jadwal reservasi berhasil dipindahkan tanpa selisih biaya.',
@@ -357,7 +357,7 @@ class KelolaPemesanan extends Page
         }
     }
 
-    /** Customer bilang "sudah bayar tapi masih pending": tanya langsung ke Midtrans. */
+    /** Customer bilang "sudah bayar tapi masih pending": tanya langsung ke gateway tagihannya (lewat pengarah). */
     public function checkMidtransPayment(string $bookingId): void
     {
         if ($this->deniedWithout('settle_unpaid_booking')) {
@@ -368,18 +368,20 @@ class KelolaPemesanan extends Page
         $order = $booking->order_id ? \App\Models\Pos\Order::find($booking->order_id) : null;
 
         if (! $order) {
-            Notification::make()->title('Tidak Ada Transaksi Online')->body("Tiket {$booking->booking_code} tidak punya order pembayaran Midtrans.")->warning()->send();
+            Notification::make()->title('Tidak Ada Transaksi Online')->body("Tiket {$booking->booking_code} tidak punya order pembayaran online.")->warning()->send();
 
             return;
         }
 
-        $result = app(\App\Services\Payment\MidtransReconciliationService::class)->reconcileOrder($order);
+        $router = app(\App\Services\Payment\OnlineGatewayRouter::class);
+        $result = $router->reconcileOrder($order);
+        $gatewayName = $router->gatewayLabel($order);
         Cache::forget('kelola_pemesanan_tab_counts');
 
         $booking->refresh();
         $service = app(PadelBookingService::class);
         $openBill = $service->pendingBillForBooking($booking);
-        if ($result === \App\Services\Payment\MidtransReconciliationService::NOT_PAID && $openBill) {
+        if ($result === \App\Services\Payment\OnlineGatewayRouter::NOT_PAID && $openBill) {
             Notification::make()->title('Tagihan Belum Dibayar')
                 ->body("Belum ada pembayaran untuk tagihan {$booking->booking_code} Rp ".number_format((float) $openBill->amount, 0, ',', '.').'. Tagihan masih terbuka: dibayar di POS Walk-In atau via invoice customer.')
                 ->warning()->send();
@@ -388,10 +390,10 @@ class KelolaPemesanan extends Page
         }
 
         [$title, $body, $color] = match ($result) {
-            \App\Services\Payment\MidtransReconciliationService::PAID => ['Pembayaran Terkonfirmasi', "Midtrans mencatat order {$order->order_number} LUNAS. Tiket {$booking->booking_code} ".($booking->status === 'LOCKED' ? 'masih menunggu tagihan lain.' : 'sudah diaktifkan.'), 'success'],
-            \App\Services\Payment\MidtransReconciliationService::PENDING => ['Belum Dibayar', "Midtrans masih menunggu pembayaran order {$order->order_number}.", 'warning'],
-            \App\Services\Payment\MidtransReconciliationService::NOT_PAID => ['Tidak Ada Pembayaran', "Midtrans tidak mencatat pembayaran lunas untuk order {$order->order_number} (kedaluwarsa / dibatalkan / tidak ditemukan).", 'danger'],
-            default => ['Gagal Menghubungi Midtrans', 'Coba lagi beberapa saat, atau cek langsung di dashboard Midtrans.', 'danger'],
+            \App\Services\Payment\OnlineGatewayRouter::PAID => ['Pembayaran Terkonfirmasi', "{$gatewayName} mencatat order {$order->order_number} LUNAS. Tiket {$booking->booking_code} ".($booking->status === 'LOCKED' ? 'masih menunggu tagihan lain.' : 'sudah diaktifkan.'), 'success'],
+            \App\Services\Payment\OnlineGatewayRouter::PENDING => ['Belum Dibayar', "{$gatewayName} masih menunggu pembayaran order {$order->order_number}.", 'warning'],
+            \App\Services\Payment\OnlineGatewayRouter::NOT_PAID => ['Tidak Ada Pembayaran', "{$gatewayName} tidak mencatat pembayaran lunas untuk order {$order->order_number} (kedaluwarsa / dibatalkan / tidak ditemukan).", 'danger'],
+            default => ["Gagal Menghubungi {$gatewayName}", "Coba lagi beberapa saat, atau cek langsung di dashboard {$gatewayName}.", 'danger'],
         };
 
         Notification::make()->title($title)->body($body)->color($color)->send();

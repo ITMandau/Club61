@@ -215,7 +215,7 @@
                                 <div class="c61-actions">
                                     @if ($this->canSettle && $b->order_id && ($b->status === 'PENDING_PAYMENT' || ($b->status === 'LOCKED' && $pendingAmount > 0)))
                                         <button type="button" wire:click="checkMidtransPayment('{{ $b->id }}')"
-                                            wire:loading.attr="disabled" title="Cek Status Pembayaran ke Midtrans"
+                                            wire:loading.attr="disabled" title="Cek Status Pembayaran ke Gateway"
                                             class="c61-icon-btn is-info">
                                             <span wire:loading.remove wire:target="checkMidtransPayment('{{ $b->id }}')">
                                                 <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -558,7 +558,7 @@
                                         </label>
                                         <label style="display: flex; align-items: flex-start; gap: 0.45rem; cursor: pointer; padding: 0.5rem 0.65rem; border-radius: 10px; background: #FFFFFF; border: 1px solid #FECACA;">
                                             <input type="radio" wire:model.live="rescheduleDeltaChannel" value="ONLINE" style="margin-top: 0.15rem; accent-color: #662721;">
-                                            <span><b>Bayar Online (Midtrans)</b>: customer membayar dari halaman invoice-nya.</span>
+                                            <span><b>Bayar Online</b>: customer membayar dari halaman invoice-nya (Midtrans / DOKU sesuai pengaturan).</span>
                                         </label>
                                     </div>
                                     <div style="font-size: 0.65rem; color: #7F1D1D; line-height: 1.4;">

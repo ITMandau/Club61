@@ -1203,6 +1203,17 @@
                                         );
                                     }
                                 });
+                            } else if (data.driver === 'doku') {
+                                // DOKU Checkout: halaman bayar DOKU (server memastikan URL https *.doku.com). Selesai / batal
+                                // bayar → DOKU mengembalikan customer ke halaman invoice. WAJIB sebelum cabang di bawah: sesi
+                                // DOKU tidak punya snap_token, jangan sampai dianggap "sudah lunas".
+                                if (data.payment_url) {
+                                    window.location.href = data.payment_url;
+                                } else {
+                                    this.showNotice('Payment Not Started', 'The payment page could not be opened. Continue payment from the Invoice page.', 'error', 'View Invoice Page', () => {
+                                        this.clearSessionAndRedirect(this.createdBookingId, this.createdOrderId);
+                                    });
+                                }
                             } else if (data.is_mock || !data.snap_token) {
                                 // Simulator lokal / total Rp0 ditanggung kuota-voucher: sudah lunas di server.
                                 this.showPaymentSuccessModal = true;

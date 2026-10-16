@@ -160,9 +160,25 @@ class SignatureService
         return $screen->token;
     }
 
+    /**
+     * Kode link layar: pendek supaya bisa diketik pakai remote TV (/tv/{kode}), tanpa huruf/angka yang mirip (0/o, 1/l/i).
+     * 10 karakter dari 31 simbol ≈ 8×10^14 kemungkinan + throttle 120/menit per IP → tidak bisa ditebak. Link lama
+     * (48 karakter) tetap berlaku sampai "Buat Ulang Link".
+     */
+    public const TOKEN_ALPHABET = 'abcdefghjkmnpqrstuvwxyz23456789';
+
+    public const TOKEN_LENGTH = 10;
+
     private function newToken(): string
     {
-        return Str::lower(Str::random(48));
+        do {
+            $token = '';
+            for ($i = 0; $i < self::TOKEN_LENGTH; $i++) {
+                $token .= self::TOKEN_ALPHABET[random_int(0, strlen(self::TOKEN_ALPHABET) - 1)];
+            }
+        } while (SignatureScreen::where('token', $token)->exists());
+
+        return $token;
     }
 
     // ================================================================== ZONA TEMPLATE
