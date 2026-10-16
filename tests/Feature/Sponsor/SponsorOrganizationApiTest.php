@@ -104,6 +104,18 @@ class SponsorOrganizationApiTest extends TestCase
         $this->assertEquals(5.0, $member->totalRemainingHours());
     }
 
+    public function test_member_name_with_symbols_is_rejected(): void
+    {
+        $pic = User::factory()->create();
+        $this->makeOrganization($pic);
+
+        $this->actingAs($pic)->postJson('/api/v1/sponsor/organization/members', [
+            'name' => 'Budi (Finance)', 'phone' => '081234567891',
+        ])->assertStatus(422)->assertJsonValidationErrors('name');
+
+        $this->assertDatabaseMissing('users', ['phone' => '081234567891']);
+    }
+
     public function test_adding_same_active_member_twice_is_rejected(): void
     {
         $pic = User::factory()->create();

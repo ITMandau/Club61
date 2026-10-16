@@ -9,6 +9,7 @@ use App\Models\Padel\PadelCourt;
 use App\Models\Pos\PosCashierShift;
 use App\Models\User;
 use App\Services\Padel\PadelBookingService;
+use App\Support\PersonName;
 use BackedEnum;
 use BezhanSalleh\FilamentShield\Traits\HasPageShield;
 use Carbon\Carbon;
@@ -1316,6 +1317,15 @@ class BookOfflineCourt extends Page
                 return;
             }
 
+            if (! PersonName::isValid($name)) {
+                Notification::make()
+                    ->title('Nama Tidak Valid')
+                    ->body(PersonName::MESSAGE)
+                    ->warning()
+                    ->send();
+                return;
+            }
+
             if (empty($phone) || strlen(preg_replace('/[^0-9]/', '', $phone)) < 8) {
                 Notification::make()
                     ->title('Nomor Telepon Tidak Valid')
@@ -1573,6 +1583,15 @@ class BookOfflineCourt extends Page
                 Notification::make()
                     ->title('Nama Wajib Diisi')
                     ->body('Silakan masukkan nama pelanggan walk-in.')
+                    ->warning()
+                    ->send();
+                return;
+            }
+
+            if (! PersonName::isValid($name)) {
+                Notification::make()
+                    ->title('Nama Tidak Valid')
+                    ->body(PersonName::MESSAGE)
                     ->warning()
                     ->send();
                 return;

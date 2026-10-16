@@ -11,6 +11,7 @@ use App\Models\User;
 use App\Services\Membership\MembershipOnlinePaymentService;
 use App\Services\Padel\BookingTimeService;
 use App\Services\Padel\PadelBookingService;
+use App\Services\Payment\GatewayCustomer;
 use App\Services\Payment\MidtransReconciliationService;
 use App\Services\Payment\MidtransService;
 use App\Services\Payment\OnlinePaymentMethodService;
@@ -105,11 +106,12 @@ class PosMidtransQrisService
             'order_id' => $sessionId,
             'gross_amount' => $gross,
             'item_details' => [['id' => $order->order_number, 'price' => $gross, 'quantity' => 1, 'name' => mb_substr('Club 61 '.$order->order_number, 0, 50)]],
-            'customer_details' => array_filter([
-                'first_name' => $order->user?->name ?? $order->customer_name,
+            // Order F&B tanpa nama → customer_details kosong (tidak dikirim), sama seperti sebelumnya.
+            'customer_details' => GatewayCustomer::forMidtrans([
+                'name' => $order->user?->name ?? $order->customer_name,
                 'email' => $order->user?->email,
                 'phone' => $order->user?->phone,
-            ]),
+            ], fallbackName: null),
             'payment_method' => $method,
             'expiry_minutes' => $minutes,
         ]);

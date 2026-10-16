@@ -997,7 +997,7 @@ trait ManagesCheckoutAndPayments
             : (empty($cleanPhone) ? '123456' : str_pad($cleanPhone, 6, '0', STR_PAD_LEFT));
 
         return User::create([
-            'name' => trim($name),
+            'name' => \App\Support\PersonName::clean($name),
             'phone' => $cleanPhone,
             'email' => $fallbackEmail,
             'password' => Hash::make($rawPassword),

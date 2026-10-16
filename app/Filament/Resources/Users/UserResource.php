@@ -44,7 +44,9 @@ class UserResource extends Resource
                 \Filament\Forms\Components\TextInput::make('name')
                     ->label('Nama Lengkap')
                     ->required()
-                    ->maxLength(100),
+                    ->maxLength(\App\Support\PersonName::MAX_LENGTH)
+                    ->rules([new \App\Rules\ValidPersonName])
+                    ->dehydrateStateUsing(fn (?string $state) => \App\Support\PersonName::clean($state)),
 
                 \Filament\Forms\Components\TextInput::make('email')
                     ->label('Alamat Email')

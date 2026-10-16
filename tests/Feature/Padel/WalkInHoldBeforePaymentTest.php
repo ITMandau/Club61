@@ -63,7 +63,7 @@ class WalkInHoldBeforePaymentTest extends TestCase
             ->set('bookingDate', $this->date)
             ->set('selectedSlots', $slots)
             ->set('customerMode', 'quick_create')
-            ->set('walkInName', 'Budi Walk-In')
+            ->set('walkInName', 'Budi Walk In')
             ->set('walkInPhone', '081299887766');
     }
 
@@ -97,6 +97,15 @@ class WalkInHoldBeforePaymentTest extends TestCase
         $this->onlineHold('14');
     }
 
+    public function test_walk_in_name_with_symbols_is_refused_before_any_slot_is_held(): void
+    {
+        $this->pos($this->slot('14'))->set('walkInName', 'Budi (Walk-In)')->call('proceedToPayment')
+            ->assertSet('posStep', 'selection')
+            ->assertNotified('Nama Tidak Valid');
+
+        $this->assertSame(0, PadelBooking::count());
+    }
+
     public function test_payment_turns_the_held_slot_into_the_customers_booking(): void
     {
         $page = $this->pos($this->slot('14'))->call('proceedToPayment');
@@ -107,7 +116,7 @@ class WalkInHoldBeforePaymentTest extends TestCase
         $this->assertSame(1, PadelBooking::count(), 'tahanan dipakai, bukan dibuat booking baru');
         $booking = $held->fresh();
         $this->assertSame('PAID', $booking->status);
-        $this->assertSame('Budi Walk-In', $booking->user->name);
+        $this->assertSame('Budi Walk In', $booking->user->name);
         $this->assertNotSame($held->qr_code_hash, $booking->qr_code_hash, 'kode QR tiket mengikuti pemilik barunya');
         $this->assertSame('PAID', Order::sole()->payment_status);
     }
@@ -169,7 +178,7 @@ class WalkInHoldBeforePaymentTest extends TestCase
         $this->payByEdc($page)->assertSet('posStep', 'receipt');
 
         $this->assertSame(1, PadelBooking::where('status', 'PAID')->count());
-        $this->assertSame('Budi Walk-In', PadelBooking::where('status', 'PAID')->sole()->user->name);
+        $this->assertSame('Budi Walk In', PadelBooking::where('status', 'PAID')->sole()->user->name);
     }
 
     public function test_expired_hold_taken_by_someone_else_is_refused_before_recording_payment(): void

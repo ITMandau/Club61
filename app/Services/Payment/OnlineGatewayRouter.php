@@ -299,11 +299,7 @@ class OnlineGatewayRouter
             'order_id' => $p['session_id'],
             'gross_amount' => (int) $p['amount'],
             'item_details' => $p['items'],
-            'customer_details' => [
-                'first_name' => $p['customer']['name'] ?? null,
-                'email' => $p['customer']['email'] ?? null,
-                'phone' => $p['customer']['phone'] ?? null,
-            ],
+            'customer_details' => GatewayCustomer::forMidtrans($p['customer'] ?? []),
             'payment_method' => $p['method'],
         ];
         if (isset($p['expiry_minutes'])) {

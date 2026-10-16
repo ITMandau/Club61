@@ -15,6 +15,7 @@ use App\Services\Padel\PadelBookingService;
 use App\Services\Payment\Doku\DokuCheckoutService;
 use App\Services\Payment\Doku\DokuSessionGuard;
 use App\Services\Payment\Doku\DokuSignature;
+use App\Services\Payment\GatewayCustomer;
 use App\Services\Payment\OnlineGatewayRouter;
 use App\Services\Permission\Club61PermissionMatrix;
 use Carbon\Carbon;
@@ -257,13 +258,13 @@ class DokuGatewayTest extends TestCase
             && $r->data()['customer'] === ['name' => 'Andi Wijaya Customer', 'email' => 'budi@example.test', 'phone' => '6281234567890']);
         $this->assertSame('Andi Wijaya (Customer)', $this->customer->fresh()->name, 'Nama di database tidak diubah');
 
-        $this->assertSame('Muh Irham', DokuCheckoutService::customerName('Muh. Irham'));
-        $this->assertSame('Siti Nurhaliza', DokuCheckoutService::customerName("  Siti  😀 Nurhaliza 123 "));
-        $this->assertSame('Pelanggan Club', DokuCheckoutService::customerName('(123)'));
-        $this->assertSame('6281122334455', DokuCheckoutService::customerPhone('+62 811-2233-4455'));
-        $this->assertSame('6281122334455', DokuCheckoutService::customerPhone('81122334455'));
-        $this->assertNull(DokuCheckoutService::customerPhone('12345'), 'Nomor tidak valid tidak dikirim');
-        $this->assertNull(DokuCheckoutService::customerEmail('bukan-email'));
+        $this->assertSame('Muh Irham', GatewayCustomer::name('Muh. Irham'));
+        $this->assertSame('Siti Nurhaliza', GatewayCustomer::name("  Siti  😀 Nurhaliza 123 "));
+        $this->assertSame('Pelanggan Club', GatewayCustomer::name('(123)'));
+        $this->assertSame('6281122334455', GatewayCustomer::phone('+62 811-2233-4455'));
+        $this->assertSame('6281122334455', GatewayCustomer::phone('81122334455'));
+        $this->assertNull(GatewayCustomer::phone('12345'), 'Nomor tidak valid tidak dikirim');
+        $this->assertNull(GatewayCustomer::email('bukan-email'));
     }
 
     public function test_checkout_is_rolled_back_when_doku_fails_or_returns_a_foreign_url(): void

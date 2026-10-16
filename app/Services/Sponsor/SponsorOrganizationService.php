@@ -8,6 +8,7 @@ use App\Models\Sponsor\SponsorOrganization;
 use App\Models\Sponsor\SponsorOrganizationMember;
 use App\Models\User;
 use App\Services\Membership\MembershipBalanceService;
+use App\Support\PersonName;
 use App\Support\PhoneNumber;
 use DomainException;
 use Illuminate\Support\Facades\DB;
@@ -415,6 +416,11 @@ class SponsorOrganizationService
                     continue;
                 }
 
+                if (! PersonName::isValid($name)) {
+                    $result['failed_rows'][] = ['row' => $rowNumber, 'reason' => "Nama \"{$name}\" tidak valid. ".PersonName::MESSAGE];
+                    continue;
+                }
+
                 $hours = null;
                 if ($hoursRaw !== '') {
                     if (! is_numeric($hoursRaw) || (float) $hoursRaw <= 0) {
@@ -509,8 +515,12 @@ class SponsorOrganizationService
             return $user;
         }
 
+        if (! PersonName::isValid($name)) {
+            throw new DomainException(PersonName::MESSAGE);
+        }
+
         return User::create([
-            'name' => $name,
+            'name' => PersonName::clean($name),
             'email' => 'corp_'.$normalizedPhone.'@club61.id',
             'phone' => $normalizedPhone,
             'password' => Hash::make(substr($normalizedPhone, -6)),

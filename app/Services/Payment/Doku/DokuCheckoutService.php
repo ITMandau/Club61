@@ -3,6 +3,7 @@
 namespace App\Services\Payment\Doku;
 
 use App\Exceptions\PaymentGatewayUnavailableException;
+use App\Services\Payment\GatewayCustomer;
 use Carbon\CarbonInterface;
 use Illuminate\Support\Carbon;
 use InvalidArgumentException;
@@ -108,11 +109,7 @@ class DokuCheckoutService
             throw new PaymentGatewayUnavailableException();
         }
 
-        $customer = array_filter([
-            'name' => self::customerName($params['customer']['name'] ?? null),
-            'email' => self::customerEmail($params['customer']['email'] ?? null),
-            'phone' => self::customerPhone($params['customer']['phone'] ?? null),
-        ], fn ($v) => filled($v));
+        $customer = GatewayCustomer::clean($params['customer'] ?? []);
 
         $payload = [
             'order' => [
@@ -259,40 +256,6 @@ class DokuCheckoutService
         ]);
 
         return $response !== null && $response['status'] >= 200 && $response['status'] < 300;
-    }
-
-    /**
-     * customer.name DOKU hanya menerima huruf ("alphabetic", dokumentasi Checkout). Nama di Club 61 bisa berisi tanda
-     * kurung / angka / titik (mis. "Andi Wijaya (Customer)", "Muh. Irham") → DOKU menolak membuat VA ("Invalid
-     * customerName Format"). Yang dikirim ke DOKU hanya huruf & spasi; nama di database tidak diubah.
-     */
-    public static function customerName(?string $name): string
-    {
-        $clean = trim(preg_replace('/\s+/u', ' ', preg_replace('/[^\p{L}\s]+/u', ' ', (string) $name)));
-
-        return $clean !== '' ? mb_substr($clean, 0, 255) : 'Pelanggan Club';
-    }
-
-    /** customer.phone DOKU: "{calling_code}{phone_number}", mis. 6281122334455, maks. 16. Tidak valid → tidak dikirim. */
-    public static function customerPhone(?string $phone): ?string
-    {
-        $digits = preg_replace('/\D+/', '', (string) $phone);
-        $digits = match (true) {
-            str_starts_with($digits, '62') => $digits,
-            str_starts_with($digits, '0') => '62'.substr($digits, 1),
-            str_starts_with($digits, '8') => '62'.$digits,
-            default => $digits,
-        };
-
-        return strlen($digits) >= 10 && strlen($digits) <= 16 && str_starts_with($digits, '62') ? $digits : null;
-    }
-
-    /** customer.email maks. 128; email tidak valid tidak dikirim (lebih baik kosong daripada tagihan ditolak). */
-    public static function customerEmail(?string $email): ?string
-    {
-        $email = trim((string) $email);
-
-        return $email !== '' && strlen($email) <= 128 && filter_var($email, FILTER_VALIDATE_EMAIL) ? $email : null;
     }
 
     /** URL halaman bayar yang boleh diberikan ke customer: https + domain doku.com. */
