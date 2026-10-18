@@ -245,6 +245,29 @@ class CompanyProfileContentTest extends TestCase
         $response->assertSee('https://instagram.com/club61', false);
     }
 
+    public function test_customer_home_and_my_club_show_address_and_hours_from_website_content(): void
+    {
+        $settings = CompanyProfileSetting::current();
+        $settings->update(['address_line' => 'Jl. Uji Alamat No. 7, Medan', 'operating_hours_text' => 'Buka 08:00 – 22:00', 'operating_hours_text_en' => 'Open 08:00 – 22:00']);
+        $this->actingAs(User::factory()->customer()->create());
+
+        foreach (['/dashboard', '/my-club'] as $url) {
+            $this->get($url)->assertOk()
+                ->assertSee('Jl. Uji Alamat No. 7, Medan')
+                ->assertSee('Open 08:00 – 22:00')          // portal customer berbahasa Inggris → teks EN
+                ->assertDontSee('Buka 08:00 – 22:00')
+                ->assertDontSee('06:00–23:00 WIB')          // teks lama yang tertulis di kode
+                ->assertDontSee('06:00 - 23:00 WIB')
+                ->assertDontSee('Indosat Building, Jl. Perintis Kemerdekaan No. 39, Medan, North Sumatra');
+        }
+
+        // Teks EN kosong → pakai teks ID; dua-duanya kosong → baris jam tidak tampil.
+        $settings->update(['operating_hours_text_en' => null]);
+        $this->get('/dashboard')->assertSee('Buka 08:00 – 22:00');
+        $settings->update(['operating_hours_text' => '']);
+        $this->get('/dashboard')->assertOk()->assertDontSee('>Hours</dt>', false);
+    }
+
     public function test_footer_social_links_render_as_builtin_icons_not_text(): void
     {
         $settings = CompanyProfileSetting::current();

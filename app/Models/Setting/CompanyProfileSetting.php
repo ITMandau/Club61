@@ -103,6 +103,25 @@ class CompanyProfileSetting extends Model
     }
 
     /**
+     * Alamat & teks jam buka untuk portal customer (Home, My Club) — sumbernya sama dengan halaman depan (Konten Website
+     * → Fakta Venue), bukan tulisan di kode. Portal customer berbahasa Inggris: jam pakai teks EN, kosong = teks ID.
+     * Teks ini hanya tampilan; jam slot booking diatur per lapangan di Master Data & Tarif.
+     *
+     * @return array{address: string, hours: string}
+     */
+    public static function venueInfo(): array
+    {
+        $settings = rescue(fn () => self::current(), null, false);
+        $address = trim((string) ($settings?->address_line ?? ''));
+        $hours = trim((string) ($settings?->operating_hours_text_en ?? ''));
+
+        return [
+            'address' => $address !== '' ? $address : self::DEFAULT_ADDRESS,
+            'hours' => $hours !== '' ? $hours : trim((string) ($settings?->operating_hours_text ?? '')),
+        ];
+    }
+
+    /**
      * Ambil singleton record konten company profile dengan proteksi cache.
      */
     public static function current(): self

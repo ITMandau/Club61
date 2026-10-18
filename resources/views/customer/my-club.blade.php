@@ -47,11 +47,18 @@
                         Medan's padel venue at Gedung Indosat: 3 international-standard padel courts, a sauna, and a specialty cafe lounge.
                     </p>
 
+                    {{-- Alamat & jam dari Konten Website → Fakta Venue (sama dengan halaman depan). --}}
+                    {{-- Sengaja bentuk blok (bukan versi satu baris dengan kurung): versi satu baris yang muncul sebelum blok PHP lain merusak kompilasi Blade. --}}
+                    @php
+                        $venue = \App\Models\Setting\CompanyProfileSetting::venueInfo();
+                    @endphp
                     <div class="mt-6 flex flex-wrap items-center gap-3">
-                        <div class="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-white/10 border border-white/20 text-xs font-bold text-white">
-                            <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-                            Venue Open Daily: 06:00 - 23:00 WIB
-                        </div>
+                        @if($venue['hours'] !== '')
+                            <div class="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-white/10 border border-white/20 text-xs font-bold text-white">
+                                <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                                {{ $venue['hours'] }}
+                            </div>
+                        @endif
                         {{-- Tombol WhatsApp dihapus — kontak lewat tombol WhatsApp melayang (satu tombol untuk semua). --}}
                     </div>
                 </div>
@@ -138,8 +145,7 @@
                     </div>
                     <div>
                         <div class="text-[10px] uppercase font-extrabold tracking-wider text-[#662721]">Operating Hours</div>
-                        <div class="font-display font-black text-base text-[#4F2F2A] mt-0.5">Monday &ndash; Sunday (Daily)</div>
-                        <div class="text-xs text-[#7A5A52] mt-1 font-mono font-bold">06:00 &ndash; 23:00 WIB</div>
+                        <div class="font-display font-black text-base text-[#4F2F2A] mt-0.5">{{ $venue['hours'] !== '' ? $venue['hours'] : 'See front desk' }}</div>
                     </div>
                 </div>
 
@@ -153,7 +159,7 @@
                     <div>
                         <div class="text-[10px] uppercase font-extrabold tracking-wider text-[#662721]">Prime Location</div>
                         <div class="font-display font-black text-base text-[#4F2F2A] mt-0.5">Club 61 Padel Court Medan</div>
-                        <div class="text-xs text-[#7A5A52] mt-1">Indosat Building, Jl. Perintis Kemerdekaan No. 39, Medan, North Sumatra</div>
+                        <div class="text-xs text-[#7A5A52] mt-1">{{ $venue['address'] }}</div>
                     </div>
                 </div>
 

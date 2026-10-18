@@ -108,22 +108,23 @@
                                     <span class="block text-[10px] text-[#7A5A52] truncate">Venue &amp; plans</span>
                                 </span>
                             </a>
-                            <button type="button"
-                                    @click="showNotice('Value Pack Passes', 'Buy 10 Hours of Padel and receive 2 Hours complimentary Sauna! Ask us using the WhatsApp button at the bottom right.', 'info')"
+                            {{-- Value Pack & Tournaments belum ada modulnya — dulu popup promo/turnamen karangan, sekarang "Coming soon". --}}
+                            <button type="button" data-coming-soon="value-pack"
+                                    @click="showNotice('Value Pack — coming soon', 'Prepaid court-hour packs are on the way. We\'ll let you know here as soon as they\'re available.', 'info')"
                                     class="{{ $tileClass }}">
                                 <span class="{{ $iconClass }}"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg></span>
                                 <span class="min-w-0">
                                     <span class="block text-xs font-extrabold text-[#4F2F2A] truncate">Value Pack</span>
-                                    <span class="block text-[10px] text-[#7A5A52] truncate">Hourly pass</span>
+                                    <span class="inline-block mt-0.5 px-1.5 py-px rounded-full text-[9px] font-extrabold uppercase tracking-wider bg-amber-100 text-amber-800 border border-amber-200 whitespace-nowrap">Coming soon</span>
                                 </span>
                             </button>
-                            <button type="button"
-                                    @click="showNotice('Upcoming Tournament', 'CLUB 61 Padel Championship 2026! Prize pool Rp 50.000.000. Registration open for members — ask us using the WhatsApp button at the bottom right.', 'info')"
+                            <button type="button" data-coming-soon="tournaments"
+                                    @click="showNotice('Tournaments — coming soon', 'Club 61 tournaments and events are being prepared. Registration will open here once the first event is announced.', 'info')"
                                     class="{{ $tileClass }}">
                                 <span class="{{ $iconClass }}"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" /></svg></span>
                                 <span class="min-w-0">
                                     <span class="block text-xs font-extrabold text-[#4F2F2A] truncate">Tournaments</span>
-                                    <span class="block text-[10px] text-[#7A5A52] truncate">Competitions</span>
+                                    <span class="inline-block mt-0.5 px-1.5 py-px rounded-full text-[9px] font-extrabold uppercase tracking-wider bg-amber-100 text-amber-800 border border-amber-200 whitespace-nowrap">Coming soon</span>
                                 </span>
                             </button>
                         </div>
@@ -315,9 +316,10 @@
                     <section class="relative overflow-hidden rounded-xl p-5 text-white shadow-lg border border-[#E6DAC0]/70"
                              style="background: #511D18;">
                         <div class="relative z-10 space-y-2.5">
-                            <span class="inline-block px-2.5 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider bg-[#F7F0DB]/20 text-[#F7F0DB] border border-[#F7F0DB]/40">VIP Privilege</span>
-                            <h3 class="font-display text-lg font-black leading-tight">Upgrade to Diamond Club</h3>
-                            <p class="text-xs text-emerald-100/85 leading-relaxed">Priority advance booking, court rental discounts and weekly sauna access.</p>
+                            {{-- Dulu "Upgrade to Diamond Club" + priority booking (paket & fitur itu tidak ada). Isi mengikuti paket asli. --}}
+                            <span class="inline-block px-2.5 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider bg-[#F7F0DB]/20 text-[#F7F0DB] border border-[#F7F0DB]/40">Membership</span>
+                            <h3 class="font-display text-lg font-black leading-tight">Club 61 Membership</h3>
+                            <p class="text-xs text-emerald-100/85 leading-relaxed">Court-hour quotas, member prices and sauna access. See every plan and its benefits.</p>
                             {{-- Dulu popup + WhatsApp (nomor tertulis di kode). Modul 23: langsung ke halaman Membership. --}}
                             <a href="{{ route('customer.membership') }}"
                                class="bk-tap w-full h-11 rounded-xl flex items-center justify-center text-xs font-black uppercase tracking-wider whitespace-nowrap text-[#4F2F2A] bg-[#F7F0DB] hover:bg-white shadow-md active:scale-[0.98] transition-transform">
@@ -330,8 +332,12 @@
                     <section class="rounded-xl bg-white/90 border border-[#E6DAC0] p-4 sm:p-5 text-xs">
                         <div class="font-bold text-sm mb-2.5">Club 61 Padel Court Medan</div>
                         <dl class="space-y-2 text-[#7A5A52] leading-relaxed">
-                            <div class="flex gap-3"><dt class="w-20 shrink-0 font-bold text-[#4F2F2A]">Address</dt><dd class="min-w-0">Gedung Indosat, Jl. Perintis Kemerdekaan No. 39, Medan</dd></div>
-                            <div class="flex gap-3"><dt class="w-20 shrink-0 font-bold text-[#4F2F2A]">Hours</dt><dd class="min-w-0">Daily · 06:00–23:00 WIB</dd></div>
+                            {{-- Alamat & jam dari Konten Website → Fakta Venue (sama dengan halaman depan). --}}
+                            @php($venue = \App\Models\Setting\CompanyProfileSetting::venueInfo())
+                            <div class="flex gap-3"><dt class="w-20 shrink-0 font-bold text-[#4F2F2A]">Address</dt><dd class="min-w-0">{{ $venue['address'] }}</dd></div>
+                            @if($venue['hours'] !== '')
+                                <div class="flex gap-3"><dt class="w-20 shrink-0 font-bold text-[#4F2F2A]">Hours</dt><dd class="min-w-0">{{ $venue['hours'] }}</dd></div>
+                            @endif
                             @php($venueWa = trim((string) rescue(fn () => \App\Models\Setting\CompanyProfileSetting::current()->whatsapp_number, '', false)))
                             @if($venueWa !== '')
                                 <div class="flex gap-3"><dt class="w-20 shrink-0 font-bold text-[#4F2F2A]">WhatsApp</dt><dd class="min-w-0">{{ $venueWa }}</dd></div>

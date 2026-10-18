@@ -140,7 +140,7 @@
         <div class="c61-card-head">
             <div>
                 <div class="c61-card-title">2. Fakta Venue</div>
-                <div class="c61-card-sub">Dipakai ulang persis sama di halaman depan DAN panel kiri halaman login — sumbernya cuma satu di sini.</div>
+                <div class="c61-card-sub">Dipakai ulang persis sama di halaman depan, panel kiri halaman login, DAN portal customer (Home &amp; My Club: alamat + jam buka EN) — sumbernya cuma satu di sini.</div>
             </div>
         </div>
 
@@ -157,6 +157,9 @@
                 <div class="kkw-field kkw-col-2">
                     <label class="c61-label">Jam Operasional <span class="kkw-tag kkw-tag-en">EN</span></label>
                     <input type="text" wire:model="operatingHoursTextEn" class="c61-input" placeholder="Kosongkan = pakai teks ID di atas">
+                </div>
+                <div class="kkw-field" style="grid-column: 1 / -1;">
+                    <div class="c61-note">Jam operasional di sini hanya <strong>teks tampilan</strong>. Jam slot booking yang benar-benar bisa dipesan diatur di <strong>Master Data &amp; Tarif → Atur Jam Operasional</strong> — kalau jam buka berubah, ubah di dua tempat itu.</div>
                 </div>
                 <div class="kkw-field">
                     <label class="c61-label">Alamat</label>

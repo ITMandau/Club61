@@ -803,6 +803,7 @@
                 <div class="c61-modal-body">
                     <div class="c61-note">
                         Perubahan ini langsung memperbarui awal dan akhir slot booking pada jadwal publik (/booking), monitor command board, dan kasir POS walk-in. Misalnya jika diset jam 11:00 WIB, maka booking lapangan langsung dimulai dari jam 11:00 WIB.
+                        Teks jam buka yang tampil di halaman depan &amp; portal customer diubah terpisah di <strong>Konten Website → 2. Fakta Venue</strong>.
                     </div>
 
                     <div class="md-grid-2">
