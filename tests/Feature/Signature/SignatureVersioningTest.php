@@ -19,8 +19,8 @@ use Livewire\Livewire;
 use Tests\TestCase;
 
 /**
- * Riwayat versi Digital Signage: versi baru hanya dibuat kalau tampilannya berubah, Kembalikan memindahkan tanda
- * Tayang (bukan menyalin), dan riwayat dibatasi. Dulu setiap klik Tayangkan / Kembalikan menambah versi.
+ * Riwayat versi Digital Signage: versi baru hanya dibuat saat layar pindah template (edit template / konten yang sedang
+ * tayang = versi itu diperbarui), Kembalikan memindahkan tanda Tayang (bukan menyalin), dan riwayat dibatasi.
  */
 class SignatureVersioningTest extends TestCase
 {
@@ -52,6 +52,60 @@ class SignatureVersioningTest extends TestCase
         return $this->screen->fresh()->publishedVersion;
     }
 
+    /** Layar memakai template lain (yang sudah ada dengan nama itu, atau template baru). */
+    private function switchTo(string $name): SignatureTemplate
+    {
+        $template = SignatureTemplate::firstOrCreate(['name' => $name], ['layout' => 'PRESET_B', 'theme' => SignatureService::DEFAULT_THEME, 'ticker' => SignatureService::DEFAULT_TICKER]);
+        $this->screen->update(['template_id' => $template->id]);
+
+        return $template;
+    }
+
+    public function test_editing_the_template_on_air_updates_that_version_instead_of_creating_one(): void
+    {
+        $this->publish();                                        // v1
+        $this->template->update(['theme' => array_merge(SignatureService::DEFAULT_THEME, ['background' => '#112233'])]);
+
+        $result = $this->publish();
+        $this->assertSame(PublishResult::UPDATED, $result->outcome);
+        $this->assertSame(1, $result->version->version);
+        $this->assertSame(1, SignatureVersion::count(), 'tidak ada v2');
+        $this->assertSame(2, $this->airing()->revision);
+        $this->assertSame('#112233', $this->airing()->payload['template']['theme']['background']);
+        $this->assertNotNull($this->airing()->updated_at);
+        $this->assertSame($this->admin->id, $this->airing()->updated_by_id);
+
+        // TV memuat ulang karena revisinya berubah (nomor versi tetap 1).
+        $live = $this->getJson("/signature/{$this->screen->token}/live")->json();
+        $this->assertSame([1, 2], [$live['version'], $live['revision']]);
+        $this->assertSame(2, $this->getJson("/signature/{$this->screen->token}/payload")->json('revision'));
+
+        // Konten di playlist diubah lalu Tayangkan lewat halaman admin → tetap versi 1.
+        $this->template->playlistItems()->orderByDesc('sort_order')->first()->delete();
+        $this->actingAs($this->admin);
+        Livewire::test(Signature::class)->call('publish')->assertNotified('Versi 1 diperbarui');
+        $this->assertSame(1, SignatureVersion::count());
+        $this->assertSame(3, $this->airing()->revision);
+        $this->assertSame(PublishResult::UNCHANGED, $this->publish()->outcome, 'tanpa perubahan → revisi tidak naik');
+        $this->assertSame(3, $this->airing()->revision);
+    }
+
+    public function test_switching_template_creates_a_version_and_switching_back_reuses_it(): void
+    {
+        $this->publish();                                        // v1 (template awal)
+        $this->switchTo('Full Slider');
+        $this->assertSame(PublishResult::CREATED, $this->publish()->outcome); // v2
+
+        $this->screen->update(['template_id' => $this->template->id]);
+        $result = $this->publish();
+        $this->assertSame(PublishResult::REUSED, $result->outcome);
+        $this->assertSame(1, $result->version->version);
+        $this->assertSame(2, SignatureVersion::count());
+        $this->assertNotNull(SignatureVersion::where('version', 2)->sole()->aired_until, 'v2 tercatat berhenti tayang');
+        $this->assertNull($this->airing()->aired_until);
+        $this->assertSame(1, $this->getJson("/signature/{$this->screen->token}/live")->json('version'));
+    }
+
     public function test_publishing_without_changes_does_not_create_a_version(): void
     {
         $this->assertSame(PublishResult::CREATED, $this->publish()->outcome);
@@ -64,50 +118,48 @@ class SignatureVersioningTest extends TestCase
         $this->assertSame(1, SignatureVersion::count());
     }
 
-    public function test_going_back_to_an_old_layout_reuses_that_version(): void
-    {
-        $this->publish();                                        // v1
-        $this->template->update(['name' => 'Promo Malam']);
-        $this->assertSame(PublishResult::CREATED, $this->publish()->outcome); // v2
-
-        // Draft dikembalikan seperti semula lalu Tayangkan → versi 1 tayang lagi, tidak ada v3.
-        $this->template->update(['name' => 'Monitoring + Panel']);
-        $result = $this->publish();
-        $this->assertSame(PublishResult::REUSED, $result->outcome);
-        $this->assertSame(1, $result->version->version);
-        $this->assertSame(2, SignatureVersion::count());
-        $this->assertSame(1, $this->airing()->version);
-        $this->assertNotNull(SignatureVersion::where('version', 2)->sole()->aired_until, 'v2 tercatat berhenti tayang');
-        $this->assertNull($this->airing()->aired_until);
-
-        // TV ikut berganti (nomor versi di data live berubah → TV memuat ulang).
-        $this->assertSame(1, $this->getJson("/signature/{$this->screen->token}/live")->json('version'));
-    }
-
-    public function test_restore_moves_the_on_air_mark_instead_of_copying(): void
+    public function test_restore_moves_the_on_air_mark_and_the_screen_template_back(): void
     {
         $this->publish();
-        $this->template->update(['name' => 'Versi Dua']);
+        $this->switchTo('Versi Dua');
         $this->publish();
         $first = SignatureVersion::where('version', 1)->sole();
 
         $this->travel(5)->minutes();
         $this->actingAs($this->admin);
-        $page = Livewire::test(Signature::class)->call('restoreVersion', $first->id)->assertNotified('Versi 1 ditayangkan lagi');
+        $page = Livewire::test(Signature::class)->call('restoreVersion', $first->id)->assertNotified('Versi 1 ditayangkan lagi')
+            ->assertSet('screenTemplateId', $this->template->id);
 
         $this->assertSame(2, SignatureVersion::count());
         $this->assertSame($first->id, $this->airing()->id);
+        $this->assertSame($this->template->id, $this->screen->fresh()->template_id, 'pilihan template layar ikut kembali');
         $this->assertTrue($this->airing()->aired_at->gt($first->created_at), 'waktu mulai tayang lagi dicatat');
         $this->assertSame($this->admin->id, $this->airing()->aired_by_id);
 
         $page->call('restoreVersion', $first->id)->assertNotified('Versi 1 sudah tayang');
         $this->assertSame(2, SignatureVersion::count());
+
+        // Edit template versi yang dikembalikan lalu Tayangkan → v1 diperbarui, bukan v3.
+        $this->template->update(['theme' => array_merge(SignatureService::DEFAULT_THEME, ['accent' => '#AA0000'])]);
+        $this->assertSame(PublishResult::UPDATED, $this->publish()->outcome);
+        $this->assertSame(2, SignatureVersion::count());
+    }
+
+    public function test_versions_published_before_the_template_column_are_matched_by_template_name(): void
+    {
+        $this->publish();
+        SignatureVersion::query()->update(['template_id' => null]);
+        $this->template->update(['theme' => array_merge(SignatureService::DEFAULT_THEME, ['text' => '#EEEEEE'])]);
+
+        $this->assertSame(PublishResult::UPDATED, $this->publish()->outcome);
+        $this->assertSame(1, SignatureVersion::count());
+        $this->assertSame($this->template->id, $this->airing()->template_id, 'versi lama ikut tercatat templatenya');
     }
 
     public function test_history_keeps_the_latest_versions_and_never_drops_the_one_on_air(): void
     {
         foreach (range(1, SignatureService::MAX_VERSIONS + 2) as $i) {
-            $this->template->update(['name' => "Tampilan {$i}"]);
+            $this->switchTo("Tampilan {$i}");
             $this->publish();
         }
         $this->assertSame(SignatureService::MAX_VERSIONS, SignatureVersion::count());
@@ -115,7 +167,7 @@ class SignatureVersioningTest extends TestCase
         $this->assertSame(SignatureService::MAX_VERSIONS + 2, $this->airing()->version, 'yang tayang = versi terbaru, tidak ikut dibuang');
 
         // Nomor versi tetap naik (tidak dipakai ulang setelah versi lama dibuang).
-        $this->template->update(['name' => 'Tampilan baru']);
+        $this->switchTo('Tampilan baru');
         $this->assertSame(SignatureService::MAX_VERSIONS + 3, $this->publish()->version->version);
     }
 
@@ -153,8 +205,9 @@ class SignatureVersioningTest extends TestCase
         SignaturePlaylistItem::create(['template_id' => $this->template->id, 'zone_key' => 'main', 'content_id' => $promo->id, 'sort_order' => 9]);
 
         $this->publish();                                        // v1 berisi promo
+        $this->switchTo('Tanpa Promo');
+        $this->publish();                                        // v2 (template lain, tanpa promo)
         $promo->delete();
-        $this->publish();                                        // v2 tanpa promo
         $withPromo = SignatureVersion::where('version', 1)->sole();
 
         // v1 tayang lagi 10 hari kemudian, lalu diganti → filenya dihitung dari saat berhenti tayang, bukan saat dibuat.

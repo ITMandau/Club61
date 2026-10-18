@@ -55,6 +55,12 @@ class SignatureFileJanitorTest extends TestCase
         return app(SignatureService::class)->publish($this->screen->fresh(), $this->admin)->version;
     }
 
+    /** Layar pindah ke template lain (preset lain dari ensureDefaults). */
+    private function switchTemplate(): void
+    {
+        $this->screen->update(['template_id' => \App\Models\Signature\SignatureTemplate::whereKeyNot($this->screen->template_id)->orderBy('created_at')->value('id')]);
+    }
+
     private function sweep(): array
     {
         return app(SignatureFileJanitor::class)->sweep();
@@ -86,7 +92,8 @@ class SignatureFileJanitorTest extends TestCase
         $this->sweep();
         Storage::disk('public')->assertExists('signature/videos/promo.mp4'); // masih tayang → tidak pernah disapu
 
-        // Tayangkan versi baru tanpa video itu → berhenti tayang, ditahan 7 hari.
+        // Pindah template (versi baru tanpa video itu) → versi lama berhenti tayang, filenya ditahan 7 hari.
+        $this->switchTemplate();
         $this->publish();
         $this->travel(6)->days();
         $this->sweep();
@@ -94,6 +101,22 @@ class SignatureFileJanitorTest extends TestCase
 
         $this->travel(2)->days();
         $this->assertSame(1, $this->sweep()['deleted']);
+        Storage::disk('public')->assertMissing('signature/videos/promo.mp4');
+    }
+
+    public function test_file_dropped_from_the_version_on_air_by_an_update_is_swept(): void
+    {
+        $promo = $this->upload('Promo', 'signature/videos/promo.mp4');
+        $this->putOnScreen($promo);
+        $this->publish();
+        $promo->delete();
+        Storage::disk('public')->assertExists('signature/videos/promo.mp4'); // masih tayang
+
+        // Template sama → versi yang tayang diperbarui tanpa video itu. Revisi lama tidak bisa dikembalikan, jadi
+        // filenya tidak ditahan 7 hari (TV sudah memuat revisi baru).
+        $this->assertSame(1, $this->publish()->version);
+        $this->travel(2)->hours(); // file < 60 menit dianggap upload baru, tidak disapu
+        $this->sweep();
         Storage::disk('public')->assertMissing('signature/videos/promo.mp4');
     }
 
@@ -122,6 +145,7 @@ class SignatureFileJanitorTest extends TestCase
         $this->putOnScreen($promo);
         $first = $this->publish();
         $promo->delete();
+        $this->switchTemplate();
         $this->publish();
         $this->travel(8)->days();
         $this->sweep();

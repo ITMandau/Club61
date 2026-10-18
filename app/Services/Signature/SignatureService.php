@@ -417,9 +417,11 @@ class SignatureService
     public const MAX_VERSIONS = 20;
 
     /**
-     * Tayangkan draft saat ini. Versi baru hanya dibuat kalau tampilannya belum pernah ada: sama dengan yang sedang
-     * tayang → tidak ada perubahan; sama dengan versi lama di riwayat → versi itu yang ditayangkan lagi. Dulu setiap
-     * klik membuat versi baru walau isinya sama, sehingga riwayat penuh duplikat.
+     * Tayangkan draft saat ini:
+     *   - template SAMA dengan versi yang sedang tayang → versi itu DIPERBARUI (nomor tetap, revision naik), atau tidak
+     *     ada perubahan kalau isinya sama. Dulu setiap edit template / konten jadi versi baru (v2, v3, …);
+     *   - pindah TEMPLATE → tampilan yang sama persis dengan versi lama di riwayat = versi itu ditayangkan lagi, selain
+     *     itu versi baru.
      */
     public function publish(SignatureScreen $screen, User $user, ?string $note = null): PublishResult
     {
@@ -428,6 +430,27 @@ class SignatureService
         return DB::transaction(function () use ($screen, $payload, $user, $note) {
             $screen = SignatureScreen::whereKey($screen->id)->lockForUpdate()->firstOrFail();
             $fingerprint = self::fingerprint($payload);
+            $templateId = $this->publishedTemplateId($screen);
+
+            $live = $screen->published_version_id ? SignatureVersion::find($screen->published_version_id) : null;
+            if ($live && $this->sameTemplate($live, $templateId, $payload)) {
+                if (self::fingerprint((array) $live->payload) === $fingerprint) {
+                    return new PublishResult($live, PublishResult::UNCHANGED);
+                }
+
+                $payload['version'] = $live->version;
+                $payload['revision'] = (int) $live->revision + 1;
+                $live->update([
+                    'template_id' => $templateId,
+                    'revision' => $payload['revision'],
+                    'payload' => $payload,
+                    'updated_at' => now(),
+                    'updated_by_id' => $user->id,
+                ]);
+                $this->announce($screen, $live, $user, "memperbarui versi {$live->version} (revisi {$live->revision})", 'signature.updated');
+
+                return new PublishResult($live, PublishResult::UPDATED);
+            }
 
             $same = SignatureVersion::where('screen_id', $screen->id)->orderByDesc('version')->get()
                 ->first(fn (SignatureVersion $v) => self::fingerprint((array) $v->payload) === $fingerprint);
@@ -441,9 +464,12 @@ class SignatureService
 
             $number = (int) SignatureVersion::where('screen_id', $screen->id)->max('version') + 1;
             $payload['version'] = $number;
+            $payload['revision'] = 1;
             $version = SignatureVersion::create([
                 'screen_id' => $screen->id,
+                'template_id' => $templateId,
                 'version' => $number,
+                'revision' => 1,
                 'payload' => $payload,
                 'note' => mb_substr($note ?: 'Tayangkan', 0, 120),
                 'published_by_id' => $user->id,
@@ -475,8 +501,31 @@ class SignatureService
                 return new PublishResult($version, PublishResult::UNCHANGED);
             }
 
+            // Pilihan template layar ikut kembali ke template versi itu: Tayangkan berikutnya (setelah edit template /
+            // konten) memperbarui versi ini, bukan membuat versi baru.
+            if ($version->template_id && SignatureTemplate::whereKey($version->template_id)->exists()) {
+                $screen->update(['template_id' => $version->template_id]);
+            }
+
             return new PublishResult($this->putOnAir($screen, $version, $user, "dikembalikan ke versi {$version->version}", 'signature.restored'), PublishResult::REUSED);
         });
+    }
+
+    /** Template yang dipakai Tayangkan — sama dengan buildPayload (template layar, cadangan template pertama). */
+    private function publishedTemplateId(SignatureScreen $screen): ?string
+    {
+        return SignatureTemplate::whereKey($screen->template_id)->value('id') ?? SignatureTemplate::orderBy('created_at')->value('id');
+    }
+
+    /** Versi yang sedang tayang memakai template yang sama? Versi lama (sebelum kolom template_id) dicocokkan lewat nama. */
+    private function sameTemplate(SignatureVersion $live, ?string $templateId, array $payload): bool
+    {
+        if ($live->template_id !== null) {
+            return $live->template_id === $templateId;
+        }
+
+        return ($live->payload['template']['name'] ?? null) !== null
+            && ($live->payload['template']['name'] ?? null) === ($payload['template']['name'] ?? null);
     }
 
     /** Pindahkan tanda Tayang: versi lama dicatat berhenti tayang (dasar aturan file 7 hari), versi ini mulai tayang. */
@@ -487,6 +536,13 @@ class SignatureService
         }
         $version->update(['aired_at' => now(), 'aired_by_id' => $user->id, 'aired_until' => null]);
         $screen->update(['published_version_id' => $version->id]);
+
+        return $this->announce($screen, $version, $user, $what, $event);
+    }
+
+    /** TV memuat ulang tampilan + jejak di Log Aktivitas. */
+    private function announce(SignatureScreen $screen, SignatureVersion $version, User $user, string $what, string $event): SignatureVersion
+    {
         // TV langsung memuat tampilan baru (tanpa menunggu jadwal polling).
         app(\App\Services\Realtime\RealtimeSignal::class)->signaturePublished();
 
@@ -511,10 +567,10 @@ class SignatureService
         SignatureVersion::where('screen_id', $screen->id)->whereNotIn('id', $keep)->delete();
     }
 
-    /** Sidik tampilan: isi payload tanpa nomor versi & waktu dibuat (dua tayangan dengan isi sama = sidik sama). */
+    /** Sidik tampilan: isi payload tanpa nomor versi / revisi & waktu dibuat (dua tayangan dengan isi sama = sidik sama). */
     private static function fingerprint(array $payload): string
     {
-        unset($payload['version'], $payload['generated_at']);
+        unset($payload['version'], $payload['revision'], $payload['generated_at']);
 
         return md5(json_encode($payload));
     }
@@ -636,6 +692,8 @@ class SignatureService
         return [
             'server_time' => $wib->toIso8601String(),
             'version' => $screen?->publishedVersion?->version ?? ($payload['version'] ?? null),
+            // Versi yang sedang tayang bisa diperbarui (template sama) → TV memuat ulang saat versi ATAU revisinya berubah.
+            'revision' => (int) ($screen?->publishedVersion?->revision ?? ($payload['revision'] ?? 1)),
             'is_open' => ! ($payload['screen']['operating_hours_only'] ?? true) || ($clock >= $hours['open'] && ($hours['close'] === '24:00' || $clock < $hours['close'])),
             'courts' => $courtRows,
             'schedule' => $schedule,
@@ -679,7 +737,7 @@ class SignatureService
             'age_seconds' => (int) max(0, $at->diffInSeconds($now, false)),
             'text' => strtr($template, [
                 '{nama}' => $name,
-                '{lapangan}' => $b->court?->name ?? 'lapangan',
+                '{lapangan}' => $b->court?->name ?? 'court',
                 '{jam}' => $b->start_time->format('H:i'),
             ]),
         ];

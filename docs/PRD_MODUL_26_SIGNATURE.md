@@ -123,9 +123,14 @@ Per lapangan, diperbarui otomatis tiap 10–15 detik:
 ### 4.7 Draft → Preview → Tayangkan
 1. Semua perubahan (template, playlist, running text, sponsor, pengaturan) tersimpan sebagai **draft** — TV tidak berubah.
 2. Tombol **Preview** menampilkan hasil persis seperti di TV (16:9, animasi & running text berjalan, data monitoring asli) **sebelum disimpan**.
-3. Tombol **Tayangkan** mengirim versi itu ke TV (TV mengambil versi baru dalam ±15 detik).
-4. **Riwayat versi** + **Kembalikan ke versi sebelumnya**.
-5. Setiap Tayangkan / Kembalikan tercatat di Log Aktivitas.
+3. Tombol **Tayangkan** mengirim draft ke TV (TV memuat ulang dalam ±15 detik):
+   - template **sama** dengan versi yang sedang tayang → versi itu **diperbarui** (nomor tetap, revisi naik — TV memuat
+     ulang saat versi atau revisinya berubah); tanpa perubahan → tidak terjadi apa-apa;
+   - layar **pindah template** → versi baru (atau versi lama yang isinya sama persis ditayangkan lagi).
+   (Keputusan user 18 Okt 2026 — dulu setiap edit template / konten menjadi v2, v3, ….)
+4. **Riwayat versi** + **Kembalikan ke versi sebelumnya** — pilihan template layar ikut kembali ke template versi itu,
+   jadi edit berikutnya memperbarui versi tersebut. Revisi lama dalam satu versi tidak bisa dikembalikan.
+5. Setiap Tayangkan / perbarui / Kembalikan tercatat di Log Aktivitas.
 
 ### 4.8 Hak Akses
 | Izin | Default |

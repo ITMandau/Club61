@@ -58,7 +58,7 @@ class SignatureController extends Controller
     {
         $this->authorizePreview();
         $payload = $this->signature->previewPayload($key);
-        abort_unless($payload, 404, 'Preview sudah kedaluwarsa — tekan Preview lagi.');
+        abort_unless($payload, 404, 'This preview has expired — press Preview again.');
 
         return view('signature.player', [
             'title' => 'Preview — '.($payload['screen']['name'] ?? 'Signature'),

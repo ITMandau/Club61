@@ -179,7 +179,7 @@ class Signature extends Page
 
     public function getScreenProperty(): SignatureScreen
     {
-        return SignatureScreen::with(['template', 'publishedVersion.publishedBy'])->findOrFail($this->screenId);
+        return SignatureScreen::with(['template', 'publishedVersion.publishedBy', 'publishedVersion.updatedBy'])->findOrFail($this->screenId);
     }
 
     /** Status Online di kartu Layar TV saat realtime tidak tersambung (dipanggil tiap 60 dtk, tanpa render ulang halaman). */
@@ -196,8 +196,8 @@ class Signature extends Page
 
     public function getVersionsProperty()
     {
-        return SignatureVersion::with(['publishedBy:id,name', 'airedBy:id,name'])->where('screen_id', $this->screenId)->orderByDesc('version')
-            ->limit(SignatureService::MAX_VERSIONS)->get(['id', 'screen_id', 'version', 'note', 'published_by_id', 'created_at', 'aired_at', 'aired_by_id', 'aired_until']);
+        return SignatureVersion::with(['publishedBy:id,name', 'airedBy:id,name', 'updatedBy:id,name'])->where('screen_id', $this->screenId)->orderByDesc('version')
+            ->limit(SignatureService::MAX_VERSIONS)->get(['id', 'screen_id', 'version', 'revision', 'note', 'published_by_id', 'created_at', 'updated_at', 'updated_by_id', 'aired_at', 'aired_by_id', 'aired_until']);
     }
 
     public function saveScreen(bool $notify = true): bool
@@ -245,8 +245,9 @@ class Signature extends Page
 
         match ($result->outcome) {
             PublishResult::UNCHANGED => Notification::make()->title('Tidak ada perubahan')->body("TV sudah menayangkan tampilan ini (versi {$number}).")->info()->send(),
+            PublishResult::UPDATED => Notification::make()->title("Versi {$number} diperbarui")->body('Template sama, jadi versi yang sedang tayang diperbarui (bukan versi baru). TV berganti dalam ±15 detik.')->success()->send(),
             PublishResult::REUSED => Notification::make()->title("Versi {$number} ditayangkan lagi")->body('Isinya sama dengan versi lama, jadi tidak dibuat versi baru. TV berganti dalam ±15 detik.')->success()->send(),
-            default => Notification::make()->title("Versi {$number} ditayangkan")->body('TV mengambil tampilan baru dalam ±15 detik.')->success()->send(),
+            default => Notification::make()->title("Versi {$number} ditayangkan")->body('Layar pindah template → versi baru. TV mengambil tampilan baru dalam ±15 detik.')->success()->send(),
         };
     }
 
@@ -261,6 +262,9 @@ class Signature extends Page
 
             return;
         }
+
+        // Pilihan template di form ikut template versi yang dikembalikan (Kembalikan memindahkannya di database).
+        $this->screenTemplateId = $this->screen->fresh()->template_id;
 
         $result->outcome === PublishResult::UNCHANGED
             ? Notification::make()->title("Versi {$version->version} sudah tayang")->info()->send()

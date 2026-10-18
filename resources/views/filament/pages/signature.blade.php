@@ -172,7 +172,7 @@
                     </div>
                     <div class="c61-card-body">
                         @if($published)
-                            <div class="c61-hint" style="margin-top:0;">Ditayangkan {{ ($published->aired_at ?? $published->created_at)->setTimezone('Asia/Jakarta')->format('d/m/Y H:i') }} oleh {{ ($published->airedBy ?? $published->publishedBy)?->name ?? '-' }} · {{ array_sum(array_map('count', (array) ($published->payload['playlists'] ?? []))) }} konten di playlist.</div>
+                            <div class="c61-hint" style="margin-top:0;">Ditayangkan {{ ($published->aired_at ?? $published->created_at)->setTimezone('Asia/Jakarta')->format('d/m/Y H:i') }} oleh {{ ($published->airedBy ?? $published->publishedBy)?->name ?? '-' }} · {{ array_sum(array_map('count', (array) ($published->payload['playlists'] ?? []))) }} konten di playlist.@if($published->updated_at) Terakhir diperbarui {{ $published->updated_at->setTimezone('Asia/Jakarta')->format('d/m/Y H:i') }} oleh {{ $published->updatedBy?->name ?? '-' }}.@endif</div>
                         @else
                             <div class="c61-hint" style="margin-top:0;">TV menampilkan pesan "Belum ada tampilan" sampai Tayangkan ditekan.</div>
                         @endif
@@ -183,7 +183,7 @@
                     <div class="c61-card-head">
                         <div>
                             <div class="c61-card-title">Riwayat Versi</div>
-                            <div class="c61-card-sub">Versi baru hanya dibuat kalau tampilannya berubah. Kembalikan = tayangkan lagi versi itu. Disimpan {{ \App\Services\Signature\SignatureService::MAX_VERSIONS }} versi terakhir.</div>
+                            <div class="c61-card-sub">Versi baru hanya dibuat saat layar pindah template. Edit template / konten lalu Tayangkan = versi yang sedang tayang diperbarui. Kembalikan = tayangkan lagi versi itu. Disimpan {{ \App\Services\Signature\SignatureService::MAX_VERSIONS }} versi terakhir.</div>
                         </div>
                     </div>
                     <div class="c61-table-wrap">
@@ -197,6 +197,9 @@
                                             @php $airing = $published && $published->id === $version->id; @endphp
                                             <div class="strong">{{ $version->note }}</div>
                                             <div class="sub">Dibuat {{ $version->created_at->setTimezone('Asia/Jakarta')->format('d/m/Y H:i') }} · {{ $version->publishedBy?->name ?? '-' }}</div>
+                                            @if($version->updated_at)
+                                                <div class="sub">Diperbarui {{ $version->updated_at->setTimezone('Asia/Jakarta')->format('d/m/Y H:i') }} · {{ $version->updatedBy?->name ?? '-' }} ({{ $version->revision - 1 }}× perubahan)</div>
+                                            @endif
                                             @if($airing && $version->aired_at && $version->aired_at->ne($version->created_at))
                                                 <div class="sub">Tayang lagi sejak {{ $version->aired_at->setTimezone('Asia/Jakarta')->format('d/m/Y H:i') }} · {{ $version->airedBy?->name ?? '-' }}</div>
                                             @elseif(! $airing && $version->aired_until)
@@ -208,7 +211,7 @@
                                                 <span class="c61-pill c61-pill-ok">Tayang</span>
                                             @elseif($this->canPublish)
                                                 <button type="button" class="c61-btn c61-btn-ghost c61-btn-sm"
-                                                    x-on:click="$dispatch('club61-confirm', { title: @js('Tayangkan lagi versi '.$version->version.'?'), message: 'TV kembali menayangkan versi itu (tidak membuat versi baru). Draft yang sedang diedit tidak berubah.', confirmLabel: 'Ya, Kembalikan', onConfirm: () => $wire.restoreVersion(@js($version->id)) })">Kembalikan</button>
+                                                    x-on:click="$dispatch('club61-confirm', { title: @js('Tayangkan lagi versi '.$version->version.'?'), message: 'TV kembali menayangkan versi itu (tidak membuat versi baru). Pilihan template layar ikut kembali ke template versi itu.', confirmLabel: 'Ya, Kembalikan', onConfirm: () => $wire.restoreVersion(@js($version->id)) })">Kembalikan</button>
                                             @endif
                                         </td>
                                     </tr>

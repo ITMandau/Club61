@@ -109,9 +109,11 @@ class SignatureTest extends TestCase
         SignatureTemplate::find($screen->template_id)->update(['name' => 'Template Draft Baru']);
         $this->assertNotSame('Template Draft Baru', $this->getJson("/signature/{$screen->token}/payload")->json('template.name'));
 
+        // Template yang sama → versi 1 diperbarui; TV memuat ulang karena revisinya naik.
         Livewire::test(Signature::class)->call('publish');
         $this->assertSame('Template Draft Baru', $this->getJson("/signature/{$screen->token}/payload")->json('template.name'));
-        $this->assertSame(2, $this->getJson("/signature/{$screen->token}/live")->json('version'));
+        $live = $this->getJson("/signature/{$screen->token}/live")->json();
+        $this->assertSame([1, 2], [$live['version'], $live['revision']]);
     }
 
     public function test_live_monitoring_shows_names_per_setting_and_never_contact_details(): void
@@ -312,15 +314,29 @@ class SignatureTest extends TestCase
         $this->get("/tv/{$legacy}")->assertSee('requestFullscreen', false)->assertSee('webkitRequestFullscreen', false);
     }
 
+    public function test_tv_screen_built_in_texts_are_in_english(): void
+    {
+        $screen = $this->service()->ensureDefaults();
+        $page = $this->get("/tv/{$screen->token}")->assertOk();
+
+        $page->assertSee('<html lang="en">', false)
+            ->assertSee('Court Status')->assertSee("Today's Schedule", false)->assertSee('Awaiting check-in')
+            ->assertSee('Supported by')->assertSee('See you tomorrow!')->assertSee('Press OK on the remote')
+            ->assertSee('Wednesday')->assertSee('January');
+
+        foreach (['Status Lapangan', 'Jadwal Hari Ini', 'Sedang main', 'Menunggu check-in', 'Didukung oleh', 'Sampai jumpa besok', 'Tekan OK', 'Koneksi terputus', 'Selamat datang', "'Senin'", "'Januari'"] as $indonesian) {
+            $page->assertDontSee($indonesian, false);
+        }
+    }
+
     public function test_versions_can_be_restored_and_link_regenerated(): void
     {
         $this->actingAs($this->admin);
         $screen = $this->service()->ensureDefaults();
-        $template = SignatureTemplate::find($screen->template_id);
+        $other = SignatureTemplate::whereKeyNot($screen->template_id)->orderBy('created_at')->firstOrFail();
 
         $page = Livewire::test(Signature::class)->call('publish');
-        $template->update(['name' => 'Versi Dua']);
-        $page->call('publish');
+        $page->set('screenTemplateId', $other->id)->call('publish');   // pindah template → versi 2
         $first = SignatureVersion::where('version', 1)->sole();
 
         // Kembalikan = versi 1 tayang lagi, tidak disalin jadi versi baru.

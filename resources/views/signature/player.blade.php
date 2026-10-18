@@ -2,10 +2,11 @@
     Pemutar Signature (Modul 26) — dipakai halaman TV (/signature/{token}) dan Preview admin. Kanvas tetap 1920×1080
     yang diskalakan ke layar, jadi tampilan di TV 96 inch sama dengan Preview. JavaScript sengaja ditulis tanpa fitur
     baru (optional chaining, dll.) supaya jalan di browser Smart TV versi lama. Semua teks dari data dipasang lewat
-    textContent (bukan innerHTML).
+    textContent (bukan innerHTML). Semua teks bawaan layar berbahasa Inggris; teks yang diisi admin (nama layar, lapangan,
+    running text, sponsor) tampil apa adanya.
 --}}
 <!doctype html>
-<html lang="id">
+<html lang="en">
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -182,12 +183,14 @@
     var POLL_LIVE_MS = 60000;   // realtime tersambung: cukup untuk status per jam & heartbeat; perubahan datang lewat event
 
     var TRANSITIONS = { fade: 1, slide: 1, zoom: 1, none: 1 };
-    var DAYS = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
-    var MONTHS = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
+    var DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    var MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 
     var state = {
         payload: window.SIG_INITIAL || null,
         version: window.SIG_INITIAL ? window.SIG_INITIAL.version : null,
+        // Versi yang sedang tayang bisa diperbarui (template sama) → revision naik. Versi lama tanpa revision = 1.
+        revision: window.SIG_INITIAL ? (window.SIG_INITIAL.revision || 1) : null,
         live: null,
         liveAt: 0,
         serverOffset: 0,
@@ -261,7 +264,7 @@
 
         var p = state.payload;
         if (!p || !p.template) {
-            stage.appendChild(el('div', 'empty', isPreview ? 'Preview kosong' : 'Belum ada tampilan yang ditayangkan. Buka admin → Signature → Tayangkan.'));
+            stage.appendChild(el('div', 'empty', isPreview ? 'Preview is empty' : 'Nothing is on screen yet. Publish a display from Admin → Signature.'));
             return;
         }
         applyTheme(p);
@@ -290,9 +293,9 @@
         stage.appendChild(state.toast);
         state.status = el('div', 'status');
         stage.appendChild(state.status);
-        state.soundHint = el('div', 'sound-hint', 'Tekan OK pada remote untuk mengaktifkan suara');
+        state.soundHint = el('div', 'sound-hint', 'Press OK on the remote to turn on sound');
         stage.appendChild(state.soundHint);
-        if (isPreview) { stage.appendChild(el('div', 'preview-badge', 'PREVIEW — BELUM DITAYANGKAN')); }
+        if (isPreview) { stage.appendChild(el('div', 'preview-badge', 'PREVIEW — NOT LIVE YET')); }
 
         refreshSoundHint();
         renderClosed();
@@ -456,8 +459,8 @@
     function drawMonitoring(slide) {
         var wrap = el('div', 'mon');
         var head = el('div', 'mon-head');
-        head.appendChild(el('div', 'mon-title', 'Status Lapangan'));
-        head.appendChild(el('div', 'mon-sub', state.live ? 'Diperbarui ' + timeText(new Date(state.liveAt + state.serverOffset)) : 'Memuat data…'));
+        head.appendChild(el('div', 'mon-title', 'Court Status'));
+        head.appendChild(el('div', 'mon-sub', state.live ? 'Updated ' + timeText(new Date(state.liveAt + state.serverOffset)) : 'Loading…'));
         wrap.appendChild(head);
         var courts = (state.live && state.live.courts) || [];
         var cols = Math.min(Math.max(courts.length, 1), 3);
@@ -468,27 +471,27 @@
             var card = el('div', 'court ' + c.status);
             var top = el('div', 'court-top');
             top.appendChild(el('div', 'court-name', c.name));
-            top.appendChild(el('div', 'badge ' + c.status, c.status === 'PLAYING' ? 'Sedang main' : (c.status === 'WAITING' ? 'Menunggu check-in' : 'Tersedia')));
+            top.appendChild(el('div', 'badge ' + c.status, c.status === 'PLAYING' ? 'Playing' : (c.status === 'WAITING' ? 'Awaiting check-in' : 'Available')));
             card.appendChild(top);
             var mid = el('div', 'court-mid');
             if (c.current) {
                 mid.appendChild(el('div', 'who', c.current.name ? c.current.name : 'Booked'));
                 mid.appendChild(el('div', 'time', c.current.start + ' – ' + c.current.end));
-                mid.appendChild(el('div', 'cd-label', 'Sisa waktu'));
+                mid.appendChild(el('div', 'cd-label', 'Time left'));
                 var cd = el('div', 'countdown', fmtCountdown(c.current.remaining_seconds));
                 cd._remaining = c.current.remaining_seconds;
                 mid.appendChild(cd);
             } else {
-                mid.appendChild(el('div', 'free-big', 'Kosong'));
-                mid.appendChild(el('div', 'free-cta', c.next ? 'Bisa dipakai sampai ' + c.next.start : 'Booking sekarang di front desk'));
+                mid.appendChild(el('div', 'free-big', 'Free'));
+                mid.appendChild(el('div', 'free-cta', c.next ? 'Free until ' + c.next.start : 'Book now at the front desk'));
             }
             card.appendChild(mid);
-            var next = el('div', 'next', c.next ? 'Berikutnya ' + c.next.start + ' – ' + c.next.end : 'Berikutnya');
-            next.appendChild(el('b', '', c.next ? (c.next.name ? c.next.name : 'Booked') : 'Belum ada booking'));
+            var next = el('div', 'next', c.next ? 'Next ' + c.next.start + ' – ' + c.next.end : 'Next');
+            next.appendChild(el('b', '', c.next ? (c.next.name ? c.next.name : 'Booked') : 'No bookings yet'));
             card.appendChild(next);
             grid.appendChild(card);
         }
-        if (!courts.length) { grid.appendChild(el('div', 'empty', state.live ? 'Belum ada lapangan aktif' : 'Memuat…')); }
+        if (!courts.length) { grid.appendChild(el('div', 'empty', state.live ? 'No active courts' : 'Loading…')); }
         wrap.appendChild(grid);
         slide.appendChild(wrap);
     }
@@ -528,11 +531,11 @@
         }
         var head = el('div', 'sch-head');
         var titles = el('div');
-        titles.appendChild(el('div', 'mon-title', 'Jadwal Hari Ini'));
+        titles.appendChild(el('div', 'mon-title', "Today's Schedule"));
         titles.appendChild(el('div', 'mon-sub', dateText(now())));
         head.appendChild(titles);
         var stats = el('div', 'sch-stats');
-        [['play', playing, 'Berlangsung'], ['', upcoming, 'Akan main'], ['free', freeHours, 'Jam kosong']].forEach(function (s) {
+        [['play', playing, 'On court'], ['', upcoming, 'Upcoming'], ['free', freeHours, 'Free hours']].forEach(function (s) {
             var box = el('div', 'sch-stat ' + s[0]);
             box.appendChild(el('b', '', s[1]));
             box.appendChild(el('span', '', s[2]));
@@ -542,7 +545,7 @@
         wrap.appendChild(head);
 
         if (!rows.length) {
-            wrap.appendChild(el('div', 'empty', live ? 'Belum ada lapangan aktif' : 'Memuat jadwal…'));
+            wrap.appendChild(el('div', 'empty', live ? 'No active courts' : 'Loading schedule…'));
             slide.appendChild(wrap);
             return;
         }
@@ -567,7 +570,7 @@
         wrap.appendChild(board);
 
         var legend = el('div', 'legend');
-        [['#34D399', 'Sedang main'], ['#FCD34D', 'Menunggu check-in'], ['var(--accent)', 'Akan main'], ['', 'Tersedia'], ['rgba(255,255,255,.2)', 'Selesai']].forEach(function (l) {
+        [['#34D399', 'Playing'], ['#FCD34D', 'Awaiting check-in'], ['var(--accent)', 'Upcoming'], ['', 'Available'], ['rgba(255,255,255,.2)', 'Finished']].forEach(function (l) {
             var item = el('span', '', l[1]);
             var dot = el('i');
             if (l[0]) { dot.style.background = l[0]; } else { dot.style.border = '2px dashed #6EE7B7'; }
@@ -591,7 +594,7 @@
             var cname = el('div', 'sch-colname', court.name);
             if (court.name.length > 16) { cname.style.fontSize = Math.max(22, Math.round(30 * 16 / court.name.length)) + 'px'; }
             ch.appendChild(cname);
-            ch.appendChild(el('div', 'sch-colmeta', active ? 'Sedang main sampai ' + active.end : (remaining ? remaining + ' booking lagi hari ini' : 'Belum ada booking lagi')));
+            ch.appendChild(el('div', 'sch-colmeta', active ? 'Playing until ' + active.end : (remaining ? remaining + (remaining === 1 ? ' more booking today' : ' more bookings today') : 'No more bookings today')));
             col.appendChild(ch);
             var track = el('div', 'sch-track');
             col.appendChild(track);
@@ -625,7 +628,7 @@
 
             var gaps = freeGaps(ct, Math.max(nextHour, from), close);
             for (var q = 0; q < gaps.length; q++) {
-                var fb = el('div', 'sch-free', 'Tersedia');
+                var fb = el('div', 'sch-free', 'Available');
                 var fh = (gaps[q][1] - gaps[q][0]) / 60 * hourPx;
                 fb.style.top = 'calc(' + pct(gaps[q][0]) + ' + 4px)';
                 fb.style.height = Math.max(fh - 8, 10) + 'px';
@@ -647,7 +650,7 @@
                 if (size !== 'sm') {
                     var top = el('div', 'sch-blk-top');
                     top.appendChild(time);
-                    var pill = { PLAYING: 'Sedang main', WAITING: 'Menunggu', DONE: 'Selesai' }[bk.status];
+                    var pill = { PLAYING: 'Playing', WAITING: 'Waiting', DONE: 'Done' }[bk.status];
                     if (pill) { top.appendChild(el('span', 'sch-pill', pill)); }
                     blk.appendChild(top);
                     blk.appendChild(name);
@@ -670,7 +673,7 @@
     function drawSponsor(slide) {
         var col = el('div', 'center-col');
         var sponsors = (state.payload && state.payload.sponsors) || [];
-        col.appendChild(el('div', 'sp-label', 'Didukung oleh'));
+        col.appendChild(el('div', 'sp-label', 'Supported by'));
         if (!sponsors.length) {
             col.appendChild(el('div', 'sp-name', 'Club 61 Padel Court'));
         } else {
@@ -716,7 +719,7 @@
             date.textContent = dateText(now());
             if (!sponsors.length) { return; }
             var s = sponsors[i % sponsors.length];
-            sp.appendChild(el('div', 'sp-label', 'Didukung oleh'));
+            sp.appendChild(el('div', 'sp-label', 'Supported by'));
             if (s.logo_url) { var img = el('img'); img.src = s.logo_url; img.alt = ''; sp.appendChild(img); }
             sp.appendChild(el('div', 'sp-name', s.name));
             i++;
@@ -746,7 +749,7 @@
         else if (state.payload && state.payload.running_texts) {
             items = state.payload.running_texts.filter(function (t) { return t.kind === 'MANUAL'; }).map(function (t) { return t.text; });
         }
-        return items.length ? items : ['Selamat datang di Club 61 Padel Court'];
+        return items.length ? items : ['Welcome to Club 61 Padel Court'];
     }
 
     function renderTicker(force) {
@@ -810,7 +813,7 @@
         var e = state.toastQueue.shift();
         state.toastBusy = true;
         state.toast.innerHTML = '';
-        state.toast.appendChild(el('span', 'toast-tag', e.type === 'CHECKIN' ? 'Check-in' : 'Booking baru'));
+        state.toast.appendChild(el('span', 'toast-tag', e.type === 'CHECKIN' ? 'Check-in' : 'New booking'));
         state.toast.appendChild(el('span', '', e.text));
         state.toast.className = 'toast on';
         setTimeout(function () {
@@ -861,8 +864,8 @@
         if (!state.soundHint) { return; }
         var sound = needsSound() && !state.soundUnlocked;
         var full = needsFullscreen();
-        state.soundHint.textContent = sound && full ? 'Tekan OK pada remote untuk layar penuh & suara'
-            : (full ? 'Tekan OK pada remote untuk layar penuh' : 'Tekan OK pada remote untuk mengaktifkan suara');
+        state.soundHint.textContent = sound && full ? 'Press OK on the remote for full screen & sound'
+            : (full ? 'Press OK on the remote for full screen' : 'Press OK on the remote to turn on sound');
         state.soundHint.style.display = sound || full ? 'block' : 'none';
     }
     function unlockSound() {
@@ -894,8 +897,8 @@
         logo.src = state.payload.template.logo_url;
         logo.alt = '';
         state.closed.appendChild(logo);
-        state.closed.appendChild(el('div', 'closed-title', 'Sampai jumpa besok!'));
-        state.closed.appendChild(el('div', 'closed-sub', 'Buka setiap hari ' + state.payload.hours.open + ' – ' + state.payload.hours.close));
+        state.closed.appendChild(el('div', 'closed-title', 'See you tomorrow!'));
+        state.closed.appendChild(el('div', 'closed-sub', 'Open daily ' + state.payload.hours.open + ' – ' + state.payload.hours.close));
         state.closed.className = 'closed on';
     }
 
@@ -908,7 +911,7 @@
             if (data.server_time) { state.serverOffset = new Date(data.server_time).getTime() - Date.now(); }
             if (state.status) { state.status.style.display = 'none'; }
 
-            if (!isPreview && data.version !== state.version) {
+            if (!isPreview && (data.version !== state.version || (data.version !== null && (data.revision || 1) !== state.revision))) {
                 loadPayload();
             } else {
                 renderWidgets();
@@ -919,7 +922,7 @@
             pollDone();
         }, function () {
             if (state.status && state.liveAt) {
-                state.status.textContent = 'Koneksi terputus — data terakhir ' + timeText(new Date(state.liveAt + state.serverOffset));
+                state.status.textContent = 'Connection lost — last update ' + timeText(new Date(state.liveAt + state.serverOffset));
                 state.status.style.display = 'block';
             }
             pollDone();
@@ -971,6 +974,7 @@
         getJson(payloadUrl, function (payload) {
             state.payload = payload;
             state.version = payload ? payload.version : null;
+            state.revision = payload ? (payload.revision || 1) : null;
             build();
         }, function () {});
     }
