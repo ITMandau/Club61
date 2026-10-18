@@ -107,7 +107,7 @@ class OnlineGatewayRouterTest extends TestCase
         $this->mock(MidtransReconciliationService::class, function ($mock) use ($order) {
             $mock->shouldReceive('reconcileOrder')->once()->withArgs(fn ($o, $cache) => $o->is($order) && $cache === 10)->andReturn('PENDING');
             $mock->shouldReceive('hasOnlinePaymentAttempt')->once()->andReturn(true);
-            $mock->shouldReceive('settle')->once()->withArgs(fn ($o, $id, $status) => $o->is($order) && $id === 'ORD-ROUTE-1_1' && $status === ['transaction_status' => 'settlement']);
+            $mock->shouldReceive('settle')->once()->withArgs(fn ($o, $id, $status) => $o->is($order) && $id === 'ORD-ROUTE-1_1' && $status === ['transaction_status' => 'settlement'])->andReturn(true);
         });
 
         $this->assertSame('PENDING', $this->router()->reconcileOrder($order, cacheSeconds: 10));

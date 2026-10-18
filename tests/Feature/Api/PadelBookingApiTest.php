@@ -772,6 +772,28 @@ class PadelBookingApiTest extends TestCase
     /**
      * 17. Test Ganti Metode Pembayaran ke Tunai di Meja Kasir (CASH).
      */
+    public function test_idempotency_key_reused_by_another_account_never_returns_someone_elses_checkout(): void
+    {
+        $bookingId = $this->withHeader('Authorization', "Bearer {$this->customerToken}")
+            ->postJson('/api/v1/padel/hold-slot', [
+                'booking_date' => now()->addDays(6)->format('Y-m-d'),
+                'slots' => [['court_id' => $this->court1->id, 'start_time' => '10:00', 'end_time' => '11:00']],
+            ])->assertStatus(201)->json('data.bookings.0.id');
+        $key = (string) Str::uuid();
+
+        $this->withHeader('Authorization', "Bearer {$this->customerToken}")->withHeader('X-Idempotency-Key', $key)
+            ->postJson('/api/v1/padel/checkout', ['booking_ids' => [$bookingId], 'payment_method' => 'QRIS'])
+            ->assertOk();
+
+        $this->app['auth']->forgetGuards(); // guard Sanctum menyimpan user request sebelumnya di dalam satu test
+        // Akun lain memakai kunci yang sama → diproses sebagai checkout-nya sendiri (booking bukan miliknya → ditolak),
+        // bukan menerima respons checkout akun pertama (link bayar, kode booking, QR).
+        $this->withHeader('Authorization', "Bearer {$this->customerBToken}")->withHeader('X-Idempotency-Key', $key)
+            ->postJson('/api/v1/padel/checkout', ['booking_ids' => [$bookingId], 'payment_method' => 'QRIS'])
+            ->assertStatus(422)
+            ->assertJsonMissingPath('data.order_number');
+    }
+
     public function test_retry_payment_with_cash_is_rejected(): void
     {
         $tomorrow = Carbon::parse('next Tuesday')->format('Y-m-d');

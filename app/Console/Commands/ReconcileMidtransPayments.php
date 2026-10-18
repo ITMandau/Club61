@@ -19,6 +19,13 @@ class ReconcileMidtransPayments extends Command
 
     protected $description = 'Cek ulang status pembayaran Midtrans untuk order yang masih pending (cadangan webhook)';
 
+    /**
+     * Batas per jalan (sama dengan DOKU): saat Midtrans lambat / down tiap pengecekan menunggu timeout, satu jalan tanpa
+     * batas bisa melewati kunci 10 menit. Sisanya diambil jalan berikutnya — yang terlama dulu (tagihan lama yang tidak
+     * dibayar ditutup FAILED lalu keluar dari daftar).
+     */
+    private const MAX_ORDERS_PER_RUN = 100;
+
     public function handle(MidtransReconciliationService $reconciler): int
     {
         $since = now()->subHours((int) $this->option('hours'));
@@ -33,6 +40,8 @@ class ReconcileMidtransPayments extends Command
                 ->where(fn ($w) => $w->where('created_at', '>=', $since)->orWhere('updated_at', '>=', $since))
                 // Beri webhook asli kesempatan datang duluan.
                 ->where('created_at', '<=', now()->subMinutes(2)))
+            ->oldest()
+            ->limit(self::MAX_ORDERS_PER_RUN)
             ->get();
 
         $counts = array_fill_keys([

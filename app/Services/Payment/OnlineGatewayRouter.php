@@ -341,7 +341,9 @@ class OnlineGatewayRouter
             return;
         }
 
-        app(MidtransReconciliationService::class)->settle($order, $prepared['session_id'], $prepared['status'] ?? []);
+        if (! app(MidtransReconciliationService::class)->settle($order, $prepared['session_id'], $prepared['status'] ?? [])) {
+            throw new HttpException(409, 'Pembayaran sebelumnya sedang dicek oleh tim Club 61. Jangan membayar lagi — hubungi front desk.');
+        }
     }
 
     /**
@@ -369,8 +371,9 @@ class OnlineGatewayRouter
     }
 
     /**
-     * Order dibatalkan / hangus: tutup sesi bayarnya di gateway (best-effort, di luar transaksi DB). Midtrans: perilaku
-     * lama (sesi dengan id = nomor order). DOKU: semua sesi tagihan order itu yang belum mati / belum lunas.
+     * Order dibatalkan / hangus: tutup sesi bayarnya di gateway (best-effort, di luar transaksi DB). Midtrans & DOKU:
+     * semua sesi tagihan order itu yang belum mati / belum lunas (dulu Midtrans hanya sesi bernomor order polos —
+     * sesi bayar ulang / ganti metode tetap bisa dibayar → uang masuk untuk booking yang sudah dilepas → refund).
      *
      * @param  iterable<int, mixed>  $orderNumbers
      */
@@ -390,6 +393,13 @@ class OnlineGatewayRouter
 
             $invoices = [];
             foreach (Payment::where('order_id', $order->id)->whereNotIn('status', ['SUCCESS', PaymentOrchestratorService::DUPLICATE_STATUS])->get() as $bill) {
+                if (self::hasMidtransTrace($bill)) {
+                    try {
+                        app(SnapSessionGuard::class)->closeOpenSessions($bill, skip: [$orderNumber]);
+                    } catch (\Throwable $e) {
+                        // Best-effort (lihat di atas); sweep berkala + webhook tetap mencatat pembayaran yang lolos.
+                    }
+                }
                 foreach (DokuSessionGuard::sessionsOf($bill) as $invoice) {
                     if (! in_array(DokuSessionGuard::session($bill, $invoice)['status'] ?? null, [DokuSessionGuard::CLOSED, DokuSessionGuard::EXPIRED, DokuSessionGuard::DUPLICATE], true)) {
                         $invoices[] = $invoice;

@@ -290,8 +290,10 @@ class PadelBookingController extends Controller
     public function checkIn(Request $request): JsonResponse
     {
         $user = $request->user();
-        if (! $user->isStaff()) {
-            throw new HttpException(403, 'Akses Ditolak: Hanya staf kasir atau admin yang dapat memverifikasi check-in pemain.');
+        // Izin spesifik, bukan isStaff(): isStaff() meloloskan role non-frontline mana pun (trainer, stylist, role
+        // baru bikinan admin) walau tidak diberi izin check-in. Sama dengan rute web /pos/check-in.
+        if (! $user->can('checkin_padel_ticket')) {
+            throw new HttpException(403, 'Akses Ditolak: Hanya staf yang punya izin check-in yang dapat memverifikasi check-in pemain.');
         }
 
         $validated = $request->validate([

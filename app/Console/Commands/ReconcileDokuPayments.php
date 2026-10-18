@@ -61,6 +61,7 @@ class ReconcileDokuPayments extends Command
                 ->where(fn ($w) => $w->where('created_at', '>=', $since)->orWhere('updated_at', '>=', $since))
                 // Beri notifikasi asli kesempatan datang duluan.
                 ->where('updated_at', '<=', now()->subMinutes(2)))
+            ->oldest()
             ->limit(self::MAX_ORDERS_PER_RUN)
             ->get();
 

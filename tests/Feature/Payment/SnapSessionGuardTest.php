@@ -246,14 +246,69 @@ class SnapSessionGuardTest extends TestCase
         $booking = $this->pendingBooking();
         // Popup QRIS lama belum dibuka saat customer ganti ke VA (Midtrans belum mengenalnya).
         $this->payNow($booking, 'BCA_VA')->assertOk();
-        $this->assertSame(SnapSessionGuard::CLOSED, $this->sessionStatus($booking, 'ORD-G1'));
+        // Belum bisa dimatikan (Midtrans belum mengenalnya) & masih bisa dibuka → tetap diawasi, bukan dianggap tertutup.
+        $this->assertSame(SnapSessionGuard::ACTIVE, $this->sessionStatus($booking, 'ORD-G1'));
 
         // Customer membuka popup lama di tab lain → Midtrans membuat transaksi & mengirim notifikasi pending.
         $this->gateway['ORD-G1'] = 'pending';
         $this->webhook('ORD-G1', 'pending')->assertOk();
 
         $this->assertSame('expire', $this->gateway['ORD-G1']);
+        $this->assertSame(SnapSessionGuard::CLOSED, $this->sessionStatus($booking, 'ORD-G1'));
         $this->assertSame('PENDING', $this->bill($booking)->status, 'tagihan & sesi aktif tidak tersentuh');
+    }
+
+    public function test_releasing_a_booking_closes_every_open_session_not_only_the_first(): void
+    {
+        $booking = $this->pendingBooking();
+        $this->payNow($booking, 'BCA_VA')->assertOk();
+        $retrySession = $this->created[0]['order_id'];
+        $this->gateway[$retrySession] = 'pending'; // customer sudah membuka VA dari sesi bayar ulang
+
+        app(\App\Services\Padel\PadelBookingService::class)->releaseSlots([$booking->id], $this->customer);
+
+        $this->assertSame('CANCELLED', $booking->fresh()->status);
+        $this->assertSame('expire', $this->gateway[$retrySession], 'VA sesi bayar ulang ikut dimatikan (dulu tetap bisa ditransfer)');
+        $this->assertSame(SnapSessionGuard::CLOSED, $this->sessionStatus($booking, $retrySession));
+    }
+
+    public function test_payment_for_an_order_whose_booking_already_expired_in_part_is_never_silent(): void
+    {
+        $booking = $this->pendingBooking();
+        $start = $booking->start_time->copy()->addHour();
+        $expired = PadelBooking::create(['booking_code' => 'BK-G1-2', 'order_id' => $booking->order_id, 'user_id' => $this->customer->id, 'court_id' => $this->court->id, 'booking_date' => $booking->booking_date, 'start_time' => $start, 'end_time' => $start->copy()->addHour(), 'court_fee' => 200000, 'total_amount' => 200000, 'status' => 'EXPIRED', 'expires_at' => now()->subMinute()]);
+        \Illuminate\Support\Facades\Log::spy();
+
+        $this->gateway['ORD-G1'] = 'settlement';
+        $this->webhook('ORD-G1', 'settlement')->assertOk();
+
+        $this->assertSame('PAID', $booking->fresh()->status);
+        $this->assertSame('EXPIRED', $expired->fresh()->status);
+        \Illuminate\Support\Facades\Log::shouldHaveReceived('critical')->withArgs(fn ($message) => str_contains($message, 'sebagian booking-nya sudah tidak aktif'))->once();
+    }
+
+    public function test_paid_amount_that_differs_from_the_bill_is_never_settled(): void
+    {
+        $booking = $this->pendingBooking();
+        // Ditagihkan Rp250.000, Midtrans melaporkan Rp200.000 dibayar.
+        $bill = $this->bill($booking);
+        $log = $bill->payload_log;
+        $log['midtrans_sessions']['ORD-G1']['amount'] = 250000;
+        $bill->update(['amount' => 250000, 'payload_log' => $log]);
+        $this->gateway['ORD-G1'] = 'settlement';
+
+        $this->webhook('ORD-G1', 'settlement')->assertOk()->assertJsonPath('data.status', 'AMOUNT_MISMATCH');
+        $this->webhook('ORD-G1', 'settlement')->assertOk();
+        $this->assertSame(
+            \App\Services\Payment\MidtransReconciliationService::ERROR,
+            app(\App\Services\Payment\MidtransReconciliationService::class)->reconcileOrder(Order::find($booking->order_id)),
+            'bukan "lunas" (kasir tidak boleh menganggap tiket aktif) dan bukan "belum bayar" (uangnya ada di Midtrans)'
+        );
+
+        $this->assertSame('PENDING', $this->bill($booking)->status);
+        $this->assertSame('PENDING_PAYMENT', $booking->fresh()->status);
+        $this->assertNotSame('PAID', Order::find($booking->order_id)->payment_status);
+        $this->assertSame(1, \App\Models\Audit\ActivityLog::where('event', 'payment.amount_mismatch')->where('severity', 'CRITICAL')->count(), 'alert sekali, tidak berulang tiap notifikasi / rekonsiliasi');
     }
 
     public function test_reconciliation_records_a_second_payment_whose_webhook_never_arrived(): void

@@ -322,7 +322,10 @@ class MidtransService
         }
 
         if (! $response->successful() || empty($data['transaction_status'])) {
-            Log::warning("Midtrans status check: HTTP {$response->status()} ({$orderId})", ['body' => $data]);
+            Log::warning("Midtrans status check: HTTP {$response->status()} ({$orderId})", [
+                'status_code' => $data['status_code'] ?? null,
+                'status_message' => $data['status_message'] ?? null,
+            ]);
 
             return null;
         }

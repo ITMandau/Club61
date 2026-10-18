@@ -419,14 +419,32 @@ class PaymentOrchestratorService
             return true;
         }
 
+        // Locking read (versi terbaru yang sudah commit, lalu dikunci sampai pelunasan selesai): pembersih slot mengunci
+        // order lebih dulu lalu menghanguskan booking-nya, jadi keduanya bergiliran. Dulu dibaca biasa → pembersih bisa
+        // menghanguskan booking di sela pembacaan ini dan aktivasi tiket → uang masuk, booking EXPIRED, tanpa refund.
         if (($log['type'] ?? null) === 'RESCHEDULE_PRICE_DELTA' && ! empty($log['booking_id'])) {
-            return in_array(\App\Models\Padel\PadelBooking::whereKey($log['booking_id'])->value('status'), $inactive, true);
+            return in_array(\App\Models\Padel\PadelBooking::whereKey($log['booking_id'])->lockForUpdate()->value('status'), $inactive, true);
         }
 
         // Tagihan level order (checkout awal): hanya kalau SEMUA booking padel order ini sudah tidak aktif.
-        $statuses = \App\Models\Padel\PadelBooking::where('order_id', $order->id)->pluck('status');
+        $statuses = \App\Models\Padel\PadelBooking::where('order_id', $order->id)->lockForUpdate()->pluck('status', 'id');
 
-        return $statuses->isNotEmpty() && $statuses->every(fn ($s) => in_array($s, $inactive, true));
+        if ($statuses->isNotEmpty() && $statuses->every(fn ($s) => in_array($s, $inactive, true))) {
+            return true;
+        }
+
+        // Sebagian booking order ini sudah tidak aktif padahal tagihannya baru dibayar → order tetap dilunasi (booking
+        // lain aktif), tapi jangan diam: staf yang memutuskan refund sebagian / memindahkan jadwal.
+        $dead = $statuses->filter(fn ($s) => in_array($s, $inactive, true));
+        if ($payment->status === 'PENDING' && $dead->isNotEmpty()) {
+            Log::critical("[ALERT] Pembayaran masuk untuk order [{$order->order_number}] tapi sebagian booking-nya sudah tidak aktif — cek & tindak lanjuti manual.", [
+                'order_id' => $order->id,
+                'booking_tidak_aktif' => $dead->all(),
+                'tagihan' => $payment->id,
+            ]);
+        }
+
+        return false;
     }
 
     /**

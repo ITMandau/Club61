@@ -581,47 +581,59 @@ trait ManagesScheduleAndSlots
         $expiredBookings = $expiredHolds->merge($expiredPendingPayments);
 
         $count = 0;
-        foreach ($expiredBookings as $b) {
-            // Update BERSYARAT: di sela pengecekan di atas (yang bisa memanggil Midtrans beberapa detik) booking ini bisa
-            // saja baru di-checkout / dibayar. Dulu langsung ditimpa EXPIRED → order dibatalkan & sesi Midtrans di-cancel
-            // padahal customer sedang membayar.
-            $expired = DB::transaction(function () use ($b) {
-                if (! PadelBooking::whereKey($b->id)->where('status', $b->status)->update(['status' => 'EXPIRED'])) {
-                    return false;
+        // Satu transaksi per ORDER, order DIKUNCI DULU — urutan kunci sama dengan webhook pelunasan
+        // (PaymentOrchestratorService::markOrderAsPaid: order → tagihan → booking). Dulu booking dihanguskan satu per satu
+        // tanpa mengunci order: webhook yang sedang melunasi order yang sama bisa lolos di sela-selanya → uang tercatat,
+        // order PAID, booking tetap EXPIRED, tanpa refund & tanpa alert (audit 16 Okt 2026).
+        foreach ($expiredBookings->groupBy(fn (PadelBooking $b) => $b->order_id ?: 'booking:'.$b->id) as $group) {
+            $orderId = $group->first()->order_id;
+
+            [$expiredGroup, $orderCancelled] = DB::transaction(function () use ($group, $orderId) {
+                if ($orderId) {
+                    \App\Models\Pos\Order::whereKey($orderId)->lockForUpdate()->first();
                 }
-                // Jam kuota member / voucher sponsor yang dipotong saat checkout dikembalikan.
-                $this->reverseBookingBenefits(PadelBooking::whereKey($b->id)->lockForUpdate()->first());
 
-                return true;
-            });
-            if (! $expired) {
-                continue;
-            }
-            app(\App\Services\Realtime\RealtimeSignal::class)->bookingDates($b->booking_date);
+                $expiredGroup = collect();
+                foreach ($group as $b) {
+                    // Update BERSYARAT: di sela pengecekan di atas (yang bisa memanggil gateway beberapa detik) booking ini
+                    // bisa saja baru di-checkout / dibayar. Dulu langsung ditimpa EXPIRED → order dibatalkan & sesi
+                    // gateway di-cancel padahal customer sedang membayar.
+                    if (! PadelBooking::whereKey($b->id)->where('status', $b->status)->update(['status' => 'EXPIRED'])) {
+                        continue;
+                    }
+                    // Jam kuota member / voucher sponsor yang dipotong saat checkout dikembalikan.
+                    $this->reverseBookingBenefits(PadelBooking::whereKey($b->id)->lockForUpdate()->first());
+                    $expiredGroup->push($b);
+                }
 
-            $currLock = $b->start_time->copy();
-            $endLock = $b->end_time->copy();
-            while ($currLock->lt($endLock)) {
-                $lockKey = "padel_lock:{$b->court_id}:{$b->booking_date->format('Y-m-d')}:" . $currLock->format('Hi');
-                Cache::forget($lockKey);
-                try {
-                    Cache::lock($lockKey)->forceRelease();
-                } catch (\Throwable $e) {}
-                $currLock->addHour();
-            }
-
-            $count++;
-
-            if ($b->order_id) {
-                // Update BERSYARAT di database: webhook lunas bisa commit di sela pengecekan di atas — dulu order yang
-                // barusan PAID tertimpa CANCELLED dari data yang dibaca sebelumnya.
-                $cancelled = \App\Models\Pos\Order::whereKey($b->order_id)
+                // Update BERSYARAT: order yang sudah menerima uang tidak pernah dibatalkan di sini.
+                $orderCancelled = $orderId && $expiredGroup->isNotEmpty() && \App\Models\Pos\Order::whereKey($orderId)
                     ->where('payment_status', '!=', 'PAID')
                     ->whereDoesntHave('payments', fn ($q) => $q->where('status', 'SUCCESS'))
                     ->update(['payment_status' => 'CANCELLED', 'updated_at' => now()]);
-                if ($cancelled) {
-                    $orderNumbersToCancel[] = \App\Models\Pos\Order::whereKey($b->order_id)->value('order_number');
+
+                return [$expiredGroup, (bool) $orderCancelled];
+            });
+
+            foreach ($expiredGroup as $b) {
+                app(\App\Services\Realtime\RealtimeSignal::class)->bookingDates($b->booking_date);
+
+                $currLock = $b->start_time->copy();
+                $endLock = $b->end_time->copy();
+                while ($currLock->lt($endLock)) {
+                    $lockKey = "padel_lock:{$b->court_id}:{$b->booking_date->format('Y-m-d')}:" . $currLock->format('Hi');
+                    Cache::forget($lockKey);
+                    try {
+                        Cache::lock($lockKey)->forceRelease();
+                    } catch (\Throwable $e) {}
+                    $currLock->addHour();
                 }
+
+                $count++;
+            }
+
+            if ($orderCancelled) {
+                $orderNumbersToCancel[] = \App\Models\Pos\Order::whereKey($orderId)->value('order_number');
             }
         }
 

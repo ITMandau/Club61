@@ -113,6 +113,14 @@ class SnapSessionGuard
                 throw new HttpException(503, 'Pembayaran sebelumnya belum bisa ditutup karena Midtrans sedang tidak bisa dihubungi. Coba lagi beberapa saat — jangan bayar memakai kode / VA yang lama.');
             }
 
+            // Popup yang belum pernah dibuka (Midtrans belum mengenalnya) TIDAK bisa dimatikan dan masih bisa dibuka
+            // sampai masa berlakunya habis. Dulu langsung dicatat CLOSED → tidak diawasi lagi (bayar dobel tanpa
+            // terdeteksi kalau webhook-nya hilang). Sekarang tetap ACTIVE: dibuka → notifikasi pending → closeIfStale
+            // menutupnya; dibayar → tercatat ganda + refund; sweepPaidSiblings mengawasinya sampai kedaluwarsa.
+            if ($closed['result'] === MidtransService::CLOSE_NOT_FOUND && $this->mayStillOpen($bill, $sessionId)) {
+                continue;
+            }
+
             $log = self::withStatus($log, $sessionId, self::CLOSED);
         }
 
@@ -208,9 +216,10 @@ class SnapSessionGuard
                 $normalized = $status === null ? null : MidtransService::normalizeStatus((string) ($status['transaction_status'] ?? ''), $status['fraud_status'] ?? null);
 
                 if ($normalized === 'PAID' && ($status['order_id'] ?? null) === $sessionId && $bill->order) {
-                    $reconciler->settle($bill->order, $sessionId, $status);
-                    $results[$sessionId] = self::DUPLICATE;
-                    $found++;
+                    if ($reconciler->settle($bill->order, $sessionId, $status)) {
+                        $results[$sessionId] = self::DUPLICATE;
+                        $found++;
+                    }
                 } elseif (in_array($normalized, ['PENDING', 'CHALLENGE'], true)) {
                     if ($this->midtrans->closeTransaction($sessionId)['result'] === MidtransService::CLOSE_CLOSED) {
                         $results[$sessionId] = self::CLOSED;
@@ -224,6 +233,109 @@ class SnapSessionGuard
         }
 
         return $found;
+    }
+
+    /**
+     * Booking dilepas / hangus / dibatalkan: tutup semua sesi tagihan ini yang masih bisa dibayar. Best-effort, dipanggil
+     * di LUAR transaksi DB. Sesi yang masa berlakunya sudah lewat tidak ditanyakan (Midtrans sudah menolaknya).
+     * Dulu hanya sesi bernomor order polos yang dibatalkan — sesi bayar ulang / ganti metode tetap hidup.
+     *
+     * @param  array<int, string>  $skip  sesi yang sudah dibatalkan pemanggil
+     */
+    public function closeOpenSessions(Payment $bill, array $skip = []): void
+    {
+        if (! $this->midtrans->isConfigured()) {
+            return;
+        }
+
+        $log = self::log($bill);
+        $results = [];
+        foreach (self::sessionsOf($bill) as $sessionId) {
+            $meta = (array) ($log['midtrans_sessions'][$sessionId] ?? []);
+            if (in_array($sessionId, $skip, true) || in_array($meta['status'] ?? null, [self::CLOSED, self::DUPLICATE], true)) {
+                continue;
+            }
+            $expiresAt = self::expiresAt($meta);
+            if ($expiresAt !== null && $expiresAt->isPast()) {
+                continue;
+            }
+
+            try {
+                $closed = $this->midtrans->closeTransaction($sessionId);
+            } catch (\Throwable $e) {
+                continue;
+            }
+
+            if ($closed['result'] === MidtransService::CLOSE_CLOSED
+                || ($closed['result'] === MidtransService::CLOSE_NOT_FOUND && ! $this->mayStillOpen($bill, $sessionId))) {
+                $results[$sessionId] = self::CLOSED;
+            }
+        }
+
+        $this->markSessions($bill->id, $results);
+    }
+
+    /**
+     * Nominal yang diminta ke Midtrans untuk sesi ini: catatan sesi → tagihan pemilik sesi (status apa pun).
+     * Null = sesi ini tidak dimiliki tagihan mana pun (data lama / sesi yang tidak sempat tercatat).
+     */
+    public static function expectedAmount(Order $order, string $sessionId): ?float
+    {
+        $bill = Payment::where('order_id', $order->id)->get()
+            ->first(fn (Payment $p) => PaymentOrchestratorService::ownsGatewayId($p, $sessionId));
+        if (! $bill) {
+            return null;
+        }
+
+        return (float) (self::log($bill)['midtrans_sessions'][$sessionId]['amount'] ?? $bill->amount);
+    }
+
+    /**
+     * Nominal yang dibayar ≠ nominal yang ditagihkan untuk sesi ini → JANGAN dilunasi (booking / membership tidak aktif),
+     * catat KRITIS sekali per sesi. Disamakan dengan DOKU — dulu Midtrans hanya mencatat log lalu tetap melunasi.
+     *
+     * Sesi yang tidak dimiliki tagihan mana pun tidak punya acuan nominal: uangnya tetap dicatat (kelebihan bayar →
+     * refund PENDING; kurang bayar → order PARTIALLY_PAID, tiket / kartu / slip tidak aktif) + alert — menolaknya justru
+     * membuat uang yang sudah masuk tidak tercatat sama sekali.
+     *
+     * @return bool true = boleh dilunasi
+     */
+    public static function amountMatches(Order $order, string $sessionId, float $paid, string $source): bool
+    {
+        $expected = self::expectedAmount($order, $sessionId);
+        if ($expected === null) {
+            Log::warning("[ALERT] Pembayaran Midtrans untuk sesi yang tidak dikenal tagihan mana pun [{$order->order_number}] ({$sessionId}) — dicatat, cek manual.", [
+                'order_id' => $order->id,
+                'dibayar' => $paid,
+                'grand_total' => (float) $order->grand_total,
+                'sumber' => $source,
+            ]);
+
+            return true;
+        }
+        if (abs($paid - $expected) <= 1) {
+            return true;
+        }
+
+        if (\Illuminate\Support\Facades\Cache::add("midtrans_amount_mismatch:{$sessionId}", true, now()->addDay())) {
+            Log::critical("[ALERT] Pembayaran Midtrans DITOLAK: nominal dibayar tidak sama dengan tagihan [{$order->order_number}] ({$sessionId}) — order tidak dilunasi, cek manual di dashboard Midtrans.", [
+                'order_id' => $order->id,
+                'dibayar' => $paid,
+                'ditagihkan' => $expected,
+                'sumber' => $source,
+            ]);
+            \App\Services\Audit\ActivityLogger::record(
+                module: 'FINANCE',
+                event: 'payment.amount_mismatch',
+                description: 'Pembayaran Midtrans '.\App\Services\Audit\ActivityLogger::rupiah($paid).' untuk order '.$order->order_number.' DITOLAK: tagihan '.\App\Services\Audit\ActivityLogger::rupiah($expected).' — cek manual',
+                subject: $order,
+                meta: ['no_order' => $order->order_number, 'sesi' => $sessionId, 'dibayar' => $paid, 'ditagihkan' => $expected, 'sumber' => $source],
+                severity: \App\Services\Audit\ActivityLogger::CRITICAL,
+                asSystem: true,
+            );
+        }
+
+        return false;
     }
 
     /** Notifikasi "pending" untuk sesi yang seharusnya sudah mati (popup lama di tab lain) → langsung ditutup. */

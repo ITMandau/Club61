@@ -34,7 +34,8 @@ Route::middleware(['auth'])->group(function () {
 
     Route::post('/pos/check-in', function (\Illuminate\Http\Request $request, \App\Services\Padel\PadelBookingService $service) {
         $user = auth()->user();
-        if (! $user || ! $user->isStaff() || ! $user->can('checkin_padel_ticket')) {
+        // Izin check-in saja (resepsionis punya izin ini tapi bukan isStaff()).
+        if (! $user || ! $user->can('checkin_padel_ticket')) {
             return response()->json([
                 'success' => false,
                 'message' => 'Akses Ditolak: Hanya staf kasir atau admin yang berhak melakukan check-in tiket.',

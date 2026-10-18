@@ -35,7 +35,8 @@ trait ManagesCheckoutAndPayments
             throw new HttpException(422, 'Pembayaran tunai (CASH) tidak diperbolehkan. Venue Club 61 beroperasi 100% Cashless.');
         }
 
-        $cacheIdempotencyKey = "idempotency:padel:checkout:{$idempotencyKey}";
+        // Diikat ke akun: kunci yang sama dari akun lain tidak pernah mendapat respons checkout orang lain.
+        $cacheIdempotencyKey = "idempotency:padel:checkout:{$user->id}:{$idempotencyKey}";
 
         // Cek apakah request ini sudah pernah berhasil diproses dalam 24 jam terakhir
         if ($cachedResponse = Cache::get($cacheIdempotencyKey)) {
@@ -422,8 +423,9 @@ trait ManagesCheckoutAndPayments
                 ],
             ];
 
-            // Simpan ke Cache Idempotency selama 24 Jam (Anti-Bloat)
-            Cache::put($cacheIdempotencyKey, $response, self::IDEMPOTENCY_TTL_SECONDS);
+            // Simpan ke Cache Idempotency selama 24 Jam — SETELAH commit: checkout yang di-rollback tidak boleh
+            // "berhasil" saat request yang sama diulang.
+            DB::afterCommit(fn () => Cache::put($cacheIdempotencyKey, $response, self::IDEMPOTENCY_TTL_SECONDS));
 
             return $response;
         });
@@ -459,9 +461,10 @@ trait ManagesCheckoutAndPayments
                 ->lockForUpdate()
                 ->firstOrFail();
 
-            // Proteksi Otorisasi: Pastikan user hanya bisa retry booking miliknya sendiri
-            $isStaff = $user->isStaff();
-            if (! $isStaff && $booking->user_id !== $user->id) {
+            // Hanya pemilik booking. Dulu "staf" (isStaff(), termasuk role non-frontline mana pun) boleh membayar ulang
+            // booking orang lain: sesi bayar customer ditutup & link bayar baru jatuh ke staf. Pelunasan oleh staf
+            // lewat kasir (adminSettleCashierPayment), bukan endpoint ini.
+            if ($booking->user_id !== $user->id) {
                 throw new HttpException(403, 'Anda tidak memiliki otoritas untuk memproses pembayaran booking ini.');
             }
 
@@ -613,6 +616,13 @@ trait ManagesCheckoutAndPayments
             $bookingTimes = app(\App\Services\Padel\BookingTimeService::class);
             $unpaidBookings = $bookings->filter(fn (PadelBooking $b) => in_array($b->status, ['LOCKED', 'PENDING_PAYMENT', 'PENDING'], true) && (int) $b->reschedule_count === 0);
             if ($booking->status === 'LOCKED') {
+                // Aturan sama dengan checkout: hold yang waktunya sudah habis tidak bisa dibayar (dulu jalur ini
+                // mengubahnya jadi PENDING_PAYMENT dengan batas bayar baru = hold diperpanjang).
+                $holdExpired = $unpaidBookings->contains(fn (PadelBooking $b) => $b->status === 'LOCKED'
+                    && ($b->expires_at ?? $b->created_at->copy()->addMinutes($bookingTimes->holdMinutes()))->isPast());
+                if ($holdExpired) {
+                    throw new HttpException(422, 'Masa kuncian slot ('.$bookingTimes->holdMinutes().' menit) telah kedaluwarsa. Silakan pilih slot lagi.');
+                }
                 $paymentDeadline = $bookingTimes->paymentExpiresAt();
                 foreach ($unpaidBookings as $b) {
                     $b->update(['status' => 'PENDING_PAYMENT', 'expires_at' => $paymentDeadline]);

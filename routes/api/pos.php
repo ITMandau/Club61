@@ -4,7 +4,7 @@ use App\Http\Controllers\Api\V1\Pos\PaymentController;
 use Illuminate\Support\Facades\Route;
 
 Route::prefix('v1/payments')->group(function () {
-    Route::post('/webhook', [PaymentController::class, 'webhook']);
+    Route::post('/webhook', [PaymentController::class, 'webhook'])->middleware('throttle:300,1');
 
     // Notifikasi DOKU (Modul 27). URL ini yang didaftarkan di dashboard DOKU per kanal; path-nya ikut tanda tangan.
     Route::post('/doku/notification', \App\Http\Controllers\Api\V1\Payment\DokuNotificationController::class)

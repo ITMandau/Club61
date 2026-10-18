@@ -58,7 +58,7 @@ class VoucherService
         }
 
         if ($voucher->isCredit()) {
-            $available = $this->availableBalance($voucher);
+            $available = $this->availableBalance($voucher, $lock);
             if ($available < 1) {
                 return $fail('Saldo voucher sudah habis atau sedang dipakai di pesanan lain yang belum dibayar.');
             }
@@ -69,8 +69,8 @@ class VoucherService
         // Promo: kuota dipotong permanen saat lunas (consume), jadi order yang sudah mengklaim kode ini tapi belum
         // lunas ikut dihitung — kalau tidak, checkout paralel saat kuota tinggal 1 bisa sama-sama lolos.
         if ($voucher->quota !== null) {
-            $reservedInFlight = Order::where('voucher_code', $voucher->code)
-                ->whereIn('payment_status', ['UNPAID', 'PENDING_PAYMENT', 'PARTIALLY_PAID'])
+            $reservedInFlight = $this->freshRead(Order::where('voucher_code', $voucher->code)
+                ->whereIn('payment_status', ['UNPAID', 'PENDING_PAYMENT', 'PARTIALLY_PAID']), $lock)
                 ->count();
             if ($voucher->quota - $reservedInFlight <= 0) {
                 return $fail('Kuota voucher sudah habis.');
@@ -93,17 +93,28 @@ class VoucherService
     }
 
     /** Sisa saldo voucher CREDIT dikurangi potongan yang sedang dipesan order belum bayar. */
-    public function availableBalance(Voucher $voucher): float
+    public function availableBalance(Voucher $voucher, bool $lock = false): float
     {
         if (! $voucher->isCredit()) {
             return 0.0;
         }
 
-        $reserved = (float) Order::where('voucher_code', $voucher->code)
-            ->whereIn('payment_status', self::RESERVING_STATUSES)
+        $reserved = (float) $this->freshRead(Order::where('voucher_code', $voucher->code)
+            ->whereIn('payment_status', self::RESERVING_STATUSES), $lock)
             ->sum('discount_amount');
 
         return max(0.0, round((float) $voucher->balance - $reserved, 2));
+    }
+
+    /**
+     * Checkout ($lock): baris voucher sudah dikunci, jadi checkout dengan kode yang sama berjalan bergiliran. Tapi di
+     * MySQL REPEATABLE READ (default) SELECT biasa memakai snapshot awal transaksi — checkout kedua tidak melihat order
+     * checkout pertama yang baru commit, sehingga saldo / kuota yang sama terpakai dua kali (audit 16 Okt 2026).
+     * Locking read selalu membaca versi terbaru yang sudah commit. Tampilan saldo (tanpa $lock) tetap baca biasa.
+     */
+    private function freshRead(\Illuminate\Database\Eloquent\Builder $query, bool $lock): \Illuminate\Database\Eloquent\Builder
+    {
+        return $lock ? $query->lockForUpdate() : $query;
     }
 
     /**
