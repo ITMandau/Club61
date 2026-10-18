@@ -512,9 +512,31 @@ trait ManagesScheduleAndSlots
             $changed = true;
         }
 
+        $this->restoreBallStock($booking);
+
         if ($changed) {
             $booking->save();
         }
+    }
+
+    /**
+     * Bola = dibeli (habis pakai) dan stoknya dipotong saat checkout, SEBELUM dibayar. Booking batal/expired = pembelian
+     * bola ikut batal → stok dikembalikan. Dulu hanya batal QRIS kasir yang mengembalikan, jadi tiap keranjang yang
+     * ditinggal menggerus stok (bisa dibuat 0 dengan sengaja). Idempoten: baris yang sudah dikembalikan
+     * (stock_deducted_at NULL) dilewati. Alat sewa (raket/handuk) tidak disentuh — stoknya diurus saat check-in/retur.
+     */
+    protected function restoreBallStock(PadelBooking $booking): void
+    {
+        \App\Models\Padel\PadelBookingEquipment::with('equipment')
+            ->where('booking_id', $booking->id)
+            ->whereNotNull('stock_deducted_at')
+            ->lockForUpdate()
+            ->get()
+            ->filter(fn ($row) => strtoupper((string) $row->equipment?->type) === 'BALL')
+            ->each(function ($row) {
+                $row->equipment->increment('stock_quantity', (int) $row->quantity);
+                $row->update(['stock_deducted_at' => null]);
+            });
     }
 
     /**

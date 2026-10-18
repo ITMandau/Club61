@@ -10,6 +10,11 @@ class ListSponsorAccessSchedules extends ListRecords
 {
     protected static string $resource = SponsorAccessScheduleResource::class;
 
+    public function getSubheading(): ?string
+    {
+        return SponsorAccessScheduleResource::IN_PROGRESS_NOTE;
+    }
+
     protected function getHeaderActions(): array
     {
         return [

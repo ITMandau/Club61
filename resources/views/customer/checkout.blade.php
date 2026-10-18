@@ -209,6 +209,9 @@
                             <div x-show="!useMembershipBenefit" class="text-[11px] leading-relaxed text-[#7A5A52]">Benefit off for this booking — your quota stays untouched.</div>
                         </div>
                     </template>
+                    <template x-if="!isLoadingMembershipPreview && !membershipBenefit && membershipNotice">
+                        <div data-membership-notice class="rounded-lg border border-amber-200 bg-amber-50 p-3 text-[11px] leading-relaxed text-amber-900" x-text="membershipNotice"></div>
+                    </template>
 
                     {{-- Voucher jam corporate --}}
                     <template x-if="!isLoadingMembershipPreview && sponsorVoucherBenefit">
@@ -553,6 +556,7 @@
                 bookingItems: [],
                 bookingDateFormatted: 'Today',
                 membershipBenefit: null,
+                membershipNotice: null,
                 useMembershipBenefit: true,
                 sponsorVoucherBenefit: null,
                 useSponsorVoucherBenefit: true,
@@ -711,6 +715,12 @@
                         } else {
                             this.membershipBenefit = null;
                         }
+                        // Kartu member ada tapi tidak berlaku untuk jadwal ini → jelaskan kenapa harga normal.
+                        this.membershipNotice = (json.success && json.data && !json.data.has_benefit) ? ({
+                            MEMBERSHIP_ENDS_BEFORE_PLAY_DATE: 'Your membership' + (json.data.plan_name ? ' (' + json.data.plan_name + ')' : '') + ' ends'
+                                + (json.data.membership_end_date ? ' on ' + this.formatDate(json.data.membership_end_date) : '') + ', before this play date — normal price applies.',
+                            OUTSIDE_TIME_WINDOW: 'This slot is outside your membership access hours — normal price applies.',
+                        }[json.data.rejected_reason] || null) : null;
                         if (json.success && json.data && json.data.sponsor_voucher_benefit && json.data.sponsor_voucher_benefit.has_benefit) {
                             this.sponsorVoucherBenefit = json.data.sponsor_voucher_benefit;
                         } else {
@@ -719,6 +729,7 @@
                     } catch (e) {
                         // Tidak fatal — customer tanpa membership/voucher tetap bisa checkout normal
                         this.membershipBenefit = null;
+                        this.membershipNotice = null;
                         this.sponsorVoucherBenefit = null;
                     } finally {
                         this.isLoadingMembershipPreview = false;
@@ -965,7 +976,8 @@
                 incrementAddon(idx) {
                     if (!this.selectedAddOns[idx]) return;
                     const item = this.selectedAddOns[idx];
-                    const maxStock = item.stock || 99;
+                    // Maksimal 10 per alat per checkout (sama dengan validasi server), dan tidak melebihi stok.
+                    const maxStock = Math.min(10, item.stock || 10);
                     if ((item.quantity || 1) < maxStock) {
                         item.quantity = (item.quantity || 1) + 1;
                     }

@@ -34,14 +34,20 @@
                 <div @if(! empty($previewMode)) inert @endif class="space-y-6">
                 <div id="corporate-alert" class="hidden p-4 rounded-lg text-xs font-bold"></div>
 
+                @if($organization->isSuspended())
+                    <div data-org-suspended class="p-4 rounded-lg bg-amber-50 border border-amber-300 text-xs text-amber-900 leading-relaxed">
+                        <strong>This corporate account is suspended.</strong> Releasing hours is paused and your team's vouchers can't be used for bookings until Club 61 reactivates the account. Please contact Club 61.
+                    </div>
+                @endif
+
                 <!-- Contract Summary -->
                 <div class="relative overflow-hidden rounded-xl p-6 sm:p-8 border-2 border-[#662721] shadow-[0_15px_35px_rgba(102,39,33,0.2)]"
                      style="background: linear-gradient(135deg, #F7F0DB 0%, #FFFFFF 100%);">
                     <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
                         <div>
                             <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full text-[10px] font-extrabold uppercase bg-[#F7F0DB] text-[#662721] border border-[#E6DAC0]">
-                                <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                                <span>Active Corporate Account</span>
+                                <span class="w-2 h-2 rounded-full {{ $organization->isSuspended() ? 'bg-amber-500' : 'bg-emerald-500 animate-pulse' }}"></span>
+                                <span>{{ $organization->isSuspended() ? 'Suspended Corporate Account' : 'Active Corporate Account' }}</span>
                             </div>
                             <div class="font-display font-black text-2xl sm:text-3xl text-[#4F2F2A] mt-2">{{ $organization->name }}</div>
                             <div class="text-xs text-[#7A5A52] mt-1">
@@ -59,13 +65,13 @@
                             <div class="p-4 rounded-lg bg-white border border-[#E6DAC0] shadow-sm text-center">
                                 <div class="text-[10px] font-extrabold uppercase tracking-wider text-[#662721]">Contract Quota</div>
                                 <div class="font-display font-black text-xl text-[#4F2F2A] mt-1">
-                                    {{ $totalQuota !== null ? number_format($totalQuota, 1) : 'Unlimited' }}
+                                    {{ $totalQuota !== null ? number_format($totalQuota, 1) : 'No hour quota' }}
                                 </div>
                             </div>
                             <div class="p-4 rounded-lg bg-white border border-[#E6DAC0] shadow-sm text-center">
                                 <div class="text-[10px] font-extrabold uppercase tracking-wider text-[#662721]">Quota Remaining</div>
                                 <div class="font-display font-black text-xl text-[#4F2F2A] mt-1">
-                                    {{ $quotaRemaining !== null ? number_format($quotaRemaining, 1) : 'Unlimited' }}
+                                    {{ $quotaRemaining !== null ? number_format($quotaRemaining, 1) : 'No hour quota' }}
                                 </div>
                             </div>
                             <div class="p-4 rounded-lg bg-white border border-[#E6DAC0] shadow-sm text-center">
@@ -82,7 +88,7 @@
                         @if($totalQuota !== null)
                             Contract quota of {{ number_format($totalQuota, 1) }} hrs &mdash; {{ number_format($totalHoursReleased, 1) }} hrs already released to {{ $activeMemberCount }} active member(s), {{ number_format($quotaRemaining, 1) }} hrs still available to release. {{ number_format($totalHoursUsed, 1) }} hrs actually used so far.
                         @else
-                            No contract quota cap set (unlimited) &mdash; {{ number_format($totalHoursReleased, 1) }} hrs released so far to {{ $activeMemberCount }} active member(s), {{ number_format($totalHoursUsed, 1) }} hrs actually used.
+                            This plan has no padel hour quota, so hours can't be released &mdash; contact Club 61 to update the contract. {{ number_format($totalHoursReleased, 1) }} hrs released so far to {{ $activeMemberCount }} active member(s), {{ number_format($totalHoursUsed, 1) }} hrs actually used.
                         @endif
                     </p>
                 </div>

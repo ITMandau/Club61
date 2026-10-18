@@ -125,7 +125,8 @@ class CustomerAccountService
                 $member = $members[$v->sponsor_organization_member_id];
                 $remaining = $v->remainingHours();
                 $status = match (true) {
-                    $member->status !== 'ACTIVE' => self::INACTIVE,
+                    // Anggota dicabut, atau organisasinya Ditangguhkan admin → voucher tidak bisa dipakai di checkout.
+                    $member->status !== 'ACTIVE', (bool) $member->organization?->isSuspended() => self::INACTIVE,
                     $remaining <= 0 => self::USED,
                     $v->isExpired() => self::EXPIRED,
                     default => self::AVAILABLE,

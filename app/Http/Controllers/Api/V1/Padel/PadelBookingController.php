@@ -187,8 +187,10 @@ class PadelBookingController extends Controller
             'booking_ids' => ['required', 'array', 'min:1'],
             'booking_ids.*' => ['required', 'string'],
             'equipments' => ['nullable', 'array'],
-            'equipments.*.equipment_id' => ['required', 'string'],
-            'equipments.*.quantity' => ['required', 'integer', 'min:1'],
+            // Satu baris per alat, maks. 10 per checkout — dulu tanpa batas: stok bola bisa dihabiskan oleh keranjang yang
+            // tidak pernah dibayar (stok bola dipotong saat checkout).
+            'equipments.*.equipment_id' => ['required', 'string', 'distinct'],
+            'equipments.*.quantity' => ['required', 'integer', 'min:1', 'max:10'],
             'voucher_code' => ['nullable', 'string'],
             // Kode harus ada di katalog resmi; aktif/nonaktif & batas nominal divalidasi di service (butuh total tagihan).
             'payment_method' => ['required', 'string', \Illuminate\Validation\Rule::in(array_keys(\App\Services\Payment\OnlinePaymentCatalog::all()))],

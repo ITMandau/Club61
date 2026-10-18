@@ -47,6 +47,27 @@ class SponsorAccessScheduleResource extends Resource
 
     protected static ?int $navigationSort = 2;
 
+    /**
+     * Aturan jadwal ini BELUM ditegakkan saat checkout / kasir (voucher sponsor tetap bisa dipakai di jam & lapangan
+     * mana pun) — keputusan 18 Okt 2026: tampilkan sebagai "sedang dalam proses pembuatan", fitur lain tetap jalan.
+     */
+    public const IN_PROGRESS_NOTE = 'Sedang dalam proses pembuatan — jadwal di sini sudah bisa diatur dan tampil di portal PIC, tapi belum membatasi pemakaian voucher sponsor saat booking (hari, jam, dan maks. lapangan belum dicek).';
+
+    public static function getNavigationBadge(): ?string
+    {
+        return 'Proses';
+    }
+
+    public static function getNavigationBadgeColor(): string|array|null
+    {
+        return 'warning';
+    }
+
+    public static function getNavigationBadgeTooltip(): ?string
+    {
+        return 'Sedang dalam proses pembuatan';
+    }
+
     // Model SponsorAccessSchedule tidak punya Gate::policy() apa pun terdaftar — tanpa override
     // ini, Filament fallback ke Gate::before-only (default ALLOW ke semua staf yang login, apapun
     // rolenya) karena tidak ada policy yang bisa dicek sama sekali. Override langsung di sini

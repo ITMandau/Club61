@@ -1483,11 +1483,18 @@ trait ManagesCheckoutAndPayments
             'discount_percent' => 0.0,
             'remaining_quota_after' => null,
             'rejected_reason' => null,
+            'membership_end_date' => null,
         ];
 
         if ($membershipBalanceId === 'none' || $membershipBalanceId === 'NONE') {
             return $noBenefit;
         }
+
+        $bookings = collect($bookings);
+        // Benefit berlaku menurut TANGGAL MAIN, bukan tanggal checkout: kartu yang habis 20 Okt tidak boleh menanggung
+        // booking 30 Nov (dulu cuma dicek "masih aktif hari ini"). Sama dengan aturan reschedule (benefit gugur).
+        $lastPlayDate = $bookings->map(fn ($b) => \Carbon\Carbon::parse($b->start_time)->toDateString())->max();
+        $autoDetected = ! $membershipBalanceId;
 
         // Mode preview (dipanggil dari endpoint "lihat dulu sebelum bayar") tidak perlu row-lock karena
         // tidak menulis apa-apa ke database — locking cukup dilakukan saat commit (checkout beneran).
@@ -1497,7 +1504,7 @@ trait ManagesCheckoutAndPayments
             $balance = $commit ? $query->lockForUpdate()->first() : $query->first();
         } else {
             // Auto-detect active membership Padel balance
-            $activeMembership = \App\Models\Membership\UserMembership::where('user_id', $user->id)
+            $candidates = \App\Models\Membership\UserMembership::where('user_id', $user->id)
                 ->where('status', 'ACTIVE')
                 ->where(function ($q) {
                     $q->whereNull('end_date')->orWhere('end_date', '>=', now()->toDateString());
@@ -1508,13 +1515,23 @@ trait ManagesCheckoutAndPayments
                 // Tie-break: kartu yang paling cepat kedaluwarsa dipakai lebih dulu (jam tidak hangus sia-sia
                 // jika user punya >1 membership aktif); kartu tanpa end_date (unlimited) diprioritaskan paling akhir.
                 ->orderByRaw('end_date IS NULL, end_date ASC')
-                ->first();
+                ->get();
 
-            if ($activeMembership) {
-                $query = \App\Models\Membership\UserMembershipBalance::where('user_membership_id', $activeMembership->id)
-                    ->where('facility', 'PADEL');
-                $balance = $commit ? $query->lockForUpdate()->first() : $query->first();
+            // Kartu yang masih berlaku di tanggal main terakhir keranjang ini.
+            $activeMembership = $candidates->first(fn ($m) => $m->end_date === null || $lastPlayDate === null || $m->end_date->toDateString() >= $lastPlayDate);
+
+            if (! $activeMembership) {
+                // Ada kartu aktif, tapi habis sebelum tanggal main → harga normal (bukan error) + alasannya untuk layar.
+                return $candidates->isEmpty() ? $noBenefit : array_merge($noBenefit, [
+                    'rejected_reason' => 'MEMBERSHIP_ENDS_BEFORE_PLAY_DATE',
+                    'plan_name' => $candidates->first()->plan->name ?? null,
+                    'membership_end_date' => $candidates->first()->end_date?->toDateString(),
+                ]);
             }
+
+            $query = \App\Models\Membership\UserMembershipBalance::where('user_membership_id', $activeMembership->id)
+                ->where('facility', 'PADEL');
+            $balance = $commit ? $query->lockForUpdate()->first() : $query->first();
         }
 
         if (! $balance) {
@@ -1530,21 +1547,35 @@ trait ManagesCheckoutAndPayments
             return $noBenefit;
         }
 
-        // Time window check — SELURUH rentang booking (mulai s.d. selesai) wajib di dalam jendela waktu paket,
-        // bukan cuma jam mulainya saja (all-or-nothing, tidak ada benefit parsial untuk booking yang nyerempet keluar jendela).
-        if ($balance->time_window_start && $balance->time_window_end) {
+        // Masa berlaku & jam akses paket — SELURUH booking di keranjang wajib lolos (all-or-nothing, tidak ada benefit
+        // parsial). Kartu yang dipilih eksplisit tapi tidak berlaku → 422 saat bayar. Kartu hasil deteksi otomatis
+        // (checkout online) → harga normal: layar sudah menampilkan "benefit tidak berlaku", jadi checkout tidak boleh
+        // gagal (dulu member paket jam pagi yang booking malam tidak bisa checkout sama sekali).
+        $endDate = $membership->end_date?->toDateString();
+        $rejectedReason = null;
+        if ($endDate && $lastPlayDate && $lastPlayDate > $endDate) {
+            $rejectedReason = 'MEMBERSHIP_ENDS_BEFORE_PLAY_DATE';
+        } elseif ($balance->time_window_start && $balance->time_window_end) {
             foreach ($bookings as $b) {
-                $bookingStart = \Carbon\Carbon::parse($b->start_time)->format('H:i:s');
-                $bookingEnd = \Carbon\Carbon::parse($b->end_time)->format('H:i:s');
-                if ($bookingStart < $balance->time_window_start || $bookingEnd > $balance->time_window_end) {
-                    if ($commit) {
-                        throw new HttpException(422, "Sesi booking di luar jam akses paket membership ({$balance->time_window_start} - {$balance->time_window_end}). Seluruh durasi booking harus berada di dalam jendela waktu paket.");
-                    }
-
-                    // Mode preview: jangan gagalkan halaman, cukup laporkan benefit tidak berlaku + alasannya.
-                    return array_merge($noBenefit, ['rejected_reason' => 'OUTSIDE_TIME_WINDOW']);
+                if ($this->isOutsideBenefitTimeWindow((string) $balance->time_window_start, (string) $balance->time_window_end, \Carbon\Carbon::parse($b->start_time), \Carbon\Carbon::parse($b->end_time))) {
+                    $rejectedReason = 'OUTSIDE_TIME_WINDOW';
+                    break;
                 }
             }
+        }
+
+        if ($rejectedReason) {
+            if ($commit && ! $autoDetected) {
+                throw new HttpException(422, $rejectedReason === 'OUTSIDE_TIME_WINDOW'
+                    ? "Sesi booking di luar jam akses paket membership ({$balance->time_window_start} - {$balance->time_window_end}). Seluruh durasi booking harus berada di dalam jendela waktu paket."
+                    : 'Masa aktif membership berakhir '.$membership->end_date->translatedFormat('d M Y').' — booking setelah tanggal itu tidak bisa memakai benefit member. Matikan benefit member atau pilih tanggal sampai '.$membership->end_date->translatedFormat('d M Y').'.');
+            }
+
+            return array_merge($noBenefit, [
+                'rejected_reason' => $rejectedReason,
+                'plan_name' => $membership->plan->name ?? null,
+                'membership_end_date' => $endDate,
+            ]);
         }
 
         $balanceService = app(\App\Services\Membership\MembershipBalanceService::class);
@@ -1617,7 +1648,24 @@ trait ManagesCheckoutAndPayments
             'discount_percent' => (float) $balance->discount_percent,
             'remaining_quota_after' => $simulatedRemaining,
             'rejected_reason' => null,
+            'membership_end_date' => $endDate,
         ];
+    }
+
+    /**
+     * Apakah sesi main keluar dari jam akses paket. Dihitung dalam menit-dalam-hari: jam selesai 00:00 hari berikutnya
+     * = 24:00 (1440), jendela yang berakhir 00:00 = sampai tengah malam. Dulu dibandingkan sebagai teks "H:i:s", jadi
+     * slot 23:00–24:00 ("00:00:00") lolos dari paket 06:00–16:00 dan paket malam (s.d. 00:00) selalu menolak.
+     * Dipakai checkout online, kasir walk-in, preview, dan reschedule.
+     */
+    protected function isOutsideBenefitTimeWindow(string $windowStart, string $windowEnd, \Carbon\Carbon $start, \Carbon\Carbon $end): bool
+    {
+        $toMinutes = fn (string $hms) => ((int) substr($hms, 0, 2)) * 60 + (int) substr($hms, 3, 2);
+        $startMin = $start->hour * 60 + $start->minute;
+        $endMin = $end->isSameDay($start) ? $end->hour * 60 + $end->minute : 1440 + $end->hour * 60 + $end->minute;
+        $windowEndMin = $toMinutes($windowEnd) === 0 ? 1440 : $toMinutes($windowEnd);
+
+        return $startMin < $toMinutes($windowStart) || $endMin > $windowEndMin;
     }
 
     /**
@@ -1668,8 +1716,10 @@ trait ManagesCheckoutAndPayments
             return $noBenefit;
         }
 
+        // Organisasi yang Ditangguhkan admin → voucher karyawannya tidak bisa dipakai (dulu status ini tidak dicek di mana pun).
         $member = \App\Models\Sponsor\SponsorOrganizationMember::where('user_id', $user->id)
             ->where('status', 'ACTIVE')
+            ->whereHas('organization', fn ($q) => $q->where('status', \App\Models\Sponsor\SponsorOrganization::STATUS_ACTIVE))
             ->first();
 
         if (! $member) {
@@ -1687,10 +1737,13 @@ trait ManagesCheckoutAndPayments
         }
 
         $vouchers = $commit ? $voucherQuery->lockForUpdate()->get() : $voucherQuery->get();
-        $usable = $vouchers->filter(fn ($v) => $v->remainingHours() > 0)->values();
+        $withHours = $vouchers->filter(fn ($v) => $v->remainingHours() > 0)->values();
+        // Voucher harus masih berlaku saat JAM MAIN dimulai (bukan cuma saat checkout) — sama dengan aturan reschedule.
+        $lastStart = collect($bookings)->map(fn ($b) => \Carbon\Carbon::parse($b->start_time))->max();
+        $usable = $withHours->filter(fn ($v) => $lastStart === null || $v->expires_at->gt($lastStart))->values();
 
         if ($usable->isEmpty()) {
-            return $noBenefit;
+            return $withHours->isEmpty() ? $noBenefit : array_merge($noBenefit, ['rejected_reason' => 'VOUCHER_EXPIRES_BEFORE_PLAY_DATE']);
         }
 
         // 1 transaksi = 1 voucher: yang paling cepat expired di antara yang cukup menutup semua jam transaksi ini,
@@ -1871,7 +1924,8 @@ trait ManagesCheckoutAndPayments
 
             // 2. Voucher jam corporate — rumus sama dengan applySponsorVoucherBenefitToCourtBookings().
             $member = $sponsorVoucherId === 'NONE' || $sponsorVoucherId === 'none' ? null
-                : \App\Models\Sponsor\SponsorOrganizationMember::with('organization')->where('user_id', $user->id)->where('status', 'ACTIVE')->first();
+                : \App\Models\Sponsor\SponsorOrganizationMember::with('organization')->where('user_id', $user->id)->where('status', 'ACTIVE')
+                    ->whereHas('organization', fn ($q) => $q->where('status', \App\Models\Sponsor\SponsorOrganization::STATUS_ACTIVE))->first();
             if ($member) {
                 $voucherQuery = \App\Models\Sponsor\SponsorMemberVoucher::where('sponsor_organization_member_id', $member->id)
                     ->where('expires_at', '>', now())
@@ -1879,7 +1933,19 @@ trait ManagesCheckoutAndPayments
                 if ($sponsorVoucherId) {
                     $voucherQuery->where('id', $sponsorVoucherId);
                 }
-                $pool = $voucherQuery->get()->map(fn ($v) => $v->remainingHours())->filter(fn ($h) => $h > 0)->values()->all();
+                // Sama dengan checkout: voucher harus masih berlaku saat jam main terakhir dimulai.
+                $lastStart = collect($lines)->max('start');
+                $usable = $voucherQuery->get()->filter(fn ($v) => $lastStart === null || $v->expires_at->gt($lastStart))
+                    ->filter(fn ($v) => $v->remainingHours() > 0)->values();
+
+                // 1 transaksi = 1 voucher, dipilih persis seperti applySponsorVoucherBenefitToCourtBookings(): yang paling
+                // cepat expired di antara yang cukup menutup semua jam yang belum lunas oleh membership, kalau tidak ada
+                // yang cukup → sisa jam terbanyak. Dulu layar kasir menjumlah SEMUA voucher (2 voucher @1 jam = 2 jam
+                // gratis) padahal server hanya memakai satu → bayar selalu gagal 409 "Total tagihan berubah".
+                $hoursNeeded = round((float) collect($lines)->filter(fn ($l) => $l['fee_after'] > 0)->sum('hours'), 2);
+                $chosen = $usable->first(fn ($v) => $v->remainingHours() >= $hoursNeeded)
+                    ?? $usable->sortByDesc(fn ($v) => $v->remainingHours())->first();
+                $pool = $chosen ? [$chosen->remainingHours()] : [];
 
                 $sponsor['organization_name'] = $member->organization->name ?? null;
                 $sponsor['hours_available'] = round((float) array_sum($pool), 2);
@@ -1977,6 +2043,7 @@ trait ManagesCheckoutAndPayments
             'court_subtotal' => $courtSubtotal,
             'projected_court_total' => $projectedCourtTotal,
             'rejected_reason' => $result['rejected_reason'],
+            'membership_end_date' => $result['membership_end_date'],
             'sponsor_voucher_benefit' => [
                 'has_benefit' => $sponsorResult['benefit_type'] !== 'NONE',
                 'organization_name' => $sponsorResult['organization_name'],

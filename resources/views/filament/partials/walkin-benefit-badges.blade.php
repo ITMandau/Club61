@@ -32,6 +32,8 @@
     </div>
     @if ($useMembershipBenefit && ($benefitQuote['membership']['rejected_reason'] ?? null) === 'OUTSIDE_TIME_WINDOW')
         <div style="font-size:0.6rem; color:#92400E; margin-top:0.2rem;">Jadwal di luar jam akses paket — kuota member tidak dipakai.</div>
+    @elseif ($useMembershipBenefit && ($benefitQuote['membership']['rejected_reason'] ?? null) === 'MEMBERSHIP_ENDS_BEFORE_PLAY_DATE')
+        <div style="font-size:0.6rem; color:#92400E; margin-top:0.2rem;">Tanggal main setelah membership berakhir — kuota member tidak dipakai, harga normal.</div>
     @endif
 @endif
 

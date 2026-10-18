@@ -362,10 +362,22 @@ class KelolaMenuFnb extends Page
             'menuBasePrice.required' => 'Harga dasar wajib diisi.',
         ]);
 
+        $menu = null;
+        if ($this->editingMenuId) {
+            $menu = FnbMenu::find($this->editingMenuId);
+            if (! $menu) {
+                Notification::make()->title('Menu tidak ditemukan')->danger()->send();
+
+                return;
+            }
+        }
+
         // Foto SELALU diproses ulang lewat SecureImageUploader (GD re-encode, buang
         // EXIF/metadata, resize) — staf tidak pernah bisa menempelkan URL gambar eksternal
         // bebas, cuma upload file yang divalidasi dari isinya.
-        $photoPath = $this->existingMenuPhotoPath;
+        // Foto lama diambil dari DATABASE, bukan $existingMenuPhotoPath (properti publik — bisa diubah dari browser,
+        // lalu path itu ikut dihapus oleh FnbMenu::booted(), mis. video signage).
+        $photoPath = $menu?->image_url;
         if ($this->menuPhotoUpload) {
             $photoPath = SecureImageUploader::store($this->menuPhotoUpload, 'fnb/menu');
         } elseif ($this->removeMenuPhoto) {
@@ -382,14 +394,7 @@ class KelolaMenuFnb extends Page
             'is_available' => $this->menuIsAvailable,
         ];
 
-        if ($this->editingMenuId) {
-            $menu = FnbMenu::find($this->editingMenuId);
-            if (! $menu) {
-                Notification::make()->title('Menu tidak ditemukan')->danger()->send();
-
-                return;
-            }
-
+        if ($menu) {
             // Event model FnbMenu::booted() otomatis membuang foto lama dari disk kalau
             // image_url berubah — tidak perlu diulang manual di sini.
             $menu->update($data);

@@ -19,6 +19,7 @@ use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\TimePicker;
 use Filament\Forms\Components\Toggle;
+use Filament\Notifications\Notification;
 use Filament\Resources\Resource;
 use Filament\Schemas\Components\Grid;
 use Filament\Schemas\Components\Section;
@@ -27,6 +28,7 @@ use Filament\Schemas\Schema;
 use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
+use Illuminate\Support\Collection;
 use UnitEnum;
 
 class MembershipPlanResource extends Resource
@@ -296,13 +298,45 @@ class MembershipPlanResource extends Resource
             ])
             ->recordActions([
                 EditAction::make(),
-                DeleteAction::make(),
+                self::guardedDeleteAction(),
             ])
             ->toolbarActions([
                 BulkActionGroup::make([
-                    DeleteBulkAction::make(),
+                    DeleteBulkAction::make()
+                        ->before(function (DeleteBulkAction $action, Collection $records) {
+                            $inUse = $records->filter(fn (MembershipPlan $plan) => $plan->isInUse());
+                            if ($inUse->isNotEmpty()) {
+                                self::notifyPlanInUse($inUse->pluck('name')->implode(', '));
+                                $action->cancel();
+                            }
+                        }),
                 ]),
             ]);
+    }
+
+    /**
+     * Hapus paket ditolak selama masih ada kartu aktif / menunggu bayar yang memakainya (dulu bisa → Home member 500,
+     * kasir error, aktivasi gagal). Dipakai di tabel & halaman edit; model juga menolak sebagai pengaman terakhir.
+     */
+    public static function guardedDeleteAction(): DeleteAction
+    {
+        return DeleteAction::make()
+            ->before(function (DeleteAction $action, MembershipPlan $record) {
+                if ($record->isInUse()) {
+                    self::notifyPlanInUse($record->name);
+                    $action->cancel();
+                }
+            });
+    }
+
+    private static function notifyPlanInUse(string $names): void
+    {
+        Notification::make()
+            ->title('Paket masih dipakai member')
+            ->body("{$names} masih dipakai kartu member yang aktif / menunggu pembayaran, jadi tidak bisa dihapus. Nonaktifkan paketnya (matikan Aktif) supaya tidak dijual lagi.")
+            ->danger()
+            ->persistent()
+            ->send();
     }
 
     public static function getPages(): array

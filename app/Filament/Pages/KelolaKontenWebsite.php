@@ -338,7 +338,10 @@ class KelolaKontenWebsite extends Page
         // properti non-public Livewire (protected/private) di-reset ke default setiap request,
         // jadi kalau dicatat di mount() lalu dibaca lagi di save() (request terpisah), nilainya
         // selalu kosong dan penghapusan tidak akan pernah benar-benar tereksekusi.
-        $existingFacilityIds = CompanyProfileFacility::pluck('id')->all();
+        // Path foto SELALU dari database, bukan dari properti Livewire: properti publik bisa diubah dari browser, dan
+        // dulu path kiriman browser langsung dipakai untuk menghapus file (mis. video signage) / disimpan ke baris lain.
+        $storedPhotoPaths = CompanyProfileFacility::pluck('photo_path', 'id')->all();
+        $existingFacilityIds = array_keys($storedPhotoPaths);
         $keptFacilityIds = [];
 
         foreach ($this->facilities as $index => $facility) {
@@ -347,7 +350,9 @@ class KelolaKontenWebsite extends Page
                 continue;
             }
 
-            $photoPath = $facility['photo_path'] ?? null;
+            // Id yang tidak ada di database diperlakukan sebagai fasilitas baru (tanpa foto lama).
+            $knownId = ! empty($facility['id']) && array_key_exists($facility['id'], $storedPhotoPaths) ? $facility['id'] : null;
+            $photoPath = $knownId ? $storedPhotoPaths[$knownId] : null;
             $oldPhotoPath = null;
 
             if (! empty($this->facilityUploads[$index])) {
@@ -358,7 +363,7 @@ class KelolaKontenWebsite extends Page
                 $photoPath = null;
             }
 
-            $id = $facility['id'] ?: (string) Str::ulid();
+            $id = $knownId ?: (string) Str::ulid();
 
             CompanyProfileFacility::updateOrCreate(['id' => $id], [
                 'title' => mb_substr($title, 0, 80),

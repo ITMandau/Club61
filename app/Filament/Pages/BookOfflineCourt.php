@@ -614,7 +614,7 @@ class BookOfflineCourt extends Page
             $padelBalance = $activeMbr->balanceFor('PADEL');
             $this->activeMembershipInfo = [
                 'membership_code' => $activeMbr->membership_code,
-                'plan_name' => $activeMbr->plan->name,
+                'plan_name' => $activeMbr->plan?->name ?? 'Membership',
                 'facility' => 'PADEL',
                 'quota_type' => $padelBalance?->quota_type ?? 'NONE',
                 'remaining_quota' => $padelBalance ? (float) $padelBalance->remaining_quota : 0.00,

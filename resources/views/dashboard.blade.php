@@ -1,6 +1,8 @@
 @php
     $myCorporateMemberForDashboard = \App\Models\Sponsor\SponsorOrganizationMember::where('user_id', Auth::id())
         ->where('status', 'ACTIVE')
+        // Organisasi Ditangguhkan → voucher tidak bisa dipakai, jadi tidak dipromosikan di Home.
+        ->whereHas('organization', fn ($q) => $q->where('status', \App\Models\Sponsor\SponsorOrganization::STATUS_ACTIVE))
         ->with(['organization.userMembership.plan', 'vouchers' => fn ($q) => $q->whereNull('acknowledged_at')->where('expires_at', '>', now())->orderBy('expires_at')])
         ->first();
     $unacknowledgedVouchers = $myCorporateMemberForDashboard ? $myCorporateMemberForDashboard->vouchers : collect();
@@ -266,7 +268,7 @@
                         @if($activeUserMembership)
                             <div class="mt-1.5 inline-flex items-center gap-1.5 max-w-full px-3 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wider bg-[#F7F0DB] text-[#662721] border border-[#E6DAC0]">
                                 <span class="w-2 h-2 shrink-0 rounded-full bg-emerald-500 animate-pulse"></span>
-                                <span class="truncate">{{ $activeUserMembership->plan->name }}</span>
+                                <span class="truncate">{{ $activeUserMembership->plan?->name ?? 'Club 61 Member' }}</span>
                             </div>
                             <div class="text-[11px] font-mono font-bold text-[#662721] mt-1 truncate">{{ $activeUserMembership->membership_code }}</div>
 

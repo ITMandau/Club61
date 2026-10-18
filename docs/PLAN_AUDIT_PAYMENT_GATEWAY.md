@@ -1,5 +1,8 @@
 # Plan: Audit Payment Gateway & Scheduler (16 Okt 2026)
 
+> **Arsip / catatan.** Audit terbaru: [AUDIT_QA_18_OKT_2026.md](AUDIT_QA_18_OKT_2026.md). Item yang masih terbuka
+> dari dokumen ini sudah dirangkum di sana (bagian "Catatan audit lama").
+
 Hasil audit QA/pentest jalur pembayaran (Midtrans, DOKU, checkout, webhook, scheduler) — daftar kerja bertahap. Semua
 temuan sudah dicocokkan ke baris kode saat audit; nomor baris bisa bergeser setelah ada perubahan.
 

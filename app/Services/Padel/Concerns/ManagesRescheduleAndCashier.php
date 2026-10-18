@@ -271,13 +271,8 @@ trait ManagesRescheduleAndCashier
         }
 
         if ($window = $context['time_window']) {
-            // Menit-dalam-hari; jam selesai 00:00 hari berikutnya = 24:00 (dulu 23:00-24:00 lolos dari cek jam paket).
-            $toMinutes = fn (string $hms) => ((int) substr($hms, 0, 2)) * 60 + (int) substr($hms, 3, 2);
-            $startMin = $start->hour * 60 + $start->minute;
-            $endMin = $end->isSameDay($start) ? $end->hour * 60 + $end->minute : 1440 + $end->hour * 60 + $end->minute;
-            $windowEnd = $toMinutes($window['end']) === 0 ? 1440 : $toMinutes($window['end']);
-
-            if ($startMin < $toMinutes($window['start']) || $endMin > $windowEnd) {
+            // Rumus yang sama dengan checkout & kasir (24:00 dihitung benar).
+            if ($this->isOutsideBenefitTimeWindow($window['start'], $window['end'], $start, $end)) {
                 return 'Jadwal baru di luar jam berlaku paket membership ('.substr($window['start'], 0, 5).' - '.substr($window['end'], 0, 5)
                     .'), benefit member gugur — jadwal baru dihitung harga normal.';
             }
