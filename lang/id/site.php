@@ -64,4 +64,7 @@ return [
     'location_address' => 'Alamat',
     'location_hours' => 'Jam buka',
     'location_whatsapp' => 'WhatsApp',
+    // Tombol WhatsApp melayang (website & portal customer) — satu-satunya tombol hubungi admin.
+    'whatsapp_float_label' => 'Chat dengan admin Club 61 via WhatsApp',
+    'whatsapp_float_message' => 'Halo Club 61, saya ingin bertanya.',
 ];

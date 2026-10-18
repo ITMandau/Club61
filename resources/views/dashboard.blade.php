@@ -109,7 +109,7 @@
                                 </span>
                             </a>
                             <button type="button"
-                                    @click="showNotice('Value Pack Passes', 'Buy 10 Hours of Padel and receive 2 Hours complimentary Sauna! Contact Concierge on WhatsApp at 0812-6161-PADEL.', 'info', 'Contact WhatsApp', () => window.open('https://wa.me/6281261617233?text=Hello%20Club%2061,%20I%20am%20interested%20in%20Value%20Pack', '_blank'))"
+                                    @click="showNotice('Value Pack Passes', 'Buy 10 Hours of Padel and receive 2 Hours complimentary Sauna! Ask us using the WhatsApp button at the bottom right.', 'info')"
                                     class="{{ $tileClass }}">
                                 <span class="{{ $iconClass }}"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg></span>
                                 <span class="min-w-0">
@@ -118,7 +118,7 @@
                                 </span>
                             </button>
                             <button type="button"
-                                    @click="showNotice('Upcoming Tournament', 'CLUB 61 Padel Championship 2026! Prize pool Rp 50.000.000. Registration open for members.', 'info', 'Inquire Concierge', () => window.open('https://wa.me/6281261617233?text=Hello%20Club%2061,%20I%20want%20to%20register%20for%20Tournament', '_blank'))"
+                                    @click="showNotice('Upcoming Tournament', 'CLUB 61 Padel Championship 2026! Prize pool Rp 50.000.000. Registration open for members — ask us using the WhatsApp button at the bottom right.', 'info')"
                                     class="{{ $tileClass }}">
                                 <span class="{{ $iconClass }}"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" /></svg></span>
                                 <span class="min-w-0">
@@ -318,11 +318,11 @@
                             <span class="inline-block px-2.5 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider bg-[#F7F0DB]/20 text-[#F7F0DB] border border-[#F7F0DB]/40">VIP Privilege</span>
                             <h3 class="font-display text-lg font-black leading-tight">Upgrade to Diamond Club</h3>
                             <p class="text-xs text-emerald-100/85 leading-relaxed">Priority advance booking, court rental discounts and weekly sauna access.</p>
-                            <button type="button"
-                                    @click="showNotice('VIP Membership Upgrade', 'To upgrade to Diamond Club VIP Membership, please visit our Frontdesk Concierge or contact via WhatsApp at 0812-6161-PADEL.', 'info', 'Inquire Concierge', () => window.open('https://wa.me/6281261617233?text=Hello%20Club%2061,%20I%20want%20to%20upgrade%20to%20Diamond%20Club', '_blank'))"
-                                    class="bk-tap w-full h-11 rounded-xl text-xs font-black uppercase tracking-wider whitespace-nowrap text-[#4F2F2A] bg-[#F7F0DB] hover:bg-white shadow-md active:scale-[0.98] transition-transform">
+                            {{-- Dulu popup + WhatsApp (nomor tertulis di kode). Modul 23: langsung ke halaman Membership. --}}
+                            <a href="{{ route('customer.membership') }}"
+                               class="bk-tap w-full h-11 rounded-xl flex items-center justify-center text-xs font-black uppercase tracking-wider whitespace-nowrap text-[#4F2F2A] bg-[#F7F0DB] hover:bg-white shadow-md active:scale-[0.98] transition-transform">
                                 Join Membership
-                            </button>
+                            </a>
                         </div>
                     </section>
 
@@ -332,7 +332,10 @@
                         <dl class="space-y-2 text-[#7A5A52] leading-relaxed">
                             <div class="flex gap-3"><dt class="w-20 shrink-0 font-bold text-[#4F2F2A]">Address</dt><dd class="min-w-0">Gedung Indosat, Jl. Perintis Kemerdekaan No. 39, Medan</dd></div>
                             <div class="flex gap-3"><dt class="w-20 shrink-0 font-bold text-[#4F2F2A]">Hours</dt><dd class="min-w-0">Daily · 06:00–23:00 WIB</dd></div>
-                            <div class="flex gap-3"><dt class="w-20 shrink-0 font-bold text-[#4F2F2A]">WhatsApp</dt><dd class="min-w-0">0812-6161-PADEL</dd></div>
+                            @php($venueWa = trim((string) rescue(fn () => \App\Models\Setting\CompanyProfileSetting::current()->whatsapp_number, '', false)))
+                            @if($venueWa !== '')
+                                <div class="flex gap-3"><dt class="w-20 shrink-0 font-bold text-[#4F2F2A]">WhatsApp</dt><dd class="min-w-0">{{ $venueWa }}</dd></div>
+                            @endif
                         </dl>
                     </section>
                 </div>

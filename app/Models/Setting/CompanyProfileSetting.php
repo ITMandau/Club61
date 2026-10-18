@@ -67,6 +67,30 @@ class CompanyProfileSetting extends Model
     public const DEFAULT_ADDRESS = 'Gedung Indosat, Jl. Perintis Kemerdekaan No. 39, Medan, Sumatera Utara.';
 
     /**
+     * Nomor WhatsApp admin dalam format wa.me (62…) — satu sumber untuk tombol WhatsApp melayang di website & portal
+     * customer (diubah dari menu Konten Website → Lokasi & Kontak). "0812-…", "+62 812 …", "812…" dirapikan; nomor
+     * kosong / tidak masuk akal → null (tombol tidak tampil). Gagal baca DB tidak boleh merusak halaman.
+     */
+    public static function whatsappDigits(): ?string
+    {
+        $digits = preg_replace('/\D+/', '', (string) rescue(fn () => self::current()->whatsapp_number, '', false));
+        $digits = match (true) {
+            str_starts_with($digits, '0') => '62'.substr($digits, 1),
+            str_starts_with($digits, '8') => '62'.$digits,
+            default => $digits,
+        };
+
+        return strlen($digits) >= 10 && strlen($digits) <= 15 ? $digits : null;
+    }
+
+    public static function whatsappUrl(?string $message = null): ?string
+    {
+        $digits = self::whatsappDigits();
+
+        return $digits ? 'https://wa.me/'.$digits.($message ? '?text='.rawurlencode($message) : '') : null;
+    }
+
+    /**
      * Alamat venue untuk struk & invoice — satu sumber dengan Konten Website (diubah dari menu Konten Website).
      * Dulu struk kasir & Z-Report menulis alamat lain secara hardcode ("Lebak Bulus"). Gagal baca DB / cache tidak boleh
      * menggagalkan cetak struk, jadi jatuh ke alamat default.

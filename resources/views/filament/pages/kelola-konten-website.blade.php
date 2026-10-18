@@ -371,14 +371,14 @@
         <div class="c61-card-head">
             <div>
                 <div class="c61-card-title">6. Lokasi &amp; Kontak</div>
-                <div class="c61-card-sub">Tombol WhatsApp &amp; peta di halaman depan.</div>
+                <div class="c61-card-sub">Nomor ini dipakai tombol WhatsApp melayang (pojok kanan bawah) di halaman depan, login, dan semua halaman customer — satu-satunya tombol hubungi admin. Kosongkan = tombol tidak tampil. Peta untuk halaman depan.</div>
             </div>
         </div>
 
         <div class="kkw-card-body">
             <div class="kkw-grid-2">
                 <div class="kkw-field">
-                    <label class="c61-label">Nomor WhatsApp (format: 62812xxxxxxx)</label>
+                    <label class="c61-label">Nomor WhatsApp admin (62812xxxxxxx atau 0812xxxxxxx)</label>
                     <input type="text" wire:model="whatsappNumber" class="c61-input" placeholder="6281234567890">
                 </div>
                 <div class="kkw-field">

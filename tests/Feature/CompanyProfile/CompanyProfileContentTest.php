@@ -245,6 +245,23 @@ class CompanyProfileContentTest extends TestCase
         $response->assertSee('https://instagram.com/club61', false);
     }
 
+    public function test_footer_social_links_render_as_builtin_icons_not_text(): void
+    {
+        $settings = CompanyProfileSetting::current();
+        $settings->footer_social_links = ['instagram' => 'https://instagram.com/club61', 'facebook' => 'https://facebook.com/club61', 'tiktok' => 'https://tiktok.com/@club61'];
+        $settings->save();
+
+        $response = $this->get('/')->assertOk();
+        foreach (['Instagram' => 'https://instagram.com/club61', 'Facebook' => 'https://facebook.com/club61', 'TikTok' => 'https://tiktok.com/@club61'] as $name => $url) {
+            $response->assertSee('href="'.$url.'" target="_blank" rel="noopener" aria-label="'.$name.'"', false);
+        }
+        // Logo resmi dengan warna brand (SVG bawaan), bukan teks nama platform.
+        $response->assertSee('data-social="instagram"', false)->assertSee('#d6249f', false)
+            ->assertSee('data-social="facebook"', false)->assertSee('fill="#0866FF"', false)
+            ->assertSee('data-social="tiktok"', false)->assertSee('fill="#25F4EE"', false)->assertSee('fill="#FE2C55"', false);
+        $response->assertDontSee('>instagram</a>', false);
+    }
+
     public function test_invalid_maps_embed_url_is_rejected_and_welcome_page_falls_back_to_generated_map(): void
     {
         // Regresi: staf pernah tidak sengaja mengetik alamat biasa (bukan link) di field

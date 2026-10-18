@@ -88,11 +88,11 @@
                     </div>
                 </template>
 
+                {{-- Dulu tombol "Contact the front desk" (WhatsApp) — kontak sekarang lewat tombol WhatsApp melayang. --}}
                 <template x-if="! currentTicket.can_pay_online">
-                    <a href="https://wa.me/6281261617233" target="_blank" rel="noopener"
-                       class="bk-tap w-full h-12 rounded-lg flex items-center justify-center text-xs font-black uppercase tracking-wider bg-[#662721] hover:bg-[#511D18] text-[#F7F0DB] shadow-md active:scale-[0.98] transition-transform">
-                        Contact the front desk
-                    </a>
+                    <p class="text-[11px] text-center text-[#7A5A52] leading-snug px-2">
+                        This order can't be paid online. Please pay at the front desk, or chat with us using the WhatsApp button at the bottom right.
+                    </p>
                 </template>
             </div>
         </template>

@@ -184,18 +184,7 @@
 
                         </div>
 
-                        <!-- Panel Footer -->
-                        <div class="pt-2.5 border-t border-[#E6DAC0]/50 text-center">
-                            <a href="https://wa.me/6281261617233?text=Hello%20Club%2061%20Padel,%20I%20need%20assistance" 
-                               target="_blank" 
-                               class="inline-flex items-center justify-center gap-1.5 text-[11px] font-bold text-[#662721] hover:text-[#4F2F2A] transition-colors">
-                                <svg class="w-3.5 h-3.5 text-emerald-600" fill="currentColor" viewBox="0 0 24 24">
-                                    <path d="M12.031 6.172c-3.181 0-5.767 2.586-5.768 5.766-.001 1.298.38 2.27 1.019 3.287l-.711 2.598 2.669-.699c.969.54 1.771.82 2.791.82 3.181 0 5.767-2.587 5.767-5.766.001-3.181-2.585-5.766-5.767-5.766zm9.969 5.766c0 5.514-4.486 10-10 10-1.823 0-3.528-.49-4.996-1.344l-5.004 1.309 1.334-4.877c-.958-1.517-1.503-3.308-1.503-5.088 0-5.514 4.486-10 10-10s10 4.486 10 10z"/>
-                                </svg>
-                                <span>Contact WhatsApp Concierge</span>
-                            </a>
-                        </div>
-
+                        {{-- Tombol "Contact WhatsApp Concierge" dihapus — kontak lewat tombol WhatsApp melayang. --}}
                     </div>
                 </div>
 

@@ -75,14 +75,4 @@
     </div>
 </div>
 
-<!-- Bantuan -->
-<div class="p-4 rounded-xl bg-gradient-to-r from-[#F7F0DB] via-[#F7F0DB] to-[#F7F0DB] border border-[#E6DAC0] flex items-center gap-3">
-    <div class="flex-1 min-w-0">
-        <h4 class="font-bold text-sm leading-tight">Need help with check-in?</h4>
-        <p class="text-[11px] text-[#7A5A52] leading-snug mt-0.5">Our front desk team is happy to help.</p>
-    </div>
-    <a href="https://wa.me/6281261617233" target="_blank" rel="noopener"
-       class="bk-tap shrink-0 h-10 px-4 rounded-xl bg-[#662721] text-[#F7F0DB] text-xs font-bold whitespace-nowrap flex items-center hover:bg-[#511D18] transition-colors">
-        WhatsApp
-    </a>
-</div>
+{{-- Kartu "Need help with check-in? → WhatsApp" dihapus — kontak lewat tombol WhatsApp melayang. --}}

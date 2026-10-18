@@ -52,10 +52,7 @@
                             <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
                             Venue Open Daily: 06:00 - 23:00 WIB
                         </div>
-                        <a href="https://wa.me/6281261617233" target="_blank" 
-                           class="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-[#E6DAC0]/20 hover:bg-[#E6DAC0]/30 border border-[#E6DAC0]/50 text-xs font-bold text-[#F7F0DB] transition-colors">
-                            <span>Contact Concierge via WhatsApp</span>
-                        </a>
+                        {{-- Tombol WhatsApp dihapus — kontak lewat tombol WhatsApp melayang (satu tombol untuk semua). --}}
                     </div>
                 </div>
             </div>
@@ -125,12 +122,6 @@
                                    class="block w-full text-center py-2.5 px-3 rounded-xl bg-[#662721] hover:bg-[#511D18]  text-[#F7F0DB] font-extrabold text-xs shadow-md transition-all active:scale-95 cursor-pointer">
                                     Lihat Detail &amp; Beli Online &rarr;
                                 </a>
-                                <a href="https://wa.me/6281261617233?text=Halo%20Club%2061%2C%20saya%20tertarik%20mendaftar%20paket%20{{ urlencode($p->name) }}"
-                                   target="_blank"
-                                   onclick="event.stopPropagation()"
-                                   class="block w-full text-center py-1.5 px-3 rounded-xl bg-[#F7F0DB] hover:bg-[#F7F0DB] border border-[#E6DAC0] text-[#662721] font-bold text-[11px] transition-colors">
-                                    Tanya Concierge WA
-                                </a>
                             </div>
                         </div>
                     @endforeach
@@ -175,7 +166,8 @@
                     <div>
                         <div class="text-[10px] uppercase font-extrabold tracking-wider text-[#662721]">Concierge &amp; Valet</div>
                         <div class="font-display font-black text-base text-[#4F2F2A] mt-0.5">Dedicated Member Services</div>
-                        <div class="text-xs text-[#7A5A52] mt-1 font-mono">0812-6161-PADEL &bull; Free VIP Valet</div>
+                        @php($venueWa = trim((string) rescue(fn () => \App\Models\Setting\CompanyProfileSetting::current()->whatsapp_number, '', false)))
+                        <div class="text-xs text-[#7A5A52] mt-1 font-mono">@if($venueWa !== ''){{ $venueWa }} &bull; @endif Free VIP Valet</div>
                     </div>
                 </div>
             </div>

@@ -43,6 +43,9 @@
             @include('layouts.bottom-nav')
         </div>
 
+        {{-- Satu-satunya tombol hubungi admin (nomor dari Konten Website). --}}
+        <x-whatsapp-float :bottom-nav="true" />
+
         @stack('scripts')
     </body>
 </html>

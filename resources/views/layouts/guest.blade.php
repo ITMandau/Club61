@@ -43,5 +43,7 @@
         <main class="relative z-10 w-full py-6 sm:py-10 px-4 sm:px-6 lg:px-8 flex items-center justify-center min-h-screen">
             {{ $slot }}
         </main>
+
+        <x-whatsapp-float />
     </body>
 </html>

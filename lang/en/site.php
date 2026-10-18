@@ -64,4 +64,7 @@ return [
     'location_address' => 'Address',
     'location_hours' => 'Opening hours',
     'location_whatsapp' => 'WhatsApp',
+    // Floating WhatsApp button (website & customer portal) — the only "contact admin" button.
+    'whatsapp_float_label' => 'Chat with Club 61 on WhatsApp',
+    'whatsapp_float_message' => 'Hello Club 61, I have a question.',
 ];

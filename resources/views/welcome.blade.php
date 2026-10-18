@@ -346,18 +346,13 @@
     {{-- ============ SPONSOR KORPORAT ============ --}}
     <section class="bg-club-brown text-club-cream relative overflow-hidden">
         <img src="{{ asset('images/identity/monogram-cream.png') }}" alt="" class="absolute right-[6%] -bottom-16 h-72 w-auto opacity-[0.07] pointer-events-none">
-        <div class="{{ $wrap }} relative py-14 sm:py-20 flex flex-col md:flex-row md:items-center md:justify-between gap-8">
+        {{-- Tombol "Hubungi Kami" dihapus — kontak lewat tombol WhatsApp melayang (satu tombol untuk semua). --}}
+        <div class="{{ $wrap }} relative py-14 sm:py-20">
             <div class="max-w-2xl">
                 <div class="text-xs font-bold uppercase tracking-[0.2em] text-club-cream/65 mb-3">{{ __('site.sponsor_eyebrow') }}</div>
                 <h3 class="font-display font-semibold text-3xl sm:text-4xl mb-3">{{ __('site.sponsor_headline') }}</h3>
                 <p class="text-base leading-relaxed text-club-cream/80">{{ __('site.sponsor_description') }}</p>
             </div>
-            <a href="https://wa.me/{{ preg_replace('/\D/', '', $companyProfile->whatsapp_number) }}?text={{ urlencode(__('site.sponsor_whatsapp_message')) }}"
-               target="_blank" rel="noopener"
-               class="shrink-0 self-start md:self-auto inline-flex items-center justify-center gap-2 h-14 px-8 rounded-md bg-club-terra text-club-cream font-bold text-[15px] hover:bg-club-terra-dark transition-colors">
-                {{ __('site.sponsor_cta') }}
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.25" d="M14 5l7 7m0 0l-7 7m7-7H3" /></svg>
-            </a>
         </div>
     </section>
     @endif
@@ -390,12 +385,6 @@
                         </div>
                     @endif
                 </dl>
-                @if($companyProfile->whatsapp_number)
-                    <a href="https://wa.me/{{ preg_replace('/\D/', '', $companyProfile->whatsapp_number) }}" target="_blank" rel="noopener"
-                       class="mt-8 inline-flex items-center justify-center h-12 px-6 rounded-md bg-club-terra text-club-cream font-bold text-[15px] hover:bg-club-terra-dark transition-colors">
-                        {{ __('site.location_whatsapp_cta') }}
-                    </a>
-                @endif
             </div>
             <div class="lg:col-span-7 rounded-lg overflow-hidden border border-club-line bg-club-paper">
                 <iframe src="{{ $mapsUrl }}" title="Google Maps Club 61"
@@ -413,19 +402,30 @@
                     <p class="text-sm leading-relaxed max-w-sm">{{ $companyProfile->localized('footer_tagline') }}</p>
                 @endif
             </div>
-            @php $social = $companyProfile->safeSocialLinks(); @endphp
+            @php
+                $social = $companyProfile->safeSocialLinks();
+                $socialNames = ['instagram' => 'Instagram', 'facebook' => 'Facebook', 'tiktok' => 'TikTok'];
+            @endphp
             @if(!empty($social))
-                <div class="flex flex-wrap items-center gap-6">
+                <div class="flex flex-wrap items-center gap-3">
                     @foreach($social as $platform => $url)
-                        <a href="{{ $url }}" target="_blank" rel="noopener" class="text-sm font-semibold uppercase tracking-wider text-club-cream/80 hover:text-white transition-colors">{{ $platform }}</a>
+                        @php $socialName = $socialNames[$platform] ?? ucfirst($platform); @endphp
+                        {{-- Logo resmi + warna brand (komponen x-social-icon), tanpa file / kolom tambahan. --}}
+                        <a href="{{ $url }}" target="_blank" rel="noopener" aria-label="{{ $socialName }}" title="{{ $socialName }}"
+                           data-social="{{ $platform }}" class="block rounded-[11px] transition hover:-translate-y-0.5 hover:opacity-90">
+                            <x-social-icon :platform="$platform" />
+                        </a>
                     @endforeach
                 </div>
             @endif
         </div>
         <div class="border-t border-club-cream/10">
-            <p class="{{ $wrap }} py-5 text-xs">&copy; {{ date('Y') }} Club 61 Padel Court. {{ $companyProfile->address_line }}</p>
+            {{-- pb-24 di HP: baris terakhir tidak tertutup tombol WhatsApp melayang. --}}
+            <p class="{{ $wrap }} pt-5 pb-24 md:pb-5 text-xs">&copy; {{ date('Y') }} Club 61 Padel Court. {{ $companyProfile->address_line }}</p>
         </div>
     </footer>
 
+    {{-- Satu-satunya tombol hubungi admin (nomor dari Konten Website). --}}
+    <x-whatsapp-float />
 </body>
 </html>
