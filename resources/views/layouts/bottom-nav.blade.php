@@ -25,15 +25,15 @@
             <span class="text-[10px] font-bold tracking-tight mt-0.5 {{ request()->routeIs('customer.booking') ? 'text-[#F7F0DB]' : '' }}">Book Court</span>
         </a>
 
-        <!-- 3. My Club (detail membership aktif + katalog beli, bukan langsung halaman jualan) -->
+        <!-- 3. My Club (profil klub). Profile pindah ke avatar di header (Modul 23). -->
         <a href="{{ route('customer.my-club') }}"
-           class="flex flex-col items-center justify-center py-1 group transition-all {{ (request()->routeIs('customer.my-club') || request()->routeIs('customer.membership')) ? 'text-[#F7F0DB]' : 'text-[#F7F0DB]/65 hover:text-[#F7F0DB]' }}">
-            <div class="p-1 rounded-xl transition-transform duration-150 {{ (request()->routeIs('customer.my-club') || request()->routeIs('customer.membership')) ? 'scale-110 bg-[#F7F0DB] text-[#662721]' : 'group-hover:scale-105' }}">
+           class="flex flex-col items-center justify-center py-1 group transition-all {{ request()->routeIs('customer.my-club') ? 'text-[#F7F0DB]' : 'text-[#F7F0DB]/65 hover:text-[#F7F0DB]' }}">
+            <div class="p-1 rounded-xl transition-transform duration-150 {{ request()->routeIs('customer.my-club') ? 'scale-110 bg-[#F7F0DB] text-[#662721]' : 'group-hover:scale-105' }}">
                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
                 </svg>
             </div>
-            <span class="text-[10px] font-bold tracking-tight mt-0.5 {{ (request()->routeIs('customer.my-club') || request()->routeIs('customer.membership')) ? 'text-[#F7F0DB]' : '' }}">My Club</span>
+            <span class="text-[10px] font-bold tracking-tight mt-0.5 {{ request()->routeIs('customer.my-club') ? 'text-[#F7F0DB]' : '' }}">My Club</span>
         </a>
 
         <!-- 4. Invoice -->
@@ -47,15 +47,15 @@
             <span class="text-[10px] font-bold tracking-tight mt-0.5 {{ request()->routeIs('customer.invoice') ? 'text-[#F7F0DB]' : '' }}">Invoice</span>
         </a>
 
-        <!-- 5. Profil -->
-        <a href="{{ route('profile.edit') }}" 
-           class="flex flex-col items-center justify-center py-1 group transition-all {{ request()->routeIs('profile.edit') ? 'text-[#F7F0DB]' : 'text-[#F7F0DB]/65 hover:text-[#F7F0DB]' }}">
-            <div class="p-1 rounded-xl transition-transform duration-150 {{ request()->routeIs('profile.edit') ? 'scale-110 bg-[#F7F0DB] text-[#662721]' : 'group-hover:scale-105' }}">
+        <!-- 5. Membership (beli / perpanjang paket) -->
+        <a href="{{ route('customer.membership') }}"
+           class="flex flex-col items-center justify-center py-1 group transition-all {{ request()->routeIs('customer.membership') ? 'text-[#F7F0DB]' : 'text-[#F7F0DB]/65 hover:text-[#F7F0DB]' }}">
+            <div class="p-1 rounded-xl transition-transform duration-150 {{ request()->routeIs('customer.membership') ? 'scale-110 bg-[#F7F0DB] text-[#662721]' : 'group-hover:scale-105' }}">
                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
                 </svg>
             </div>
-            <span class="text-[10px] font-bold tracking-tight mt-0.5 {{ request()->routeIs('profile.edit') ? 'text-[#F7F0DB]' : '' }}">Profile</span>
+            <span class="text-[10px] font-bold tracking-tight mt-0.5 {{ request()->routeIs('customer.membership') ? 'text-[#F7F0DB]' : '' }}">Membership</span>
         </a>
 
     </div>

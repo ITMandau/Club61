@@ -61,162 +61,25 @@
             </div>
 
             @php
-                $activeMbr = \App\Models\Membership\UserMembership::with(['plan', 'balances'])
-                    ->where('user_id', Auth::id())
-                    ->where('status', 'ACTIVE')
-                    ->where(function ($q) {
-                        $q->whereNull('end_date')->orWhere('end_date', '>=', now()->toDateString());
-                    })
-                    ->latest('start_date')
-                    ->first();
+                // Modul 23: kartu member lengkap & voucher pindah ke Profile / Voucher Saya. Di sini cukup satu baris status.
+                $activeMbr = app(\App\Services\Customer\CustomerAccountService::class)->activeMembership(Auth::user());
                 $allPlans = \App\Models\Membership\MembershipPlan::with('benefits')->where('is_active', true)->get();
-
                 $facilityService = app(\App\Services\Membership\MembershipFacilityService::class);
-                $creditVouchers = app(\App\Services\Finance\VoucherService::class)->walletFor(Auth::user());
             @endphp
 
             @if($activeMbr)
-                <!-- Active Membership Digital Pass -->
-                <div class="relative overflow-hidden rounded-xl p-6 sm:p-8 border-2 border-[#662721] shadow-[0_15px_35px_rgba(102,39,33,0.2)]"
-                     style="background: linear-gradient(135deg, #F7F0DB 0%, #FFFFFF 100%);">
-                    <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
-                        <div>
-                            <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full text-[10px] font-extrabold uppercase bg-[#F7F0DB] text-[#662721] border border-[#E6DAC0]">
-                                <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                                <span>Digital Member Pass</span>
-                            </div>
-                            <div class="font-display font-black text-2xl sm:text-3xl text-[#4F2F2A] mt-2">{{ $activeMbr->plan->name }}</div>
-                            <div class="text-xs font-mono font-bold text-[#662721] mt-0.5">KODE: {{ $activeMbr->membership_code }}</div>
-                            <div class="text-xs text-[#7A5A52] mt-1">
-                                Masa Aktif: <strong>{{ \Carbon\Carbon::parse($activeMbr->start_date)->format('d M Y') }}</strong> s/d <strong>{{ \Carbon\Carbon::parse($activeMbr->end_date)->format('d M Y') }}</strong>
-                                @if($activeMbr->end_date)
-                                    ({{ now()->diffInDays(\Carbon\Carbon::parse($activeMbr->end_date), false) }} hari tersisa)
-                                @endif
-                            </div>
-                        </div>
-
-                        <!-- Balances Grid -->
-                        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 min-w-[320px] lg:min-w-[480px]">
-                            @foreach($activeMbr->balances as $bal)
-                                <div class="p-4 rounded-lg bg-white border border-[#E6DAC0] shadow-sm text-center">
-                                    <div class="text-[10px] font-extrabold uppercase tracking-wider text-[#662721]">{{ $facilityService->name($bal->facility) }}</div>
-                                    <div class="font-display font-black text-xl text-[#4F2F2A] mt-1">
-                                        @if($bal->quota_type === 'HOURS')
-                                            {{ (float)$bal->remaining_quota }} Jam
-                                        @elseif($bal->quota_type === 'VISITS')
-                                            {{ $bal->initial_quota ? ((float)$bal->remaining_quota . ' Sesi') : 'Unlimited' }}
-                                        @elseif((float) $bal->discount_percent > 0)
-                                            Diskon {{ (float) $bal->discount_percent }}%
-                                        @else
-                                            Termasuk
-                                        @endif
-                                    </div>
-                                    <div class="text-[10px] text-[#7A5A52] mt-0.5">
-                                        @if($bal->discount_percent > 0 && $bal->quota_type !== 'NONE')
-                                            Diskon {{ $bal->discount_percent }}%
-                                        @elseif($bal->booking_priority_days > 0)
-                                            Prioritas H-{{ $bal->booking_priority_days }}
-                                        @else
-                                            Entitlement Aktif
-                                        @endif
-                                    </div>
-                                </div>
-                            @endforeach
-                        </div>
-                    </div>
-                </div>
+                <a href="{{ route('profile.edit') }}" class="flex items-center gap-3 px-4 py-3 rounded-xl bg-emerald-50 border border-emerald-200 hover:border-emerald-400 transition-colors">
+                    <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 shrink-0"></span>
+                    <span class="flex-1 min-w-0 text-sm text-emerald-900">
+                        You're a <strong>{{ $activeMbr->plan?->name ?? 'Club 61' }}</strong> member
+                        @if($activeMbr->end_date) &middot; active until {{ \Carbon\Carbon::parse($activeMbr->end_date)->format('d M Y') }} @endif
+                    </span>
+                    <span class="shrink-0 text-xs font-black text-emerald-800 whitespace-nowrap">View in Profile &rarr;</span>
+                </a>
             @endif
 
-            @php
-                $myCorporateMember = \App\Models\Sponsor\SponsorOrganizationMember::where('user_id', Auth::id())
-                    ->where('status', 'ACTIVE')
-                    ->with(['organization', 'vouchers' => fn ($q) => $q->orderByDesc('issued_at')])
-                    ->first();
-            @endphp
-
-            @if($myCorporateMember)
-                <!-- Corporate Team Voucher -->
-                <div id="corporate-vouchers" class="relative overflow-hidden rounded-xl p-6 sm:p-8 border-2 border-[#662721] shadow-[0_15px_35px_rgba(102,39,33,0.2)] scroll-mt-24"
-                     style="background: linear-gradient(135deg, #F7F0DB 0%, #FFFFFF 100%);">
-                    <div class="flex items-center justify-between gap-4 flex-wrap mb-4">
-                        <div>
-                            <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full text-[10px] font-extrabold uppercase bg-[#F7F0DB] text-[#662721] border border-[#E6DAC0]">
-                                <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                                <span>Corporate Team Benefit</span>
-                            </div>
-                            <div class="font-display font-black text-xl sm:text-2xl text-[#4F2F2A] mt-2">{{ $myCorporateMember->organization->name ?? 'Corporate Team' }}</div>
-                            <p class="text-xs text-[#7A5A52] mt-0.5">Free play-hour vouchers granted by your company. Hours are already active as soon as they're released — no need to activate anything before booking.</p>
-                        </div>
-                        <div class="p-4 rounded-lg bg-white border border-[#E6DAC0] shadow-sm text-center shrink-0">
-                            <div class="text-[10px] font-extrabold uppercase tracking-wider text-[#662721]">Total Active Hours</div>
-                            <div class="font-display font-black text-2xl text-[#4F2F2A] mt-1">{{ number_format($myCorporateMember->totalRemainingHours(), 1) }}</div>
-                        </div>
-                    </div>
-
-                    @if($myCorporateMember->vouchers->isEmpty())
-                        <p class="text-xs text-[#7A5A52] italic">No vouchers issued yet.</p>
-                    @else
-                        <div class="overflow-x-auto">
-                            <table class="w-full text-xs">
-                                <thead>
-                                    <tr class="text-left text-[10px] uppercase font-extrabold text-[#662721] border-b border-[#E6DAC0]">
-                                        <th class="py-2 pr-3">Hours Granted</th>
-                                        <th class="py-2 pr-3">Used</th>
-                                        <th class="py-2 pr-3">Remaining</th>
-                                        <th class="py-2 pr-3">Issued</th>
-                                        <th class="py-2 pr-3">Expires</th>
-                                        <th class="py-2 pr-3">Status</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    @foreach($myCorporateMember->vouchers as $v)
-                                        <tr class="border-b border-[#F7F0DB] {{ $v->isExpired() ? 'opacity-50' : '' }}">
-                                            <td class="py-2 pr-3 font-bold text-[#4F2F2A]">{{ number_format((float) $v->hours_granted, 1) }}</td>
-                                            <td class="py-2 pr-3">{{ number_format((float) $v->hours_used, 1) }}</td>
-                                            <td class="py-2 pr-3 font-bold">{{ number_format($v->remainingHours(), 1) }}</td>
-                                            <td class="py-2 pr-3">{{ $v->issued_at->format('d M Y') }}</td>
-                                            <td class="py-2 pr-3">{{ $v->expires_at->format('d M Y') }}</td>
-                                            <td class="py-2 pr-3">
-                                                @if($v->isExpired())
-                                                    <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-gray-100 text-gray-600 border border-gray-300">Expired</span>
-                                                @elseif(! $v->isAcknowledged())
-                                                    <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200">New</span>
-                                                @else
-                                                    <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">Claimed</span>
-                                                @endif
-                                            </td>
-                                        </tr>
-                                    @endforeach
-                                </tbody>
-                            </table>
-                        </div>
-                    @endif
-                </div>
-            @endif
-
-            <!-- Voucher saldo (refund yang dijadikan voucher) -->
-            @if ($creditVouchers->isNotEmpty())
-                <div class="p-5 rounded-xl bg-emerald-50/80 border border-emerald-200 shadow-sm space-y-3">
-                    <div>
-                        <h3 class="font-display font-extrabold text-lg text-[#4F2F2A]">My Credit Vouchers</h3>
-                        <p class="text-xs text-[#7A5A52]">Saldo dari refund yang dialihkan ke voucher. Bisa dipakai sebagian untuk booking padel berikutnya &mdash; muncul otomatis di halaman checkout, atau sebutkan kodenya di kasir.</p>
-                    </div>
-                    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                        @foreach ($creditVouchers as $v)
-                            <div class="p-4 rounded-lg bg-white border border-emerald-200">
-                                <div class="text-sm font-mono font-black text-emerald-900">{{ $v['code'] }}</div>
-                                <div class="text-lg font-black text-[#4F2F2A]">Rp {{ number_format($v['balance'], 0, ',', '.') }}</div>
-                                <div class="text-[11px] text-[#7A5A52]">
-                                    dari Rp {{ number_format($v['initial'], 0, ',', '.') }}
-                                    @if ($v['valid_until']) &middot; berlaku s/d {{ $v['valid_until'] }} @endif
-                                </div>
-                            </div>
-                        @endforeach
-                    </div>
-                </div>
-            @endif
-
-            <!-- Membership Plans Catalog -->            <div class="space-y-4">
+            <!-- Membership Plans Catalog -->
+            <div class="space-y-4">
                 <div class="flex items-center justify-between px-1">
                     <div>
                         <h3 class="font-display font-extrabold text-lg text-[#4F2F2A]">Paket Keanggotaan Club 61</h3>

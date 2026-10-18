@@ -83,7 +83,7 @@
                                 $iconClass = 'w-10 h-10 sm:w-11 sm:h-11 shrink-0 rounded-lg flex items-center justify-center bg-gradient-to-br from-[#F7F0DB] to-[#F7F0DB] border border-[#E6DAC0] text-[#662721] transition-transform group-hover:scale-105';
                             @endphp
                             @if($myCorporateMemberForDashboard)
-                                <a href="{{ route('customer.my-club') }}#corporate-vouchers" class="{{ $tileClass }}">
+                                <a href="{{ route('profile.vouchers') }}" class="{{ $tileClass }}">
                                     @if($unacknowledgedVouchers->isNotEmpty())
                                         <span class="absolute top-2 right-2 w-2.5 h-2.5 rounded-full bg-rose-500 animate-pulse"></span>
                                     @endif
@@ -397,7 +397,7 @@
                             class="bk-tap w-full h-12 rounded-lg text-xs font-black uppercase tracking-wider bg-[#662721] hover:bg-[#511D18] text-[#F7F0DB] shadow-md active:scale-[0.98] transition-transform">
                         Claim &amp; Continue
                     </button>
-                    <a href="{{ route('customer.my-club') }}#corporate-vouchers" class="block w-full text-center py-2 text-xs font-bold text-[#662721] hover:text-[#662721] transition-colors">
+                    <a href="{{ route('profile.vouchers') }}" class="block w-full text-center py-2 text-xs font-bold text-[#662721] hover:text-[#662721] transition-colors">
                         View all my vouchers
                     </a>
                 </div>

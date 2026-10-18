@@ -7,7 +7,8 @@
                 <div class="shrink-0 flex items-center">
                     <a href="{{ route('dashboard') }}" class="flex items-center gap-2.5">
                         <img src="{{ asset('images/identity/monogram-cream.png') }}" alt="Club 61 Padel Court" class="h-10 lg:h-11 w-auto shrink-0">
-                        <span class="leading-none whitespace-nowrap">
+                        {{-- Tablet (md): tulisan disembunyikan, cukup monogram — 5 menu + ikon kanan tidak muat di 768–1023px. --}}
+                        <span class="leading-none whitespace-nowrap md:hidden lg:block">
                             <span class="block font-bold text-[16px] sm:text-lg tracking-[0.18em] text-[#F7F0DB]" style="font-stretch: 125%;">CLUB 61</span>
                             <span class="block text-[9px] font-semibold tracking-[0.32em] text-[#F7F0DB]/70 mt-1">PADEL COURT</span>
                         </span>
@@ -24,13 +25,15 @@
                        class="inline-flex items-center px-1 pt-1 border-b-2 {{ request()->routeIs('customer.booking') ? 'border-[#F7F0DB] text-[#F7F0DB]' : 'border-transparent text-[#F7F0DB]/70 hover:text-[#F7F0DB] hover:border-[#F7F0DB]/40' }} text-xs font-bold uppercase tracking-wider whitespace-nowrap transition-colors">
                         Book Court
                     </a>
-                    {{-- "Membership" sengaja tidak lagi jadi menu navbar terpisah yang langsung ke halaman
-                         penjualan/katalog. Status & detail membership customer (kode, masa aktif, sisa
-                         benefit per fasilitas) sudah ditampilkan di atas katalog pada halaman "My Club" itu
-                         sendiri — dan dari situ pula customer klik untuk membeli/upgrade paket. --}}
+                    {{-- Modul 23: My Club = profil klub, Membership = beli paket (menu sendiri). Kartu member &
+                         voucher milik customer ada di Profile / Voucher Saya (dropdown akun). --}}
                     <a href="{{ route('customer.my-club') }}"
-                       class="inline-flex items-center px-1 pt-1 border-b-2 {{ request()->routeIs('customer.my-club') || request()->routeIs('customer.membership') ? 'border-[#F7F0DB] text-[#F7F0DB]' : 'border-transparent text-[#F7F0DB]/70 hover:text-[#F7F0DB] hover:border-[#F7F0DB]/40' }} text-xs font-bold uppercase tracking-wider whitespace-nowrap transition-colors">
+                       class="inline-flex items-center px-1 pt-1 border-b-2 {{ request()->routeIs('customer.my-club') ? 'border-[#F7F0DB] text-[#F7F0DB]' : 'border-transparent text-[#F7F0DB]/70 hover:text-[#F7F0DB] hover:border-[#F7F0DB]/40' }} text-xs font-bold uppercase tracking-wider whitespace-nowrap transition-colors">
                         My Club
+                    </a>
+                    <a href="{{ route('customer.membership') }}"
+                       class="inline-flex items-center px-1 pt-1 border-b-2 {{ request()->routeIs('customer.membership') ? 'border-[#F7F0DB] text-[#F7F0DB]' : 'border-transparent text-[#F7F0DB]/70 hover:text-[#F7F0DB] hover:border-[#F7F0DB]/40' }} text-xs font-bold uppercase tracking-wider whitespace-nowrap transition-colors">
+                        Membership
                     </a>
                     <a href="{{ route('customer.invoice') }}"
                        class="inline-flex items-center px-1 pt-1 border-b-2 {{ request()->routeIs('customer.invoice') ? 'border-[#F7F0DB] text-[#F7F0DB]' : 'border-transparent text-[#F7F0DB]/70 hover:text-[#F7F0DB] hover:border-[#F7F0DB]/40' }} text-xs font-bold uppercase tracking-wider whitespace-nowrap transition-colors">
@@ -222,62 +225,81 @@
                     </a>
                 @endif
 
-                <!-- User Info & Logout (Desktop) -->
+                <!-- Akun: satu tombol (avatar + nama + status member) → dropdown Profile / Voucher Saya / Logout (Modul 23) -->
                 @php
-                    // Badge membership REAL dari database (bukan label statis) — menunjukkan paket aktif
-                    // customer saat ini, tautannya menuju /my-club untuk rincian lengkap per fasilitas.
-                    $navActiveMembership = null;
-                    if (Auth::check()) {
-                        $navActiveMembership = \App\Models\Membership\UserMembership::where('user_id', Auth::id())
-                            ->where('status', 'ACTIVE')
-                            ->where(function ($q) {
-                                $q->whereNull('end_date')->orWhere('end_date', '>=', now()->toDateString());
-                            })
-                            ->with('plan')
-                            ->orderByRaw('end_date IS NULL, end_date ASC')
-                            ->first();
-                    }
+                    $navAccount = app(\App\Services\Customer\CustomerAccountService::class);
+                    $navActiveMembership = $navAccount->activeMembership(Auth::user());
+                    $navVoucherCount = $navAccount->availableVoucherCount(Auth::user());
+                    $navInitial = mb_strtoupper(mb_substr(Auth::user()->name, 0, 1));
+                    $navMemberLabel = $navActiveMembership && $navActiveMembership->plan
+                        ? $navActiveMembership->plan->name.($navActiveMembership->end_date ? ' · until '.\Carbon\Carbon::parse($navActiveMembership->end_date)->format('d M Y') : '')
+                        : 'Not a member yet';
                 @endphp
-                <div class="hidden sm:flex items-center gap-3 ms-2">
-                    {{-- Tablet: avatar saja (nama + status member membuat menu turun baris). --}}
-                    <a href="{{ route('profile.edit') }}" title="{{ Auth::user()->name }}"
-                       class="lg:hidden w-9 h-9 rounded-full bg-[#F7F0DB] border border-transparent flex items-center justify-center text-xs font-bold text-[#662721] shadow-sm">
-                        {{ strtoupper(substr(Auth::user()->name, 0, 1)) }}
-                    </a>
-                    <div class="hidden lg:block text-right whitespace-nowrap max-w-[180px]">
-                        <div class="text-xs font-bold text-[#F7F0DB] truncate">{{ Auth::user()->name }}</div>
-                        @if($navActiveMembership && $navActiveMembership->plan)
-                            <a href="{{ route('customer.my-club') }}"
-                               class="text-[9px] text-[#662721] font-mono uppercase bg-[#F7F0DB] px-2 py-0.5 rounded-full border border-transparent inline-flex items-center gap-1 hover:bg-[#F7F0DB] transition-colors"
-                               title="Lihat detail membership & sisa kuota">
-                                <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-                                {{ $navActiveMembership->plan->name }}
+                <div class="relative" @click.outside="accountOpen = false" @keydown.escape.window="accountOpen = false">
+                    <button type="button" @click="accountOpen = ! accountOpen" :aria-expanded="accountOpen.toString()" aria-haspopup="menu"
+                            class="flex items-center gap-2.5 ms-1 sm:ms-2 rounded-xl p-0.5 lg:pe-2 hover:bg-white/10 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-[#F7F0DB]/60"
+                            title="{{ Auth::user()->name }}">
+                        <span class="relative w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-[#F7F0DB] flex items-center justify-center text-xs font-bold text-[#662721] shadow-sm shrink-0">
+                            {{ $navInitial }}
+                            @if($navVoucherCount > 0)
+                                <span class="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-amber-500 ring-2 ring-[#662721]"></span>
+                            @endif
+                        </span>
+                        <span class="hidden lg:block text-left whitespace-nowrap max-w-[170px]">
+                            <span class="block text-xs font-bold text-[#F7F0DB] truncate">{{ Auth::user()->name }}</span>
+                            <span class="block text-[9px] font-mono uppercase truncate {{ $navActiveMembership ? 'text-[#E6DAC0]' : 'text-[#F7F0DB]/60' }}">{{ $navActiveMembership?->plan?->name ?? 'Not a member yet' }}</span>
+                        </span>
+                        <svg class="hidden lg:block w-3.5 h-3.5 text-[#F7F0DB]/70 transition-transform" :class="accountOpen && 'rotate-180'" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M19 9l-7 7-7-7" /></svg>
+                    </button>
+
+                    <!-- HP: panel lebar penuh di bawah header. Tablet / desktop: dropdown kecil di kanan. -->
+                    <div x-show="accountOpen" x-cloak role="menu"
+                         x-transition:enter="transition ease-out duration-150"
+                         x-transition:enter-start="opacity-0 -translate-y-1"
+                         x-transition:enter-end="opacity-100 translate-y-0"
+                         x-transition:leave="transition ease-in duration-100"
+                         x-transition:leave-start="opacity-100"
+                         x-transition:leave-end="opacity-0"
+                         class="fixed sm:absolute left-0 right-0 sm:left-auto top-16 sm:top-auto sm:right-0 sm:mt-3 sm:w-80 bg-white sm:rounded-xl border-b sm:border border-[#E6DAC0] shadow-[0_20px_50px_rgba(79,47,42,0.25)] text-[#4F2F2A] z-50 overflow-hidden"
+                         style="display: none;">
+                        <div class="flex items-center gap-3 p-4 bg-[#FCF8EE] border-b border-[#E6DAC0]">
+                            <span class="w-11 h-11 rounded-full bg-[#662721] text-[#F7F0DB] flex items-center justify-center font-bold shrink-0">{{ $navInitial }}</span>
+                            <div class="min-w-0">
+                                <div class="text-sm font-black truncate">{{ Auth::user()->name }}</div>
+                                <div class="text-[11px] text-[#7A5A52] truncate">{{ \App\Support\PlaceholderEmail::is(Auth::user()->email) ? (Auth::user()->phone ?? '') : Auth::user()->email }}</div>
+                                <div class="mt-1 inline-flex items-center gap-1.5 text-[10px] font-bold {{ $navActiveMembership ? 'text-emerald-700' : 'text-[#7A5A52]' }}">
+                                    <span class="w-1.5 h-1.5 rounded-full {{ $navActiveMembership ? 'bg-emerald-500' : 'bg-[#C9B99A]' }}"></span>
+                                    {{ $navMemberLabel }}
+                                </div>
+                            </div>
+                        </div>
+                        <div class="p-2">
+                            <a href="{{ route('profile.edit') }}" role="menuitem" class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-bold hover:bg-[#F7F0DB] transition-colors">
+                                <svg class="w-4 h-4 text-[#662721]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
+                                Profile
                             </a>
-                        @else
-                            <a href="{{ route('customer.membership') }}"
-                               class="text-[9px] text-[#F7F0DB]/80 font-mono uppercase bg-white/10 px-2 py-0.5 rounded-full border border-[#F7F0DB]/25 inline-block hover:bg-white/15 transition-colors">
-                                Belum Member
+                            <a href="{{ route('profile.vouchers') }}" role="menuitem" class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-bold hover:bg-[#F7F0DB] transition-colors">
+                                <svg class="w-4 h-4 text-[#662721]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 5v2m0 4v2m0 4v2M5 5a2 2 0 00-2 2v3a2 2 0 110 4v3a2 2 0 002 2h14a2 2 0 002-2v-3a2 2 0 110-4V7a2 2 0 00-2-2H5z" /></svg>
+                                <span class="flex-1">My Vouchers</span>
+                                @if($navVoucherCount > 0)
+                                    <span class="min-w-[22px] h-[22px] px-1.5 rounded-full bg-[#662721] text-[#F7F0DB] text-[11px] font-black flex items-center justify-center">{{ $navVoucherCount }}</span>
+                                @endif
                             </a>
-                        @endif
+                            @if(Auth::user()->canAccessPanel(\Filament\Facades\Filament::getPanel('admin')))
+                                <a href="/admin" role="menuitem" class="sm:hidden flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-bold hover:bg-[#F7F0DB] transition-colors">
+                                    <svg class="w-4 h-4 text-[#662721]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+                                    Admin Panel
+                                </a>
+                            @endif
+                        </div>
+                        <form method="POST" action="{{ route('logout') }}" class="p-2 border-t border-[#E6DAC0]">
+                            @csrf
+                            <button type="submit" role="menuitem" class="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-bold text-rose-700 hover:bg-rose-50 transition-colors cursor-pointer">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" /></svg>
+                                Log Out
+                            </button>
+                        </form>
                     </div>
-
-                    <form method="POST" action="{{ route('logout') }}">
-                        @csrf
-                        <button type="submit" 
-                                class="p-2 rounded-xl bg-white/10 hover:bg-white/15 border border-[#F7F0DB]/25 text-[#F7F0DB] text-xs font-bold transition-all flex items-center gap-1 cursor-pointer shadow-sm" 
-                                title="Log Out">
-                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-                            </svg>
-                        </button>
-                    </form>
-                </div>
-
-                <!-- User Avatar Quick Menu (Mobile) -->
-                <div class="sm:hidden flex items-center">
-                    <a href="{{ route('profile.edit') }}" class="w-8 h-8 rounded-full bg-[#F7F0DB] border border-transparent flex items-center justify-center text-xs font-bold text-[#662721] shadow-sm">
-                        {{ substr(Auth::user()->name, 0, 1) }}
-                    </a>
                 </div>
 
             </div>
@@ -290,6 +312,7 @@
         return {
             open: false,
             notifOpen: false,
+            accountOpen: false,
             cartCount: 0,
             unreadNotifs: true,
             activeBooking: null,
