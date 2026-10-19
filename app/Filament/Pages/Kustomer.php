@@ -301,7 +301,7 @@ class Kustomer extends Page
             'habit_status' => $habitStatus,
             'habit_label' => $habitLabel,
             'habit_color' => $habitColor,
-            'favorite_court' => $bookings->groupBy('court.name')->sortByDesc->count()->keys()->first() ?? 'Court 1 - Panoramic Indoor',
+            'favorite_court' => $bookings->groupBy('court.name')->sortByDesc->count()->keys()->first() ?? '-',
             'favorite_time' => 'Sore & Malam (16:00 - 20:00 WIB)',
             'recommendation' => $recommendation,
         ];

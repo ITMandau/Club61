@@ -34,7 +34,8 @@ Route::middleware(['auth'])->group(function () {
 
     Route::post('/pos/check-in', function (\Illuminate\Http\Request $request, \App\Services\Padel\PadelBookingService $service) {
         $user = auth()->user();
-        if (! $user || ! $user->isStaff() || ! $user->can('checkin_padel_ticket')) {
+        // Izin check-in saja (resepsionis punya izin ini tapi bukan isStaff()).
+        if (! $user || ! $user->can('checkin_padel_ticket')) {
             return response()->json([
                 'success' => false,
                 'message' => 'Akses Ditolak: Hanya staf kasir atau admin yang berhak melakukan check-in tiket.',
@@ -49,8 +50,14 @@ Route::middleware(['auth'])->group(function () {
         try {
             $result = $service->checkIn($code, $user);
             return response()->json(['success' => true, 'data' => $result]);
-        } catch (\Throwable $e) {
+        } catch (\Symfony\Component\HttpKernel\Exception\HttpException $e) {
+            // Pesan bisnis (tiket tidak valid, belum jam main, dsb.) memang untuk kasir.
             return response()->json(['success' => false, 'message' => $e->getMessage()], 400);
+        } catch (\Throwable $e) {
+            // Error lain (mis. query DB) jangan dibocorkan ke layar kasir — cukup dicatat di log.
+            report($e);
+
+            return response()->json(['success' => false, 'message' => 'Check-in gagal diproses. Coba lagi atau hubungi admin.'], 500);
         }
     })->name('pos.checkin');
 
@@ -128,6 +135,20 @@ Route::get('/admin/log-aktivitas/export', \App\Http\Controllers\Admin\ActivityLo
     ->middleware('auth')
     ->name('admin.log-aktivitas.export');
 
+// Signature (Modul 26) — layar TV venue. Link rahasia per layar, tanpa login, hanya baca.
+Route::middleware('throttle:120,1')->group(function () {
+    // Alamat pendek untuk diketik di browser TV (sandbox.club61.id/tv/xxxxxxxxxx). /signature/{token} tetap berlaku.
+    Route::get('/tv/{token}', [\App\Http\Controllers\SignatureController::class, 'player'])->name('signature.tv');
+    Route::get('/signature/{token}', [\App\Http\Controllers\SignatureController::class, 'player'])->name('signature.player');
+    Route::get('/signature/{token}/payload', [\App\Http\Controllers\SignatureController::class, 'payload'])->name('signature.payload');
+    Route::get('/signature/{token}/live', [\App\Http\Controllers\SignatureController::class, 'live'])->name('signature.live');
+});
+// Preview tampilan yang belum ditayangkan — izin View:Signature dicek di controller.
+Route::middleware('auth')->group(function () {
+    Route::get('/admin/signature/preview/{key}', [\App\Http\Controllers\SignatureController::class, 'preview'])->name('signature.preview');
+    Route::get('/admin/signature/preview/{key}/live', [\App\Http\Controllers\SignatureController::class, 'previewLive'])->name('signature.preview.live');
+});
+
 // Export Buku Transaksi (Modul 17) — route GET biasa, izin View:BukuTransaksi + export_ledger dicek di controller.
 Route::get('/admin/buku-transaksi/export', \App\Http\Controllers\Admin\LedgerExportController::class)
     ->middleware('auth')
@@ -135,6 +156,7 @@ Route::get('/admin/buku-transaksi/export', \App\Http\Controllers\Admin\LedgerExp
 
 Route::middleware('auth')->group(function () {
     Route::get('/profile',[ProfileController::class, 'edit'])->name('profile.edit');
+    Route::get('/profile/vouchers', [ProfileController::class, 'vouchers'])->name('profile.vouchers');
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
 });

@@ -113,10 +113,9 @@ class FnbPosService
             }
 
             // Satu-satunya jalur pelunasan yang sah di seluruh aplikasi — sama persis dengan yang
-            // dipakai walk-in padel (shift gating, idempoten, delegasi fulfillment). Tidak ada
-            // handler PaymentFulfillmentRegistry untuk item_type 'FNB' (memang sengaja: jualan
-            // F&B tidak butuh "aktivasi" apa pun pasca-bayar seperti booking/membership — order
-            // yang PAID sudah cukup, dapur memantau lewat KDS terpisah).
+            // dipakai walk-in padel (shift gating, idempoten, delegasi fulfillment). Begitu lunas,
+            // FnbFulfillmentHandler membuat slip pesanan per stasiun (Kitchen, dst.) untuk dicetak
+            // di printer stasiunnya.
             // Struktur payload_log sengaja identik dengan walk-in padel (edc_details /
             // qris_details) supaya audit & rekonsiliasi closing shift membaca format yang sama.
             $payloadLog = [
@@ -148,6 +147,11 @@ class FnbPosService
                     'charged_amount' => (float) $finance['grand_total'],
                 ]);
             }
+
+            // Satu RRN QRIS / approval code EDC hanya boleh melunasi satu transaksi — sama dengan kasir padel, reschedule,
+            // dan jual membership. Dulu F&B tidak dicek: satu struk asli bisa diketik ulang di banyak order (semua LUNAS,
+            // dapur mencetak, rekap shift menghitung, uangnya tidak ada). Repeat order aman: tiap transaksi dapat kode baru.
+            \App\Services\Pos\PosPaymentProof::assertProofNotReused($payloadLog);
 
             $this->orchestrator->markOrderAsPaid($order, [
                 'payment_gateway' => 'CASHIER_POS',

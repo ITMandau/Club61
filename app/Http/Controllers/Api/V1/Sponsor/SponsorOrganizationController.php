@@ -7,6 +7,7 @@ use App\Models\Sponsor\SponsorMemberVoucher;
 use App\Models\Sponsor\SponsorOrganization;
 use App\Models\Sponsor\SponsorOrganizationMember;
 use App\Services\Sponsor\SponsorOrganizationService;
+use App\Support\PersonName;
 use DomainException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -77,7 +78,7 @@ class SponsorOrganizationController extends Controller
         $this->authorize('manageMembers', $organization);
 
         $validated = $request->validate([
-            'name' => 'required|string|max:100',
+            'name' => PersonName::rules(),
             'phone' => 'required|string|max:20',
             'initial_hours' => 'nullable|numeric|min:0.01',
         ]);

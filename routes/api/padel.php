@@ -14,8 +14,9 @@ Route::prefix('v1/padel')->group(function () {
     Route::get('/finance-settings', [PadelBookingController::class, 'financeSettings']);
 
     // 2. ENDPOINT WEBHOOK PAYMENT GATEWAY (Publik, Multi-Driver)
-    Route::post('/webhook/midtrans', fn(\Illuminate\Http\Request $request) => app(PaymentWebhookController::class)->handle('midtrans', $request))->name('api.payment.webhook.midtrans');
-    Route::post('/webhook/{driver}', [PaymentWebhookController::class, 'handle'])->name('api.payment.webhook');
+    // Throttle longgar (sama dengan notifikasi DOKU): notifikasi asli tidak pernah sebanyak ini, banjir sampah dibatasi.
+    Route::post('/webhook/midtrans', fn(\Illuminate\Http\Request $request) => app(PaymentWebhookController::class)->handle('midtrans', $request))->middleware('throttle:300,1')->name('api.payment.webhook.midtrans');
+    Route::post('/webhook/{driver}', [PaymentWebhookController::class, 'handle'])->middleware('throttle:300,1')->name('api.payment.webhook');
 
     // 3. ENDPOINT PRIVATE (Wajib Auth: Sanctum Token untuk Flutter, Session Cookie untuk Web Portal)
     Route::middleware(['auth:sanctum,web'])->group(function () {
@@ -27,12 +28,12 @@ Route::prefix('v1/padel')->group(function () {
         Route::post('/preview-membership-benefit', [PadelBookingController::class, 'previewMembershipBenefit']);
 
         // Checkout & Payment Initialization (Midtrans Snap)
-        Route::post('/checkout', [PadelBookingController::class, 'checkout']);
+        Route::post('/checkout', [PadelBookingController::class, 'checkout'])->middleware('throttle:payment-throttle');
 
         // Riwayat & E-Tiket Member
         Route::get('/my-bookings', [PadelBookingController::class, 'myBookings']);
         Route::get('/bookings/{id}/ticket', [PadelBookingController::class, 'ticket']);
-        Route::post('/bookings/{id}/retry-payment', [PadelBookingController::class, 'retryPayment']);
+        Route::post('/bookings/{id}/retry-payment', [PadelBookingController::class, 'retryPayment'])->middleware('throttle:payment-throttle');
         // Customer tidak bisa mengajukan refund sendiri (Modul 21) — pembatalan + refund diajukan staf di Kelola Pemesanan.
 
         // Voucher promo & voucher saldo (refund yang ditolak) milik customer.

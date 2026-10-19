@@ -55,6 +55,7 @@ class LogAktivitas extends Page implements HasTable
         'MASTER_DATA' => 'Master Data',
         'USER_ROLE' => 'User & Hak Akses',
         'CONTENT' => 'Konten Website',
+        'SIGNATURE' => 'Signature (Layar TV)',
         'AUTH' => 'Login & Keamanan',
         'SYSTEM' => 'Sistem',
     ];

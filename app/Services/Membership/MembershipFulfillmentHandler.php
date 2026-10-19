@@ -21,6 +21,13 @@ class MembershipFulfillmentHandler implements DomainFulfillmentHandlerInterface
      */
     public function fulfill(Order $order, Collection $items): void
     {
+        // Kartu hanya aktif kalau order benar-benar LUNAS — dulu PARTIALLY_PAID (bayar kurang) ikut mengaktifkan kartu.
+        if ($order->payment_status !== 'PAID') {
+            \Illuminate\Support\Facades\Log::critical("[ALERT] Order membership [{$order->order_number}] belum lunas penuh ({$order->payment_status}) — kartu tidak diaktifkan.");
+
+            return;
+        }
+
         $memberships = UserMembership::where('order_id', $order->id)
             ->orWhere('order_id', $order->order_number)
             ->get();

@@ -98,6 +98,21 @@ class MembershipOnlinePaymentTest extends TestCase
         $this->assertSame(1, Order::count());
     }
 
+    public function test_partial_payment_never_activates_the_membership(): void
+    {
+        $this->checkout($this->plan())->assertCreated();
+        $membership = UserMembership::first();
+        $order = Order::first();
+
+        // Pelunasan kurang (jalur mana pun) → order PARTIALLY_PAID → kartu tetap menunggu pembayaran.
+        app(PaymentOrchestratorService::class)->markOrderAsPaid($order, [
+            'payment_gateway' => 'MIDTRANS', 'transaction_id' => $order->order_number, 'payment_method' => 'QRIS', 'amount' => (float) $order->grand_total - 100000,
+        ]);
+
+        $this->assertSame('PARTIALLY_PAID', $order->fresh()->payment_status);
+        $this->assertSame('PENDING_PAYMENT', $membership->fresh()->status);
+    }
+
     public function test_paying_the_new_session_activates_the_membership_once(): void
     {
         $plan = $this->plan();
@@ -228,7 +243,8 @@ class MembershipOnlinePaymentTest extends TestCase
         $membership = UserMembership::first();
         $this->app->forgetInstance(PaymentManager::class); // kembali ke driver bawaan (simulator di testing)
 
-        $this->postJson("/api/v1/membership/purchases/{$membership->id}/pay", ['payment_method' => 'QRIS'])
+        // Metode lain: metode yang sama memakai sesi yang sudah ada (SnapSessionGuard), bukan sesi simulator baru.
+        $this->postJson("/api/v1/membership/purchases/{$membership->id}/pay", ['payment_method' => 'BCA_VA'])
             ->assertOk()
             ->assertJsonPath('data.payment.is_mock', true);
 

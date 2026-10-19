@@ -421,6 +421,7 @@ class PadelAdminOverrideTest extends TestCase
             'court_fee' => 300000.00,
             'total_amount' => 300000.00,
             'status' => 'LOCKED',
+            'reschedule_count' => 1, // selisih reschedule (sama dengan adminRescheduleBooking)
             'qr_code_hash' => null, // Ditahan
         ]);
 

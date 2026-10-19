@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\V1\Auth;
 
 use App\Http\Controllers\Controller;
 use App\Models\User;
+use App\Support\PersonName;
 use App\Support\PhoneNumber;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -17,7 +18,7 @@ class AuthController extends Controller
     public function register(Request $request): JsonResponse
     {
         $validated = $request->validate([
-            'name' => ['required', 'string', 'max:100'],
+            'name' => PersonName::rules(),
             'email' => ['required', 'string', 'email', 'max:150', Rule::unique('users')->whereNull('deleted_at')],
             'phone' => ['required', 'string', 'max:20'],
             'password' => ['required', 'string', Password::min(8)],
@@ -38,7 +39,7 @@ class AuthController extends Controller
         }
 
         $user = User::create([
-            'name' => $validated['name'],
+            'name' => PersonName::clean($validated['name']),
             'email' => $validated['email'],
             'phone' => $normalizedPhone,
             'password' => Hash::make($validated['password']),

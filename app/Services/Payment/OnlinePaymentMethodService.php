@@ -31,33 +31,38 @@ class OnlinePaymentMethodService
     }
 
     /**
-     * Metode yang boleh dipilih customer untuk tagihan sebesar $amount (null = abaikan batas nominal).
+     * Metode yang boleh dipilih customer untuk tagihan sebesar $amount (null = abaikan batas nominal). Metode yang tidak
+     * punya kode kanal untuk gateway yang dipakai (default: gateway online pilihan admin) disembunyikan.
      *
      * @return array<int, array<string, mixed>>
      */
-    public function available(?float $amount = null): array
+    public function available(?float $amount = null, ?string $gateway = null): array
     {
+        $gateway ??= app(OnlineGatewayRouter::class)->onlineGateway();
+
         return array_values(array_filter(
             $this->all(),
-            fn (array $m) => $m['is_active'] && ($amount === null || $this->withinLimits($m, $amount))
+            fn (array $m) => $m['is_active'] && $this->supportsGateway($m, $gateway) && ($amount === null || $this->withinLimits($m, $amount))
         ));
     }
 
     /**
      * Metode untuk "Bayar Otomatis" di layar kasir (POS Walk-In, F&B, Jual Membership): aktif, dicentang "Tampil di
-     * Kasir" di menu Metode Pembayaran Online, dan masuk batas nominal tagihan.
+     * Kasir" di menu Metode Pembayaran Online, punya kanal di gateway QR kasir, dan masuk batas nominal tagihan.
      *
      * @return array<int, array<string, mixed>>
      */
     public function forPos(?float $amount = null): array
     {
-        return array_values(array_filter($this->available($amount), fn (array $m) => $m['show_at_pos'] ?? false));
+        $gateway = app(OnlineGatewayRouter::class)->posQrisGateway();
+
+        return array_values(array_filter($this->available($amount, $gateway), fn (array $m) => $m['show_at_pos'] ?? false));
     }
 
     /** Validasi metode "Bayar Otomatis" pilihan kasir (server — pilihan di layar bisa direkayasa). */
     public function assertPosSelectable(string $code, float $amount): string
     {
-        $code = $this->assertSelectable($code, $amount);
+        $code = $this->assertSelectable($code, $amount, app(OnlineGatewayRouter::class)->posQrisGateway());
 
         if (! ($this->all()[$code]['show_at_pos'] ?? false)) {
             throw new HttpException(422, 'Metode '.$this->all()[$code]['label'].' tidak diaktifkan untuk kasir. Aktifkan "Tampil di Kasir" di menu Metode Pembayaran Online, atau pilih metode lain.');
@@ -110,16 +115,17 @@ class OnlinePaymentMethodService
      *
      * @throws HttpException 422 metode tidak dikenal / nonaktif / di luar batas nominal
      */
-    public function assertSelectable(string $code, float $amount): string
+    public function assertSelectable(string $code, float $amount, ?string $gateway = null): string
     {
         $code = strtoupper(trim($code));
         $method = $this->all()[$code] ?? null;
+        $gateway ??= app(OnlineGatewayRouter::class)->onlineGateway();
 
         if ($method === null) {
             throw new HttpException(422, 'Metode pembayaran tidak dikenali. Pilih salah satu metode yang tersedia.');
         }
 
-        if (! $method['is_active']) {
+        if (! $method['is_active'] || ! $this->supportsGateway($method, $gateway)) {
             throw new HttpException(422, "Metode pembayaran {$method['label']} sedang tidak tersedia. Silakan pilih metode lain.");
         }
 
@@ -136,14 +142,37 @@ class OnlinePaymentMethodService
     }
 
     /**
-     * Channel Snap (`enabled_payments`) untuk kode metode. Diambil dari katalog, bukan dari pengaturan admin, supaya
-     * transaksi lama yang dibayar ulang tetap terpetakan benar.
+     * Kode kanal gateway untuk kode metode. Metode bawaan diambil dari katalog (bukan dari tabel) supaya transaksi lama
+     * yang dibayar ulang tetap terpetakan benar; metode tambahan admin dari pilihan kanalnya (hanya kode resmi).
+     *
+     * @return array<int, string>|null null = metode tidak dikenal
+     */
+    public function channels(string $code, string $gateway): ?array
+    {
+        $code = strtoupper($code);
+        $key = strtoupper($gateway) === OnlineGatewayRouter::DOKU ? 'doku_channels' : 'midtrans_channels';
+
+        if (OnlinePaymentCatalog::has($code)) {
+            return $key === 'doku_channels' ? OnlinePaymentCatalog::dokuChannels($code) : OnlinePaymentCatalog::midtransChannels($code);
+        }
+
+        return $this->all()[$code][$key] ?? null;
+    }
+
+    /**
+     * Channel Snap (`enabled_payments`) untuk kode metode (lihat channels()).
      *
      * @return array<int, string>|null
      */
     public function midtransChannels(string $code): ?array
     {
-        return OnlinePaymentCatalog::midtransChannels($code);
+        return $this->channels($code, OnlineGatewayRouter::MIDTRANS);
+    }
+
+    /** Metode punya kode kanal di gateway ini? Tanpa kode = tidak bisa dibayar lewat gateway itu. */
+    public function supportsGateway(array $method, string $gateway): bool
+    {
+        return ! empty($this->channels($method['code'], $gateway));
     }
 
     /** Nama tampilan metode online (pengaturan admin → katalog). Null kalau bukan metode online. */
@@ -182,6 +211,10 @@ class OnlinePaymentMethodService
                     'sort_order' => (int) $m->sort_order,
                     'min_amount' => $m->min_amount !== null ? (float) $m->min_amount : null,
                     'max_amount' => $m->max_amount !== null ? (float) $m->max_amount : null,
+                    'kind' => $m->kind,
+                    'midtrans_channels' => array_values((array) ($m->midtrans_channels ?? [])),
+                    'doku_channels' => array_values((array) ($m->doku_channels ?? [])),
+                    'is_custom' => (bool) ($m->is_custom ?? false),
                 ])->keyBy('code')->all());
         } catch (\Illuminate\Database\QueryException $e) {
             // Tabel belum ada (deploy lupa `php artisan migrate`): pakai default katalog supaya checkout tetap jalan.
@@ -204,8 +237,35 @@ class OnlinePaymentMethodService
                 'sort_order' => $setting['sort_order'] ?? (1000 + $index),
                 'min_amount' => $setting ? $setting['min_amount'] : $catalog['default_min'],
                 'max_amount' => $setting ? $setting['max_amount'] : $catalog['default_max'],
+                'kind' => $catalog['group'],
+                'midtrans_channels' => $catalog['midtrans'],
+                'doku_channels' => $catalog['doku'],
+                'is_custom' => false,
             ];
             $index++;
+        }
+
+        // Metode tambahan admin (jenis QRIS / VA, kanal dari daftar kode resmi — lihat MetodePembayaranOnline).
+        foreach ($settings as $code => $setting) {
+            if (isset($methods[$code]) || ! ($setting['is_custom'] ?? false)) {
+                continue;
+            }
+            $methods[$code] = [
+                'code' => $code,
+                'label' => $setting['label'],
+                'description' => $setting['description'],
+                'badge' => $setting['badge'],
+                'group' => $setting['kind'] ?? 'VA',
+                'is_active' => $setting['is_active'],
+                'show_at_pos' => $setting['show_at_pos'],
+                'sort_order' => $setting['sort_order'],
+                'min_amount' => $setting['min_amount'],
+                'max_amount' => $setting['max_amount'],
+                'kind' => $setting['kind'] ?? 'VA',
+                'midtrans_channels' => $setting['midtrans_channels'],
+                'doku_channels' => $setting['doku_channels'],
+                'is_custom' => true,
+            ];
         }
 
         uasort($methods, fn ($a, $b) => $a['sort_order'] <=> $b['sort_order']);

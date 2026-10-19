@@ -187,8 +187,10 @@ class PadelBookingController extends Controller
             'booking_ids' => ['required', 'array', 'min:1'],
             'booking_ids.*' => ['required', 'string'],
             'equipments' => ['nullable', 'array'],
-            'equipments.*.equipment_id' => ['required', 'string'],
-            'equipments.*.quantity' => ['required', 'integer', 'min:1'],
+            // Satu baris per alat, maks. 10 per checkout — dulu tanpa batas: stok bola bisa dihabiskan oleh keranjang yang
+            // tidak pernah dibayar (stok bola dipotong saat checkout).
+            'equipments.*.equipment_id' => ['required', 'string', 'distinct'],
+            'equipments.*.quantity' => ['required', 'integer', 'min:1', 'max:10'],
             'voucher_code' => ['nullable', 'string'],
             // Kode harus ada di katalog resmi; aktif/nonaktif & batas nominal divalidasi di service (butuh total tagihan).
             'payment_method' => ['required', 'string', \Illuminate\Validation\Rule::in(array_keys(\App\Services\Payment\OnlinePaymentCatalog::all()))],
@@ -266,8 +268,14 @@ class PadelBookingController extends Controller
         if ($request->boolean('verify_payment') && $awaitingPayment && $booking->order_id) {
             $order = \App\Models\Pos\Order::find($booking->order_id);
 
-            if ($order && app(\App\Services\Payment\MidtransReconciliationService::class)->reconcileOrder($order, cacheSeconds: 10) === \App\Services\Payment\MidtransReconciliationService::PAID) {
+            if ($order && app(\App\Services\Payment\OnlineGatewayRouter::class)->reconcileOrder($order, cacheSeconds: 10) === \App\Services\Payment\OnlineGatewayRouter::PAID) {
                 $booking = $this->bookingService->getTicket($id, $request->user());
+            } elseif ($booking->expires_at && $booking->expires_at->isPast() && (int) $booking->reschedule_count === 0) {
+                // Batas bayar lewat: lepas slot sekarang kalau Midtrans sudah memastikan sesinya berakhir — tidak
+                // menunggu scheduler tiap menit, jadi halaman invoice langsung berubah jadi Expired.
+                if ($this->bookingService->releaseExpiredLocks() > 0) {
+                    $booking = $this->bookingService->getTicket($id, $request->user());
+                }
             }
         }
 
@@ -284,8 +292,10 @@ class PadelBookingController extends Controller
     public function checkIn(Request $request): JsonResponse
     {
         $user = $request->user();
-        if (! $user->isStaff()) {
-            throw new HttpException(403, 'Akses Ditolak: Hanya staf kasir atau admin yang dapat memverifikasi check-in pemain.');
+        // Izin spesifik, bukan isStaff(): isStaff() meloloskan role non-frontline mana pun (trainer, stylist, role
+        // baru bikinan admin) walau tidak diberi izin check-in. Sama dengan rute web /pos/check-in.
+        if (! $user->can('checkin_padel_ticket')) {
+            throw new HttpException(403, 'Akses Ditolak: Hanya staf yang punya izin check-in yang dapat memverifikasi check-in pemain.');
         }
 
         $validated = $request->validate([

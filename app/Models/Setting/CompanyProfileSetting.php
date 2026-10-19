@@ -42,6 +42,10 @@ class CompanyProfileSetting extends Model
 
     public const CACHE_KEY = 'company_profile_settings';
 
+    public const DEFAULT_HERO_SUBTITLE = 'Fasilitas terpadu berstandar internasional di Gedung Indosat Medan: {court_count} Lapangan Padel.';
+
+    public const DEFAULT_HERO_SUBTITLE_EN = 'An internationally-standard integrated facility at Gedung Indosat Medan: {court_count} Padel Courts.';
+
     /**
      * Daftar tertutup icon_key yang boleh dipakai kartu fasilitas — sengaja bukan upload
      * SVG/HTML bebas dari staf (lihat komponen <x-company-profile.icon>), karena SVG mentah
@@ -63,6 +67,30 @@ class CompanyProfileSetting extends Model
     public const DEFAULT_ADDRESS = 'Gedung Indosat, Jl. Perintis Kemerdekaan No. 39, Medan, Sumatera Utara.';
 
     /**
+     * Nomor WhatsApp admin dalam format wa.me (62…) — satu sumber untuk tombol WhatsApp melayang di website & portal
+     * customer (diubah dari menu Konten Website → Lokasi & Kontak). "0812-…", "+62 812 …", "812…" dirapikan; nomor
+     * kosong / tidak masuk akal → null (tombol tidak tampil). Gagal baca DB tidak boleh merusak halaman.
+     */
+    public static function whatsappDigits(): ?string
+    {
+        $digits = preg_replace('/\D+/', '', (string) rescue(fn () => self::current()->whatsapp_number, '', false));
+        $digits = match (true) {
+            str_starts_with($digits, '0') => '62'.substr($digits, 1),
+            str_starts_with($digits, '8') => '62'.$digits,
+            default => $digits,
+        };
+
+        return strlen($digits) >= 10 && strlen($digits) <= 15 ? $digits : null;
+    }
+
+    public static function whatsappUrl(?string $message = null): ?string
+    {
+        $digits = self::whatsappDigits();
+
+        return $digits ? 'https://wa.me/'.$digits.($message ? '?text='.rawurlencode($message) : '') : null;
+    }
+
+    /**
      * Alamat venue untuk struk & invoice — satu sumber dengan Konten Website (diubah dari menu Konten Website).
      * Dulu struk kasir & Z-Report menulis alamat lain secara hardcode ("Lebak Bulus"). Gagal baca DB / cache tidak boleh
      * menggagalkan cetak struk, jadi jatuh ke alamat default.
@@ -75,6 +103,25 @@ class CompanyProfileSetting extends Model
     }
 
     /**
+     * Alamat & teks jam buka untuk portal customer (Home, My Club) — sumbernya sama dengan halaman depan (Konten Website
+     * → Fakta Venue), bukan tulisan di kode. Portal customer berbahasa Inggris: jam pakai teks EN, kosong = teks ID.
+     * Teks ini hanya tampilan; jam slot booking diatur per lapangan di Master Data & Tarif.
+     *
+     * @return array{address: string, hours: string}
+     */
+    public static function venueInfo(): array
+    {
+        $settings = rescue(fn () => self::current(), null, false);
+        $address = trim((string) ($settings?->address_line ?? ''));
+        $hours = trim((string) ($settings?->operating_hours_text_en ?? ''));
+
+        return [
+            'address' => $address !== '' ? $address : self::DEFAULT_ADDRESS,
+            'hours' => $hours !== '' ? $hours : trim((string) ($settings?->operating_hours_text ?? '')),
+        ];
+    }
+
+    /**
      * Ambil singleton record konten company profile dengan proteksi cache.
      */
     public static function current(): self
@@ -84,13 +131,13 @@ class CompanyProfileSetting extends Model
                 ['id' => 1],
                 [
                     'hero_badge_text' => 'Medan Flagship Venue • Gedung Indosat • Open Daily',
-                    'hero_headline_line1' => 'The Sanctuary for',
-                    'hero_headline_highlight' => 'Padel Athletes',
-                    'hero_headline_line2' => 'in Medan.',
-                    'hero_subtitle' => 'Fasilitas terpadu berstandar internasional di Gedung Indosat Medan: {court_count} Lapangan Padel Panoramic Full Indoor ber-AC, Thermal Wellness Recovery (Sauna).',
+                    'hero_headline_line1' => 'Welcome to Club61',
+                    'hero_headline_highlight' => '-',
+                    'hero_headline_line2' => 'Your New Home on the court.',
+                    'hero_subtitle' => self::DEFAULT_HERO_SUBTITLE,
                     'court_count' => 3,
                     'facility_cards' => [
-                        ['icon_key' => 'arena', 'title' => 'Padel Arena', 'subtitle' => '+ Panoramic Courts'],
+                        ['icon_key' => 'arena', 'title' => 'Padel Arena', 'subtitle' => ''],
                         ['icon_key' => 'wellness', 'title' => 'Wellness Suite', 'subtitle' => 'Sauna'],
                         ['icon_key' => 'lounge', 'title' => 'Social Lounge', 'subtitle' => 'Artisan Cafe & Bar'],
                     ],
@@ -145,5 +192,55 @@ class CompanyProfileSetting extends Model
 
             return $card;
         })->all();
+    }
+
+    /** Host Google Maps yang boleh dipasang sebagai iframe peta di halaman depan. */
+    public const MAPS_EMBED_HOSTS = ['www.google.com', 'google.com', 'maps.google.com'];
+
+    /**
+     * Link web biasa (http/https dengan host). filter_var saja tidak cukup: "javascript://x%0Aalert(1)"
+     * lolos FILTER_VALIDATE_URL, padahal dijalankan browser sebagai skrip di href/iframe.
+     */
+    public static function isSafeWebUrl(?string $url): bool
+    {
+        $url = trim((string) $url);
+        if ($url === '' || ! filter_var($url, FILTER_VALIDATE_URL)) {
+            return false;
+        }
+
+        $scheme = strtolower((string) parse_url($url, PHP_URL_SCHEME));
+
+        return in_array($scheme, ['http', 'https'], true) && (string) parse_url($url, PHP_URL_HOST) !== '';
+    }
+
+    /** URL embed peta: wajib https ke Google Maps (iframe ber-origin lain tidak boleh disisipkan). */
+    public static function isSafeMapsEmbedUrl(?string $url): bool
+    {
+        if (! self::isSafeWebUrl($url)) {
+            return false;
+        }
+
+        $url = trim((string) $url);
+
+        return strtolower((string) parse_url($url, PHP_URL_SCHEME)) === 'https'
+            && in_array(strtolower((string) parse_url($url, PHP_URL_HOST)), self::MAPS_EMBED_HOSTS, true)
+            && str_starts_with((string) parse_url($url, PHP_URL_PATH), '/maps');
+    }
+
+    /** URL iframe peta yang aman dipakai halaman publik: embed tersimpan kalau valid, selain itu peta dari alamat. */
+    public function safeMapsEmbedUrl(): string
+    {
+        return self::isSafeMapsEmbedUrl($this->maps_embed_url)
+            ? trim((string) $this->maps_embed_url)
+            : 'https://www.google.com/maps?q='.urlencode((string) $this->address_line).'&output=embed';
+    }
+
+    /** Link media sosial footer yang aman di-render (data lama yang tidak valid dilewati). */
+    public function safeSocialLinks(): array
+    {
+        return array_filter(
+            array_map(fn ($url) => trim((string) $url), $this->footer_social_links ?: []),
+            fn (string $url) => self::isSafeWebUrl($url),
+        );
     }
 }

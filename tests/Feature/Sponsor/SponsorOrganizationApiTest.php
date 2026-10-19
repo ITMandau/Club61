@@ -18,7 +18,11 @@ class SponsorOrganizationApiTest extends TestCase
 {
     use RefreshDatabase;
 
-    protected function makeOrganization(User $pic): SponsorOrganization
+    /**
+     * Organisasi uji dengan kuota jam PADEL bawaan (seperti paket corporate sungguhan). `$padelHours = null` = paket
+     * tanpa kuota jam → rilis jam ditolak.
+     */
+    protected function makeOrganization(User $pic, ?float $padelHours = 1000): SponsorOrganization
     {
         $plan = MembershipPlan::create([
             'code' => 'MBR-CORP-'.uniqid(),
@@ -39,11 +43,17 @@ class SponsorOrganizationApiTest extends TestCase
             'end_date' => now()->addYear(),
         ]);
 
-        return SponsorOrganization::create([
+        $org = SponsorOrganization::create([
             'name' => 'PT Uji Corporate',
             'user_membership_id' => $membership->id,
             'sponsor_admin_user_id' => $pic->id,
         ]);
+
+        if ($padelHours !== null) {
+            $this->givePadelHourQuota($org, $padelHours);
+        }
+
+        return $org;
     }
 
     /**
@@ -53,13 +63,10 @@ class SponsorOrganizationApiTest extends TestCase
      */
     protected function givePadelHourQuota(SponsorOrganization $org, float $hours): UserMembershipBalance
     {
-        return UserMembershipBalance::create([
-            'user_membership_id' => $org->user_membership_id,
-            'facility' => 'PADEL',
-            'quota_type' => 'HOURS',
-            'initial_quota' => $hours,
-            'remaining_quota' => $hours,
-        ]);
+        return UserMembershipBalance::updateOrCreate(
+            ['user_membership_id' => $org->user_membership_id, 'facility' => 'PADEL'],
+            ['quota_type' => 'HOURS', 'initial_quota' => $hours, 'remaining_quota' => $hours],
+        );
     }
 
     public function test_pic_can_view_own_organization_summary(): void
@@ -102,6 +109,18 @@ class SponsorOrganizationApiTest extends TestCase
             ->where('user_id', $newUser->id)->first();
         $this->assertNotNull($member);
         $this->assertEquals(5.0, $member->totalRemainingHours());
+    }
+
+    public function test_member_name_with_symbols_is_rejected(): void
+    {
+        $pic = User::factory()->create();
+        $this->makeOrganization($pic);
+
+        $this->actingAs($pic)->postJson('/api/v1/sponsor/organization/members', [
+            'name' => 'Budi (Finance)', 'phone' => '081234567891',
+        ])->assertStatus(422)->assertJsonValidationErrors('name');
+
+        $this->assertDatabaseMissing('users', ['phone' => '081234567891']);
     }
 
     public function test_adding_same_active_member_twice_is_rejected(): void
@@ -158,19 +177,46 @@ class SponsorOrganizationApiTest extends TestCase
         $this->assertEquals(7.0, $org->totalHoursReleased());
     }
 
-    public function test_organization_without_quota_set_is_unlimited(): void
+    public function test_organization_without_padel_hour_quota_cannot_release_hours(): void
     {
+        // Dulu paket tanpa kuota jam PADEL = rilis tanpa batas (500 jam lolos).
         $pic = User::factory()->create();
-        $org = $this->makeOrganization($pic); // tidak ada UserMembershipBalance PADEL — unlimited
+        $org = $this->makeOrganization($pic, padelHours: null);
         $employee = User::factory()->create(['phone' => '081200000031']);
         $member = SponsorOrganizationMember::create([
             'sponsor_organization_id' => $org->id, 'user_id' => $employee->id, 'status' => 'ACTIVE',
         ]);
 
         $this->actingAs($pic)->postJson("/api/v1/sponsor/organization/members/{$member->id}/release-voucher", ['hours' => 500])
-            ->assertStatus(201);
+            ->assertStatus(422)->assertJsonFragment(['success' => false]);
 
+        $this->assertSame(0, $member->vouchers()->count());
         $this->assertNull($org->remainingQuota());
+    }
+
+    public function test_suspended_organization_cannot_release_hours_by_any_path(): void
+    {
+        $pic = User::factory()->create();
+        $org = $this->makeOrganization($pic);
+        $member = SponsorOrganizationMember::create([
+            'sponsor_organization_id' => $org->id,
+            'user_id' => User::factory()->create(['phone' => '081200000039'])->id,
+            'status' => 'ACTIVE',
+        ]);
+        $this->actingAs($pic)->postJson("/api/v1/sponsor/organization/members/{$member->id}/release-voucher", ['hours' => 2])->assertStatus(201);
+        $voucher = $member->vouchers()->first();
+
+        $org->update(['status' => SponsorOrganization::STATUS_SUSPENDED]);
+
+        $this->actingAs($pic)->postJson("/api/v1/sponsor/organization/members/{$member->id}/release-voucher", ['hours' => 3])->assertStatus(422);
+        $this->actingAs($pic)->postJson('/api/v1/sponsor/organization/members/bulk-release-voucher', ['mode' => 'uniform', 'hours' => 3])
+            ->assertJsonPath('data.released', 0);
+        $this->actingAs($pic)->postJson('/api/v1/sponsor/organization/members', ['name' => 'Rina Baru', 'phone' => '081200000040', 'initial_hours' => 4])
+            ->assertStatus(422);
+
+        $this->assertSame(1, SponsorMemberVoucher::count());
+        $this->assertEquals(2.0, (float) $voucher->fresh()->hours_granted);
+        $this->assertEquals(998.0, $org->fresh()->remainingQuota());
     }
 
     public function test_bulk_release_reports_failure_for_members_once_quota_is_exhausted(): void

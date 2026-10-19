@@ -1,13 +1,24 @@
 {
   "resources/css/app.css": {
-    "file": "assets/app-0pYOrwFC.css",
+    "file": "assets/app-DiHi-xJa.css",
     "src": "resources/css/app.css",
+    "isEntry": true
+  },
+  "resources/css/signature-editor.css": {
+    "file": "assets/signature-editor-Dx1cANiY.css",
+    "src": "resources/css/signature-editor.css",
     "isEntry": true
   },
   "resources/js/app.js": {
     "file": "assets/app-27Rnumxh.js",
     "name": "app",
     "src": "resources/js/app.js",
+    "isEntry": true
+  },
+  "resources/js/signature-editor.js": {
+    "file": "assets/signature-editor-CGbQUJLD.js",
+    "name": "signature-editor",
+    "src": "resources/js/signature-editor.js",
     "isEntry": true
   }
 }

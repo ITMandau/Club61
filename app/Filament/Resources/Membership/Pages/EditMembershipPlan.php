@@ -3,7 +3,6 @@
 namespace App\Filament\Resources\Membership\Pages;
 
 use App\Filament\Resources\Membership\MembershipPlanResource;
-use Filament\Actions\DeleteAction;
 use Filament\Resources\Pages\EditRecord;
 
 class EditMembershipPlan extends EditRecord
@@ -13,7 +12,7 @@ class EditMembershipPlan extends EditRecord
     protected function getHeaderActions(): array
     {
         return [
-            DeleteAction::make(),
+            MembershipPlanResource::guardedDeleteAction(),
         ];
     }
 

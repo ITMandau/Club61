@@ -59,9 +59,12 @@ class PadelFulfillmentHandler implements DomainFulfillmentHandlerInterface
 
             if (! empty($updateData)) {
                 // Atomic conditional update di level database untuk mencegah race condition dengan pembatalan/check-in konkuren
-                \App\Models\Padel\PadelBooking::where('id', $booking->id)
+                $updated = \App\Models\Padel\PadelBooking::where('id', $booking->id)
                     ->whereIn('status', ['LOCKED', 'PENDING_PAYMENT', 'PENDING'])
                     ->update($updateData);
+                if ($updated) {
+                    app(\App\Services\Realtime\RealtimeSignal::class)->bookingDates($booking->booking_date);
+                }
             }
         }
     }

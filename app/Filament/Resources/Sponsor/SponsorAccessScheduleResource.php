@@ -39,9 +39,34 @@ class SponsorAccessScheduleResource extends Resource
 
     protected static ?string $navigationLabel = 'Jadwal Akses Sponsor';
 
+    protected static ?string $modelLabel = 'Jadwal Akses Sponsor';
+
+    protected static ?string $pluralModelLabel = 'Jadwal Akses Sponsor';
+
     protected static string|UnitEnum|null $navigationGroup = 'Sponsor';
 
     protected static ?int $navigationSort = 2;
+
+    /**
+     * Aturan jadwal ini BELUM ditegakkan saat checkout / kasir (voucher sponsor tetap bisa dipakai di jam & lapangan
+     * mana pun) — keputusan 18 Okt 2026: tampilkan sebagai "sedang dalam proses pembuatan", fitur lain tetap jalan.
+     */
+    public const IN_PROGRESS_NOTE = 'Sedang dalam proses pembuatan — jadwal di sini sudah bisa diatur dan tampil di portal PIC, tapi belum membatasi pemakaian voucher sponsor saat booking (hari, jam, dan maks. lapangan belum dicek).';
+
+    public static function getNavigationBadge(): ?string
+    {
+        return 'Proses';
+    }
+
+    public static function getNavigationBadgeColor(): string|array|null
+    {
+        return 'warning';
+    }
+
+    public static function getNavigationBadgeTooltip(): ?string
+    {
+        return 'Sedang dalam proses pembuatan';
+    }
 
     // Model SponsorAccessSchedule tidak punya Gate::policy() apa pun terdaftar — tanpa override
     // ini, Filament fallback ke Gate::before-only (default ALLOW ke semua staf yang login, apapun
@@ -86,7 +111,8 @@ class SponsorAccessScheduleResource extends Resource
                     "Contoh nyata: Club 61 cuma punya 3 lapangan, tapi ada 3 perusahaan sponsor berbeda. Kalau semua karyawan dari 3 perusahaan itu bebas booking kapan saja, bisa saja 1 perusahaan (misal PT Maju Jaya) memborong ketiga lapangan terus setiap jam ramai, dan perusahaan lain jadi tidak kebagian.\n\n".
                     "Dengan aturan di bawah ini, Anda bisa bilang ke sistem: \"PT Maju Jaya cuma boleh main jam 08:00–16:00, Senin sampai Jumat, dan maksimal pakai 1 lapangan di waktu yang sama.\" Kalau karyawan PT Maju Jaya coba booking di luar jam/hari itu, atau mau pakai lapangan ke-2 di jam yang sama, sistem OTOMATIS MENOLAK booking-nya."
                 )
-                ->schema([]),
+                ->schema([])
+                ->columnSpanFull(),
 
             Section::make('1. Pilih Perusahaan Sponsor')
                 ->description('Aturan yang Anda buat di halaman ini HANYA berlaku untuk 1 perusahaan yang dipilih di sini — bukan untuk semua sponsor sekaligus.')

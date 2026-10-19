@@ -398,9 +398,9 @@ PRD: [`PRD_MODUL_21_REFUND_NO_SHOW_PEMBAYARAN_BERMASALAH.md`](PRD_MODUL_21_REFUN
 
 ## MODUL 22: VOUCHER SALDO & VOUCHER PROMO MARKETING
 
-### Status: 30% (fondasi jalan, menunggu arahan PM)
+### Status: 30% (fondasi jalan, rancangan final v0.2 menunggu konfirmasi PM)
 
-PRD: [`PRD_MODUL_22_VOUCHER_DAN_PROMO.md`](PRD_MODUL_22_VOUCHER_DAN_PROMO.md) — 11 pertanyaan untuk PM.
+PRD: [`PRD_MODUL_22_VOUCHER_DAN_PROMO.md`](PRD_MODUL_22_VOUCHER_DAN_PROMO.md) v0.2 (18 Okt 2026) — skema dinamis, cara sebar A–D, aturan tetap T1–T6.
 
 - [x] Tabel & mesin voucher satu untuk online dan kasir (`VoucherService`), voucher saldo dari refund ditolak, Daftar Voucher.
 - [ ] Voucher saldo **sekali pakai, sisa hangus** (keputusan PM 5 Okt 2026 — yang berjalan sekarang masih menyimpan sisa).
@@ -411,15 +411,15 @@ PRD: [`PRD_MODUL_22_VOUCHER_DAN_PROMO.md`](PRD_MODUL_22_VOUCHER_DAN_PROMO.md) �
 
 ## MODUL 23: STRUKTUR PORTAL CUSTOMER (MEMBERSHIP, MY CLUB, PROFILE, VOUCHER SAYA)
 
-### Status: 0% (PRD disetujui arahnya, belum dikerjakan)
+### Status: ±50% (navigasi, Profile, Voucher Saya selesai 18 Okt 2026; My Club compro & halaman Membership menyusul)
 
 PRD: [`PRD_MODUL_23_STRUKTUR_PORTAL_CUSTOMER.md`](PRD_MODUL_23_STRUKTUR_PORTAL_CUSTOMER.md)
 
-- [ ] Navigasi: tab Membership menggantikan Profile di navigasi bawah HP; menu Membership di navbar desktop; Profile + Voucher Saya + Logout di dropdown akun.
-- [ ] My Club jadi profil klub (compro): baris status member + 3 paket paling laku + "Lihat semua paket"; kartu member, voucher & katalog lengkap dipindah.
-- [ ] Profile: kartu membership aktif (QR + kuota), menu Voucher Saya, pengaturan akun dirapikan.
-- [ ] Voucher Saya gaya Shopee (voucher saldo + voucher jam corporate, tab Tersedia / Riwayat) + endpoint riwayat voucher saldo.
-- [ ] Pindahkan link lama (`/my-club#corporate-vouchers`, redirect setelah beli membership, kartu Upgrade di Home).
+- [x] Navigasi: tab Membership menggantikan Profile di navigasi bawah HP; menu Membership di navbar desktop; Profile + Voucher Saya + Logout di dropdown akun.
+- [ ] My Club jadi profil klub (compro): ~~kartu member & voucher dipindah~~ (selesai, diganti baris status member); 3 paket paling laku + "Lihat semua paket" menggantikan katalog lengkap — belum.
+- [x] Profile: kartu membership aktif (QR + kuota), menu Voucher Saya, pengaturan akun dirapikan.
+- [x] Voucher Saya gaya Shopee (voucher saldo + voucher jam corporate, tab Tersedia / Riwayat) — data dari `CustomerAccountService` (siap dipakai API mobile).
+- [ ] Pindahkan link lama: `/my-club#corporate-vouchers` di Home ✓; redirect setelah beli membership & tombol "Kembali ke My Club", kartu Upgrade di Home — belum.
 
 ---
 

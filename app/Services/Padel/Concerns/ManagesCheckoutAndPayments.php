@@ -35,7 +35,8 @@ trait ManagesCheckoutAndPayments
             throw new HttpException(422, 'Pembayaran tunai (CASH) tidak diperbolehkan. Venue Club 61 beroperasi 100% Cashless.');
         }
 
-        $cacheIdempotencyKey = "idempotency:padel:checkout:{$idempotencyKey}";
+        // Diikat ke akun: kunci yang sama dari akun lain tidak pernah mendapat respons checkout orang lain.
+        $cacheIdempotencyKey = "idempotency:padel:checkout:{$user->id}:{$idempotencyKey}";
 
         // Cek apakah request ini sudah pernah berhasil diproses dalam 24 jam terakhir
         if ($cachedResponse = Cache::get($cacheIdempotencyKey)) {
@@ -126,6 +127,7 @@ trait ManagesCheckoutAndPayments
             // Voucher promo / voucher saldo (VoucherService: aturan sama dengan kasir). Kode tidak valid diabaikan —
             // halaman checkout sudah memvalidasinya lebih dulu lewat /vouchers/check.
             $voucherResult = app(\App\Services\Finance\VoucherService::class)->resolve($voucherCode, $user, $courtTotal + $equipmentTotal, lock: true);
+            $this->assertOneVoucherPerTransaction($sponsorBenefitResult, $voucherResult['voucher']);
             $discountAmount = $voucherResult['discount'];
             $appliedVoucherCode = $voucherResult['voucher']?->code;
 
@@ -240,6 +242,10 @@ trait ManagesCheckoutAndPayments
                 ];
             }
 
+            // Baris Rp0 (sewa lapangan yang ditanggung penuh kuota member / voucher jam corporate) tidak dikirim ke
+            // Midtrans — tidak ada yang ditagih dari baris itu, dan total item tetap sama dengan gross_amount.
+            $midtransItems = array_values(array_filter($midtransItems, fn (array $item) => (int) $item['price'] !== 0));
+
             // QA DEFENSE 3: Targeted 1-Rupiah Auto-Reconciliation
             $sumItems = 0;
             foreach ($midtransItems as $item) {
@@ -291,27 +297,28 @@ trait ManagesCheckoutAndPayments
                 ];
                 $initialStatus = 'PAID';
             } else {
-                // Metode harus aktif & sesuai batas nominal (mis. QRIS maks Rp10 juta) — dicek di server, bukan cuma
-                // disaring di halaman. Gagal di sini = seluruh checkout di-rollback (booking tetap LOCKED, bisa dicoba lagi).
-                $paymentMethod = app(\App\Services\Payment\OnlinePaymentMethodService::class)->assertSelectable($paymentMethod, (float) $grandTotal);
+                // Gateway tagihan baru = pilihan admin (Midtrans / DOKU), lewat pengarah.
+                $onlineRouter = app(\App\Services\Payment\OnlineGatewayRouter::class);
+                $onlineGateway = $onlineRouter->onlineGateway();
 
-                // Batas bayar dihitung SEJAK KLIK BAYAR dan dipakai dua-duanya: expiry sesi Midtrans & pelepasan slot.
+                // Metode harus aktif, punya kanal di gateway itu & sesuai batas nominal (mis. QRIS maks Rp10 juta) — dicek
+                // di server, bukan cuma disaring di halaman. Gagal di sini = seluruh checkout di-rollback (booking tetap LOCKED).
+                $paymentMethod = app(\App\Services\Payment\OnlinePaymentMethodService::class)->assertSelectable($paymentMethod, (float) $grandTotal, $onlineGateway);
+
+                // Batas bayar dihitung SEJAK KLIK BAYAR dan dipakai dua-duanya: expiry sesi gateway & pelepasan slot.
                 $bookingTimes = app(\App\Services\Padel\BookingTimeService::class);
                 $paymentDeadline = $bookingTimes->paymentExpiresAt();
 
-                // Panggil Payment Manager (Midtrans & Mock Simulator)
-                $paymentManager = app(\App\Services\Payment\PaymentManager::class);
-                $paymentResult = $paymentManager->createPayment([
-                    'order_id' => $orderNumber,
+                // Midtrans (Snap / mock simulator) atau DOKU Checkout.
+                $paymentResult = $onlineRouter->createSession($onlineGateway, [
+                    'order_number' => $orderNumber,
+                    'session_id' => $orderNumber,
                     'expiry_minutes' => $bookingTimes->paymentWindowMinutes(),
-                    'gross_amount' => (int) $grandTotal,
-                    'item_details' => $midtransItems,
-                    'customer_details' => [
-                        'first_name' => $user->name,
-                        'email' => $user->email,
-                        'phone' => $user->phone ?? '081261617233',
-                    ],
-                    'payment_method' => $paymentMethod,
+                    'amount' => (int) $grandTotal,
+                    'items' => $midtransItems,
+                    'customer' => ['name' => $user->name, 'email' => $user->email, 'phone' => $user->phone ?? '081261617233'],
+                    'method' => $paymentMethod,
+                    'callback_url' => route('customer.invoice', ['booking_id' => $bookings->first()->id, 'order_id' => $orderNumber]),
                 ]);
 
                 // Tentukan status awal transaksi: PAID seketika hanya kalau gateway mock aktif (simulator),
@@ -356,17 +363,25 @@ trait ManagesCheckoutAndPayments
                     'payload_log' => $paymentResult['raw'] ?? null,
                 ]);
             } else {
-                // Simpan record pembayaran awal PENDING dengan transaction_id = orderNumber
+                // Simpan record pembayaran awal PENDING dengan transaction_id = id sesi (Midtrans: orderNumber,
+                // DOKU: invoice sesi).
                 Payment::create([
                     'order_id' => $order->id,
-                    'payment_gateway' => 'MIDTRANS',
-                    'transaction_id' => $orderNumber,
+                    'payment_gateway' => $paymentResult['gateway'],
+                    'transaction_id' => $paymentResult['session_id'],
                     'snap_token' => $paymentResult['snap_token'] ?? null,
                     'payment_url' => $paymentResult['payment_url'] ?? $paymentResult['redirect_url'] ?? null,
                     'amount' => (float) $grandTotal,
                     'payment_method' => strtoupper($paymentMethod),
                     'status' => 'PENDING',
-                    'payload_log' => $paymentResult['raw'] ?? null,
+                    // Sesi pertama dicatat supaya "Pay Now" berikutnya dengan metode sama memakai sesi ini lagi.
+                    'payload_log' => \App\Services\Payment\OnlineGatewayRouter::recordSession(
+                        is_array($paymentResult['raw'] ?? null) ? $paymentResult['raw'] : [],
+                        $paymentResult,
+                        $paymentMethod,
+                        (float) $grandTotal,
+                        $paymentDeadline,
+                    ),
                 ]);
             }
 
@@ -376,7 +391,7 @@ trait ManagesCheckoutAndPayments
                     ? 'Pembayaran berhasil dikonfirmasi. E-Tiket aktif.'
                     : 'Sesi transaksi pembayaran berhasil dibuat. Silakan selesaikan pembayaran.',
                 'data' => [
-                    'driver' => $paymentResult['driver'] ?? $paymentManager->getDefaultDriver(),
+                    'driver' => $paymentResult['driver'] ?? app(\App\Services\Payment\PaymentManager::class)->getDefaultDriver(),
                     'order_id' => $orderNumber,
                     'booking_id' => $primaryBooking->id,
                     'snap_token' => $paymentResult['snap_token'] ?? null,
@@ -408,8 +423,9 @@ trait ManagesCheckoutAndPayments
                 ],
             ];
 
-            // Simpan ke Cache Idempotency selama 24 Jam (Anti-Bloat)
-            Cache::put($cacheIdempotencyKey, $response, self::IDEMPOTENCY_TTL_SECONDS);
+            // Simpan ke Cache Idempotency selama 24 Jam — SETELAH commit: checkout yang di-rollback tidak boleh
+            // "berhasil" saat request yang sama diulang.
+            DB::afterCommit(fn () => Cache::put($cacheIdempotencyKey, $response, self::IDEMPOTENCY_TTL_SECONDS));
 
             return $response;
         });
@@ -445,9 +461,10 @@ trait ManagesCheckoutAndPayments
                 ->lockForUpdate()
                 ->firstOrFail();
 
-            // Proteksi Otorisasi: Pastikan user hanya bisa retry booking miliknya sendiri
-            $isStaff = $user->isStaff();
-            if (! $isStaff && $booking->user_id !== $user->id) {
+            // Hanya pemilik booking. Dulu "staf" (isStaff(), termasuk role non-frontline mana pun) boleh membayar ulang
+            // booking orang lain: sesi bayar customer ditutup & link bayar baru jatuh ke staf. Pelunasan oleh staf
+            // lewat kasir (adminSettleCashierPayment), bukan endpoint ini.
+            if ($booking->user_id !== $user->id) {
                 throw new HttpException(403, 'Anda tidak memiliki otoritas untuk memproses pembayaran booking ini.');
             }
 
@@ -511,7 +528,18 @@ trait ManagesCheckoutAndPayments
                 $deltaAmount = (float) $pendingSupplementalPayment->amount;
                 $chargeTotal = max(0, $deltaAmount);
                 $newGatewayFee = 0;
-                $paymentMethod = app(\App\Services\Payment\OnlinePaymentMethodService::class)->assertSelectable($paymentMethod, (float) $chargeTotal);
+                $onlineRouter = app(\App\Services\Payment\OnlineGatewayRouter::class);
+                $onlineGateway = $onlineRouter->targetGatewayFor($pendingSupplementalPayment);
+                $paymentMethod = app(\App\Services\Payment\OnlinePaymentMethodService::class)->assertSelectable($paymentMethod, (float) $chargeTotal, $onlineGateway);
+
+                // Satu tagihan selisih = satu sesi yang bisa dibayar (lihat SnapSessionGuard / DokuSessionGuard).
+                $prepared = $onlineRouter->prepareSession($pendingSupplementalPayment, $paymentMethod, (float) $chargeTotal, $onlineGateway);
+                if ($prepared['action'] === \App\Services\Payment\OnlineGatewayRouter::SESSION_PAID) {
+                    return $this->settledDuringRetry($order, $prepared);
+                }
+                if ($prepared['action'] === \App\Services\Payment\OnlineGatewayRouter::SESSION_REUSE) {
+                    return $this->reusedSessionResponse($order, $prepared, (float) $chargeTotal, $paymentMethod, ['gateway_fee' => $newGatewayFee]);
+                }
 
                 // Midtrans Snap untuk Pelunasan Delta
                 $orderNumber = $order->order_number ?: ('ORD-PAD-' . strtoupper(Str::random(8)));
@@ -536,42 +564,43 @@ trait ManagesCheckoutAndPayments
                     ];
                 }
 
-                $paymentManager = app(\App\Services\Payment\PaymentManager::class);
-                $paymentResult = $paymentManager->createPayment([
-                    'order_id' => $suffixedOrderId,
-                    'gross_amount' => (int) $chargeTotal,
-                    'item_details' => $midtransItems,
-                    'customer_details' => [
-                        'first_name' => $user->name,
-                        'email' => $user->email,
-                        'phone' => $user->phone ?? '081261617233',
-                    ],
-                    'payment_method' => $paymentMethod,
+                $paymentResult = $onlineRouter->createSession($onlineGateway, [
+                    'order_number' => $orderNumber,
+                    'session_id' => $suffixedOrderId,
+                    'amount' => (int) $chargeTotal,
+                    'items' => $midtransItems,
+                    'customer' => ['name' => $user->name, 'email' => $user->email, 'phone' => $user->phone ?? '081261617233'],
+                    'method' => $paymentMethod,
+                    'callback_url' => route('customer.invoice', ['booking_id' => $booking->id]),
                 ]);
+                $suffixedOrderId = $paymentResult['session_id'];
 
                 Cache::put("order_bookings:{$suffixedOrderId}", $bookings->pluck('id')->toArray(), 86400);
 
+                $deltaLog = \App\Services\Payment\OnlineGatewayRouter::recordSession(
+                    is_array($pendingSupplementalPayment->payload_log) ? $pendingSupplementalPayment->payload_log : [],
+                    $paymentResult,
+                    $paymentMethod,
+                    (float) $chargeTotal,
+                    now()->addMinutes(app(\App\Services\Padel\BookingTimeService::class)->paymentWindowMinutes()),
+                );
+                $deltaLog['gateway_fee'] = $newGatewayFee;
+
                 $pendingSupplementalPayment->update([
-                    'payment_gateway' => 'MIDTRANS',
+                    'payment_gateway' => $paymentResult['gateway'],
                     'payment_method' => $paymentMethod,
-                    'payload_log' => array_merge($pendingSupplementalPayment->payload_log ?? [], [
-                        'midtrans_order_id' => $suffixedOrderId,
-                        'midtrans_order_ids' => array_values(array_unique(array_merge(
-                            (array) ($pendingSupplementalPayment->payload_log['midtrans_order_ids'] ?? []),
-                            [$suffixedOrderId]
-                        ))),
-                        'snap_token' => $paymentResult['snap_token'] ?? null,
-                        'gateway_fee' => $newGatewayFee,
-                    ]),
+                    'payload_log' => $deltaLog,
                 ]);
 
                 return [
                     'success' => true,
                     'is_cash' => false,
+                    'driver' => $paymentResult['driver'] ?? 'midtrans',
                     'order_id' => $order->order_number,
                     'suffixed_order_id' => $suffixedOrderId,
                     'snap_token' => $paymentResult['snap_token'] ?? null,
                     'redirect_url' => $paymentResult['redirect_url'] ?? null,
+                    'payment_url' => $paymentResult['payment_url'] ?? null,
                     'grand_total' => $chargeTotal,
                     'gateway_fee' => $newGatewayFee,
                     'payment_method' => $paymentMethod,
@@ -587,6 +616,13 @@ trait ManagesCheckoutAndPayments
             $bookingTimes = app(\App\Services\Padel\BookingTimeService::class);
             $unpaidBookings = $bookings->filter(fn (PadelBooking $b) => in_array($b->status, ['LOCKED', 'PENDING_PAYMENT', 'PENDING'], true) && (int) $b->reschedule_count === 0);
             if ($booking->status === 'LOCKED') {
+                // Aturan sama dengan checkout: hold yang waktunya sudah habis tidak bisa dibayar (dulu jalur ini
+                // mengubahnya jadi PENDING_PAYMENT dengan batas bayar baru = hold diperpanjang).
+                $holdExpired = $unpaidBookings->contains(fn (PadelBooking $b) => $b->status === 'LOCKED'
+                    && ($b->expires_at ?? $b->created_at->copy()->addMinutes($bookingTimes->holdMinutes()))->isPast());
+                if ($holdExpired) {
+                    throw new HttpException(422, 'Masa kuncian slot ('.$bookingTimes->holdMinutes().' menit) telah kedaluwarsa. Silakan pilih slot lagi.');
+                }
                 $paymentDeadline = $bookingTimes->paymentExpiresAt();
                 foreach ($unpaidBookings as $b) {
                     $b->update(['status' => 'PENDING_PAYMENT', 'expires_at' => $paymentDeadline]);
@@ -609,20 +645,74 @@ trait ManagesCheckoutAndPayments
                 channel: 'ONLINE',
                 module: 'PADEL'
             );
-            $taxAmount = $retryFinanceCalc['tax_amount'];
-            $adminFee = $retryFinanceCalc['admin_fee_amount'];
-            $totalServiceCharge = $adminFee;
-            $grandTotal = max(0, $retryFinanceCalc['taxable_amount'] + $taxAmount + $totalServiceCharge);
+            // Harga TERKUNCI sejak checkout: tagihan online yang sudah dibuat dibayar ulang dengan nominal yang sama.
+            // Perubahan pajak / biaya di admin hanya berlaku untuk transaksi baru. Dulu dihitung ulang tiap bayar ulang
+            // → sesi lama & baru beda nominal, dan membayar sesi lama yang lebih murah tetap mengaktifkan booking.
+            $priceLocked = (float) $order->grand_total > 0
+                && Payment::where('order_id', $order->id)->where('status', 'PENDING')->whereIn('payment_gateway', ['MIDTRANS', 'DOKU'])->exists();
 
-            $order->update([
-                'subtotal' => $retryFinanceCalc['subtotal'],
-                'tax_amount' => $taxAmount,
-                'service_charge' => $totalServiceCharge,
-                'grand_total' => $grandTotal,
-            ]);
+            if ($priceLocked) {
+                $taxAmount = (float) $order->tax_amount;
+                $adminFee = (float) $order->service_charge;
+                $totalServiceCharge = $adminFee;
+                $grandTotal = (float) $order->grand_total;
+            } else {
+                $taxAmount = $retryFinanceCalc['tax_amount'];
+                $adminFee = $retryFinanceCalc['admin_fee_amount'];
+                $totalServiceCharge = $adminFee;
+                $grandTotal = max(0, $retryFinanceCalc['taxable_amount'] + $taxAmount + $totalServiceCharge);
 
-            if ($grandTotal > 0) {
-                $paymentMethod = app(\App\Services\Payment\OnlinePaymentMethodService::class)->assertSelectable($paymentMethod, (float) $grandTotal);
+                $order->update([
+                    'subtotal' => $retryFinanceCalc['subtotal'],
+                    'tax_amount' => $taxAmount,
+                    'service_charge' => $totalServiceCharge,
+                    'grand_total' => $grandTotal,
+                ]);
+            }
+
+            // Tagihan Rp0 (seluruhnya ditanggung kuota member / voucher jam corporate / voucher promo): langsung lunas,
+            // jangan buka sesi Midtrans — Midtrans menolak gross_amount 0 dan customer tertahan di halaman invoice.
+            if ($grandTotal <= 0) {
+                $coveredBy = $this->fullyCoveredMethod(
+                    byMembership: $bookings->contains(fn ($b) => (float) $b->member_discount_court > 0),
+                    bySponsor: $bookings->contains(fn ($b) => (float) $b->sponsor_discount_court > 0),
+                    byVoucher: (float) ($order->discount_amount ?? 0) > 0,
+                );
+
+                app(\App\Services\Payment\PaymentOrchestratorService::class)->markOrderAsPaid($order, [
+                    'payment_gateway' => $coveredBy,
+                    'payment_method' => $coveredBy,
+                    'amount' => 0.0,
+                    'user' => $user,
+                    'payload_log' => ['covered_by' => $coveredBy],
+                ]);
+
+                return [
+                    'success' => true,
+                    'is_cash' => false,
+                    'is_paid' => true,
+                    'order_id' => $order->order_number,
+                    'snap_token' => null,
+                    'redirect_url' => null,
+                    'grand_total' => 0.0,
+                    'payment_method' => $coveredBy,
+                    'message' => 'Tagihan Rp0 sudah ditanggung benefit — booking langsung lunas.',
+                ];
+            }
+
+            // Satu tagihan = satu sesi yang bisa dibayar: metode sama → sesi yang sama dipakai lagi; ganti metode →
+            // sesi lama ditutup dulu di gateway-nya (SnapSessionGuard / DokuSessionGuard). Dulu tiap klik membuka sesi
+            // baru dan sesi lama tetap hidup → customer bisa membayar dua kali.
+            $pendingPayment = Payment::where('order_id', $order->id)->where('status', 'PENDING')->latest()->lockForUpdate()->first();
+            $onlineRouter = app(\App\Services\Payment\OnlineGatewayRouter::class);
+            $onlineGateway = $onlineRouter->targetGatewayFor($pendingPayment);
+            $paymentMethod = app(\App\Services\Payment\OnlinePaymentMethodService::class)->assertSelectable($paymentMethod, (float) $grandTotal, $onlineGateway);
+            $prepared = $onlineRouter->prepareSession($pendingPayment, $paymentMethod, (float) $grandTotal, $onlineGateway);
+            if ($prepared['action'] === \App\Services\Payment\OnlineGatewayRouter::SESSION_PAID) {
+                return $this->settledDuringRetry($order, $prepared);
+            }
+            if ($prepared['action'] === \App\Services\Payment\OnlineGatewayRouter::SESSION_REUSE) {
+                return $this->reusedSessionResponse($order, $prepared, (float) $grandTotal, $paymentMethod, ['service_charge' => $totalServiceCharge, 'gateway_fee' => $totalServiceCharge]);
             }
 
             // On-the-Fly Suffix Logic untuk Midtrans Snap
@@ -664,6 +754,10 @@ trait ManagesCheckoutAndPayments
                 ];
             }
 
+            // Baris Rp0 (sewa lapangan yang ditanggung penuh kuota member / voucher jam corporate) tidak dikirim ke
+            // Midtrans — tidak ada yang ditagih dari baris itu, dan total item tetap sama dengan gross_amount.
+            $midtransItems = array_values(array_filter($midtransItems, fn (array $item) => (int) $item['price'] !== 0));
+
             // QA DEFENSE 3: Targeted 1-Rupiah Auto-Reconciliation
             $sumItems = 0;
             foreach ($midtransItems as $item) {
@@ -692,41 +786,44 @@ trait ManagesCheckoutAndPayments
                 $midtransItems[$targetIdx]['price'] += $diff;
             }
 
-            // Panggil Payment Manager
-            $paymentManager = app(\App\Services\Payment\PaymentManager::class);
-            $paymentResult = $paymentManager->createPayment([
-                'order_id' => $suffixedOrderId,
+            // Midtrans (Snap / mock simulator) atau DOKU Checkout — sisa waktu bayar saja (tidak diperpanjang).
+            $paymentResult = $onlineRouter->createSession($onlineGateway, [
+                'order_number' => $orderNumber,
+                'session_id' => $suffixedOrderId,
                 'expiry_minutes' => $expiryMinutes,
-                'gross_amount' => (int) $grandTotal,
-                'item_details' => $midtransItems,
-                'customer_details' => [
-                    'first_name' => $user->name,
-                    'email' => $user->email,
-                    'phone' => $user->phone ?? '081261617233',
-                ],
-                'payment_method' => $paymentMethod,
+                'amount' => (int) $grandTotal,
+                'items' => $midtransItems,
+                'customer' => ['name' => $user->name, 'email' => $user->email, 'phone' => $user->phone ?? '081261617233'],
+                'method' => $paymentMethod,
+                'callback_url' => route('customer.invoice', ['booking_id' => $booking->id, 'order_id' => $order->order_number]),
             ]);
+            $suffixedOrderId = $paymentResult['session_id'];
 
             // Petakan suffixed order id ke bookings di Cache selama 24 jam
             Cache::put("order_bookings:{$suffixedOrderId}", $bookings->pluck('id')->toArray(), 86400);
 
-            // Simpan PERMANEN order_id yang dikirim ke Midtrans — cache di atas hilang dalam 24 jam,
-            // padahal rekonsiliasi (MidtransReconciliationService) butuh id persis ini untuk
-            // menanyakan status pembayaran kalau webhook-nya tidak pernah sampai.
-            $pendingPayment = Payment::where('order_id', $order->id)->where('status', 'PENDING')->latest()->lockForUpdate()->first();
+            // Simpan PERMANEN id sesi yang dikirim ke gateway — cache di atas hilang dalam 24 jam, padahal rekonsiliasi
+            // (Midtrans / DOKU) butuh id persis ini untuk menanyakan status pembayaran kalau webhook-nya tidak sampai.
+            $sessionExpiresAt = now()->addMinutes($expiryMinutes);
             if ($pendingPayment) {
-                $log = is_array($pendingPayment->payload_log) ? $pendingPayment->payload_log : [];
-                $log['midtrans_order_id'] = $suffixedOrderId;
-                $log['midtrans_order_ids'] = array_values(array_unique(array_merge((array) ($log['midtrans_order_ids'] ?? []), [$suffixedOrderId])));
-                $log['snap_token'] = $paymentResult['snap_token'] ?? null;
+                $log = \App\Services\Payment\OnlineGatewayRouter::recordSession(
+                    is_array($pendingPayment->payload_log) ? $pendingPayment->payload_log : [],
+                    $paymentResult,
+                    $paymentMethod,
+                    (float) $grandTotal,
+                    $sessionExpiresAt,
+                );
                 $updates = ['payload_log' => $log];
-                if ($pendingPayment->payment_gateway === 'MIDTRANS') {
+                if (in_array($pendingPayment->payment_gateway, ['MIDTRANS', 'DOKU'], true)) {
+                    // Tagihan online pindah ke gateway sesi baru (sesi gateway lama sudah ditutup di prepareSession).
+                    $updates['payment_gateway'] = $paymentResult['gateway'];
                     // Nominal ikut grand_total yang baru dihitung ulang di atas (pajak/biaya bisa berubah sejak checkout).
                     // Tagihan kasir TIDAK diubah nominalnya — itu yang ditagih kasir kalau customer batal bayar online.
                     $updates['amount'] = (float) $grandTotal;
                     // Metode yang SEKARANG dipilih customer — dulu tetap metode lama sampai webhook lunas masuk.
                     $updates['payment_method'] = $paymentMethod;
-                    $updates['snap_token'] = $paymentResult['snap_token'] ?? $pendingPayment->snap_token;
+                    // Sesi DOKU tidak punya token Snap — token Snap lama tidak boleh tertinggal di tagihan DOKU.
+                    $updates['snap_token'] = $paymentResult['gateway'] === 'DOKU' ? null : ($paymentResult['snap_token'] ?? $pendingPayment->snap_token);
                     $updates['payment_url'] = $paymentResult['payment_url'] ?? $paymentResult['redirect_url'] ?? $pendingPayment->payment_url;
                 } else {
                     // Tagihan kasir (bayar nanti) tetap tagihan kasir; percobaan bayar online cukup dicatat.
@@ -740,24 +837,26 @@ trait ManagesCheckoutAndPayments
                 // rekonsiliasi tidak pernah menanyakannya dan uang customer tidak terdeteksi.
                 Payment::create([
                     'order_id' => $order->id,
-                    'payment_gateway' => 'MIDTRANS',
+                    'payment_gateway' => $paymentResult['gateway'],
                     'transaction_id' => $suffixedOrderId,
                     'snap_token' => $paymentResult['snap_token'] ?? null,
                     'payment_url' => $paymentResult['payment_url'] ?? $paymentResult['redirect_url'] ?? null,
                     'amount' => (float) $grandTotal,
                     'payment_method' => $paymentMethod,
                     'status' => 'PENDING',
-                    'payload_log' => ['midtrans_order_id' => $suffixedOrderId, 'midtrans_order_ids' => [$suffixedOrderId], 'snap_token' => $paymentResult['snap_token'] ?? null],
+                    'payload_log' => \App\Services\Payment\OnlineGatewayRouter::recordSession([], $paymentResult, $paymentMethod, (float) $grandTotal, $sessionExpiresAt),
                 ]);
             }
 
             return [
                 'success' => true,
                 'is_cash' => false,
+                'driver' => $paymentResult['driver'] ?? 'midtrans',
                 'order_id' => $order->order_number,
                 'suffixed_order_id' => $suffixedOrderId,
                 'snap_token' => $paymentResult['snap_token'] ?? null,
                 'redirect_url' => $paymentResult['redirect_url'] ?? null,
+                'payment_url' => $paymentResult['payment_url'] ?? null,
                 'grand_total' => $grandTotal,
                 'service_charge' => $totalServiceCharge,
                 'gateway_fee' => $totalServiceCharge,
@@ -765,6 +864,43 @@ trait ManagesCheckoutAndPayments
                 'message' => 'Token pembayaran baru berhasil dibuat.',
             ];
         });
+    }
+
+    /** Sesi sebelumnya ternyata sudah dibayar (webhook belum sampai) → lunasi sekarang, jangan buka sesi baru. */
+    private function settledDuringRetry(Order $order, array $prepared): array
+    {
+        app(\App\Services\Payment\OnlineGatewayRouter::class)->settlePreparedSession($order, $prepared);
+
+        return [
+            'success' => true,
+            'is_cash' => false,
+            'is_paid' => true,
+            'order_id' => $order->order_number,
+            'snap_token' => null,
+            'redirect_url' => null,
+            'message' => 'Pembayaran sebelumnya sudah kami terima — tidak perlu membayar lagi. Tiket Anda segera aktif.',
+        ];
+    }
+
+    /** Metode & nominal sama, sesi terakhir masih berlaku → kembalikan sesi itu (token Snap / halaman DOKU yang sama). */
+    private function reusedSessionResponse(Order $order, array $prepared, float $amount, string $paymentMethod, array $extra = []): array
+    {
+        $reused = \App\Services\Payment\OnlineGatewayRouter::reusedPayment($prepared);
+
+        return array_merge([
+            'success' => true,
+            'is_cash' => false,
+            'driver' => $reused['driver'],
+            'order_id' => $order->order_number,
+            'suffixed_order_id' => $prepared['session_id'],
+            'snap_token' => $reused['snap_token'] ?? null,
+            'redirect_url' => $reused['redirect_url'] ?? null,
+            'payment_url' => $reused['payment_url'] ?? null,
+            'grand_total' => $amount,
+            'payment_method' => $paymentMethod,
+            'reused_session' => true,
+            'message' => 'Melanjutkan sesi pembayaran yang sama.',
+        ], $extra);
     }
 
     /**
@@ -827,6 +963,7 @@ trait ManagesCheckoutAndPayments
             'SPONSOR_VOUCHER' => 'Voucher Jam Corporate (Gratis)',
             'MEMBERSHIP_AND_SPONSOR_VOUCHER' => 'Kuota Membership + Voucher Corporate (Gratis)',
             'PROMO_VOUCHER' => 'Kode Promo (Gratis)',
+            'VOUCHER' => 'Voucher (Gratis)',
             default => $method ?: 'QRIS Instan (GoPay/OVO/BCA)',
         };
     }
@@ -870,7 +1007,7 @@ trait ManagesCheckoutAndPayments
             : (empty($cleanPhone) ? '123456' : str_pad($cleanPhone, 6, '0', STR_PAD_LEFT));
 
         return User::create([
-            'name' => trim($name),
+            'name' => \App\Support\PersonName::clean($name),
             'phone' => $cleanPhone,
             'email' => $fallbackEmail,
             'password' => Hash::make($rawPassword),
@@ -896,22 +1033,38 @@ trait ManagesCheckoutAndPayments
         array $paymentMeta = [],
         ?string $membershipBalanceId = null,
         ?string $voucherCode = null,
-        ?float $expectedGrandTotal = null
+        ?float $expectedGrandTotal = null,
+        // null = voucher jam corporate milik customer dipakai otomatis (sama dengan online), 'NONE' = kasir mematikannya.
+        ?string $sponsorVoucherId = null,
+        // Slot yang sudah ditahan kasir saat "Lanjut ke Pembayaran" (atas nama $holder). Masih sah → dipakai & dipindah
+        // ke customer; habis / tidak cocok → slot ditahan ulang seperti biasa (bisa bentrok kalau sudah diambil orang).
+        ?array $heldBookingIds = null,
+        ?User $holder = null
     ): array {
         // 100% Cashless: pembayaran tunai tidak diperbolehkan sama sekali di loket walk-in.
         if (in_array(strtoupper($paymentMethod), ['CASH', 'TUNAI'])) {
             throw new HttpException(422, 'Pembayaran tunai (CASH) tidak diperbolehkan. Venue Club 61 beroperasi 100% Cashless.');
         }
 
-        // 1. Hold batch slots untuk customer (melempar SlotConflictException jika tabrakan)
-        $holdResult = $this->holdBatchSlots($slots, $bookingDate, $customer);
-        $bookingIds = collect($holdResult['bookings'])->pluck('id')->toArray();
+        // 1. Pakai slot yang sudah ditahan kasir, atau hold batch slots untuk customer (SlotConflictException jika tabrakan)
+        $useHeld = $heldBookingIds && $holder && $this->walkInHoldIsValid($heldBookingIds, $holder, $slots, $bookingDate);
+        if ($useHeld) {
+            $bookingIds = array_values(array_unique($heldBookingIds));
+        } else {
+            $holdResult = $this->holdBatchSlots($slots, $bookingDate, $customer);
+            $bookingIds = collect($holdResult['bookings'])->pluck('id')->toArray();
+        }
 
         // Checkout gagal (bukti EDC dipakai ulang, stok habis, shift belum dibuka, dll.) → lepas lagi slot yang barusan
         // ditahan. Dulu slot tetap terkunci selama waktu tahan (sampai 30 menit) dan kasir yang mencoba ulang mendapat
-        // "slot sedang di-hold pemain lain".
+        // "slot sedang di-hold pemain lain". Slot yang ditahan kasir sebelumnya TIDAK dilepas: kasir membetulkan isian
+        // lalu menekan Bayar lagi tanpa kehilangan slotnya.
         try {
-            return DB::transaction(function () use ($customer, $bookingIds, $equipments, $paymentMethod, $cashier, $autoCheckIn, $paymentMeta, $membershipBalanceId, $voucherCode, $expectedGrandTotal) {
+            return DB::transaction(function () use ($customer, $bookingIds, $equipments, $paymentMethod, $cashier, $autoCheckIn, $paymentMeta, $membershipBalanceId, $voucherCode, $expectedGrandTotal, $sponsorVoucherId, $useHeld, $holder) {
+                if ($useHeld) {
+                    $this->claimWalkInHold($bookingIds, $holder, $customer);
+                }
+
                 $bookings = PadelBooking::with('court')
                     ->whereIn('id', $bookingIds)
                     ->where('user_id', $customer->id)
@@ -923,7 +1076,15 @@ trait ManagesCheckoutAndPayments
                 }
 
                 // Terapkan kuota atau diskon membership jika ada
-                $this->applyMembershipBenefitToCourtBookings($bookings, $customer, $membershipBalanceId);
+                $membershipBenefitResult = $this->applyMembershipBenefitToCourtBookings($bookings, $customer, $membershipBalanceId);
+
+                // Voucher jam corporate (karyawan sponsor yang datang langsung) — urutan sama dengan checkout online:
+                // hanya untuk sisa sewa lapangan yang belum ditanggung membership pribadi.
+                $sponsorBenefitResult = $this->applySponsorVoucherBenefitToCourtBookings(
+                    $bookings->filter(fn ($b) => (float) $b->court_fee > 0),
+                    $customer,
+                    $sponsorVoucherId
+                );
 
                 $courtTotal = (float) $bookings->sum('court_fee');
                 $equipmentTotal = 0;
@@ -979,6 +1140,7 @@ trait ManagesCheckoutAndPayments
                 if ($voucherResult['error']) {
                     throw new HttpException(422, $voucherResult['error']);
                 }
+                $this->assertOneVoucherPerTransaction($sponsorBenefitResult, $voucherResult['voucher']);
 
                 $walkInFinanceCalc = app(\App\Services\Finance\TaxAndFeeService::class)->calculate(
                     subtotal: $courtTotal + $equipmentTotal,
@@ -995,13 +1157,20 @@ trait ManagesCheckoutAndPayments
                     throw new HttpException(409, 'Total tagihan berubah dari Rp '.number_format($expectedGrandTotal, 0, ',', '.').' menjadi Rp '.number_format((float) $grandTotal, 0, ',', '.').'. Periksa lagi rincian di layar sebelum menagih customer.');
                 }
 
-                // 'VOUCHER' hanya untuk tagihan yang seluruhnya ditutup voucher (tanpa uang masuk = tanpa bukti bayar).
-                $coveredByVoucher = $voucherResult['voucher'] && $grandTotal <= 0;
+                // Tagihan Rp0 (ditanggung kuota membership, voucher jam corporate, dan/atau voucher promo): tidak ada uang
+                // masuk → tanpa metode bayar, tanpa bukti EDC/QRIS, tanpa Midtrans. Dulu hanya voucher promo yang dikenali;
+                // Rp0 karena kuota member memaksa kasir mengetik RRN palsu, dan QRIS Otomatis menolak "Tagihan Rp 0".
+                $coveredByVoucher = $grandTotal <= 0;
                 if (strtoupper($paymentMethod) === 'VOUCHER' && ! $coveredByVoucher) {
                     throw new HttpException(422, 'Voucher tidak menutup seluruh tagihan. Pilih metode pembayaran untuk sisa tagihan.');
                 }
                 if ($coveredByVoucher) {
-                    $paymentMethod = 'VOUCHER';
+                    $paymentMethod = $this->fullyCoveredMethod(
+                        byMembership: $membershipBenefitResult['benefit_type'] !== 'NONE',
+                        bySponsor: $sponsorBenefitResult['benefit_type'] !== 'NONE',
+                        byVoucher: (bool) $voucherResult['voucher'],
+                        voucherCode: 'VOUCHER',
+                    );
                 }
 
                 // Buat Order resmi dengan order_type = 'WALK_IN' dan cashier_id terisi
@@ -1122,8 +1291,8 @@ trait ManagesCheckoutAndPayments
                 if (! $coveredByVoucher) {
                     \App\Services\Pos\PosPaymentProof::assertProofNotReused($payloadLog);
                 } else {
-                    $payloadLog['covered_by'] = 'VOUCHER';
-                    $payloadLog['voucher_code'] = $voucherResult['voucher']->code;
+                    $payloadLog['covered_by'] = $paymentMethod;
+                    $payloadLog['voucher_code'] = $voucherResult['voucher']?->code;
                 }
 
                 // Eksekusi pelunasan langsung via PaymentOrchestratorService sebagai single writer
@@ -1144,6 +1313,7 @@ trait ManagesCheckoutAndPayments
                         'status' => 'CHECKED_IN',
                         'checked_in_at' => now(),
                     ]);
+                    app(\App\Services\Realtime\RealtimeSignal::class)->bookings(PadelBooking::where('order_id', $order->id)->pluck('id'));
                 }
 
                 $updatedBookings = PadelBooking::with(['court', 'equipments.equipment'])
@@ -1162,13 +1332,88 @@ trait ManagesCheckoutAndPayments
                 ];
             });
         } catch (\Throwable $e) {
-            try {
-                $this->releaseSlots($bookingIds, $customer, onlyLocked: true);
-            } catch (\Throwable $releaseError) {
-                report($releaseError); // jangan menutupi error checkout aslinya
+            if (! $useHeld) {
+                try {
+                    $this->releaseSlots($bookingIds, $customer, onlyLocked: true);
+                } catch (\Throwable $releaseError) {
+                    report($releaseError); // jangan menutupi error checkout aslinya
+                }
             }
 
             throw $e;
+        }
+    }
+
+    /**
+     * Slot walk-in yang ditahan kasir masih bisa dipakai: milik kasir itu, masih LOCKED & belum lewat waktu tahan, belum
+     * punya order, dan persis sama dengan jam yang akan dibayar (lapangan, tanggal, tiap jamnya).
+     */
+    public function walkInHoldIsValid(array $bookingIds, User $holder, array $slots, string $bookingDate): bool
+    {
+        $bookingIds = array_values(array_unique(array_filter($bookingIds)));
+        if ($bookingIds === []) {
+            return false;
+        }
+
+        $bookings = PadelBooking::whereIn('id', $bookingIds)->get();
+        if ($bookings->count() !== count($bookingIds)) {
+            return false;
+        }
+
+        foreach ($bookings as $booking) {
+            if ((string) $booking->user_id !== (string) $holder->id
+                || $booking->status !== 'LOCKED'
+                || $booking->order_id
+                || (int) $booking->reschedule_count > 0
+                || ! $booking->expires_at || $booking->expires_at->lte(now())
+                || $booking->booking_date->format('Y-m-d') !== $bookingDate) {
+                return false;
+            }
+        }
+
+        $held = [];
+        foreach ($bookings as $booking) {
+            for ($t = $booking->start_time->copy(); $t->lt($booking->end_time); $t->addHour()) {
+                $held[] = $booking->court_id.'|'.$t->format('Y-m-d H:i');
+            }
+        }
+        $wanted = [];
+        foreach ($slots as $slot) {
+            $end = \Carbon\Carbon::parse("{$bookingDate} {$slot['end_time']}");
+            for ($t = \Carbon\Carbon::parse("{$bookingDate} {$slot['start_time']}"); $t->lt($end); $t->addHour()) {
+                $wanted[] = $slot['court_id'].'|'.$t->format('Y-m-d H:i');
+            }
+        }
+        sort($held);
+        sort($wanted);
+
+        return $held === $wanted;
+    }
+
+    /**
+     * Pindahkan slot yang ditahan kasir ke customer di dalam transaksi checkout. Dicek ulang dengan kunci baris: di sela
+     * pengecekan awal, waktu tahan bisa saja habis lalu slotnya dilepas pembersih jadwal.
+     */
+    protected function claimWalkInHold(array $bookingIds, User $holder, User $customer): void
+    {
+        $bookings = PadelBooking::whereIn('id', $bookingIds)
+            ->where('user_id', $holder->id)
+            ->where('status', 'LOCKED')
+            ->whereNull('order_id')
+            ->where('expires_at', '>', now())
+            ->lockForUpdate()
+            ->get();
+
+        if ($bookings->count() !== count($bookingIds)) {
+            throw new HttpException(409, 'Waktu tahan slot habis. Tekan Bayar sekali lagi — slot ditahan ulang kalau masih kosong.');
+        }
+
+        foreach ($bookings as $booking) {
+            $booking->forceFill([
+                'user_id' => $customer->id,
+                // Kode QR tiket mengikuti pemiliknya (sama seperti booking yang langsung dibuat atas nama customer).
+                'qr_code_hash' => hash_hmac('sha256', $booking->booking_code.$customer->id.$booking->court_id.$booking->start_time->toISOString(), config('app.key')),
+            ])->save();
         }
     }
 
@@ -1238,11 +1483,18 @@ trait ManagesCheckoutAndPayments
             'discount_percent' => 0.0,
             'remaining_quota_after' => null,
             'rejected_reason' => null,
+            'membership_end_date' => null,
         ];
 
         if ($membershipBalanceId === 'none' || $membershipBalanceId === 'NONE') {
             return $noBenefit;
         }
+
+        $bookings = collect($bookings);
+        // Benefit berlaku menurut TANGGAL MAIN, bukan tanggal checkout: kartu yang habis 20 Okt tidak boleh menanggung
+        // booking 30 Nov (dulu cuma dicek "masih aktif hari ini"). Sama dengan aturan reschedule (benefit gugur).
+        $lastPlayDate = $bookings->map(fn ($b) => \Carbon\Carbon::parse($b->start_time)->toDateString())->max();
+        $autoDetected = ! $membershipBalanceId;
 
         // Mode preview (dipanggil dari endpoint "lihat dulu sebelum bayar") tidak perlu row-lock karena
         // tidak menulis apa-apa ke database — locking cukup dilakukan saat commit (checkout beneran).
@@ -1252,7 +1504,7 @@ trait ManagesCheckoutAndPayments
             $balance = $commit ? $query->lockForUpdate()->first() : $query->first();
         } else {
             // Auto-detect active membership Padel balance
-            $activeMembership = \App\Models\Membership\UserMembership::where('user_id', $user->id)
+            $candidates = \App\Models\Membership\UserMembership::where('user_id', $user->id)
                 ->where('status', 'ACTIVE')
                 ->where(function ($q) {
                     $q->whereNull('end_date')->orWhere('end_date', '>=', now()->toDateString());
@@ -1263,13 +1515,23 @@ trait ManagesCheckoutAndPayments
                 // Tie-break: kartu yang paling cepat kedaluwarsa dipakai lebih dulu (jam tidak hangus sia-sia
                 // jika user punya >1 membership aktif); kartu tanpa end_date (unlimited) diprioritaskan paling akhir.
                 ->orderByRaw('end_date IS NULL, end_date ASC')
-                ->first();
+                ->get();
 
-            if ($activeMembership) {
-                $query = \App\Models\Membership\UserMembershipBalance::where('user_membership_id', $activeMembership->id)
-                    ->where('facility', 'PADEL');
-                $balance = $commit ? $query->lockForUpdate()->first() : $query->first();
+            // Kartu yang masih berlaku di tanggal main terakhir keranjang ini.
+            $activeMembership = $candidates->first(fn ($m) => $m->end_date === null || $lastPlayDate === null || $m->end_date->toDateString() >= $lastPlayDate);
+
+            if (! $activeMembership) {
+                // Ada kartu aktif, tapi habis sebelum tanggal main → harga normal (bukan error) + alasannya untuk layar.
+                return $candidates->isEmpty() ? $noBenefit : array_merge($noBenefit, [
+                    'rejected_reason' => 'MEMBERSHIP_ENDS_BEFORE_PLAY_DATE',
+                    'plan_name' => $candidates->first()->plan->name ?? null,
+                    'membership_end_date' => $candidates->first()->end_date?->toDateString(),
+                ]);
             }
+
+            $query = \App\Models\Membership\UserMembershipBalance::where('user_membership_id', $activeMembership->id)
+                ->where('facility', 'PADEL');
+            $balance = $commit ? $query->lockForUpdate()->first() : $query->first();
         }
 
         if (! $balance) {
@@ -1285,21 +1547,35 @@ trait ManagesCheckoutAndPayments
             return $noBenefit;
         }
 
-        // Time window check — SELURUH rentang booking (mulai s.d. selesai) wajib di dalam jendela waktu paket,
-        // bukan cuma jam mulainya saja (all-or-nothing, tidak ada benefit parsial untuk booking yang nyerempet keluar jendela).
-        if ($balance->time_window_start && $balance->time_window_end) {
+        // Masa berlaku & jam akses paket — SELURUH booking di keranjang wajib lolos (all-or-nothing, tidak ada benefit
+        // parsial). Kartu yang dipilih eksplisit tapi tidak berlaku → 422 saat bayar. Kartu hasil deteksi otomatis
+        // (checkout online) → harga normal: layar sudah menampilkan "benefit tidak berlaku", jadi checkout tidak boleh
+        // gagal (dulu member paket jam pagi yang booking malam tidak bisa checkout sama sekali).
+        $endDate = $membership->end_date?->toDateString();
+        $rejectedReason = null;
+        if ($endDate && $lastPlayDate && $lastPlayDate > $endDate) {
+            $rejectedReason = 'MEMBERSHIP_ENDS_BEFORE_PLAY_DATE';
+        } elseif ($balance->time_window_start && $balance->time_window_end) {
             foreach ($bookings as $b) {
-                $bookingStart = \Carbon\Carbon::parse($b->start_time)->format('H:i:s');
-                $bookingEnd = \Carbon\Carbon::parse($b->end_time)->format('H:i:s');
-                if ($bookingStart < $balance->time_window_start || $bookingEnd > $balance->time_window_end) {
-                    if ($commit) {
-                        throw new HttpException(422, "Sesi booking di luar jam akses paket membership ({$balance->time_window_start} - {$balance->time_window_end}). Seluruh durasi booking harus berada di dalam jendela waktu paket.");
-                    }
-
-                    // Mode preview: jangan gagalkan halaman, cukup laporkan benefit tidak berlaku + alasannya.
-                    return array_merge($noBenefit, ['rejected_reason' => 'OUTSIDE_TIME_WINDOW']);
+                if ($this->isOutsideBenefitTimeWindow((string) $balance->time_window_start, (string) $balance->time_window_end, \Carbon\Carbon::parse($b->start_time), \Carbon\Carbon::parse($b->end_time))) {
+                    $rejectedReason = 'OUTSIDE_TIME_WINDOW';
+                    break;
                 }
             }
+        }
+
+        if ($rejectedReason) {
+            if ($commit && ! $autoDetected) {
+                throw new HttpException(422, $rejectedReason === 'OUTSIDE_TIME_WINDOW'
+                    ? "Sesi booking di luar jam akses paket membership ({$balance->time_window_start} - {$balance->time_window_end}). Seluruh durasi booking harus berada di dalam jendela waktu paket."
+                    : 'Masa aktif membership berakhir '.$membership->end_date->translatedFormat('d M Y').' — booking setelah tanggal itu tidak bisa memakai benefit member. Matikan benefit member atau pilih tanggal sampai '.$membership->end_date->translatedFormat('d M Y').'.');
+            }
+
+            return array_merge($noBenefit, [
+                'rejected_reason' => $rejectedReason,
+                'plan_name' => $membership->plan->name ?? null,
+                'membership_end_date' => $endDate,
+            ]);
         }
 
         $balanceService = app(\App\Services\Membership\MembershipBalanceService::class);
@@ -1372,7 +1648,37 @@ trait ManagesCheckoutAndPayments
             'discount_percent' => (float) $balance->discount_percent,
             'remaining_quota_after' => $simulatedRemaining,
             'rejected_reason' => null,
+            'membership_end_date' => $endDate,
         ];
+    }
+
+    /**
+     * Apakah sesi main keluar dari jam akses paket. Dihitung dalam menit-dalam-hari: jam selesai 00:00 hari berikutnya
+     * = 24:00 (1440), jendela yang berakhir 00:00 = sampai tengah malam. Dulu dibandingkan sebagai teks "H:i:s", jadi
+     * slot 23:00–24:00 ("00:00:00") lolos dari paket 06:00–16:00 dan paket malam (s.d. 00:00) selalu menolak.
+     * Dipakai checkout online, kasir walk-in, preview, dan reschedule.
+     */
+    protected function isOutsideBenefitTimeWindow(string $windowStart, string $windowEnd, \Carbon\Carbon $start, \Carbon\Carbon $end): bool
+    {
+        $toMinutes = fn (string $hms) => ((int) substr($hms, 0, 2)) * 60 + (int) substr($hms, 3, 2);
+        $startMin = $start->hour * 60 + $start->minute;
+        $endMin = $end->isSameDay($start) ? $end->hour * 60 + $end->minute : 1440 + $end->hour * 60 + $end->minute;
+        $windowEndMin = $toMinutes($windowEnd) === 0 ? 1440 : $toMinutes($windowEnd);
+
+        return $startMin < $toMinutes($windowStart) || $endMin > $windowEndMin;
+    }
+
+    /**
+     * 1 transaksi = 1 voucher: voucher jam corporate TIDAK boleh digabung dengan kode promo (diskon) — customer memilih
+     * salah satu. Voucher saldo (CREDIT, hasil refund) tetap boleh karena itu uang customer sendiri, bukan diskon.
+     * Dicek di server (checkout online & kasir), jadi tidak bisa diakali dari browser / aplikasi. Wajib dipanggil di
+     * dalam transaksi checkout supaya jam voucher yang sudah dipotong ikut dibatalkan.
+     */
+    private function assertOneVoucherPerTransaction(array $sponsorBenefitResult, ?\App\Models\Pos\Voucher $voucher): void
+    {
+        if (($sponsorBenefitResult['benefit_type'] ?? 'NONE') !== 'NONE' && $voucher && ! $voucher->isCredit()) {
+            throw new HttpException(422, 'Voucher jam corporate tidak bisa digabung dengan kode promo. Pilih salah satu: matikan voucher corporate, atau hapus kode promonya.');
+        }
     }
 
     /**
@@ -1380,13 +1686,11 @@ trait ManagesCheckoutAndPayments
      * koleksi booking lapangan padel — mirip applyMembershipBenefitToCourtBookings() di atas,
      * tapi sumber jamnya voucher yang dirilis PIC ke karyawan (bukan kartu membership pribadi).
      *
-     * Setiap voucher yang belum expired & masih ada sisa jam dianggap "usable", diurutkan yang
-     * PALING CEPAT EXPIRED dipakai lebih dulu (FIFO) supaya jam tidak hangus sia-sia. 1 booking
-     * BOLEH memotong dari lebih dari 1 voucher sekaligus kalau perlu (mis. voucher A sisa 0.5 jam,
-     * voucher B sisa 5 jam, booking butuh 1.5 jam) — kolom sponsor_member_voucher_id di booking
-     * cuma mencatat voucher PERTAMA yang kepotong untuk booking itu (buat tampilan/telusur, bukan
-     * audit trail lengkap; total jam yang benar-benar terpakai tetap akurat di kolom
-     * sponsor_hours_consumed & masing-masing voucher.hours_used).
+     * 1 TRANSAKSI = 1 VOUCHER (aturan umum voucher): jam beberapa voucher tidak digabung. Dipilih voucher yang paling
+     * cepat expired di antara yang sisa jamnya CUKUP menutup seluruh transaksi (supaya jam tidak hangus sia-sia); kalau
+     * tidak ada yang cukup, voucher dengan sisa jam terbanyak — kekurangannya dibayar normal. Dulu satu booking bisa
+     * memotong beberapa voucher sekaligus, dan saat batal seluruh jam dikembalikan ke voucher pertama (jam voucher
+     * lain hilang). Sekarang setiap booking hanya punya satu sumber (sponsor_member_voucher_id).
      *
      * All-or-nothing per booking: kalau total sisa jam voucher TIDAK CUKUP buat nutup 1 booking
      * penuh, booking itu dilewati (court_fee tidak berubah) — tidak ada potongan diskon parsial
@@ -1412,8 +1716,10 @@ trait ManagesCheckoutAndPayments
             return $noBenefit;
         }
 
+        // Organisasi yang Ditangguhkan admin → voucher karyawannya tidak bisa dipakai (dulu status ini tidak dicek di mana pun).
         $member = \App\Models\Sponsor\SponsorOrganizationMember::where('user_id', $user->id)
             ->where('status', 'ACTIVE')
+            ->whereHas('organization', fn ($q) => $q->where('status', \App\Models\Sponsor\SponsorOrganization::STATUS_ACTIVE))
             ->first();
 
         if (! $member) {
@@ -1431,11 +1737,23 @@ trait ManagesCheckoutAndPayments
         }
 
         $vouchers = $commit ? $voucherQuery->lockForUpdate()->get() : $voucherQuery->get();
-        $usable = $vouchers->filter(fn ($v) => $v->remainingHours() > 0)->values();
+        $withHours = $vouchers->filter(fn ($v) => $v->remainingHours() > 0)->values();
+        // Voucher harus masih berlaku saat JAM MAIN dimulai (bukan cuma saat checkout) — sama dengan aturan reschedule.
+        $lastStart = collect($bookings)->map(fn ($b) => \Carbon\Carbon::parse($b->start_time))->max();
+        $usable = $withHours->filter(fn ($v) => $lastStart === null || $v->expires_at->gt($lastStart))->values();
 
         if ($usable->isEmpty()) {
-            return $noBenefit;
+            return $withHours->isEmpty() ? $noBenefit : array_merge($noBenefit, ['rejected_reason' => 'VOUCHER_EXPIRES_BEFORE_PLAY_DATE']);
         }
+
+        // 1 transaksi = 1 voucher: yang paling cepat expired di antara yang cukup menutup semua jam transaksi ini,
+        // atau (kalau tidak ada yang cukup) yang sisa jamnya terbanyak.
+        $hoursNeededTotal = round(collect($bookings)->sum(fn ($b) => max(0.5, round(
+            \Carbon\Carbon::parse($b->start_time)->diffInMinutes(\Carbon\Carbon::parse($b->end_time)) / 60, 2
+        ))), 2);
+        $chosen = $usable->first(fn ($v) => $v->remainingHours() >= $hoursNeededTotal)
+            ?? $usable->sortByDesc(fn ($v) => $v->remainingHours())->first();
+        $usable = collect([$chosen]);
 
         $totalHoursConsumed = 0.0;
         $totalCourtDiscount = 0.0;
@@ -1520,6 +1838,170 @@ trait ManagesCheckoutAndPayments
      * dipakai halaman "Payment Details & Checkout" (online) maupun POS walk-in agar customer/kasir
      * tahu ada potongan SEBELUM menekan tombol bayar — bukan baru ketahuan setelah checkout dieksekusi.
      */
+    /**
+     * Potongan benefit untuk layar kasir walk-in SEBELUM slot di-hold — urutan & rumusnya sama persis dengan
+     * processWalkInCheckout(): jam berurutan di lapangan yang sama digabung jadi satu booking (seperti
+     * holdBatchSlots), kuota membership dipotong dulu (kuota jam all-or-nothing per booking), lalu voucher jam
+     * corporate (paling cepat kedaluwarsa dulu, boleh sebagian). Kode promo & pajak dihitung pemanggil.
+     * Dulu layar kasir menghitung kuota per jam terpisah sehingga angkanya bisa beda dengan server
+     * (checkout gagal "Total tagihan berubah").
+     *
+     * @param  array<int, array{court_id: string, start_time: string, end_time: string}>  $slots
+     */
+    public function quoteWalkInBenefits(array $slots, string $bookingDate, ?User $user, ?string $membershipBalanceId = null, ?string $sponsorVoucherId = null): array
+    {
+        usort($slots, fn ($a, $b) => strcmp($a['court_id'], $b['court_id']) ?: strcmp($a['start_time'], $b['start_time']));
+        $merged = [];
+        foreach ($slots as $slot) {
+            $last = array_key_last($merged);
+            if ($last !== null && $merged[$last]['court_id'] === $slot['court_id'] && $merged[$last]['end_time'] === $slot['start_time']) {
+                $merged[$last]['end_time'] = $slot['end_time'];
+
+                continue;
+            }
+            $merged[] = ['court_id' => $slot['court_id'], 'start_time' => $slot['start_time'], 'end_time' => $slot['end_time']];
+        }
+
+        $courts = \App\Models\Padel\PadelCourt::whereIn('id', array_unique(array_column($merged, 'court_id')))->get()->keyBy('id');
+        $peak = app(\App\Services\Padel\PeakHourService::class);
+
+        $lines = [];
+        foreach ($merged as $slot) {
+            $court = $courts[$slot['court_id']] ?? null;
+            if (! $court) {
+                continue;
+            }
+            $start = \Carbon\Carbon::parse("{$bookingDate} {$slot['start_time']}");
+            $end = \Carbon\Carbon::parse("{$bookingDate} {$slot['end_time']}");
+            $fee = (float) $peak->courtFee($court, $start, $end)['fee'];
+
+            $lines[] = [
+                'court_id' => $court->id,
+                'court_name' => $court->name,
+                'start' => $start,
+                'end' => $end,
+                'hours' => max(0.5, round($start->diffInMinutes($end) / 60, 2)),
+                'normal_fee' => $fee,
+                'member_hours' => 0.0,
+                'member_discount' => 0.0,
+                'sponsor_hours' => 0.0,
+                'sponsor_discount' => 0.0,
+                'fee_after' => $fee,
+            ];
+        }
+
+        $membership = ['applies' => false, 'balance_id' => null, 'plan_name' => null, 'hours' => 0.0, 'rejected_reason' => null];
+        $sponsor = ['applies' => false, 'organization_name' => null, 'hours_available' => 0.0, 'hours' => 0.0, 'hours_left' => 0.0];
+
+        if ($user && $lines !== []) {
+            // 1. Membership — deteksi kartu & jendela waktu memakai fungsi checkout yang sama (mode preview).
+            $transient = collect($lines)->map(fn ($l) => (new PadelBooking)->forceFill([
+                'start_time' => $l['start'], 'end_time' => $l['end'], 'court_fee' => $l['normal_fee'], 'total_amount' => $l['normal_fee'],
+            ]));
+            $m = $this->applyMembershipBenefitToCourtBookings($transient, $user, $membershipBalanceId, commit: false);
+            $membership['rejected_reason'] = $m['rejected_reason'];
+            $membership['plan_name'] = $m['plan_name'];
+
+            if ($m['applied_balance'] && ! $m['rejected_reason']) {
+                $balance = $m['applied_balance'];
+                $remaining = (float) $balance->remaining_quota;
+                foreach ($lines as &$l) {
+                    if ($balance->quota_type === 'HOURS' && $remaining >= $l['hours']) {
+                        $l['member_hours'] = $l['hours'];
+                        $l['member_discount'] = $l['fee_after'];
+                        $remaining -= $l['hours'];
+                    } elseif ((float) $balance->discount_percent > 0) {
+                        $l['member_discount'] = round($l['fee_after'] * ((float) $balance->discount_percent / 100), 2);
+                    }
+                    $l['fee_after'] = max(0, round($l['fee_after'] - $l['member_discount'], 2));
+                }
+                unset($l);
+
+                $membership['balance_id'] = $balance->id;
+                $membership['applies'] = array_sum(array_column($lines, 'member_discount')) > 0;
+                $membership['hours'] = (float) array_sum(array_column($lines, 'member_hours'));
+            }
+
+            // 2. Voucher jam corporate — rumus sama dengan applySponsorVoucherBenefitToCourtBookings().
+            $member = $sponsorVoucherId === 'NONE' || $sponsorVoucherId === 'none' ? null
+                : \App\Models\Sponsor\SponsorOrganizationMember::with('organization')->where('user_id', $user->id)->where('status', 'ACTIVE')
+                    ->whereHas('organization', fn ($q) => $q->where('status', \App\Models\Sponsor\SponsorOrganization::STATUS_ACTIVE))->first();
+            if ($member) {
+                $voucherQuery = \App\Models\Sponsor\SponsorMemberVoucher::where('sponsor_organization_member_id', $member->id)
+                    ->where('expires_at', '>', now())
+                    ->orderBy('expires_at');
+                if ($sponsorVoucherId) {
+                    $voucherQuery->where('id', $sponsorVoucherId);
+                }
+                // Sama dengan checkout: voucher harus masih berlaku saat jam main terakhir dimulai.
+                $lastStart = collect($lines)->max('start');
+                $usable = $voucherQuery->get()->filter(fn ($v) => $lastStart === null || $v->expires_at->gt($lastStart))
+                    ->filter(fn ($v) => $v->remainingHours() > 0)->values();
+
+                // 1 transaksi = 1 voucher, dipilih persis seperti applySponsorVoucherBenefitToCourtBookings(): yang paling
+                // cepat expired di antara yang cukup menutup semua jam yang belum lunas oleh membership, kalau tidak ada
+                // yang cukup → sisa jam terbanyak. Dulu layar kasir menjumlah SEMUA voucher (2 voucher @1 jam = 2 jam
+                // gratis) padahal server hanya memakai satu → bayar selalu gagal 409 "Total tagihan berubah".
+                $hoursNeeded = round((float) collect($lines)->filter(fn ($l) => $l['fee_after'] > 0)->sum('hours'), 2);
+                $chosen = $usable->first(fn ($v) => $v->remainingHours() >= $hoursNeeded)
+                    ?? $usable->sortByDesc(fn ($v) => $v->remainingHours())->first();
+                $pool = $chosen ? [$chosen->remainingHours()] : [];
+
+                $sponsor['organization_name'] = $member->organization->name ?? null;
+                $sponsor['hours_available'] = round((float) array_sum($pool), 2);
+
+                foreach ($lines as &$l) {
+                    $available = round((float) array_sum($pool), 2);
+                    if ($l['fee_after'] <= 0 || $available <= 0) {
+                        continue;
+                    }
+                    $covered = min($available, $l['hours']);
+                    $toConsume = $covered;
+                    foreach ($pool as $i => $hoursLeft) {
+                        if ($toConsume <= 0) {
+                            break;
+                        }
+                        $take = min($hoursLeft, $toConsume);
+                        $pool[$i] = round($hoursLeft - $take, 2);
+                        $toConsume = round($toConsume - $take, 2);
+                    }
+                    $discount = $covered >= $l['hours'] ? $l['fee_after'] : min($l['fee_after'], round(($l['fee_after'] / $l['hours']) * $covered, 2));
+                    $l['sponsor_hours'] = $covered;
+                    $l['sponsor_discount'] = $discount;
+                    $l['fee_after'] = round($l['fee_after'] - $discount, 2);
+                }
+                unset($l);
+
+                $sponsor['hours'] = (float) array_sum(array_column($lines, 'sponsor_hours'));
+                $sponsor['hours_left'] = round((float) array_sum($pool), 2);
+                $sponsor['applies'] = array_sum(array_column($lines, 'sponsor_discount')) > 0;
+            }
+        }
+
+        return [
+            'lines' => $lines,
+            'court_total' => (float) array_sum(array_column($lines, 'normal_fee')),
+            'membership_discount' => round((float) array_sum(array_column($lines, 'member_discount')), 2),
+            'sponsor_discount' => round((float) array_sum(array_column($lines, 'sponsor_discount')), 2),
+            'court_total_after' => round((float) array_sum(array_column($lines, 'fee_after')), 2),
+            'membership' => $membership,
+            'sponsor' => $sponsor,
+        ];
+    }
+
+    /**
+     * Kode metode untuk tagihan yang 100% ditanggung benefit (tanpa uang masuk) — label sama dengan checkout online.
+     */
+    protected function fullyCoveredMethod(bool $byMembership, bool $bySponsor, bool $byVoucher, string $voucherCode = 'PROMO_VOUCHER'): string
+    {
+        return match (true) {
+            $byMembership && $bySponsor => 'MEMBERSHIP_AND_SPONSOR_VOUCHER',
+            $bySponsor => 'SPONSOR_VOUCHER',
+            $byMembership => 'MEMBERSHIP_QUOTA',
+            default => $voucherCode,
+        };
+    }
+
     public function previewMembershipBenefit(
         array $bookingIds,
         User $user,
@@ -1561,6 +2043,7 @@ trait ManagesCheckoutAndPayments
             'court_subtotal' => $courtSubtotal,
             'projected_court_total' => $projectedCourtTotal,
             'rejected_reason' => $result['rejected_reason'],
+            'membership_end_date' => $result['membership_end_date'],
             'sponsor_voucher_benefit' => [
                 'has_benefit' => $sponsorResult['benefit_type'] !== 'NONE',
                 'organization_name' => $sponsorResult['organization_name'],

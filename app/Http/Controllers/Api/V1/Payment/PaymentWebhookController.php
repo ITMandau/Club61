@@ -68,9 +68,13 @@ class PaymentWebhookController extends Controller
         $result = $gateway->verifyWebhook($request);
 
         if (! $result['is_valid']) {
+            // Bukan seluruh payload: signature_key (kalau server key salah set, signature notifikasi ASLI ikut tercatat),
+            // nomor VA & data kartu tidak masuk log.
             Log::warning("[ALERT] PAYMENT WEBHOOK SPOOFING DETECTED [{$driver}]: {$result['message']}", [
                 'ip' => $request->ip(),
-                'payload' => $request->all(),
+                'order_id' => mb_substr((string) $request->input('order_id'), 0, 100),
+                'status_code' => mb_substr((string) $request->input('status_code'), 0, 10),
+                'transaction_status' => mb_substr((string) $request->input('transaction_status'), 0, 30),
             ]);
 
             return response()->json([
@@ -171,31 +175,25 @@ class PaymentWebhookController extends Controller
             }
         }
 
+        // Notifikasi sah (tanda tangan valid, "lunas" dikonfirmasi Status API) tapi tidak ada order yang cocok = uang masuk
+        // tanpa catatan. Rekonsiliasi berkala hanya memeriksa order yang ada, jadi tidak akan menemukannya.
+        if (! $order && $status === 'PAID') {
+            Log::critical("[ALERT] Pembayaran {$driver} LUNAS untuk order yang tidak dikenal [{$incomingOrderId}] — uang masuk tanpa order, cek manual.", [
+                'gross_amount' => $grossAmount,
+                'payment_type' => $paymentType,
+            ]);
+        }
+
         if ($order) {
             $orchestrator = app(\App\Services\Payment\PaymentOrchestratorService::class);
 
             if ($status === 'PAID') {
-                // Defense-in-depth: signature webhook sudah diverifikasi valid (hash_equals di
-                // driver masing-masing), tapi itu cuma membuktikan notifikasi ini datang dari
-                // gateway asli — bukan berarti gross_amount yang diklaim webhook otomatis cocok
-                // dengan grand_total order di database kita. Selisih besar di sini janggal (order
-                // rusak, notifikasi basi/duplikat untuk order yang sudah berubah, dsb.) dan wajib
-                // masuk log supaya kelihatan di monitoring, walau proses pelunasan tetap lanjut
-                // (grand_total milik kita sendiri yang tetap jadi acuan `payment_status`, bukan
-                // klaim gross_amount dari webhook — lihat markOrderAsPaid()).
-                // Dibandingkan dengan tagihan PEMILIK sesi ini — pembayaran selisih reschedule dulu selalu memicu
-                // ALERT palsu karena dibandingkan dengan grand_total order (alert fatigue menutupi selisih asli).
-                $bill = Payment::where('order_id', $order->id)->get()
-                    ->first(fn (Payment $p) => PaymentOrchestratorService::ownsGatewayId($p, $incomingOrderId));
-                $expectedAmount = $bill ? (float) $bill->amount : (float) $order->grand_total;
-                if ($order->grand_total !== null && abs((float) $grossAmount - $expectedAmount) > 1) {
-                    Log::warning("[ALERT] Webhook gross_amount tidak cocok dengan tagihan order [{$order->order_number}]", [
-                        'order_id' => $order->id,
-                        'gross_amount_from_webhook' => $grossAmount,
-                        'expected_amount' => $expectedAmount,
-                        'grand_total_in_db' => (float) $order->grand_total,
-                        'driver' => $driver,
-                    ]);
+                // Nominal yang dibayar wajib sama dengan nominal yang ditagihkan untuk sesi ini (dibandingkan dengan
+                // catatan sesi / tagihan PEMILIK sesi, bukan grand_total order). Beda → tidak dilunasi + alert KRITIS,
+                // sama dengan DOKU. Dulu hanya dicatat lalu tetap dilunasi (booking & membership ikut aktif).
+                // Dibalas 200: notifikasi ulang tidak mengubah nominalnya.
+                if (! \App\Services\Payment\SnapSessionGuard::amountMatches($order, $incomingOrderId, (float) $grossAmount, 'WEBHOOK_'.strtoupper($driver))) {
+                    return $this->acknowledged($driver, $incomingOrderId, 'AMOUNT_MISMATCH');
                 }
 
                 $orchestrator->markOrderAsPaid($order, [
@@ -207,6 +205,10 @@ class PaymentWebhookController extends Controller
                 ]);
             } elseif ($status === 'CANCELLED') {
                 $this->handleGatewayCancellation($order, $incomingOrderId, (string) $request->input('transaction_status', ''), $safePayload);
+            } elseif ($status === 'PENDING' && strtolower($driver) === 'midtrans') {
+                // Customer memakai sesi yang seharusnya sudah mati (popup lama di tab lain, sesi sebelum ganti metode,
+                // atau tagihan yang sudah lunas) → VA / QR barunya langsung ditutup sebelum sempat dibayar.
+                app(\App\Services\Payment\SnapSessionGuard::class)->closeIfStale($order, $incomingOrderId);
             } elseif (in_array($rawStatus = (string) $request->input('transaction_status', ''), ['refund', 'partial_refund', 'chargeback', 'partial_chargeback'], true)) {
                 // Uang ditarik kembali di sisi Midtrans/bank (refund dari dashboard atau chargeback kartu) — sistem
                 // TIDAK otomatis membatalkan booking/membership, tapi wajib terlihat supaya ditindaklanjuti manual.
@@ -296,13 +298,18 @@ class PaymentWebhookController extends Controller
             // Kartu membership yang menunggu pembayaran order ini ikut batal (dulu "Menunggu Pembayaran" selamanya).
             \App\Services\Membership\MembershipOnlinePaymentService::cancelForCancelledOrder($order);
 
-            foreach ($order->padelBookings as $booking) {
-                // Booking hasil reschedule tidak pernah ikut dibatalkan di sini (selalu sudah dibayar sebagian).
-                if (in_array($booking->status, ['PENDING_PAYMENT', 'LOCKED', 'PENDING'], true) && (int) $booking->reschedule_count === 0) {
-                    // Jam kuota member / voucher sponsor yang dipotong saat checkout dikembalikan (dulu hilang).
-                    app(\App\Services\Padel\PadelBookingService::class)->reverseBookingBenefits($booking);
-                    $booking->update(['status' => 'CANCELLED']);
-                }
+            // Dikunci & disaring status DI DATABASE: pembersih slot bisa menghanguskan booking yang sama di detik yang
+            // sama — dulu data booking lama dipakai, jadi jam kuota member / voucher sponsor dikembalikan dua kali.
+            // Booking hasil reschedule tidak pernah ikut dibatalkan di sini (selalu sudah dibayar sebagian).
+            $bookings = PadelBooking::whereIn('id', $order->padelBookings()->pluck('id'))
+                ->whereIn('status', ['PENDING_PAYMENT', 'LOCKED', 'PENDING'])
+                ->where('reschedule_count', 0)
+                ->lockForUpdate()
+                ->get();
+            foreach ($bookings as $booking) {
+                // Jam kuota member / voucher sponsor yang dipotong saat checkout dikembalikan (dulu hilang).
+                app(\App\Services\Padel\PadelBookingService::class)->reverseBookingBenefits($booking);
+                $booking->update(['status' => 'CANCELLED']);
             }
         });
     }

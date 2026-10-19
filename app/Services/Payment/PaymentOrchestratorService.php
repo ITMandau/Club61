@@ -87,7 +87,7 @@ class PaymentOrchestratorService
                 if (! empty($paymentDetails['require_pending_payment'])) {
                     // Pelunasan kasir: JANGAN diam-diam "berhasil" — kasir akan menggesek EDC padahal tagihannya
                     // barusan dilunasi jalur lain (biasanya customer bayar online).
-                    throw new \Symfony\Component\HttpKernel\Exception\HttpException(409, 'Tagihan ini SUDAH LUNAS (kemungkinan baru saja dibayar customer via Midtrans). JANGAN terima pembayaran lagi.');
+                    throw new \Symfony\Component\HttpKernel\Exception\HttpException(409, 'Tagihan ini SUDAH LUNAS (kemungkinan baru saja dibayar customer lewat pembayaran online). JANGAN terima pembayaran lagi.');
                 }
 
                 // Notifikasi duplikat untuk sesi yang SAMA → abaikan. Tapi sesi LAIN dari tagihan yang sama (customer
@@ -116,6 +116,7 @@ class PaymentOrchestratorService
             // jadi omzet karena grand_total order masih menghitung tagihan selisihnya.
             if ($payment && $this->isPaymentForInactiveTarget($order, $payment)) {
                 $this->recordPaymentForClosedBill($order, $payment, $paymentDetails, $posShiftId);
+                $this->closeSiblingSessionsAfterCommit($payment->refresh(), $paymentGateway, $transactionId);
 
                 return;
             }
@@ -171,6 +172,8 @@ class PaymentOrchestratorService
                 if ($posShiftId && ! $order->pos_shift_id) {
                     $order->update(['pos_shift_id' => $posShiftId]);
                 }
+
+                $this->closeSiblingSessionsAfterCommit($payment, $paymentGateway, $transactionId);
 
                 // Set order payment_status = PAID sesuai fakta finansial bahwa uang sah diterima
                 $order->update(['payment_status' => 'PAID']);
@@ -232,16 +235,18 @@ class PaymentOrchestratorService
                     $payload['midtrans_order_ids'] = $sessions;
                     $paymentUpdates['payload_log'] = $payload;
 
-                    DB::afterCommit(function () use ($sessions) {
-                        $midtrans = app(\App\Services\Payment\MidtransService::class);
-                        foreach ($sessions as $session) {
-                            try {
-                                $midtrans->cancelTransaction($session);
-                            } catch (\Throwable $e) {
-                                // Best-effort: kalau tetap dibayar, tercatat sebagai pembayaran ganda + refund.
-                            }
-                        }
-                    });
+                    // Best-effort: kalau tetap dibayar, tercatat sebagai pembayaran ganda + refund.
+                    DB::afterCommit(fn () => app(OnlineGatewayRouter::class)->cancelSessions($sessions));
+                }
+
+                // Sesi DOKU tagihan ini: aturan yang sama — id kasir sendiri, invoice DOKU tetap tercatat di tagihan
+                // (→ pembayaran yang telat masuk terdeteksi ganda), dan sesinya dibatalkan di DOKU.
+                $dokuSessions = \App\Services\Payment\Doku\DokuSessionGuard::sessionsOf($payment);
+                if ($dokuSessions !== []) {
+                    if (in_array($paymentUpdates['transaction_id'], $dokuSessions, true)) {
+                        $paymentUpdates['transaction_id'] = 'POS-'.strtoupper($paymentGateway).'-'.strtoupper(Str::random(10));
+                    }
+                    DB::afterCommit(fn () => app(OnlineGatewayRouter::class)->cancelSessions($dokuSessions, OnlineGatewayRouter::DOKU));
                 }
             }
 
@@ -266,6 +271,8 @@ class PaymentOrchestratorService
             if ($posShiftId && ! $order->pos_shift_id) {
                 $order->update(['pos_shift_id' => $posShiftId]);
             }
+
+            $this->closeSiblingSessionsAfterCommit($payment, $paymentGateway, $transactionId);
 
             // 3. Evaluasi status finansial Order (PAID vs PARTIALLY_PAID)
             $totalPaid = (float) $order->payments()->where('status', 'SUCCESS')->sum('amount');
@@ -362,6 +369,28 @@ class PaymentOrchestratorService
         });
     }
 
+    /**
+     * Tagihan lunas lewat salah satu sesi Snap → sesi lain tagihan itu ditutup di Midtrans setelah commit, supaya VA /
+     * QR lama tidak bisa dibayar lagi (pembayaran ganda). Gagal di sini tidak menggagalkan pelunasan — rekonsiliasi
+     * berkala (SnapSessionGuard::sweepPaidSiblings) mengulanginya.
+     */
+    private function closeSiblingSessionsAfterCommit(Payment $payment, string $paymentGateway, ?string $transactionId): void
+    {
+        $paidBillId = $payment->id;
+
+        if (strtoupper($paymentGateway) === 'DOKU' && $transactionId && count(\App\Services\Payment\Doku\DokuSessionGuard::sessionsOf($payment)) > 1) {
+            DB::afterCommit(fn () => rescue(fn () => app(\App\Services\Payment\Doku\DokuSessionGuard::class)->closeSiblings($paidBillId), null, false));
+
+            return;
+        }
+
+        if (strtoupper($paymentGateway) !== 'MIDTRANS' || ! $transactionId || count(SnapSessionGuard::sessionsOf($payment)) < 2) {
+            return;
+        }
+
+        DB::afterCommit(fn () => rescue(fn () => app(SnapSessionGuard::class)->closeSiblings($paidBillId), null, false));
+    }
+
     /** Tagihan ini pemilik order_id gateway tersebut (transaction_id-nya, atau salah satu sesi Snap-nya)? */
     public static function ownsGatewayId(Payment $payment, string $gatewayId): bool
     {
@@ -372,7 +401,9 @@ class PaymentOrchestratorService
         $log = is_array($payment->payload_log) ? $payment->payload_log : [];
 
         return ($log['midtrans_order_id'] ?? null) === $gatewayId
-            || in_array($gatewayId, (array) ($log['midtrans_order_ids'] ?? []), true);
+            || in_array($gatewayId, (array) ($log['midtrans_order_ids'] ?? []), true)
+            // Invoice sesi DOKU (Modul 27).
+            || in_array($gatewayId, \App\Services\Payment\Doku\DokuSessionGuard::sessionsOf($payment), true);
     }
 
     /**
@@ -388,14 +419,32 @@ class PaymentOrchestratorService
             return true;
         }
 
+        // Locking read (versi terbaru yang sudah commit, lalu dikunci sampai pelunasan selesai): pembersih slot mengunci
+        // order lebih dulu lalu menghanguskan booking-nya, jadi keduanya bergiliran. Dulu dibaca biasa → pembersih bisa
+        // menghanguskan booking di sela pembacaan ini dan aktivasi tiket → uang masuk, booking EXPIRED, tanpa refund.
         if (($log['type'] ?? null) === 'RESCHEDULE_PRICE_DELTA' && ! empty($log['booking_id'])) {
-            return in_array(\App\Models\Padel\PadelBooking::whereKey($log['booking_id'])->value('status'), $inactive, true);
+            return in_array(\App\Models\Padel\PadelBooking::whereKey($log['booking_id'])->lockForUpdate()->value('status'), $inactive, true);
         }
 
         // Tagihan level order (checkout awal): hanya kalau SEMUA booking padel order ini sudah tidak aktif.
-        $statuses = \App\Models\Padel\PadelBooking::where('order_id', $order->id)->pluck('status');
+        $statuses = \App\Models\Padel\PadelBooking::where('order_id', $order->id)->lockForUpdate()->pluck('status', 'id');
 
-        return $statuses->isNotEmpty() && $statuses->every(fn ($s) => in_array($s, $inactive, true));
+        if ($statuses->isNotEmpty() && $statuses->every(fn ($s) => in_array($s, $inactive, true))) {
+            return true;
+        }
+
+        // Sebagian booking order ini sudah tidak aktif padahal tagihannya baru dibayar → order tetap dilunasi (booking
+        // lain aktif), tapi jangan diam: staf yang memutuskan refund sebagian / memindahkan jadwal.
+        $dead = $statuses->filter(fn ($s) => in_array($s, $inactive, true));
+        if ($payment->status === 'PENDING' && $dead->isNotEmpty()) {
+            Log::critical("[ALERT] Pembayaran masuk untuk order [{$order->order_number}] tapi sebagian booking-nya sudah tidak aktif — cek & tindak lanjuti manual.", [
+                'order_id' => $order->id,
+                'booking_tidak_aktif' => $dead->all(),
+                'tagihan' => $payment->id,
+            ]);
+        }
+
+        return false;
     }
 
     /**
@@ -573,7 +622,7 @@ class PaymentOrchestratorService
                 'kode_booking' => $bookingCodes ?: null,
                 'item' => $order->items->take(30)->map(fn ($i) => $i->item_name.' x'.$i->quantity.' = '.ActivityLogger::rupiah((float) $i->subtotal))->values()->all() ?: null,
                 'shift_kasir' => $payment->pos_shift_id,
-                'dilunasi_lewat' => $reconciled ? 'Cek status Midtrans (webhook tidak masuk)' : null,
+                'dilunasi_lewat' => $reconciled ? 'Cek status '.(str_starts_with((string) $reconciled, 'DOKU') ? 'DOKU' : 'Midtrans').' (webhook tidak masuk)' : null,
             ], fn ($v) => $v !== null && $v !== ''),
             severity: $severity,
         );

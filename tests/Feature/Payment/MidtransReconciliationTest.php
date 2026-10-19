@@ -259,13 +259,13 @@ class MidtransReconciliationTest extends TestCase
         app()[\Spatie\Permission\PermissionRegistrar::class]->forgetCachedPermissions();
         $this->actingAs($staff);
         Livewire::test(KelolaPemesanan::class)
-            ->assertDontSeeHtml('Cek Status Pembayaran ke Midtrans')
+            ->assertDontSeeHtml('Cek Status Pembayaran ke Gateway')
             ->call('checkMidtransPayment', $this->booking->id);
         $this->assertSame('PENDING_PAYMENT', $this->booking->fresh()->status);
 
         $this->actingAs(User::factory()->receptionist()->create());
         Livewire::test(KelolaPemesanan::class)
-            ->assertSeeHtml('Cek Status Pembayaran ke Midtrans')
+            ->assertSeeHtml('Cek Status Pembayaran ke Gateway')
             ->call('checkMidtransPayment', $this->booking->id);
 
         $this->assertSame('PAID', $this->booking->fresh()->status);

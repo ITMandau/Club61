@@ -9,6 +9,7 @@ use App\Models\Padel\PadelCourt;
 use App\Models\Pos\PosCashierShift;
 use App\Models\User;
 use App\Services\Padel\PadelBookingService;
+use App\Support\PersonName;
 use BackedEnum;
 use BezhanSalleh\FilamentShield\Traits\HasPageShield;
 use Carbon\Carbon;
@@ -51,6 +52,17 @@ class BookOfflineCourt extends Page
     // Slot yang Dipilih Kasir: [$slotKey => ['court_id', 'court_name', 'start_time', 'end_time', 'time_label', 'price']]
     public array $selectedSlots = [];
 
+    // Slot yang ditahan saat "Lanjut ke Pembayaran" (atas nama kasir, dipindah ke customer saat dibayar) — supaya kalau
+    // slotnya keburu diambil customer online, kasir tahu SEBELUM customer membayar. Hanya diubah server.
+    #[\Livewire\Attributes\Locked]
+    public array $heldBookingIds = [];
+
+    #[\Livewire\Attributes\Locked]
+    public ?string $heldSignature = null;
+
+    #[\Livewire\Attributes\Locked]
+    public ?string $heldUntil = null;
+
     // Mode Pelanggan: 'quick_create' atau 'search'
     public string $customerMode = 'quick_create';
 
@@ -70,6 +82,14 @@ class BookOfflineCourt extends Page
 
     // Toggle kasir: pakai/tidak pakai benefit membership customer ini untuk transaksi sekarang.
     public bool $useMembershipBenefit = true;
+
+    /** Voucher jam corporate customer (karyawan sponsor): ['organization_name', 'remaining_hours'] — null kalau tidak punya. */
+    public ?array $sponsorVoucherInfo = null;
+
+    /** Toggle kasir: pakai voucher jam corporate customer untuk transaksi ini. */
+    public bool $useSponsorVoucherBenefit = true;
+
+    private const VOUCHER_COMBINE_ERROR = 'Kode promo tidak bisa digabung dengan voucher jam corporate. Matikan voucher corporate kalau mau pakai kode promo ini.';
 
     // Form Walk-In Cepat
     public string $walkInName = '';
@@ -175,7 +195,16 @@ class BookOfflineCourt extends Page
         }
 
         $booking = PadelBooking::with(['user', 'court', 'order.payments'])->find($bookingId);
-        if (! $booking || ! in_array($booking->status, ['LOCKED', 'PENDING_PAYMENT', 'PENDING'], true)) {
+        // Kasir hanya melunasi selisih reschedule. Booking online yang belum dibayar wajib dibayar online —
+        // customer yang mau bayar di kasir dibuatkan booking walk-in baru (supaya slot tidak bisa ditahan tanpa bayar).
+        if ($booking && (in_array($booking->status, ['PENDING_PAYMENT', 'PENDING'], true) || ($booking->status === 'LOCKED' && (int) $booking->reschedule_count < 1))) {
+            Notification::make()->title('Dibayar Online Saja')
+                ->body("Booking {$booking->booking_code} dibuat online dan belum dibayar — customer menyelesaikannya lewat pembayaran online. Kalau customer mau bayar di kasir, buat booking walk-in baru.")
+                ->warning()->send();
+
+            return;
+        }
+        if (! $booking || $booking->status !== 'LOCKED') {
             Notification::make()->title('Tidak Ada Tagihan')->body('Booking ini tidak punya tagihan yang perlu dilunasi.')->info()->send();
 
             return;
@@ -183,19 +212,20 @@ class BookOfflineCourt extends Page
 
         // Customer sudah / sedang bayar online? Jangan sampai ditagih dua kali.
         $order = $booking->order_id ? \App\Models\Pos\Order::find($booking->order_id) : null;
-        $reconciler = app(\App\Services\Payment\MidtransReconciliationService::class);
+        $reconciler = app(\App\Services\Payment\OnlineGatewayRouter::class);
         if ($order && $reconciler->hasOnlinePaymentAttempt($order)) {
             $online = $reconciler->reconcileOrder($order);
-            if ($online === \App\Services\Payment\MidtransReconciliationService::PAID) {
+            $gatewayName = $reconciler->gatewayLabel($order);
+            if ($online === \App\Services\Payment\OnlineGatewayRouter::PAID) {
                 Notification::make()->title('Sudah Dibayar Online')
-                    ->body("Customer sudah membayar tagihan {$booking->booking_code} via Midtrans. Tiket otomatis aktif — jangan terima pembayaran lagi.")
+                    ->body("Customer sudah membayar tagihan {$booking->booking_code} via {$gatewayName}. Tiket otomatis aktif — jangan terima pembayaran lagi.")
                     ->success()->persistent()->send();
 
                 return;
             }
-            if ($online === \App\Services\Payment\MidtransReconciliationService::PENDING) {
+            if ($online === \App\Services\Payment\OnlineGatewayRouter::PENDING) {
                 Notification::make()->title('Customer Sedang Bayar Online')
-                    ->body('Midtrans masih menunggu pembayaran customer. Minta customer menyelesaikan atau membatalkan pembayaran online-nya dulu supaya tidak ditagih dua kali.')
+                    ->body("{$gatewayName} masih menunggu pembayaran customer. Minta customer menyelesaikan atau membatalkan pembayaran online-nya dulu supaya tidak ditagih dua kali.")
                     ->warning()->persistent()->send();
 
                 return;
@@ -217,12 +247,13 @@ class BookOfflineCourt extends Page
             'phone' => $booking->user?->phone,
             'court' => $booking->court?->name ?? '-',
             'schedule' => $booking->start_time->format('d M Y, H:i').' - '.$booking->end_time->format('H:i').' WIB',
-            'type' => $booking->status === 'LOCKED' ? 'Selisih Reschedule' : 'Booking Belum Dibayar',
+            'type' => 'Selisih Reschedule',
             'schedule_before' => $pending?->payload_log['schedule_before'] ?? null,
             'amount' => $amount,
         ];
 
         // Keranjang dikosongkan & customer otomatis diambil dari booking — kasir tidak perlu mengetik ulang.
+        $this->releaseHeldSlots();
         $this->selectedSlots = [];
         $this->initializeEquipmentQuantities();
         foreach (array_keys($this->rentalQuantities) as $equipmentId) {
@@ -232,7 +263,8 @@ class BookOfflineCourt extends Page
         $this->selectedCustomerId = $booking->user_id;
         $this->selectedCustomerName = $booking->user?->name;
         $this->selectedCustomerPhone = $booking->user?->phone;
-        $this->activeMembershipInfo = null;
+        // Pelunasan tagihan: benefit sudah dihitung saat booking dibuat — jangan dipotong lagi.
+        $this->loadBenefitInfo(null);
         $this->bookingDate = $booking->booking_date->format('Y-m-d');
 
         $this->paymentMethod = 'QRIS';
@@ -251,6 +283,7 @@ class BookOfflineCourt extends Page
         $this->selectedCustomerName = null;
         $this->selectedCustomerPhone = null;
         $this->customerMode = 'quick_create';
+        $this->loadBenefitInfo(null);
         $this->posStep = 'selection';
     }
 
@@ -314,7 +347,7 @@ class BookOfflineCourt extends Page
 
         Cache::forget('kelola_pemesanan_tab_counts');
 
-        if (($result['settled_via'] ?? null) === 'MIDTRANS') {
+        if (in_array($result['settled_via'] ?? null, ['MIDTRANS', 'DOKU'], true)) {
             Notification::make()->title('Sudah Dibayar Online')->body($result['message'])->warning()->persistent()->send();
         } else {
             Notification::make()->title('Pelunasan Berhasil')
@@ -356,24 +389,40 @@ class BookOfflineCourt extends Page
 
     public function setDate(string $date): void
     {
+        $this->releaseHeldSlots();
         $this->bookingDate = $date;
         $this->selectedSlots = [];
     }
 
     public function prevDay(): void
     {
+        $this->releaseHeldSlots();
         $this->bookingDate = Carbon::parse($this->bookingDate)->subDay()->format('Y-m-d');
         $this->selectedSlots = [];
     }
 
+    /**
+     * Tanggal lampau tetap bisa dibuka untuk melihat siapa yang booking, tapi slotnya tidak bisa dipilih
+     * (begitu juga jam yang sudah lewat hari ini).
+     */
+    protected function isPastSlot(string $startTime): bool
+    {
+        $today = now()->format('Y-m-d');
+
+        return $this->bookingDate < $today
+            || ($this->bookingDate === $today && (int) substr($startTime, 0, 2) < (int) now()->format('H'));
+    }
+
     public function nextDay(): void
     {
+        $this->releaseHeldSlots();
         $this->bookingDate = Carbon::parse($this->bookingDate)->addDay()->format('Y-m-d');
         $this->selectedSlots = [];
     }
 
     public function today(): void
     {
+        $this->releaseHeldSlots();
         $this->bookingDate = now()->format('Y-m-d');
         $this->selectedSlots = [];
     }
@@ -383,12 +432,24 @@ class BookOfflineCourt extends Page
         if ($this->settleBill) {
             $this->cancelSettlement();
         }
+        // Pilihan jam berubah → slot yang tadi ditahan dilepas (ditahan lagi saat "Lanjut ke Pembayaran").
+        $this->releaseHeldSlots();
 
         $slotKey = "{$courtId}_{$startTime}";
 
         if (isset($this->selectedSlots[$slotKey])) {
             unset($this->selectedSlots[$slotKey]);
         } else {
+            if ($this->isPastSlot($startTime)) {
+                Notification::make()
+                    ->title('Jadwal Sudah Lewat')
+                    ->body('Slot di jam atau tanggal yang sudah lewat tidak bisa dibooking.')
+                    ->warning()
+                    ->send();
+
+                return;
+            }
+
             $court = PadelCourt::find($courtId);
             if ($court) {
                 $cOpen = (int) substr($court->open_time ?: '06:00', 0, 2);
@@ -427,6 +488,7 @@ class BookOfflineCourt extends Page
 
     public function removeSlot(string $slotKey): void
     {
+        $this->releaseHeldSlots();
         unset($this->selectedSlots[$slotKey]);
 
         if (empty($this->selectedSlots)) {
@@ -440,6 +502,7 @@ class BookOfflineCourt extends Page
 
     public function clearSelectedSlots(): void
     {
+        $this->releaseHeldSlots();
         $this->selectedSlots = [];
         Cache::forget($this->getDraftCacheKey());
         $this->hasPendingDraft = false;
@@ -467,6 +530,7 @@ class BookOfflineCourt extends Page
     public function setCustomerMode(string $mode): void
     {
         $this->customerMode = $mode;
+        $this->loadBenefitInfo($this->benefitCustomer());
         $this->saveDraft();
     }
 
@@ -479,35 +543,7 @@ class BookOfflineCourt extends Page
             $this->selectedCustomerPhone = $user->phone;
             $this->customerSearch = '';
 
-            // Cek keanggotaan aktif dan benefit fasilitas Padel
-            // Tie-break: kartu yang paling cepat kedaluwarsa dipakai lebih dulu, konsisten dengan
-            // auto-detect balance di ManagesCheckoutAndPayments::applyMembershipBenefitToCourtBookings().
-            $activeMbr = \App\Models\Membership\UserMembership::with(['plan', 'balances'])
-                ->where('user_id', $user->id)
-                ->where('status', 'ACTIVE')
-                ->where(function ($q) {
-                    $q->whereNull('end_date')->orWhere('end_date', '>=', now()->toDateString());
-                })
-                ->orderByRaw('end_date IS NULL, end_date ASC')
-                ->first();
-
-            if ($activeMbr) {
-                $padelBalance = $activeMbr->balanceFor('PADEL');
-                $this->activeMembershipInfo = [
-                    'membership_code' => $activeMbr->membership_code,
-                    'plan_name' => $activeMbr->plan->name,
-                    'facility' => 'PADEL',
-                    'quota_type' => $padelBalance?->quota_type ?? 'NONE',
-                    'remaining_quota' => $padelBalance ? (float) $padelBalance->remaining_quota : 0.00,
-                    'discount_percent' => $padelBalance ? (float) $padelBalance->discount_percent : 0.00,
-                    'balance_id' => $padelBalance?->id,
-                ];
-            } else {
-                $this->activeMembershipInfo = null;
-            }
-
-            // Reset toggle ke default (ON) setiap ganti customer, biar gak kebawa state customer sebelumnya.
-            $this->useMembershipBenefit = true;
+            $this->loadBenefitInfo($user);
 
             $this->saveDraft();
         }
@@ -524,10 +560,99 @@ class BookOfflineCourt extends Page
         $this->selectedCustomerId = null;
         $this->selectedCustomerName = null;
         $this->selectedCustomerPhone = null;
-        $this->useMembershipBenefit = true;
-        $this->activeMembershipInfo = null;
+        $this->loadBenefitInfo(null);
         $this->customerSearch = '';
         $this->saveDraft();
+    }
+
+    public function toggleSponsorVoucherBenefit(): void
+    {
+        $this->useSponsorVoucherBenefit = ! $this->useSponsorVoucherBenefit;
+        $this->benefitQuoteCache = null;
+        $this->voucherResultCache = null;
+        $this->financeCalculationCache = null;
+        $this->subtotalCache = null;
+
+        // Voucher corporate dinyalakan saat kode promo terpasang → kode promonya dilepas (1 transaksi 1 voucher).
+        if ($this->useSponsorVoucherBenefit && $this->appliedVoucherCode && $this->voucherResult['error'] === self::VOUCHER_COMBINE_ERROR) {
+            $code = $this->appliedVoucherCode;
+            $this->removeVoucher();
+            $this->voucherResultCache = null;
+            $this->financeCalculationCache = null;
+            Notification::make()->title('Kode Promo Dilepas')->body("{$code} dilepas — kode promo tidak bisa digabung dengan voucher jam corporate.")->warning()->send();
+        }
+
+        $this->saveDraft();
+    }
+
+    /**
+     * Benefit customer yang tampil di layar kasir: kartu membership aktif (paling cepat kedaluwarsa dulu, sama
+     * dengan auto-detect checkout) dan voucher jam corporate (karyawan sponsor). Toggle kembali ON setiap ganti customer.
+     */
+    protected function loadBenefitInfo(?User $user): void
+    {
+        $this->useMembershipBenefit = true;
+        $this->useSponsorVoucherBenefit = true;
+        $this->activeMembershipInfo = null;
+        $this->sponsorVoucherInfo = null;
+        $this->benefitQuoteCache = null;
+
+        if (! $user) {
+            return;
+        }
+
+        $activeMbr = \App\Models\Membership\UserMembership::with(['plan', 'balances'])
+            ->where('user_id', $user->id)
+            ->where('status', 'ACTIVE')
+            ->where(function ($q) {
+                $q->whereNull('end_date')->orWhere('end_date', '>=', now()->toDateString());
+            })
+            ->orderByRaw('end_date IS NULL, end_date ASC')
+            ->first();
+
+        if ($activeMbr) {
+            $padelBalance = $activeMbr->balanceFor('PADEL');
+            $this->activeMembershipInfo = [
+                'membership_code' => $activeMbr->membership_code,
+                'plan_name' => $activeMbr->plan?->name ?? 'Membership',
+                'facility' => 'PADEL',
+                'quota_type' => $padelBalance?->quota_type ?? 'NONE',
+                'remaining_quota' => $padelBalance ? (float) $padelBalance->remaining_quota : 0.00,
+                'discount_percent' => $padelBalance ? (float) $padelBalance->discount_percent : 0.00,
+                'balance_id' => $padelBalance?->id,
+            ];
+        }
+
+        $member = \App\Models\Sponsor\SponsorOrganizationMember::with('organization')
+            ->where('user_id', $user->id)->where('status', 'ACTIVE')->first();
+        if ($member) {
+            $hours = (float) \App\Models\Sponsor\SponsorMemberVoucher::where('sponsor_organization_member_id', $member->id)
+                ->where('expires_at', '>', now())->get()->sum(fn ($v) => $v->remainingHours());
+            if ($hours > 0) {
+                $this->sponsorVoucherInfo = [
+                    'organization_name' => $member->organization->name ?? 'Corporate',
+                    'remaining_hours' => round($hours, 2),
+                ];
+            }
+        }
+    }
+
+    /**
+     * Customer yang benefitnya dihitung di layar: dipilih lewat "Cari Member", atau — di mode Walk-In Baru — akun
+     * lama dengan nomor HP yang sama (server memakai akun itu juga saat checkout, lihat findOrCreateWalkInCustomer()).
+     */
+    protected function benefitCustomer(): ?User
+    {
+        if ($this->customerMode === 'search') {
+            return $this->selectedCustomerId ? User::find($this->selectedCustomerId) : null;
+        }
+
+        $digits = preg_replace('/\D/', '', (string) $this->walkInPhone);
+        if (strlen($digits) < 8) {
+            return null;
+        }
+
+        return User::where('phone', app(PadelBookingService::class)->normalizePhoneNumber((string) $this->walkInPhone))->first();
     }
 
     public function updatedWalkInName(): void
@@ -537,8 +662,11 @@ class BookOfflineCourt extends Page
 
     public function updatedWalkInPhone(): void
     {
+        // Nomor HP akun lama (mis. karyawan sponsor / member) → benefitnya langsung tampil & dihitung.
+        $this->loadBenefitInfo($this->benefitCustomer());
         $this->saveDraft();
     }
+
 
     public function updatedWalkInEmail(): void
     {
@@ -578,6 +706,7 @@ class BookOfflineCourt extends Page
     protected ?float $subtotalCache = null;
     protected ?array $financeCalculationCache = null;
     protected ?array $voucherResultCache = null;
+    protected ?array $benefitQuoteCache = null;
 
     public function getCourtTotalProperty(): float
     {
@@ -616,37 +745,48 @@ class BookOfflineCourt extends Page
      */
     public function getMembershipDiscountAmountProperty(): float
     {
-        if ($this->membershipDiscountAmountCache !== null) {
-            return $this->membershipDiscountAmountCache;
+        return $this->membershipDiscountAmountCache ??= min((float) $this->benefitQuote['membership_discount'], $this->courtTotal);
+    }
+
+    /** Potongan voucher jam corporate (karyawan sponsor) atas sisa sewa lapangan setelah membership. */
+    public function getSponsorDiscountAmountProperty(): float
+    {
+        return min((float) $this->benefitQuote['sponsor_discount'], max(0, $this->courtTotal - $this->membershipDiscountAmount));
+    }
+
+    /**
+     * Rincian potongan benefit per booking (jam berurutan digabung) dari PadelBookingService::quoteWalkInBenefits() —
+     * fungsi yang sama dipakai pola potong checkout, jadi angka layar = angka yang dicatat server.
+     */
+    public function getBenefitQuoteProperty(): array
+    {
+        if ($this->benefitQuoteCache !== null) {
+            return $this->benefitQuoteCache;
         }
 
-        if (! $this->useMembershipBenefit || ! $this->activeMembershipInfo) {
-            return $this->membershipDiscountAmountCache = 0.0;
+        $empty = ['lines' => [], 'membership_discount' => 0.0, 'sponsor_discount' => 0.0,
+            'membership' => ['applies' => false, 'balance_id' => null, 'rejected_reason' => null, 'hours' => 0.0, 'plan_name' => null],
+            'sponsor' => ['applies' => false, 'organization_name' => null, 'hours' => 0.0, 'hours_left' => 0.0, 'hours_available' => 0.0]];
+
+        $customer = $this->settleBill || empty($this->selectedSlots) ? null : $this->benefitCustomer();
+        if (! $customer) {
+            return $this->benefitQuoteCache = $empty;
         }
 
-        $info = $this->activeMembershipInfo;
-        $discountTotal = 0.0;
-
-        if ($info['quota_type'] === 'HOURS') {
-            $remaining = (float) $info['remaining_quota'];
-            foreach ($this->selectedSlots as $slot) {
-                $durationMinutes = \Carbon\Carbon::parse($slot['start_time'])->diffInMinutes(\Carbon\Carbon::parse($slot['end_time']));
-                $hoursNeeded = max(0.5, round($durationMinutes / 60, 2));
-                if ($remaining >= $hoursNeeded) {
-                    $discountTotal += (float) $slot['price'];
-                    $remaining -= $hoursNeeded;
-                }
-            }
-        } elseif ((float) $info['discount_percent'] > 0) {
-            $discountTotal = round($this->courtTotal * ((float) $info['discount_percent'] / 100), 2);
-        }
-
-        return $this->membershipDiscountAmountCache = min($discountTotal, $this->courtTotal);
+        return $this->benefitQuoteCache = app(PadelBookingService::class)->quoteWalkInBenefits(
+            array_values(array_map(fn ($slot) => [
+                'court_id' => $slot['court_id'], 'start_time' => $slot['start_time'], 'end_time' => $slot['end_time'],
+            ], $this->selectedSlots)),
+            $this->bookingDate,
+            $customer,
+            $this->useMembershipBenefit ? ($this->activeMembershipInfo['balance_id'] ?? null) : 'NONE',
+            $this->useSponsorVoucherBenefit ? null : 'NONE',
+        );
     }
 
     public function getSubtotalProperty(): float
     {
-        return $this->subtotalCache ??= max(0, $this->courtTotal - $this->membershipDiscountAmount) + $this->equipmentTotal;
+        return $this->subtotalCache ??= max(0, $this->courtTotal - $this->membershipDiscountAmount - $this->sponsorDiscountAmount) + $this->equipmentTotal;
     }
 
     public function getFinanceCalculationProperty(): array
@@ -671,8 +811,15 @@ class BookOfflineCourt extends Page
 
         $customer = $this->selectedCustomerId ? User::find($this->selectedCustomerId) : null;
 
-        return $this->voucherResultCache = app(\App\Services\Finance\VoucherService::class)
-            ->resolve($this->appliedVoucherCode, $customer, max(0, $this->courtTotal - $this->membershipDiscountAmount) + $this->equipmentTotal);
+        $result = app(\App\Services\Finance\VoucherService::class)
+            ->resolve($this->appliedVoucherCode, $customer, max(0, $this->courtTotal - $this->membershipDiscountAmount - $this->sponsorDiscountAmount) + $this->equipmentTotal);
+
+        // 1 transaksi 1 voucher (sama dengan server): kode promo tidak bisa digabung voucher jam corporate. Voucher saldo boleh.
+        if ($result['voucher'] && ! $result['voucher']->isCredit() && $this->sponsorDiscountAmount > 0) {
+            $result = ['voucher' => null, 'discount' => 0.0, 'error' => self::VOUCHER_COMBINE_ERROR];
+        }
+
+        return $this->voucherResultCache = $result;
     }
 
     public function getVoucherDiscountProperty(): float
@@ -985,7 +1132,11 @@ class BookOfflineCourt extends Page
             'qrisRrn' => $this->qrisRrn,
             'qrisSenderName' => $this->qrisSenderName,
             'isAutoCheckIn' => $this->isAutoCheckIn,
+            'useMembershipBenefit' => $this->useMembershipBenefit,
+            'useSponsorVoucherBenefit' => $this->useSponsorVoucherBenefit,
             'grandTotal' => $this->grandTotal,
+            'heldBookingIds' => $this->heldBookingIds,
+            'heldSignature' => $this->heldSignature,
             'savedAt' => now('Asia/Jakarta')->format('H:i'),
         ], 7200);
     }
@@ -1022,20 +1173,23 @@ class BookOfflineCourt extends Page
         $this->qrisRrn = $draft['qrisRrn'] ?? '';
         $this->qrisSenderName = $draft['qrisSenderName'] ?? '';
         $this->isAutoCheckIn = $draft['isAutoCheckIn'] ?? false;
+        $this->loadBenefitInfo($this->benefitCustomer());
+        $this->useMembershipBenefit = $draft['useMembershipBenefit'] ?? true;
+        $this->useSponsorVoucherBenefit = $draft['useSponsorVoucherBenefit'] ?? true;
+        // Slot yang tadi ditahan kasir ini (bukan bentrok) — dipakai lagi kalau waktu tahannya belum habis.
+        $this->heldBookingIds = array_values(array_filter((array) ($draft['heldBookingIds'] ?? [])));
+        $this->heldSignature = $draft['heldSignature'] ?? null;
 
         $draftSlots = $draft['selectedSlots'] ?? [];
         $conflicted = false;
         $validSlots = [];
 
-        $isToday = $this->bookingDate === now()->format('Y-m-d');
-        $currentHour = (int) now()->format('H');
-
         foreach ($draftSlots as $keySlot => $slot) {
             $startDt = "{$this->bookingDate} {$slot['start_time']}";
             $endDt = "{$this->bookingDate} {$slot['end_time']}";
-            $slotHour = (int) substr($slot['start_time'], 0, 2);
 
-            if ($isToday && $slotHour < $currentHour) {
+            // Termasuk draf dari tanggal yang sudah lewat (draf disimpan sampai 2 jam).
+            if ($this->isPastSlot($slot['start_time'])) {
                 $conflicted = true;
                 continue;
             }
@@ -1043,6 +1197,7 @@ class BookOfflineCourt extends Page
             $exists = PadelBooking::where('court_id', $slot['court_id'])
                 ->whereDate('booking_date', $this->bookingDate)
                 ->whereIn('status', ['LOCKED', 'PENDING_PAYMENT', 'PENDING', 'PAID', 'CHECKED_IN', 'COMPLETED'])
+                ->whereNotIn('id', $this->heldBookingIds)
                 ->where(function ($q) use ($startDt, $endDt) {
                     $q->where('start_time', '<', $endDt)
                         ->where('end_time', '>', $startDt);
@@ -1061,12 +1216,15 @@ class BookOfflineCourt extends Page
         $this->pendingDraftSummary = null;
 
         if ($conflicted || empty($validSlots)) {
+            $this->releaseHeldSlots();
             $this->posStep = 'selection';
             Notification::make()
                 ->title('Beberapa Slot Tidak Tersedia')
                 ->body('Satu atau lebih slot draf sebelumnya telah terisi atau kedaluwarsa. Data pelanggan telah dipulihkan, silakan sesuaikan slot lapangan pada jadwal.')
                 ->warning()
                 ->send();
+        } elseif (! $this->holdSelectedSlots()) {
+            $this->posStep = 'selection';
         } else {
             $this->posStep = 'payment';
             Notification::make()
@@ -1079,6 +1237,7 @@ class BookOfflineCourt extends Page
 
     public function discardDraft(): void
     {
+        $this->releaseHeldSlots();
         Cache::forget($this->getDraftCacheKey());
         $this->hasPendingDraft = false;
         $this->pendingDraftSummary = null;
@@ -1158,6 +1317,15 @@ class BookOfflineCourt extends Page
                 return;
             }
 
+            if (! PersonName::isValid($name)) {
+                Notification::make()
+                    ->title('Nama Tidak Valid')
+                    ->body(PersonName::MESSAGE)
+                    ->warning()
+                    ->send();
+                return;
+            }
+
             if (empty($phone) || strlen(preg_replace('/[^0-9]/', '', $phone)) < 8) {
                 Notification::make()
                     ->title('Nomor Telepon Tidak Valid')
@@ -1168,18 +1336,142 @@ class BookOfflineCourt extends Page
             }
         }
 
+        // 3. Tahan slotnya sekarang — sebelum customer membayar. Keduluan customer online → kasir langsung tahu.
+        if (! $this->holdSelectedSlots()) {
+            return;
+        }
+
         $this->saveDraft();
         $this->posStep = 'payment';
     }
 
+    /** Kembali ke pilih jadwal: slot tetap ditahan (kasir mungkin hanya membetulkan data customer). */
     public function backToSelection(): void
     {
         $this->saveDraft();
         $this->posStep = 'selection';
     }
 
+    /**
+     * Tahan slot yang dipilih atas nama kasir (sama dengan customer online menekan Continue). Tahanan sebelumnya yang
+     * masih sah untuk jam yang sama dipakai lagi. Gagal → pemberitahuan, slot yang sudah diambil orang dilepas dari
+     * pilihan, kasir tetap di layar pilih jadwal.
+     */
+    protected function holdSelectedSlots(): bool
+    {
+        abort_unless(auth()->user()?->can('process_walkin_booking'), 403, 'Akses ditolak: Anda tidak memiliki izin untuk memproses transaksi walk-in.');
+
+        $service = app(PadelBookingService::class);
+        $signature = $this->holdSignature();
+
+        if ($this->heldBookingIds !== [] && $this->heldSignature === $signature
+            && $service->walkInHoldIsValid($this->heldBookingIds, auth()->user(), $this->slotsPayload(), $this->bookingDate)) {
+            $until = PadelBooking::whereIn('id', $this->heldBookingIds)->min('expires_at');
+            $this->heldUntil = $until ? Carbon::parse($until)->toIso8601String() : null;
+
+            return true;
+        }
+
+        $this->releaseHeldSlots();
+
+        try {
+            $hold = $service->holdBatchSlots($this->slotsPayload(), $this->bookingDate, auth()->user());
+        } catch (SlotConflictException $e) {
+            $taken = $this->takenSelectedSlotKeys();
+            $labels = collect($taken)->map(fn ($key) => $this->selectedSlots[$key]['court_name'].' '.$this->selectedSlots[$key]['time_label'])->implode(', ');
+            foreach ($taken as $key) {
+                unset($this->selectedSlots[$key]);
+            }
+            $this->saveDraft();
+
+            Notification::make()
+                ->title('Slot Baru Saja Diambil')
+                ->body($taken !== []
+                    ? "{$labels} baru saja diambil customer lain dan dihapus dari pilihan. Belum ada pembayaran — pilih jam lain."
+                    : ($e->getMessage() ?: 'Slot sedang ditahan customer lain. Pilih jam lain atau coba lagi sebentar.'))
+                ->warning()
+                ->persistent()
+                ->send();
+
+            return false;
+        } catch (\Symfony\Component\HttpKernel\Exception\HttpException $e) {
+            Notification::make()->title('Slot Tidak Bisa Ditahan')->body($e->getMessage())->warning()->send();
+
+            return false;
+        }
+
+        $this->heldBookingIds = collect($hold['bookings'])->pluck('id')->values()->all();
+        $this->heldSignature = $signature;
+        $this->heldUntil = Carbon::parse($hold['expires_at'])->toIso8601String();
+
+        return true;
+    }
+
+    /** Lepas slot yang sedang ditahan kasir ini (hanya yang masih LOCKED atas namanya — yang sudah dibayar tidak tersentuh). */
+    protected function releaseHeldSlots(): void
+    {
+        if ($this->heldBookingIds !== [] && auth()->user()) {
+            try {
+                app(PadelBookingService::class)->releaseSlots($this->heldBookingIds, auth()->user(), onlyLocked: true);
+            } catch (\Throwable $e) {
+                report($e); // gagal lepas → slot tetap terlepas sendiri saat waktu tahannya habis
+            }
+        }
+        $this->forgetHeldSlots();
+    }
+
+    /** Tahanan sudah menjadi booking customer (dibayar / menunggu QR) — cukup dilupakan, jangan dilepas. */
+    protected function forgetHeldSlots(): void
+    {
+        $this->heldBookingIds = [];
+        $this->heldSignature = null;
+        $this->heldUntil = null;
+    }
+
+    protected function holdSignature(): string
+    {
+        $keys = array_keys($this->selectedSlots);
+        sort($keys);
+
+        return md5($this->bookingDate.'|'.implode(',', $keys));
+    }
+
+    /** @return list<array{court_id: string, start_time: string, end_time: string}> */
+    protected function slotsPayload(): array
+    {
+        return array_values(array_map(fn ($slot) => [
+            'court_id' => $slot['court_id'],
+            'start_time' => $slot['start_time'],
+            'end_time' => $slot['end_time'],
+        ], $this->selectedSlots));
+    }
+
+    /** Slot pilihan kasir yang sudah terisi booking lain (bukan tahanan kasir ini sendiri). */
+    protected function takenSelectedSlotKeys(): array
+    {
+        if ($this->selectedSlots === []) {
+            return [];
+        }
+
+        $others = PadelBooking::whereDate('booking_date', $this->bookingDate)
+            ->whereIn('court_id', collect($this->selectedSlots)->pluck('court_id')->unique())
+            ->whereIn('status', ['LOCKED', 'PENDING_PAYMENT', 'PENDING', 'PAID', 'CHECKED_IN', 'COMPLETED'])
+            ->whereNotIn('id', $this->heldBookingIds)
+            ->get(['id', 'court_id', 'start_time', 'end_time']);
+
+        return collect($this->selectedSlots)->filter(function ($slot) use ($others) {
+            $start = "{$this->bookingDate} {$slot['start_time']}";
+            $end = "{$this->bookingDate} {$slot['end_time']}";
+
+            return $others->contains(fn ($b) => $b->court_id === $slot['court_id']
+                && $b->start_time->format('Y-m-d H:i:s') < $end
+                && $b->end_time->format('Y-m-d H:i:s') > $start);
+        })->keys()->all();
+    }
+
     public function startNewTransaction(): void
     {
+        $this->releaseHeldSlots();
         Cache::forget($this->getDraftCacheKey());
         $this->hasPendingDraft = false;
         $this->pendingDraftSummary = null;
@@ -1192,6 +1484,7 @@ class BookOfflineCourt extends Page
         $this->selectedCustomerId = null;
         $this->selectedCustomerName = null;
         $this->selectedCustomerPhone = null;
+        $this->loadBenefitInfo(null);
         $this->paymentMethod = 'QRIS';
         $this->edcLast4 = '';
         $this->edcApprovalCode = '';
@@ -1295,6 +1588,15 @@ class BookOfflineCourt extends Page
                 return;
             }
 
+            if (! PersonName::isValid($name)) {
+                Notification::make()
+                    ->title('Nama Tidak Valid')
+                    ->body(PersonName::MESSAGE)
+                    ->warning()
+                    ->send();
+                return;
+            }
+
             if (empty($phone) || strlen(preg_replace('/[^0-9]/', '', $phone)) < 8) {
                 Notification::make()
                     ->title('Nomor Telepon Tidak Valid')
@@ -1316,8 +1618,9 @@ class BookOfflineCourt extends Page
         $grandTotal = $this->grandTotal;
         $paymentMeta = [];
 
-        if ($this->appliedVoucherCode && $grandTotal <= 0) {
-            // Seluruh tagihan ditutup voucher: tidak ada uang masuk, jadi tidak ada bukti EDC / QRIS.
+        if ($grandTotal <= 0) {
+            // Seluruh tagihan ditanggung voucher promo / kuota membership / voucher jam corporate: tidak ada uang
+            // masuk, jadi tanpa bukti EDC / QRIS dan tanpa Midtrans. Server menentukan label sumbernya.
             $method = 'VOUCHER';
         } elseif (in_array($method, ['CASH', 'TUNAI'])) {
             Notification::make()
@@ -1406,13 +1709,7 @@ class BookOfflineCourt extends Page
         }
 
         // 3. Susun array slots untuk service
-        $slotsPayload = array_values(array_map(function ($slot) {
-            return [
-                'court_id' => $slot['court_id'],
-                'start_time' => $slot['start_time'],
-                'end_time' => $slot['end_time'],
-            ];
-        }, $this->selectedSlots));
+        $slotsPayload = $this->slotsPayload();
 
         // 4. Susun array equipments
         $equipmentsPayload = [];
@@ -1441,13 +1738,21 @@ class BookOfflineCourt extends Page
                 paymentMeta: $paymentMeta,
                 // 'NONE' kalau kasir sengaja matiin toggle benefit membership untuk transaksi ini —
                 // konsisten dengan guard yang sama dipakai di jalur online checkout.
-                membershipBalanceId: $this->useMembershipBenefit ? ($this->activeMembershipInfo['balance_id'] ?? null) : 'NONE',
+                // Benefit yang dihitung di layar (quoteWalkInBenefits) — kartu di luar jendela waktunya dimatikan supaya
+                // checkout tidak gagal; 'NONE' kalau kasir mematikan toggle.
+                membershipBalanceId: $this->useMembershipBenefit && $this->benefitQuote['membership']['applies'] ? $this->benefitQuote['membership']['balance_id'] : 'NONE',
+                sponsorVoucherId: $this->useSponsorVoucherBenefit ? null : 'NONE',
                 // Voucher hanya dikirim kalau di layar memang berlaku — dulu voucher milik customer yang belum dipilih
                 // (mode Walk-In Cepat) tetap dipakai server walau layar tidak menampilkan potongannya.
                 voucherCode: $this->appliedVoucherCode && ! $this->voucherResult['error'] ? $this->appliedVoucherCode : null,
                 // Total yang dilihat & ditagih kasir wajib sama dengan yang dicatat server.
                 expectedGrandTotal: (float) $grandTotal,
+                // Slot yang ditahan saat "Lanjut ke Pembayaran" (habis / berubah → server menahan ulang).
+                heldBookingIds: $this->heldBookingIds ?: null,
+                holder: auth()->user(),
             );
+            // Tahanan sudah menjadi booking customer.
+            $this->forgetHeldSlots();
 
             // QR Midtrans: order & slot sudah ditahan, tinggal tunggu customer scan. Struk keluar setelah lunas.
             if (! empty($result['pending_qris'])) {
@@ -1468,7 +1773,9 @@ class BookOfflineCourt extends Page
                 'cashier_name' => $cashier->name,
                 'booking_date' => Carbon::parse($this->bookingDate)->translatedFormat('d F Y'),
                 // Pembayaran di kasir: label EDC/QRIS frontdesk, bukan label metode online.
-                'payment_method' => $service->formatPaymentMethodLabel($this->paymentMethod, ['cashier_id' => auth()->id()]),
+                // Metode FINAL dari server: tagihan Rp0 tercatat sebagai "Voucher Jam Corporate (Gratis)" dsb. — dulu struk
+                // tetap menulis pilihan di layar (mis. QRIS) walau tidak ada uang yang dibayar.
+                'payment_method' => $service->formatPaymentMethodLabel($result['payment_method'] ?? $this->paymentMethod, ['cashier_id' => auth()->id()]),
                 'subtotal' => $result['order']->subtotal,
                 'discount_amount' => (float) $result['order']->discount_amount,
                 'voucher_code' => $result['order']->voucher_code,
@@ -1480,16 +1787,8 @@ class BookOfflineCourt extends Page
                 'auto_checked_in' => $result['auto_checked_in'],
                 'created_at' => now()->format('d/m/Y H:i:s'),
                 'payment_meta' => $paymentMeta,
-                'bookings' => $result['bookings']->map(function ($b) {
-                    return [
-                        'booking_code' => $b->booking_code,
-                        'court_name' => $b->court?->name ?? 'Lapangan Padel',
-                        'time_label' => $b->start_time->format('H:i') . ' - ' . $b->end_time->format('H:i'),
-                        'court_fee' => (float) $b->court_fee,
-                        'status' => $b->status,
-                        'qr_code_hash' => $b->qr_code_hash,
-                    ];
-                })->toArray(),
+                'bookings' => $this->receiptBookingLines($result['bookings']),
+                'benefit_notes' => $this->receiptBenefitNotes($customer, $result['bookings']),
                 'equipments' => array_values(array_filter(array_map(function ($item) {
                     $eq = CourtEquipment::find($item['equipment_id']);
                     return ($eq && $eq->is_active) ? [
@@ -1522,6 +1821,8 @@ class BookOfflineCourt extends Page
             $this->resetWalkInCart();
 
         } catch (SlotConflictException $e) {
+            // Hanya terjadi kalau tahanan kasir sudah habis lalu slotnya keburu diambil orang.
+            $this->releaseHeldSlots();
             Notification::make()
                 ->title('Slot Tidak Tersedia')
                 ->body($e->getMessage() ?: 'Slot jam tersebut baru saja diambil customer online atau sedang di-hold. Silakan pilih slot lain.')
@@ -1537,9 +1838,64 @@ class BookOfflineCourt extends Page
         }
     }
 
+    /**
+     * Baris lapangan untuk struk: harga normal + potongan kuota member / voucher jam corporate yang dipakai, supaya
+     * struk Rp0 tetap menjelaskan apa yang ditanggung (dulu hanya "Court A … Rp 0").
+     */
+    protected function receiptBookingLines(\Illuminate\Support\Collection $bookings, ?callable $courtDeltaFor = null): array
+    {
+        return $bookings->map(function ($b) use ($courtDeltaFor) {
+            $courtFee = (float) $b->court_fee - ($courtDeltaFor ? $courtDeltaFor($b) : 0);
+            $memberDiscount = (float) $b->member_discount_court;
+            $sponsorDiscount = (float) $b->sponsor_discount_court;
+
+            return [
+                'booking_code' => $b->booking_code,
+                'court_name' => $b->court?->name ?? 'Lapangan Padel',
+                'time_label' => $b->start_time->format('H:i').' - '.$b->end_time->format('H:i'),
+                'court_fee' => $courtFee,
+                'normal_fee' => $courtFee + $memberDiscount + $sponsorDiscount,
+                'member_hours' => (float) $b->member_hours_consumed,
+                'member_discount' => $memberDiscount,
+                'sponsor_hours' => (float) $b->sponsor_hours_consumed,
+                'sponsor_discount' => $sponsorDiscount,
+                'sponsor_org' => $sponsorDiscount > 0 ? $b->sponsorOrganization?->name : null,
+                'status' => $b->status,
+                'qr_code_hash' => $b->qr_code_hash,
+            ];
+        })->values()->all();
+    }
+
+    /** Sisa saldo benefit customer setelah transaksi (hanya di struk penjualan, bukan cetak ulang). */
+    protected function receiptBenefitNotes(?User $customer, \Illuminate\Support\Collection $bookings): array
+    {
+        if (! $customer) {
+            return [];
+        }
+
+        $hours = fn ($h) => rtrim(rtrim(number_format((float) $h, 1, ',', '.'), '0'), ',');
+        $notes = [];
+
+        if ($bookings->contains(fn ($b) => (float) $b->member_hours_consumed > 0)) {
+            $left = \App\Models\Membership\UserMembershipBalance::whereIn('id', $bookings->pluck('membership_balance_id')->filter()->unique())->sum('remaining_quota');
+            $notes[] = 'Sisa kuota member: '.$hours($left).' jam';
+        }
+
+        if ($bookings->contains(fn ($b) => (float) $b->sponsor_hours_consumed > 0)) {
+            $member = \App\Models\Sponsor\SponsorOrganizationMember::where('user_id', $customer->id)->where('status', 'ACTIVE')->first();
+            $left = $member
+                ? \App\Models\Sponsor\SponsorMemberVoucher::where('sponsor_organization_member_id', $member->id)->where('expires_at', '>', now())->get()->sum(fn ($v) => $v->remainingHours())
+                : 0;
+            $notes[] = 'Sisa jam corporate: '.$hours($left).' jam';
+        }
+
+        return $notes;
+    }
+
     /** Kosongkan keranjang & data customer untuk transaksi berikutnya. */
     protected function resetWalkInCart(): void
     {
+        $this->forgetHeldSlots();
         $this->selectedSlots = [];
         $this->removeVoucher();
         $this->initializeEquipmentQuantities();
@@ -1549,6 +1905,7 @@ class BookOfflineCourt extends Page
         $this->selectedCustomerId = null;
         $this->selectedCustomerName = null;
         $this->selectedCustomerPhone = null;
+        $this->loadBenefitInfo(null);
         $this->qrisRrn = '';
         $this->qrisSenderName = '';
     }
@@ -1630,6 +1987,7 @@ class BookOfflineCourt extends Page
         $autoCheckIn = (bool) ($payment->payload_log['auto_check_in'] ?? false);
         if ($autoCheckIn) {
             PadelBooking::where('order_id', $payment->order_id)->where('status', 'PAID')->update(['status' => 'CHECKED_IN', 'checked_in_at' => now()]);
+            app(\App\Services\Realtime\RealtimeSignal::class)->bookings(PadelBooking::where('order_id', $payment->order_id)->pluck('id'));
         }
 
         $this->completedOrderData = $this->buildWalkInReceipt($payment);
@@ -1853,14 +2211,10 @@ class BookOfflineCourt extends Page
             'created_at' => ($payment->paid_at ?? $payment->updated_at)->setTimezone('Asia/Jakarta')->format('d/m/Y H:i:s'),
             'payment_meta' => $paymentMeta,
             'note' => $atSale && $wasRescheduled ? 'Jadwal di bawah adalah jadwal TERBARU (booking sudah dipindah setelah transaksi ini).' : null,
-            'bookings' => $bookings->map(fn ($b) => [
-                'booking_code' => $b->booking_code,
-                'court_name' => $b->court?->name ?? 'Lapangan Padel',
-                'time_label' => $b->start_time->format('H:i').' - '.$b->end_time->format('H:i'),
-                'court_fee' => (float) $b->court_fee - ($atSale ? $courtDeltaFor($b) : 0),
-                'status' => $b->status,
-                'qr_code_hash' => $b->qr_code_hash,
-            ])->all(),
+            'bookings' => $this->receiptBookingLines($bookings, $atSale ? $courtDeltaFor : null),
+            // Potongan voucher promo ikut tampil di cetak ulang (dulu hilang — hanya struk pertama yang memuatnya).
+            'discount_amount' => (float) $order->discount_amount,
+            'voucher_code' => $order->voucher_code,
             'equipments' => \App\Models\Padel\PadelBookingEquipment::with('equipment')
                 ->where('order_id', $order->id)
                 ->get()
@@ -1886,6 +2240,7 @@ class BookOfflineCourt extends Page
         $this->courtTotalCache = null;
         $this->equipmentTotalCache = null;
         $this->membershipDiscountAmountCache = null;
+        $this->benefitQuoteCache = null;
         $this->subtotalCache = null;
         $this->financeCalculationCache = null;
         $this->voucherResultCache = null;
@@ -1901,7 +2256,6 @@ class BookOfflineCourt extends Page
         $courts = PadelCourt::where('is_active', true)->orderBy('name')->get();
         $peakHours = app(\App\Services\Padel\PeakHourService::class); // jam peak diatur di Master Data
         $isToday = $this->bookingDate === now()->format('Y-m-d');
-        $currentHour = (int) now()->format('H');
 
         // Tarik seluruh booking pada tanggal aktif untuk evaluasi cepat
         $existingBookings = PadelBooking::with(['court', 'user'])
@@ -1975,22 +2329,23 @@ class BookOfflineCourt extends Page
 
                 if ($h < $courtOpen || $h >= $courtClose) {
                     $status = 'CLOSED';
-                } elseif (isset($this->selectedSlots[$slotKey])) {
-                    $status = 'SELECTED';
-                } elseif ($isToday && $h < $currentHour) {
-                    $status = 'PAST';
                 } else {
                     $slotStartDt = "{$this->bookingDate} {$startTimeStr}";
                     $slotEndDt = "{$this->bookingDate} {$endTimeStr}";
 
-                    // Cari booking database yang overlap
+                    // Cari booking database yang overlap (slot yang sedang ditahan kasir ini sendiri tidak dihitung)
                     $matchedBooking = $existingBookings->first(function ($b) use ($court, $slotStartDt, $slotEndDt) {
                         return $b->court_id === $court->id
+                            && ! in_array($b->id, $this->heldBookingIds, true)
                             && $b->start_time->format('Y-m-d H:i:s') < $slotEndDt
                             && $b->end_time->format('Y-m-d H:i:s') > $slotStartDt;
                     });
 
-                    if ($matchedBooking) {
+                    if (isset($this->selectedSlots[$slotKey])) {
+                        // Dipilih kasir tapi keburu diambil customer online / kasir lain (terlihat lewat update realtime)
+                        // → kasir tahu sebelum customer membayar.
+                        $status = $matchedBooking ? 'TAKEN' : 'SELECTED';
+                    } elseif ($matchedBooking) {
                         if ($matchedBooking->status === 'LOCKED' && (int) $matchedBooking->reschedule_count > 0) {
                             // Jadwal hasil reschedule yang selisihnya belum dibayar — kasir klik untuk melunasi.
                             $status = 'UNPAID_DELTA';
@@ -2031,6 +2386,13 @@ class BookOfflineCourt extends Page
                     }
                 }
 
+                // Jam / tanggal yang sudah lewat: booking lunas & tagihan selisih tetap tampil (riwayat siapa yang main),
+                // slot kosong / hold jadi arsir dan tidak bisa dipilih.
+                if (in_array($status, ['AVAILABLE', 'LOCKED'], true) && $this->isPastSlot($startTimeStr)) {
+                    $status = 'PAST';
+                    $bookingDetail = null;
+                }
+
                 $courtRow['slots'][] = [
                     'slot_key' => $slotKey,
                     'hour' => $h,
@@ -2053,11 +2415,11 @@ class BookOfflineCourt extends Page
         $bookedSlotsAll = 0;
         foreach ($gridData as $courtRow) {
             foreach ($courtRow['slots'] as $slot) {
-                if ($slot['status'] === 'PAST') {
+                if ($slot['status'] === 'PAST' || $this->isPastSlot($slot['start_time'])) {
                     continue;
                 }
                 $totalSlotsAll++;
-                if (in_array($slot['status'], ['BOOKED', 'LOCKED', 'SELECTED', 'UNPAID_DELTA'], true)) {
+                if (in_array($slot['status'], ['BOOKED', 'LOCKED', 'SELECTED', 'TAKEN', 'UNPAID_DELTA'], true)) {
                     $bookedSlotsAll++;
                 }
             }
@@ -2097,8 +2459,12 @@ class BookOfflineCourt extends Page
         // di-query ulang di sini setiap render — lihat method updatedCustomerSearch().
         $searchResults = $this->searchResults;
 
+        // Slot pilihan kasir yang keburu diambil orang — ditandai juga di daftar "Slot Dipilih".
+        $takenSlotKeys = collect($gridData)->flatMap(fn ($row) => $row['slots'])->where('status', 'TAKEN')->pluck('slot_key')->all();
+
         return [
             'gridData' => $gridData,
+            'takenSlotKeys' => $takenSlotKeys,
             'operationalHours' => $operationalHours,
             'equipments' => $equipments,
             'searchResults' => $searchResults,

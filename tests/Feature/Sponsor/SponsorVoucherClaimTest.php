@@ -128,7 +128,7 @@ class SponsorVoucherClaimTest extends TestCase
         $this->assertNull($voucherOfB->fresh()->acknowledged_at);
     }
 
-    public function test_my_club_page_shows_corporate_voucher_section_with_status_labels(): void
+    public function test_my_vouchers_page_shows_corporate_vouchers_with_status_labels(): void
     {
         $org = $this->makeOrganization();
         $employee = User::factory()->create();
@@ -147,14 +147,17 @@ class SponsorVoucherClaimTest extends TestCase
             'acknowledged_at' => now(),
         ]);
 
-        $response = $this->actingAs($employee)->get('/my-club');
+        // Modul 23: voucher corporate pindah dari My Club ke Voucher Saya.
+        $response = $this->actingAs($employee)->get('/profile/vouchers');
 
         $response->assertStatus(200)
             ->assertSee('PT Voucher Claim Test')
-            ->assertSee('Corporate Team Benefit')
+            ->assertSee('data-voucher-kind="CORPORATE"', false)
             ->assertSee('New')
-            ->assertSee('Claimed')
-            ->assertSee('id="corporate-vouchers"', false);
+            ->assertSee('7 of 10 hours left')
+            ->assertSee('4 of 4 hours left');
+
+        $this->actingAs($employee)->get('/my-club')->assertOk()->assertDontSee('id="corporate-vouchers"', false);
     }
 
     public function test_dashboard_shows_my_vouchers_quick_action_tile_only_for_corporate_members(): void

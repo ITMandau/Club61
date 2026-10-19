@@ -73,6 +73,16 @@ return [
             'replace_placeholders' => true,
         ],
 
+        // Lalu lintas DOKU (request, respons, notifikasi) — terpisah supaya mudah dilacak. Kunci & header Signature
+        // tidak pernah ditulis. [ALERT] tetap ditulis juga ke log utama (lihat DokuClient::alert).
+        'doku' => [
+            'driver' => 'daily',
+            'path' => storage_path('logs/doku.log'),
+            'level' => 'info',
+            'days' => 90,
+            'replace_placeholders' => true,
+        ],
+
         'slack' => [
             'driver' => 'slack',
             'url' => env('LOG_SLACK_WEBHOOK_URL'),

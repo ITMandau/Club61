@@ -8,6 +8,7 @@ use App\Models\Sponsor\SponsorOrganization;
 use App\Models\Sponsor\SponsorOrganizationMember;
 use App\Models\User;
 use App\Services\Membership\MembershipBalanceService;
+use App\Support\PersonName;
 use App\Support\PhoneNumber;
 use DomainException;
 use Illuminate\Support\Facades\DB;
@@ -277,15 +278,21 @@ class SponsorOrganizationService
      * Potong sisa kuota kontrak (saldo UserMembershipBalance facility PADEL) organisasi ini lewat
      * ledger MembershipBalanceService yang SAMA dipakai fasilitas lain — audit trail-nya otomatis
      * tercatat di MembershipUsageLog, dan otomatis menolak (DomainException) kalau sisa saldo
-     * tidak cukup. Organisasi yang paketnya tidak dikonfigurasi kuota jam PADEL (null) tidak
-     * dibatasi sama sekali — dilewati diam-diam.
+     * tidak cukup. Semua jalur rilis jam (manual, massal, CSV, tambah jam voucher) lewat sini.
+     *
+     * Ditolak juga kalau organisasi Ditangguhkan, atau paketnya tidak punya kuota jam PADEL —
+     * dulu kasus terakhir dilewati diam-diam, sehingga PIC bisa merilis jam tanpa batas.
      */
     private function deductFromOrganizationQuota(SponsorOrganization $organization, float $hours, string $notes, ?string $voucherId = null): void
     {
+        if ($organization->isSuspended()) {
+            throw new DomainException("Organisasi {$organization->name} sedang ditangguhkan — jam voucher tidak bisa dirilis. Hubungi admin Club 61.");
+        }
+
         $balance = $organization->padelHourBalance();
 
         if ($balance === null) {
-            return;
+            throw new DomainException('Paket corporate organisasi ini tidak punya kuota jam Padel, jadi jam voucher tidak bisa dirilis.');
         }
 
         $this->balanceService->adjustQuota(
@@ -415,6 +422,11 @@ class SponsorOrganizationService
                     continue;
                 }
 
+                if (! PersonName::isValid($name)) {
+                    $result['failed_rows'][] = ['row' => $rowNumber, 'reason' => "Nama \"{$name}\" tidak valid. ".PersonName::MESSAGE];
+                    continue;
+                }
+
                 $hours = null;
                 if ($hoursRaw !== '') {
                     if (! is_numeric($hoursRaw) || (float) $hoursRaw <= 0) {
@@ -509,8 +521,12 @@ class SponsorOrganizationService
             return $user;
         }
 
+        if (! PersonName::isValid($name)) {
+            throw new DomainException(PersonName::MESSAGE);
+        }
+
         return User::create([
-            'name' => $name,
+            'name' => PersonName::clean($name),
             'email' => 'corp_'.$normalizedPhone.'@club61.id',
             'phone' => $normalizedPhone,
             'password' => Hash::make(substr($normalizedPhone, -6)),

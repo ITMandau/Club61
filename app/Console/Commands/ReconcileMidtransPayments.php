@@ -4,6 +4,7 @@ namespace App\Console\Commands;
 
 use App\Models\Pos\Order;
 use App\Services\Payment\MidtransReconciliationService;
+use App\Services\Payment\SnapSessionGuard;
 use Illuminate\Console\Command;
 
 /**
@@ -17,6 +18,13 @@ class ReconcileMidtransPayments extends Command
     protected $signature = 'payment:reconcile-midtrans {--hours=24 : Rentang order yang dicek (jam ke belakang)}';
 
     protected $description = 'Cek ulang status pembayaran Midtrans untuk order yang masih pending (cadangan webhook)';
+
+    /**
+     * Batas per jalan (sama dengan DOKU): saat Midtrans lambat / down tiap pengecekan menunggu timeout, satu jalan tanpa
+     * batas bisa melewati kunci 10 menit. Sisanya diambil jalan berikutnya — yang terlama dulu (tagihan lama yang tidak
+     * dibayar ditutup FAILED lalu keluar dari daftar).
+     */
+    private const MAX_ORDERS_PER_RUN = 100;
 
     public function handle(MidtransReconciliationService $reconciler): int
     {
@@ -32,6 +40,8 @@ class ReconcileMidtransPayments extends Command
                 ->where(fn ($w) => $w->where('created_at', '>=', $since)->orWhere('updated_at', '>=', $since))
                 // Beri webhook asli kesempatan datang duluan.
                 ->where('created_at', '<=', now()->subMinutes(2)))
+            ->oldest()
+            ->limit(self::MAX_ORDERS_PER_RUN)
             ->get();
 
         $counts = array_fill_keys([
@@ -58,6 +68,13 @@ class ReconcileMidtransPayments extends Command
             $counts[MidtransReconciliationService::NOT_PAID],
             $counts[MidtransReconciliationService::ERROR],
         ));
+
+        // Sesi lain dari tagihan yang sudah lunas (48 jam): yang ternyata ikut dibayar tapi webhook-nya hilang
+        // dicatat sebagai pembayaran ganda + refund PENDING; yang masih menunggu bayar ditutup.
+        $duplicates = app(SnapSessionGuard::class)->sweepPaidSiblings($reconciler);
+        if ($duplicates > 0) {
+            $this->warn("Pembayaran ganda baru ditemukan: {$duplicates} (refund PENDING dibuat).");
+        }
 
         return self::SUCCESS;
     }

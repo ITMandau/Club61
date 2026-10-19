@@ -218,7 +218,9 @@ class PaymentOrchestrationIntegrityTest extends TestCase
             'end_time' => Carbon::parse(now()->addDays(2)->format('Y-m-d') . ' 15:00'),
             'court_fee' => 150000,
             'total_amount' => 150000,
-            'status' => 'PENDING_PAYMENT',
+            // Tagihan selisih reschedule — satu-satunya tagihan yang boleh dilunasi di kasir.
+            'status' => 'LOCKED',
+            'reschedule_count' => 1,
         ]);
 
         $shift = PosCashierShift::create([

@@ -18,9 +18,19 @@
         </include>
     </source>
     <php>
+        <!--
+            WAJIB: test tidak boleh membaca cache `php artisan optimize` (bootstrap/cache/config.php dll.). Cache itu
+            berisi koneksi MySQL lokal — test dengan RefreshDatabase akan menjalankan migrate:fresh dan MENGOSONGKAN
+            database lokal (terjadi 15 Okt 2026). File di bawah sengaja tidak pernah ada → config selalu dibaca dari
+            config/ + nilai <env> di file ini. Penjaga kedua ada di tests/TestCase.php::createApplication().
+        -->
+        <env name="APP_CONFIG_CACHE" value="bootstrap/cache/config.phpunit-never-cached.php" force="true"/>
+        <env name="APP_ROUTES_CACHE" value="bootstrap/cache/routes.phpunit-never-cached.php" force="true"/>
+        <env name="APP_EVENTS_CACHE" value="bootstrap/cache/events.phpunit-never-cached.php" force="true"/>
         <env name="APP_ENV" value="testing"/>
         <env name="APP_MAINTENANCE_DRIVER" value="file"/>
         <env name="BCRYPT_ROUNDS" value="4"/>
+        <env name="BROADCAST_CONNECTION" value="null"/>
         <env name="CACHE_STORE" value="array"/>
         <env name="DB_CONNECTION" value="sqlite"/>
         <env name="DB_DATABASE" value=":memory:"/>
@@ -28,6 +38,12 @@
         <!-- Jangan pernah pakai key Midtrans asli dari .env di test; test yang butuh set sendiri via config(). -->
         <env name="MIDTRANS_SERVER_KEY" value=""/>
         <env name="MIDTRANS_VERIFY_WEBHOOK_STATUS" value="false"/>
+        <!-- Sama untuk DOKU: kunci & saklar asli dari .env tidak pernah dipakai; test yang butuh set sendiri via config(). -->
+        <env name="DOKU_ENABLED" value="false" force="true"/>
+        <env name="DOKU_CLIENT_ID" value="" force="true"/>
+        <env name="DOKU_SECRET_KEY" value="" force="true"/>
+        <env name="DOKU_IS_PRODUCTION" value="false" force="true"/>
+        <env name="DOKU_NOTIFICATION_URL" value="" force="true"/>
         <env name="PULSE_ENABLED" value="false"/>
         <env name="QUEUE_CONNECTION" value="sync"/>
         <env name="SESSION_DRIVER" value="array"/>

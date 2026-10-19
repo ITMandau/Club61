@@ -247,6 +247,11 @@ class JualMembership extends Page
                 return;
             }
 
+            if (! \App\Support\PersonName::isValid($name)) {
+                Notification::make()->title('Nama Tidak Valid')->body(\App\Support\PersonName::MESSAGE)->warning()->send();
+                return;
+            }
+
             if (empty($phone) || strlen(preg_replace('/[^0-9]/', '', $phone)) < 8) {
                 Notification::make()->title('Nomor Telepon Tidak Valid')->body('Silakan masukkan nomor WhatsApp / telepon aktif minimal 8 digit.')->warning()->send();
                 return;
@@ -362,7 +367,7 @@ class JualMembership extends Page
 
                     $customer = User::where('phone', $phone)->first();
                     if (! $customer) {
-                        $name = trim($this->walkInName) ?: 'Member Walk-In';
+                        $name = \App\Support\PersonName::clean($this->walkInName) ?: 'Member Walk-In';
                         $email = trim($this->walkInEmail) ?: ('mbr_' . preg_replace('/\D/', '', $phone) . '@club61.id');
 
                         $customer = User::create([

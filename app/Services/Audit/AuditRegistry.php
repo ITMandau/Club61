@@ -14,6 +14,7 @@ use App\Models\Padel\CourtEquipment;
 use App\Models\Padel\PadelCourt;
 use App\Models\Pos\ClubFinanceSetting;
 use App\Models\Pos\OnlinePaymentMethod;
+use App\Models\Pos\PaymentGatewaySetting;
 use App\Models\Pos\PosCashierShift;
 use App\Models\Pos\Voucher;
 use App\Models\Role;
@@ -106,7 +107,13 @@ class AuditRegistry
                 'module' => 'FINANCE',
                 'label' => 'Metode Pembayaran Online',
                 'title' => ['label'],
-                'severity' => ['updated' => ActivityLogger::WARNING],
+                'severity' => ['created' => ActivityLogger::WARNING, 'updated' => ActivityLogger::WARNING],
+            ],
+            PaymentGatewaySetting::class => [
+                'module' => 'FINANCE',
+                'label' => 'Gateway Pembayaran',
+                'title' => fn () => 'Gateway Pembayaran (Online & QR Kasir)',
+                'severity' => ['created' => ActivityLogger::CRITICAL, 'updated' => ActivityLogger::CRITICAL, 'deleted' => ActivityLogger::CRITICAL],
             ],
             BookingTimeSetting::class => [
                 'module' => 'FINANCE',

@@ -32,6 +32,22 @@ class MembershipPlan extends Model
         'perks' => 'array',
     ];
 
+    /** Status kartu yang masih bergantung pada paket (nama, durasi, benefit dibaca dari paket). */
+    public const IN_USE_STATUSES = ['ACTIVE', 'PENDING_PAYMENT', 'PENDING'];
+
+    protected static function booted(): void
+    {
+        // Paket yang masih dipakai kartu aktif/menunggu bayar tidak boleh dihapus — dulu bisa, lalu Home member 500,
+        // kasir walk-in error, dan pembelian yang dibayar setelahnya gagal aktif. Nonaktifkan saja (is_active = false).
+        // Pengaman terakhir untuk semua jalur; tombol hapus di admin sudah menolak lebih dulu dengan pesan jelas.
+        static::deleting(fn (self $plan) => $plan->isForceDeleting() || ! $plan->isInUse());
+    }
+
+    public function isInUse(): bool
+    {
+        return $this->userMemberships()->whereIn('status', self::IN_USE_STATUSES)->exists();
+    }
+
     public function benefits(): HasMany
     {
         return $this->hasMany(MembershipPlanBenefit::class, 'plan_id');

@@ -446,6 +446,8 @@ class LedgerWriter
             ! empty($qris['rrn']) => 'RRN '.$qris['rrn'],
             ! empty($edc['approval_code']) => 'APPR '.$edc['approval_code'].(! empty($edc['trace_number']) ? ' · TRACE '.$edc['trace_number'] : ''),
             ! empty($log['va_numbers'][0]['va_number']) => 'VA '.$log['va_numbers'][0]['va_number'],
+            // DOKU (Modul 27): ringkasan pembayaran dari DokuReconciliationService::summary.
+            ! empty($log['doku_payment']['va_number']) && is_scalar($log['doku_payment']['va_number']) => 'VA '.$log['doku_payment']['va_number'],
             ! empty($log['transaction_id']) && is_string($log['transaction_id']) => $log['transaction_id'],
             default => $payment->transaction_id,
         };

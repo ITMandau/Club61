@@ -29,6 +29,10 @@ class RoleResource extends Resource
 
     protected static ?string $navigationLabel = 'Roles & Hak Akses';
 
+    protected static ?string $modelLabel = 'Role';
+
+    protected static ?string $pluralModelLabel = 'Roles & Hak Akses';
+
     protected static string|\UnitEnum|null $navigationGroup = 'Karyawan & Akses';
 
     protected static ?int $navigationSort = 3;
@@ -55,8 +59,11 @@ class RoleResource extends Resource
                         Select::make('home_route')
                             ->label('HOME ROUTE (Pendaratan Login)')
                             ->options(Role::getHomeRouteOptions())
-                            ->default('/admin')
-                            ->required(),
+                            // Kosong = otomatis: login mendarat di halaman pertama yang dicentang di matriks izin
+                            // (urutan menu sidebar), mis. hanya Buku Transaksi → /admin/buku-transaksi.
+                            ->placeholder('Otomatis — halaman pertama sesuai permission')
+                            ->helperText('Kosongkan agar pengguna langsung masuk ke halaman pertama yang dicentang di bawah.')
+                            ->nullable(),
 
                         TextInput::make('guard_name')
                             ->default('web')
@@ -162,7 +169,8 @@ class RoleResource extends Resource
                         '/dashboard' => 'gray',
                         default => 'gray',
                     })
-                    ->default('/admin'),
+                    ->formatStateUsing(fn (?string $state): string => array_key_exists((string) $state, Role::getHomeRouteOptions()) ? $state : 'Otomatis')
+                    ->default('Otomatis'),
 
                 TextColumn::make('created_at')
                     ->label('Dibuat')

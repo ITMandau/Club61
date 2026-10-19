@@ -184,14 +184,16 @@ class CorporateDashboardPageTest extends TestCase
             ->assertSee('41.0');
     }
 
-    public function test_dashboard_shows_unlimited_when_no_quota_is_set(): void
+    public function test_dashboard_explains_plan_without_hour_quota_cannot_release(): void
     {
         $pic = User::factory()->create();
         $this->makeOrganization($pic); // no PADEL/HOURS balance configured on the plan
 
         $response = $this->actingAs($pic)->get('/corporate');
 
-        $response->assertStatus(200)->assertSeeInOrder(['Contract Quota', 'Unlimited']);
+        // Dulu tertulis "Unlimited" — sekarang paket tanpa kuota jam tidak bisa merilis jam sama sekali.
+        $response->assertStatus(200)->assertSeeInOrder(['Contract Quota', 'No hour quota'])
+            ->assertSee("hours can't be released", false)->assertDontSee('Unlimited');
     }
 
     public function test_roster_is_paginated_when_team_is_large(): void

@@ -48,7 +48,8 @@ class UserMembership extends Model
 
     public function plan(): BelongsTo
     {
-        return $this->belongsTo(MembershipPlan::class, 'plan_id');
+        // withTrashed: kartu lama (riwayat) tetap bisa membaca nama/durasi paket yang sudah dihapus — dulu null → 500.
+        return $this->belongsTo(MembershipPlan::class, 'plan_id')->withTrashed();
     }
 
     public function order(): BelongsTo

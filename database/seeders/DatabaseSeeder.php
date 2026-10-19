@@ -59,7 +59,8 @@ class DatabaseSeeder extends Seeder
             ],
             'receptionist' => [
                 'description' => 'Resepsionis Frontdesk (Walk-In Booking & Check-In Tiket)',
-                'home_route' => '/admin/book-offline-court',
+                // Tanpa HOME ROUTE: login otomatis ke halaman pertama yang dicentang di matriks izin (HomeRouteResolver).
+                'home_route' => null,
             ],
             'kitchen' => [
                 'description' => 'Koki Dapur & Barista KDS',
@@ -193,10 +194,11 @@ class DatabaseSeeder extends Seeder
         $customer->assignRole('customer');
 
         // 2. SEED PADEL COURTS & EQUIPMENTS
+        // Sama dengan data venue di sandbox (3 lapangan, buka 06:00–23:00).
         $courts = [
-            ['name' => 'Court 1 - Panoramic Indoor', 'type' => 'INDOOR', 'hourly_rate_regular' => 300000.00, 'hourly_rate_prime' => 450000.00],
-            ['name' => 'Court 2 - Panoramic Indoor', 'type' => 'INDOOR', 'hourly_rate_regular' => 300000.00, 'hourly_rate_prime' => 450000.00],
-            ['name' => 'Court 3 - Open Air Outdoor', 'type' => 'OUTDOOR', 'hourly_rate_regular' => 250000.00, 'hourly_rate_prime' => 375000.00],
+            ['name' => 'Court BCA', 'type' => 'INDOOR', 'hourly_rate_regular' => 200000.00, 'hourly_rate_prime' => 300000.00, 'open_time' => '06:00', 'close_time' => '23:00'],
+            ['name' => 'Court Indosat', 'type' => 'INDOOR', 'hourly_rate_regular' => 200000.00, 'hourly_rate_prime' => 300000.00, 'open_time' => '06:00', 'close_time' => '23:00'],
+            ['name' => 'Court Iforte', 'type' => 'OUTDOOR', 'hourly_rate_regular' => 200000.00, 'hourly_rate_prime' => 300000.00, 'open_time' => '06:00', 'close_time' => '23:00'],
         ];
         foreach ($courts as $c) {
             PadelCourt::create($c);
@@ -242,6 +244,8 @@ class DatabaseSeeder extends Seeder
         $catCoffee = FnbCategory::create(['name' => 'Specialty Coffee', 'sort_order' => 1]);
         $catNonCoffee = FnbCategory::create(['name' => 'Matcha & Wellness Drinks', 'sort_order' => 2]);
         $catFood = FnbCategory::create(['name' => 'Artisan Bakery & Toast', 'sort_order' => 3]);
+        // Minuman dibuat langsung di kasir (tanpa slip); makanan → slip ke printer Kitchen (IP diisi di Menu F&B > Stasiun & Printer).
+        $kitchen = \App\Models\Fnb\FnbStation::firstOrCreate(['name' => 'Kitchen'], ['printer_port' => 9100, 'is_active' => true, 'sort_order' => 1]);
 
         $rawBeans = RawMaterial::create(['code' => 'RAW-BEANS', 'name' => 'Single Origin Arabica Beans', 'unit' => 'GRAM', 'current_stock' => 15000.00, 'min_alert_stock' => 2000.00]);
         $rawOatMilk = RawMaterial::create(['code' => 'RAW-OATMILK', 'name' => 'Oatside Barista Blend', 'unit' => 'ML', 'current_stock' => 25000.00, 'min_alert_stock' => 5000.00]);
@@ -253,7 +257,6 @@ class DatabaseSeeder extends Seeder
             'name' => 'Iced Spanish Latte',
             'description' => 'Espresso double shot with condensed milk and chilled fresh milk.',
             'base_price' => 38000.00,
-            'station' => 'BAR',
             'is_available' => true,
         ]);
         RecipeBom::create(['menu_id' => $menuSpanishLatte->id, 'raw_material_id' => $rawBeans->id, 'quantity_used' => 18.00]);
@@ -264,7 +267,6 @@ class DatabaseSeeder extends Seeder
             'name' => 'Ceremonial Oat Matcha Latte',
             'description' => 'Stone-ground Uji matcha whisked with Oatside barista milk.',
             'base_price' => 45000.00,
-            'station' => 'BAR',
             'is_available' => true,
         ]);
         RecipeBom::create(['menu_id' => $menuMatcha->id, 'raw_material_id' => $rawMatcha->id, 'quantity_used' => 8.00]);
@@ -275,7 +277,7 @@ class DatabaseSeeder extends Seeder
             'name' => 'Smashed Avocado Sourdough',
             'description' => 'Rustic sourdough with poached egg, hass avocado, and feta.',
             'base_price' => 55000.00,
-            'station' => 'KITCHEN',
+            'station_id' => $kitchen->id,
             'is_available' => true,
         ]);
 
@@ -375,6 +377,54 @@ class DatabaseSeeder extends Seeder
                     'is_active' => true,
                 ]
             );
+        }
+
+        $this->seedCompanyProfile();
+    }
+
+    /** Konten halaman depan sama dengan sandbox (baris dibuat migration, isinya disamakan di sini). */
+    private function seedCompanyProfile(): void
+    {
+        \App\Models\Setting\CompanyProfileSetting::current()->update([
+            'hero_headline_line1' => 'Welcome to Club61',
+            'hero_headline_highlight' => '-',
+            'hero_headline_line2' => 'Your New Home on the court.',
+            'hero_subtitle' => \App\Models\Setting\CompanyProfileSetting::DEFAULT_HERO_SUBTITLE,
+            'hero_subtitle_en' => \App\Models\Setting\CompanyProfileSetting::DEFAULT_HERO_SUBTITLE_EN,
+            'facility_cards' => [
+                ['icon_key' => 'arena', 'title' => 'Padel Arena', 'subtitle' => ''],
+                ['icon_key' => 'wellness', 'title' => 'Wellness Suite', 'subtitle' => 'Sauna'],
+                ['icon_key' => 'lounge', 'title' => 'Social Lounge', 'subtitle' => 'Artisan Cafe & Bar'],
+            ],
+        ]);
+
+        $facilities = [
+            'Padel Arena' => [
+                'description' => 'Lapangan padel, standar internasional.',
+                'description_en' => 'Internationally-standard padel courts.',
+                'amenities' => ['Lantai profesional', 'Pencahayaan LED standar turnamen'],
+                'amenities_en' => ['Professional-grade flooring', 'Tournament-standard LED lighting'],
+            ],
+            'Wellness Suite' => [
+                'description' => 'Ruang pemulihan pasca-main dengan sauna.',
+                'description_en' => 'A post-match recovery space with sauna.',
+                'amenities' => ['Sauna'],
+                'amenities_en' => ['Sauna'],
+            ],
+            'Social Lounge' => [
+                'description' => 'Area santai dan cafe artisan untuk sebelum/sesudah bermain.',
+                'description_en' => 'A relaxed lounge and artisan cafe for before or after your game.',
+                'amenities' => ['Specialty coffee', 'Menu F&B', 'Area duduk santai'],
+                'amenities_en' => ['Specialty coffee', 'Full F&B menu', 'Casual lounge seating'],
+            ],
+        ];
+        foreach ($facilities as $title => $values) {
+            \App\Models\Setting\CompanyProfileFacility::where('title', $title)->update([
+                'description' => $values['description'],
+                'description_en' => $values['description_en'],
+                'amenities' => json_encode($values['amenities']),
+                'amenities_en' => json_encode($values['amenities_en']),
+            ]);
         }
     }
 }

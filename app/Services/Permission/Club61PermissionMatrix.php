@@ -25,6 +25,8 @@ class Club61PermissionMatrix
         'manage_online_payment_methods',
         // Lama tahan slot & batas bayar online (salah atur = slot ditahan terlalu lama / customer kehabisan waktu bayar).
         'manage_booking_time_limits',
+        // Gateway untuk tagihan baru (Midtrans / DOKU): salah pilih = uang masuk ke akun gateway yang berbeda.
+        'manage_payment_gateway',
         'manage_court_pricing',
         'View:RoleResource',
         'view_roles',
@@ -43,6 +45,9 @@ class Club61PermissionMatrix
         'process_refund_queue',
         // Daftar Voucher: saldo voucher customer = uang customer yang masih disimpan klub.
         'View:DaftarVoucher',
+        // Import penjualan soft opening: menulis order, booking, akun customer & Buku Transaksi langsung tanpa kasir.
+        'View:ImportPenjualan',
+        'import_sales_data',
     ];
 
     /**
@@ -314,6 +319,8 @@ class Club61PermissionMatrix
                             'view_ledger_invoice' => 'Lihat Invoice / Struk Salinan Admin dari Buku Transaksi',
                             'process_refund_queue' => 'Proses / Tolak Refund yang Menunggu (Antrian Refund)',
                             'View:DaftarVoucher' => 'Akses Halaman Daftar Voucher (semua voucher & saldo customer)',
+                            'View:ImportPenjualan' => 'Akses Halaman Import Penjualan (Excel)',
+                            'import_sales_data' => 'Import Data Penjualan Booking Padel & F&B dari Excel',
                         ],
                     ],
                 ],
@@ -368,6 +375,7 @@ class Club61PermissionMatrix
                             'View:MetodePembayaranOnline' => 'Akses Halaman Metode Pembayaran Online',
                             'manage_online_payment_methods' => 'Kelola Metode Pembayaran Online (aktif, nama, urutan, batas nominal)',
                             'manage_booking_time_limits' => 'Atur Waktu Tahan Slot & Batas Waktu Bayar Online',
+                            'manage_payment_gateway' => 'Pilih Gateway Pembayaran (Midtrans / DOKU) untuk Online & QR Kasir',
                         ],
                     ],
                     'membership_plans' => [
@@ -411,6 +419,20 @@ class Club61PermissionMatrix
                         'actions' => [
                             'View:KelolaKontenWebsite' => 'Akses Halaman Konten Website',
                             'manage_company_profile_content' => 'Ubah & Simpan Konten Landing Page',
+                        ],
+                    ],
+                ],
+            ],
+
+            'signature' => [
+                'title' => '14. Digital Signage',
+                'submodules' => [
+                    'signature_screen' => [
+                        'label' => 'Konten & Monitoring Layar TV',
+                        'actions' => [
+                            'View:Signature' => 'Akses Halaman Signature & Preview',
+                            'manage_signature' => 'Ubah Template, Konten, Running Text & Sponsor (draft)',
+                            'publish_signature' => 'Tayangkan ke TV, Kembalikan Versi & Buat Ulang Link Layar',
                         ],
                     ],
                 ],

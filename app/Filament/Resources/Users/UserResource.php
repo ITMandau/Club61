@@ -29,6 +29,10 @@ class UserResource extends Resource
 
     protected static ?string $navigationLabel = 'Kelola Pengguna';
 
+    protected static ?string $modelLabel = 'Pengguna';
+
+    protected static ?string $pluralModelLabel = 'Kelola Pengguna';
+
     protected static string|\UnitEnum|null $navigationGroup = 'Karyawan & Akses';
 
     protected static ?int $navigationSort = 2;
@@ -40,7 +44,9 @@ class UserResource extends Resource
                 \Filament\Forms\Components\TextInput::make('name')
                     ->label('Nama Lengkap')
                     ->required()
-                    ->maxLength(100),
+                    ->maxLength(\App\Support\PersonName::MAX_LENGTH)
+                    ->rules([new \App\Rules\ValidPersonName])
+                    ->dehydrateStateUsing(fn (?string $state) => \App\Support\PersonName::clean($state)),
 
                 \Filament\Forms\Components\TextInput::make('email')
                     ->label('Alamat Email')

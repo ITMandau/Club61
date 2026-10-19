@@ -173,7 +173,9 @@ class CashierShiftTest extends TestCase
             'end_time' => Carbon::parse("{$this->bookingDate} 11:00"),
             'court_fee' => 200000.00,
             'total_amount' => 200000.00,
-            'status' => 'PENDING_PAYMENT',
+            // Kasir hanya melunasi selisih reschedule (booking online belum bayar wajib dibayar online).
+            'status' => 'LOCKED',
+            'reschedule_count' => 1,
         ]);
 
         $this->expectException(\Exception::class);
@@ -372,8 +374,8 @@ class CashierShiftTest extends TestCase
             'expected_cash' => 0.00,
         ]);
 
-        // Simulasikan customer mengajukan reschedule ke slot jam prime sehingga timbul tagihan selisih berstatus PENDING_PAYMENT
-        $booking->update(['status' => 'PENDING_PAYMENT', 'court_fee' => 250000.00, 'total_amount' => 250000.00]);
+        // Simulasikan reschedule ke slot jam prime yang selisihnya belum dibayar: sama dengan adminRescheduleBooking (LOCKED + reschedule_count)
+        $booking->update(['status' => 'LOCKED', 'reschedule_count' => 1, 'court_fee' => 250000.00, 'total_amount' => 250000.00]);
         $order->update(['grand_total' => 250000.00, 'payment_status' => 'PARTIALLY_PAID']);
 
         // Buat pembayaran selisih reschedule di Shift 2 via adminSettleCashierPayment

@@ -34,7 +34,8 @@ class AdminPanelProvider extends PanelProvider
             // ke /login lewat binding LogoutResponse custom di AppServiceProvider.
             ->darkMode(false)
             ->brandName('Club 61 Padel Court')
-            ->brandLogo(asset('images/club61-logo.png'))
+            // Logo panel: monogram + nama brand (resources/views/filament/brand-logo.blade.php).
+            ->brandLogo(fn () => view('filament.brand-logo'))
             ->brandLogoHeight('2.25rem')
             ->favicon(asset('images/club61-logo.png'))
             ->maxContentWidth('full')
@@ -52,8 +53,13 @@ class AdminPanelProvider extends PanelProvider
                 'Master Data',
                 'Karyawan & Akses',
             ])
+            // Warna utama panel = Terakota brand Club 61 (Pantone 643U). Palet otomatis Filament membuat shade 600
+            // jadi merah terang (#D14D42), jadi shade ditulis manual dengan #662721 sebagai warna tombol (600).
             ->colors([
-                'primary' => Color::Amber,
+                'primary' => array_map(fn (string $hex): string => Color::convertToOklch($hex), [
+                    50 => '#FBF4F2', 100 => '#F6E8E4', 200 => '#EBCDC6', 300 => '#D9A79D', 400 => '#B9786C',
+                    500 => '#8F4A40', 600 => '#662721', 700 => '#5A221D', 800 => '#511D18', 900 => '#3F1713', 950 => '#2A0F0C',
+                ]),
             ])
             ->spa()
             // Link download (export) jangan dibuka lewat navigasi SPA: Livewire mengambil URL-nya dengan fetch lalu
@@ -91,6 +97,18 @@ class AdminPanelProvider extends PanelProvider
                 'panels::body.end',
                 fn () => view('filament.confirm-dialog')
             )
+            // Sesi habis (419) saat aksi Livewire → dialog Club61 berbahasa Indonesia, bukan popup bawaan browser.
+            ->renderHook(
+                'panels::body.end',
+                fn () => view('partials.livewire-session-expired', ['filamentConfirm' => true])
+            )
+            // Update realtime (Reverb): Echo bawaan Filament dinyalakan hanya kalau Reverb dikonfigurasi; halaman jadwal
+            // memakai club61LiveRefresh (event + polling cadangan).
+            ->bootUsing(fn () => config(['filament.broadcasting.echo' => \App\Support\Realtime::echo()]))
+            ->renderHook(
+                'panels::body.end',
+                fn () => view('filament.realtime-script')
+            )
             ->pages([
                 \App\Filament\Pages\Dashboard::class,
                 \App\Filament\Pages\Analytics::class,
@@ -113,6 +131,8 @@ class AdminPanelProvider extends PanelProvider
                 \App\Filament\Pages\BukuTransaksi::class,
                 \App\Filament\Pages\AntrianRefund::class,
                 \App\Filament\Pages\DaftarVoucher::class,
+                \App\Filament\Pages\ImportPenjualan::class,
+                \App\Filament\Pages\Signature::class,
             ])
             ->widgets([])
             ->middleware([

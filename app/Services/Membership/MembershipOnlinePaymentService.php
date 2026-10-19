@@ -7,11 +7,11 @@ use App\Models\Pos\Order;
 use App\Models\Pos\Payment;
 use App\Models\User;
 use App\Services\Audit\ActivityLogger;
-use App\Services\Payment\MidtransReconciliationService;
-use App\Services\Payment\MidtransService;
+use App\Services\Payment\OnlineGatewayRouter;
 use App\Services\Payment\OnlinePaymentMethodService;
 use App\Services\Payment\PaymentManager;
 use App\Services\Payment\PaymentOrchestratorService;
+use App\Services\Payment\SnapSessionGuard;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Symfony\Component\HttpKernel\Exception\HttpException;
@@ -28,7 +28,7 @@ class MembershipOnlinePaymentService
 
     public function __construct(
         protected PaymentManager $paymentManager,
-        protected MidtransReconciliationService $reconciler,
+        protected OnlineGatewayRouter $reconciler,
     ) {}
 
     /** Pembelian online (bukan penjualan kasir) milik user yang masih menunggu pembayaran. */
@@ -52,7 +52,7 @@ class MembershipOnlinePaymentService
 
         // Uang dari sesi sebelumnya (mis. VA yang ditransfer) bisa sudah masuk tapi webhook-nya belum sampai —
         // cek dulu supaya customer tidak membayar dua kali.
-        if ($this->reconciler->reconcileOrder($order) === MidtransReconciliationService::PAID) {
+        if ($this->reconciler->reconcileOrder($order) === OnlineGatewayRouter::PAID) {
             return $this->alreadyPaid($membership);
         }
 
@@ -68,31 +68,50 @@ class MembershipOnlinePaymentService
             }
 
             $grandTotal = (float) $order->grand_total;
-            $paymentMethod = app(OnlinePaymentMethodService::class)->assertSelectable($paymentMethod, $grandTotal);
-            $sessionId = $order->order_number.'_'.time().strtoupper(Str::random(4));
 
-            $paymentResult = $this->paymentManager->createPayment([
-                'order_id' => $sessionId,
-                'gross_amount' => (int) $grandTotal,
-                'item_details' => self::itemDetails($order, $membership->plan?->name ?? 'Membership'),
-                'customer_details' => [
-                    'first_name' => $user->name,
-                    'email' => $user->email,
-                    'phone' => $user->phone ?? '081261617233',
-                ],
-                'payment_method' => $paymentMethod,
+            // Satu tagihan = satu sesi yang bisa dibayar: metode sama → sesi yang sama; ganti metode → sesi lama
+            // ditutup dulu di gateway-nya (SnapSessionGuard / DokuSessionGuard). Dulu tiap klik membuka sesi baru.
+            $bill = Payment::where('order_id', $order->id)->where('status', 'PENDING')->latest()->lockForUpdate()->first();
+            $onlineGateway = $this->reconciler->targetGatewayFor($bill);
+            $paymentMethod = app(OnlinePaymentMethodService::class)->assertSelectable($paymentMethod, $grandTotal, $onlineGateway);
+            $prepared = $this->reconciler->prepareSession($bill, $paymentMethod, $grandTotal, $onlineGateway);
+            if ($prepared['action'] === OnlineGatewayRouter::SESSION_PAID) {
+                $this->reconciler->settlePreparedSession($order, $prepared);
+
+                return $this->alreadyPaid($membership);
+            }
+            if ($prepared['action'] === OnlineGatewayRouter::SESSION_REUSE) {
+                return [
+                    'order' => $order->fresh(),
+                    'membership' => $membership->fresh(['balances', 'plan']),
+                    'payment' => OnlineGatewayRouter::reusedPayment($prepared),
+                    'already_paid' => false,
+                ];
+            }
+
+            $paymentResult = $this->reconciler->createSession($onlineGateway, [
+                'order_number' => $order->order_number,
+                'session_id' => $order->order_number.'_'.time().strtoupper(Str::random(4)),
+                'amount' => (int) $grandTotal,
+                'items' => self::itemDetails($order, $membership->plan?->name ?? 'Membership'),
+                'customer' => ['name' => $user->name, 'email' => $user->email, 'phone' => $user->phone ?? '081261617233'],
+                'method' => $paymentMethod,
+                'callback_url' => route('customer.invoice', ['membership_id' => $membership->id]),
             ]);
+            $sessionId = $paymentResult['session_id'];
 
             // Sesi baru dicatat PERMANEN di tagihan order — webhook / rekonsiliasi mencocokkan pembayaran ke tagihan
-            // lewat midtrans_order_ids (PaymentOrchestratorService::ownsGatewayId).
-            $bill = Payment::where('order_id', $order->id)->where('status', 'PENDING')->latest()->lockForUpdate()->first();
-            $log = is_array($bill?->payload_log) ? $bill->payload_log : [];
-            $log['midtrans_order_id'] = $sessionId;
-            $log['midtrans_order_ids'] = array_values(array_unique(array_merge((array) ($log['midtrans_order_ids'] ?? []), [$sessionId])));
-            $log['snap_token'] = $paymentResult['snap_token'] ?? null;
+            // lewat midtrans_order_ids / doku_invoice_ids (PaymentOrchestratorService::ownsGatewayId).
+            $log = OnlineGatewayRouter::recordSession(
+                is_array($bill?->payload_log) ? $bill->payload_log : [],
+                $paymentResult,
+                $paymentMethod,
+                $grandTotal,
+                now()->addMinutes(app(\App\Services\Padel\BookingTimeService::class)->paymentWindowMinutes()),
+            );
 
             $attributes = [
-                'payment_gateway' => 'MIDTRANS',
+                'payment_gateway' => $paymentResult['gateway'],
                 'payment_method' => strtoupper($paymentMethod),
                 'amount' => $grandTotal,
                 'snap_token' => $paymentResult['snap_token'] ?? null,
@@ -124,7 +143,8 @@ class MembershipOnlinePaymentService
             return [
                 'order' => $order->fresh(),
                 'membership' => $membership->fresh(['balances', 'plan']),
-                'payment' => $paymentResult,
+                // Data internal sesi DOKU (Request-Id untuk pembatalan, token) tidak dikirim ke browser.
+                'payment' => \Illuminate\Support\Arr::except($paymentResult, ['request_id', 'token_id', 'expires_at']),
                 'already_paid' => false,
             ];
         });
@@ -136,11 +156,11 @@ class MembershipOnlinePaymentService
         $order = $this->assertOwnedPending($membership, $user);
 
         $result = $this->reconciler->reconcileOrder($order);
-        if ($result === MidtransReconciliationService::PAID) {
+        if ($result === OnlineGatewayRouter::PAID) {
             throw new HttpException(409, 'Pembayaran pesanan ini ternyata sudah masuk, membership Anda sudah aktif. Muat ulang halaman.');
         }
-        if ($result === MidtransReconciliationService::ERROR) {
-            throw new HttpException(503, 'Status pembayaran belum bisa dicek ke Midtrans. Coba lagi beberapa saat.');
+        if ($result === OnlineGatewayRouter::ERROR) {
+            throw new HttpException(503, 'Status pembayaran belum bisa dicek ke '.$this->reconciler->gatewayLabel($order).'. Coba lagi beberapa saat.');
         }
 
         $sessions = $this->close($membership, 'CUSTOMER_CANCELLED');
@@ -153,10 +173,10 @@ class MembershipOnlinePaymentService
             meta: ['order_number' => $order->order_number, 'paket' => $membership->plan?->name],
         );
 
-        // Sesi Midtrans yang masih terbuka (VA belum dibayar) ditutup juga, supaya tidak bisa dibayar setelah ini.
+        // Sesi online yang masih terbuka (VA belum dibayar) ditutup juga, supaya tidak bisa dibayar setelah ini.
         // Kalaupun tetap terbayar, uangnya tercatat + refund PENDING (PaymentOrchestratorService, order CANCELLED).
-        foreach ($sessions as $sessionId) {
-            rescue(fn () => app(MidtransService::class)->cancelTransaction($sessionId), null, false);
+        foreach ($sessions as $gateway => $ids) {
+            $this->reconciler->cancelSessions($ids, $gateway);
         }
     }
 
@@ -170,7 +190,7 @@ class MembershipOnlinePaymentService
             ->where('updated_at', '<', now()->subHours(self::STALE_HOURS))
             ->get()
             ->each(function (UserMembership $membership) use (&$count) {
-                if ($this->reconciler->reconcileOrder($membership->order) !== MidtransReconciliationService::NOT_PAID) {
+                if ($this->reconciler->reconcileOrder($membership->order) !== OnlineGatewayRouter::NOT_PAID) {
                     return;
                 }
 
@@ -243,7 +263,7 @@ class MembershipOnlinePaymentService
         return $order;
     }
 
-    /** @return list<string> sesi Midtrans tagihan yang ditutup */
+    /** @return array<string, list<string>> sesi tagihan yang ditutup, per gateway (MIDTRANS / DOKU) */
     private function close(UserMembership $membership, string $reason): array
     {
         return DB::transaction(function () use ($membership, $reason) {
@@ -254,12 +274,13 @@ class MembershipOnlinePaymentService
                 return [];
             }
 
-            $sessions = [];
+            $sessions = [OnlineGatewayRouter::MIDTRANS => [], OnlineGatewayRouter::DOKU => []];
             foreach (Payment::where('order_id', $order->id)->where('status', 'PENDING')->lockForUpdate()->get() as $bill) {
                 $log = is_array($bill->payload_log) ? $bill->payload_log : [];
                 if ($bill->payment_gateway === 'MIDTRANS') {
-                    $sessions = array_merge($sessions, [$bill->transaction_id, $log['midtrans_order_id'] ?? null], (array) ($log['midtrans_order_ids'] ?? []));
+                    $sessions[OnlineGatewayRouter::MIDTRANS] = array_merge($sessions[OnlineGatewayRouter::MIDTRANS], [$bill->transaction_id, $log['midtrans_order_id'] ?? null], (array) ($log['midtrans_order_ids'] ?? []));
                 }
+                $sessions[OnlineGatewayRouter::DOKU] = array_merge($sessions[OnlineGatewayRouter::DOKU], \App\Services\Payment\Doku\DokuSessionGuard::sessionsOf($bill));
                 $log['closed_by'] = $reason;
                 $bill->update(['status' => 'FAILED', 'payload_log' => $log]);
             }
@@ -267,7 +288,7 @@ class MembershipOnlinePaymentService
             $order->update(['payment_status' => 'CANCELLED']);
             self::cancelForCancelledOrder($order);
 
-            return array_values(array_unique(array_filter($sessions, fn ($s) => is_string($s) && $s !== '')));
+            return array_map(fn (array $ids) => array_values(array_unique(array_filter($ids, fn ($s) => is_string($s) && $s !== ''))), $sessions);
         });
     }
 

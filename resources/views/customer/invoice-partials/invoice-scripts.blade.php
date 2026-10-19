@@ -2,6 +2,8 @@
     function invoiceApp() {
         return {
             isLoading: true,
+            // Jam berjalan (diperbarui tiap detik) — tombol bayar langsung tertutup begitu batas bayar lewat.
+            nowTs: Date.now(),
             isPolling: false,
             pollCount: 0,
             maxPolls: 10,
@@ -209,13 +211,16 @@
             },
 
             async payNow() {
-                if (!this.currentTicket) return;
-                if (! this.availableMethods.length) {
+                // Klik beruntun (double tap) tidak boleh mengirim permintaan bayar kedua selagi yang pertama berjalan.
+                if (!this.currentTicket || this.isSubmittingPayment) return;
+                // Tagihan Rp0 tidak memakai metode bayar (server langsung melunasi) — jangan diblokir batas nominal metode.
+                const isFree = Number(this.amountToPay) <= 0;
+                if (! isFree && ! this.availableMethods.length) {
                     this.showNotice('Pembayaran Online Tidak Tersedia', 'Belum ada metode pembayaran online yang bisa dipakai untuk nominal ini. Silakan hubungi frontdesk.', 'error', 'Tutup');
                     return;
                 }
                 // Jangan diam-diam membayar dengan metode lain — beri tahu customer dulu, biar dia yang lanjutkan.
-                if (! this.availableMethods.some(m => m.code === this.selectedMethod.code)) {
+                if (! isFree && ! this.availableMethods.some(m => m.code === this.selectedMethod.code)) {
                     const previous = this.selectedMethod.name;
                     this.ensureSelectedMethodAvailable();
                     this.showNotice('Metode Pembayaran Diganti', `${previous} tidak bisa dipakai untuk nominal ini. Metode diganti ke ${this.selectedMethod.name}. Periksa lagi lalu tekan bayar.`, 'info', 'Oke');
@@ -223,6 +228,10 @@
                 }
                 if (['EXPIRED', 'CANCELLED', 'REFUNDED', 'REFUND_PENDING'].includes(this.currentTicket.status)) {
                     this.showNotice('Reservation Inactive', 'This reservation has expired or has been cancelled and can no longer be processed. Please make a new booking.', 'error', 'Close');
+                    return;
+                }
+                if (this.paymentWindowClosed(this.currentTicket)) {
+                    this.showNotice('Waktu Pembayaran Habis', 'Batas waktu pembayaran booking ini sudah habis dan slot sedang dilepas. Silakan buat booking baru.', 'error', 'Tutup');
                     return;
                 }
                 this.isSubmittingPayment = true;
@@ -249,12 +258,22 @@
                         if (json.is_cash) {
                             this.isCashNotice = true;
                             await this.loadTicket(this.currentTicket.id);
+                        } else if (json.is_paid) {
+                            // Tagihan Rp0 (ditanggung kuota member / voucher jam corporate): lunas tanpa Midtrans.
+                            await this.loadTicket(this.currentTicket.id);
+                            this.showNotice('Booking Confirmed', json.message || 'Your booking is fully covered and confirmed.', 'success', 'OK');
+                        } else if (json.driver === 'doku' && json.payment_url) {
+                            // DOKU Checkout: halaman bayar DOKU; setelah bayar DOKU mengembalikan customer ke invoice ini.
+                            window.location.href = json.payment_url;
                         } else if (json.snap_token) {
                             this.lastSnapToken = json.snap_token;
                             this.openSnap(json.snap_token, json.redirect_url);
                         }
                     } else {
-                        this.showNotice('Payment Failed', json.message || 'Failed to process payment session.', 'error', 'Close');
+                        // Status booking bisa sudah berubah (batas bayar habis, sudah lunas lewat sesi lain) — muat ulang
+                        // kartunya supaya tampilan tidak tertahan di "Pay Now" sampai di-refresh.
+                        await this.loadTicket(this.currentTicket.id);
+                        this.showNotice(res.status === 422 ? 'Pembayaran Tidak Bisa Diproses' : 'Payment Failed', json.message || 'Failed to process payment session.', 'error', 'Close');
                     }
                 } catch(e) {
                     console.error('Error retry payment:', e);
@@ -322,7 +341,7 @@
 
             async payMembership() {
                 const t = this.currentTicket;
-                if (!t || !t.can_pay_online) return;
+                if (!t || !t.can_pay_online || this.isSubmittingPayment) return;
                 if (! this.availableMethods.length) {
                     this.showNotice('Pembayaran Online Tidak Tersedia', 'Belum ada metode pembayaran online yang bisa dipakai untuk nominal ini. Silakan hubungi frontdesk.', 'error', 'Tutup');
                     return;
@@ -530,6 +549,7 @@
             },
 
             async init() {
+                setInterval(() => { this.nowTs = Date.now(); }, 1000);
                 const urlParams = new URLSearchParams(window.location.search);
                 const lookupKey = urlParams.get('booking_id') || urlParams.get('order_id') || urlParams.get('booking_code') || urlParams.get('id');
                 const membershipLookupKey = urlParams.get('membership_id');
@@ -778,6 +798,17 @@
             },
 
             /**
+             * Batas bayar booking sudah lewat tapi server belum selesai melepas slot (pembersih otomatis menunggu
+             * jeda & konfirmasi Midtrans). Tombol bayar / ganti metode ditutup; polling yang memperbarui statusnya.
+             * Tagihan selisih reschedule tidak punya batas bayar.
+             */
+            paymentWindowClosed(t) {
+                if (!t || t.has_pending_delta || !['PENDING', 'PENDING_PAYMENT'].includes(t.status) || !t.expires_at) return false;
+                const exp = new Date(t.expires_at).getTime();
+                return !isNaN(exp) && this.nowTs >= exp;
+            },
+
+            /**
              * Cek status ke server (yang ikut menanyakan Midtrans) sampai lunas, batal, atau batas bayar lewat.
              * Dulu berhenti setelah 30 detik — customer VA yang transfer 1–3 menit kemudian tetap melihat
              * "menunggu pembayaran" sampai refresh. Tiap 3 detik di menit pertama, lalu tiap 10 detik; jeda saat
@@ -793,9 +824,11 @@
                 let busy = false;
                 const stopAt = () => {
                     const t = this.currentTicket;
-                    // Batas bayar dari server (+3 menit jeda notifikasi). Selisih reschedule tidak punya batas → 20 menit.
+                    // Batas bayar dari server + 20 menit: slot baru dilepas setelah jeda 3 menit, dan bisa sampai 15 menit
+                    // kalau Midtrans masih "pending". Dulu berhenti di +3 menit → tampilan tertahan di "Pay Now" sampai
+                    // di-refresh. Selisih reschedule tidak punya batas → 20 menit sejak mulai.
                     const exp = t && ['PENDING', 'PENDING_PAYMENT'].includes(t.status) && t.expires_at ? new Date(t.expires_at).getTime() : NaN;
-                    return isNaN(exp) ? startedAt + 20 * 60 * 1000 : exp + 3 * 60 * 1000;
+                    return isNaN(exp) ? startedAt + 20 * 60 * 1000 : exp + 20 * 60 * 1000;
                 };
                 const stop = () => {
                     clearInterval(this.pollingInterval);
@@ -866,8 +899,12 @@
                 return isoString.substring(11, 16) || isoString;
             },
 
-            // Label status yang ramah dibaca (bukan kode mentah seperti PENDING_PAYMENT).
-            statusLabel(status) {
+            // Label status yang ramah dibaca (bukan kode mentah seperti PENDING_PAYMENT). Booking yang dipindah jadwal dan
+            // selisihnya belum lunas tetap LOCKED di database, tapi bagi customer itu "Balance due", bukan "In checkout".
+            statusLabel(status, ticket = null) {
+                if (status === 'LOCKED' && ticket && (ticket.has_pending_delta || Number(ticket.reschedule_count) > 0)) {
+                    return 'Balance due';
+                }
                 const map = {
                     PAID: 'Paid', CONFIRMED: 'Confirmed', CHECKED_IN: 'Checked in', COMPLETED: 'Completed', ACTIVE: 'Active',
                     PENDING: 'Awaiting payment', PENDING_PAYMENT: 'Awaiting payment', UNPAID: 'Unpaid', PARTIALLY_PAID: 'Partly paid',
@@ -915,7 +952,7 @@
                 canvas.height = height;
                 const ctx = canvas.getContext('2d');
 
-                function drawRoundRect(x, y, w, h, radius, fill = true, stroke = false, fillColor = '#ffffff', strokeColor = '#DFC387', lineWidth = 1) {
+                function drawRoundRect(x, y, w, h, radius, fill = true, stroke = false, fillColor = '#ffffff', strokeColor = '#E6DAC0', lineWidth = 1) {
                     ctx.save();
                     ctx.beginPath();
                     ctx.moveTo(x + radius, y);
@@ -942,15 +979,15 @@
 
                 // 1. Base Luxury Cream Background
                 const bgGrad = ctx.createLinearGradient(0, 0, 0, height);
-                bgGrad.addColorStop(0, '#FAF7F0');
+                bgGrad.addColorStop(0, '#FCF8EE');
                 bgGrad.addColorStop(0.5, '#FFFFFF');
-                bgGrad.addColorStop(1, '#F7F2E6');
+                bgGrad.addColorStop(1, '#FCF8EE');
                 ctx.fillStyle = bgGrad;
                 ctx.fillRect(0, 0, width, height);
 
                 // Outer Gold Borders
-                drawRoundRect(20, 20, width - 40, height - 40, 24, false, true, null, '#DFC387', 3);
-                drawRoundRect(28, 28, width - 56, height - 56, 18, false, true, null, '#EED9A8', 1);
+                drawRoundRect(20, 20, width - 40, height - 40, 24, false, true, null, '#E6DAC0', 3);
+                drawRoundRect(28, 28, width - 56, height - 56, 18, false, true, null, '#E6DAC0', 1);
 
                 // 2. Ticket Header Banner
                 const headerH = 175;
@@ -967,16 +1004,16 @@
                 ctx.clip();
 
                 const headGrad = ctx.createLinearGradient(40, 40, width - 40, 40 + headerH);
-                headGrad.addColorStop(0, '#183428');
-                headGrad.addColorStop(0.6, '#10241B');
-                headGrad.addColorStop(1, '#0A1812');
+                headGrad.addColorStop(0, '#662721');
+                headGrad.addColorStop(0.6, '#4F2F2A');
+                headGrad.addColorStop(1, '#4F2F2A');
                 ctx.fillStyle = headGrad;
                 ctx.fillRect(40, 40, width - 80, headerH);
                 ctx.restore();
 
                 // Header Badge
-                drawRoundRect(60, 58, 270, 26, 13, true, true, 'rgba(223, 195, 135, 0.2)', '#DFC387', 1);
-                ctx.fillStyle = '#F5E6BE';
+                drawRoundRect(60, 58, 270, 26, 13, true, true, 'rgba(223, 195, 135, 0.2)', '#E6DAC0', 1);
+                ctx.fillStyle = '#F7F0DB';
                 ctx.font = 'bold 11px sans-serif';
                 ctx.fillText('OFFICIAL BOARDING PASS • PADEL PASS', 72, 75);
 
@@ -1007,7 +1044,7 @@
 
                 // Booking Code on Header
                 const bookingCode = this.currentTicket.booking_code || this.currentTicket.id.substring(0, 10);
-                ctx.fillStyle = '#DFC387';
+                ctx.fillStyle = '#E6DAC0';
                 ctx.font = 'bold 13px monospace';
                 ctx.textAlign = 'right';
                 ctx.fillText('Code: #' + bookingCode, width - 60, 125);
@@ -1016,15 +1053,15 @@
                 // 3. Perforated Divider Bar
                 const divY = 40 + headerH;
                 const barH = 42;
-                ctx.fillStyle = '#FAF4E6';
+                ctx.fillStyle = '#F7F0DB';
                 ctx.fillRect(40, divY, width - 80, barH);
-                ctx.strokeStyle = '#DFC387';
+                ctx.strokeStyle = '#E6DAC0';
                 ctx.lineWidth = 1;
                 ctx.strokeRect(40, divY, width - 80, barH);
 
                 ctx.save();
                 ctx.setLineDash([5, 5]);
-                ctx.strokeStyle = '#DFC387';
+                ctx.strokeStyle = '#E6DAC0';
                 ctx.beginPath();
                 ctx.moveTo(50, divY + (barH / 2));
                 ctx.lineTo(width - 50, divY + (barH / 2));
@@ -1032,25 +1069,25 @@
                 ctx.restore();
 
                 // Notches
-                ctx.fillStyle = '#FAF7F0';
+                ctx.fillStyle = '#FCF8EE';
                 ctx.beginPath();
                 ctx.arc(40, divY + (barH / 2), 16, 0, Math.PI * 2);
                 ctx.fill();
-                ctx.strokeStyle = '#DFC387';
+                ctx.strokeStyle = '#E6DAC0';
                 ctx.lineWidth = 1.5;
                 ctx.stroke();
 
                 ctx.beginPath();
                 ctx.arc(width - 40, divY + (barH / 2), 16, 0, Math.PI * 2);
-                ctx.fillStyle = '#FAF7F0';
+                ctx.fillStyle = '#FCF8EE';
                 ctx.fill();
-                ctx.strokeStyle = '#DFC387';
+                ctx.strokeStyle = '#E6DAC0';
                 ctx.lineWidth = 1.5;
                 ctx.stroke();
 
                 // Divider Text Pill
-                drawRoundRect((width / 2) - 190, divY + 8, 380, 26, 13, true, true, '#FFFFFF', '#DFC387', 1);
-                ctx.fillStyle = '#7A5818';
+                drawRoundRect((width / 2) - 190, divY + 8, 380, 26, 13, true, true, '#FFFFFF', '#E6DAC0', 1);
+                ctx.fillStyle = '#662721';
                 ctx.font = 'bold 11px sans-serif';
                 ctx.textAlign = 'center';
                 ctx.fillText(`STATUS: ${isPaid ? 'VALID ENTRY PASS' : 'AWAITING PAYMENT'} • GATE: FRONTDESK`, width / 2, divY + 25);
@@ -1062,7 +1099,7 @@
                 const qrBoxH = 280;
                 const qrBoxX = (width - qrBoxW) / 2;
 
-                drawRoundRect(qrBoxX, qrSectionY, qrBoxW, qrBoxH, 20, true, true, '#FFFFFF', '#DFC387', 2);
+                drawRoundRect(qrBoxX, qrSectionY, qrBoxW, qrBoxH, 20, true, true, '#FFFFFF', '#E6DAC0', 2);
 
                 // QR hanya dari kode akses asli — dulu jatuh ke kode booking / teks 'CLUB61-PASS' yang pasti ditolak gate.
                 const qrText = this.currentTicket.qr_code_hash || '';
@@ -1078,7 +1115,7 @@
                             text: qrText,
                             width: 220,
                             height: 220,
-                            colorDark: "#183428",
+                            colorDark: "#662721",
                             colorLight: "#ffffff",
                             correctLevel: QRCode.CorrectLevel.H
                         });
@@ -1094,8 +1131,8 @@
 
                 // Tidak ada cadangan layanan QR luar (dulu api.qrserver.com — kode akses gate terkirim ke pihak ketiga).
                 if (!qrLoaded) {
-                    drawRoundRect(qrBoxX + 30, qrSectionY + 30, 220, 220, 12, true, true, '#FAF8F2', '#DFC387', 1);
-                    ctx.fillStyle = '#8C6418';
+                    drawRoundRect(qrBoxX + 30, qrSectionY + 30, 220, 220, 12, true, true, '#FCF8EE', '#E6DAC0', 1);
+                    ctx.fillStyle = '#662721';
                     ctx.font = 'bold 14px monospace';
                     ctx.textAlign = 'center';
                     ctx.fillText('QR NOT AVAILABLE', width / 2, qrSectionY + 130);
@@ -1104,32 +1141,32 @@
                     ctx.textAlign = 'left';
                 }
 
-                ctx.fillStyle = '#8C6418';
+                ctx.fillStyle = '#662721';
                 ctx.font = 'bold 14px monospace';
                 ctx.textAlign = 'center';
                 ctx.fillText(codeLabel, width / 2, qrSectionY + qrBoxH + 28);
 
-                ctx.fillStyle = '#7A643E';
+                ctx.fillStyle = '#7A5A52';
                 ctx.font = '12px sans-serif';
                 ctx.fillText('Present this QR Code to frontdesk staff / turnstile gate upon arrival', width / 2, qrSectionY + qrBoxH + 48);
                 ctx.textAlign = 'left';
 
                 // 5. Reservation Details Section
                 const detailY = 660;
-                drawRoundRect(45, detailY, 6, 20, 3, true, false, '#D4AF37');
-                ctx.fillStyle = '#1F170D';
+                drawRoundRect(45, detailY, 6, 20, 3, true, false, '#662721');
+                ctx.fillStyle = '#4F2F2A';
                 ctx.font = 'bold 15px sans-serif';
                 ctx.fillText('MATCH RESERVATION DETAILS', 58, detailY + 15);
 
                 const detailBoxH = 175;
-                drawRoundRect(45, detailY + 28, width - 90, detailBoxH, 16, true, true, '#FFFFFF', '#DFC387', 1.5);
+                drawRoundRect(45, detailY + 28, width - 90, detailBoxH, 16, true, true, '#FFFFFF', '#E6DAC0', 1.5);
 
                 function drawRow(y, label, value, isBold = false, isEmerald = false) {
-                    ctx.fillStyle = '#7A643E';
+                    ctx.fillStyle = '#7A5A52';
                     ctx.font = '12px sans-serif';
                     ctx.fillText(label, 65, y);
 
-                    ctx.fillStyle = isEmerald ? '#059669' : (isBold ? '#1F170D' : '#332714');
+                    ctx.fillStyle = isEmerald ? '#059669' : (isBold ? '#4F2F2A' : '#4F2F2A');
                     ctx.font = isBold ? 'bold 13px sans-serif' : '13px sans-serif';
                     ctx.textAlign = 'right';
                     ctx.fillText(value, width - 65, y);
@@ -1146,18 +1183,18 @@
                 const custName = (this.customerName || 'Customer VIP');
                 drawRow(detailY + 60, 'Ticket Holder Name', custName + ' (VIP Member)', true);
                 drawRow(detailY + 98, 'Booking Schedule', `${bookingTimeStr} (${duration} ${duration > 1 ? 'Hours' : 'Hour'})`, true);
-                drawRow(detailY + 136, 'Court & Venue', `${courtName} • Indoor Central AC`, true);
+                drawRow(detailY + 136, 'Court & Venue', `${courtName} • Club 61 Padel Court`, true);
                 drawRow(detailY + 174, 'Check-In Status', isPaid ? 'READY FOR ENTRY (VALID)' : 'AWAITING PAYMENT', true, isPaid);
 
                 // 6. Payment & Fee Summary Section
                 const summaryY = 885;
-                drawRoundRect(45, summaryY, 6, 20, 3, true, false, '#D4AF37');
-                ctx.fillStyle = '#1F170D';
+                drawRoundRect(45, summaryY, 6, 20, 3, true, false, '#662721');
+                ctx.fillStyle = '#4F2F2A';
                 ctx.font = 'bold 15px sans-serif';
                 ctx.fillText('PAYMENT & FEE SUMMARY', 58, summaryY + 15);
 
                 const sumBoxH = 245;
-                drawRoundRect(45, summaryY + 28, width - 90, sumBoxH, 16, true, true, '#FFFFFF', '#DFC387', 1.5);
+                drawRoundRect(45, summaryY + 28, width - 90, sumBoxH, 16, true, true, '#FFFFFF', '#E6DAC0', 1.5);
 
                 const cFee = this.displayCourtFee;
                 const eFee = this.displayEquipmentFee;
@@ -1177,11 +1214,11 @@
                 }
 
                 function drawSumRow(y, label, value, isBold = false) {
-                    ctx.fillStyle = '#7A643E';
+                    ctx.fillStyle = '#7A5A52';
                     ctx.font = '12px sans-serif';
                     ctx.fillText(label, 65, y);
 
-                    ctx.fillStyle = isBold ? '#1F170D' : '#332714';
+                    ctx.fillStyle = isBold ? '#4F2F2A' : '#4F2F2A';
                     ctx.font = isBold ? 'bold 13px sans-serif' : '13px sans-serif';
                     ctx.textAlign = 'right';
                     ctx.fillText(value, width - 65, y);
@@ -1206,15 +1243,15 @@
                 drawSumRow(summaryY + 136, 'Tax & Service Fee', 'Rp ' + this.formatNumber(taxAndService), false);
 
                 // Grand Total Highlight Banner
-                drawRoundRect(60, summaryY + 160, width - 120, 68, 12, true, true, '#FAF4E6', '#DFC387', 1.5);
-                ctx.fillStyle = '#1F170D';
+                drawRoundRect(60, summaryY + 160, width - 120, 68, 12, true, true, '#F7F0DB', '#E6DAC0', 1.5);
+                ctx.fillStyle = '#4F2F2A';
                 ctx.font = 'bold 14px sans-serif';
                 ctx.fillText('TOTAL AMOUNT', 80, summaryY + 192);
-                ctx.fillStyle = '#7A643E';
+                ctx.fillStyle = '#7A5A52';
                 ctx.font = '11px sans-serif';
                 ctx.fillText('Paid via ' + payMethod, 80, summaryY + 212);
 
-                ctx.fillStyle = '#8C6418';
+                ctx.fillStyle = '#662721';
                 ctx.font = 'bold 22px monospace';
                 ctx.textAlign = 'right';
                 ctx.fillText('Rp ' + this.formatNumber(gTotal), width - 80, summaryY + 202);
@@ -1222,26 +1259,26 @@
 
                 // 7. Footer Section
                 const footerY = 1185;
-                ctx.strokeStyle = '#DFC387';
+                ctx.strokeStyle = '#E6DAC0';
                 ctx.lineWidth = 1;
                 ctx.beginPath();
                 ctx.moveTo(80, footerY);
                 ctx.lineTo(width - 80, footerY);
                 ctx.stroke();
 
-                ctx.fillStyle = '#8C6418';
+                ctx.fillStyle = '#662721';
                 ctx.font = 'bold 13px sans-serif';
                 ctx.textAlign = 'center';
                 ctx.fillText('CLUB 61 PADEL ARENA • PLAY. COMPETE. CONNECT.', width / 2, footerY + 30);
 
-                ctx.fillStyle = '#7A643E';
+                ctx.fillStyle = '#7A5A52';
                 ctx.font = '11px sans-serif';
                 ctx.fillText('Save this digital e-ticket to your device as official proof of reservation.', width / 2, footerY + 50);
 
                 const now = new Date();
                 const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
                 const timeStampStr = `${now.getDate()} ${months[now.getMonth()]} ${now.getFullYear()} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')} WIB`;
-                ctx.fillStyle = '#A89060';
+                ctx.fillStyle = '#A08F86';
                 ctx.font = '10px monospace';
                 ctx.fillText(`Downloaded: ${timeStampStr} • Ref: #${bookingCode}`, width / 2, footerY + 70);
                 ctx.textAlign = 'left';

@@ -5,6 +5,7 @@ namespace App\Services\Payment;
 use App\Models\Pos\Order;
 use App\Models\Pos\Payment;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
 /**
@@ -161,9 +162,14 @@ class MidtransReconciliationService
             );
 
             if ($normalized === 'PAID') {
-                $this->settle($order, $gatewayOrderId, $status);
+                if ($this->settle($order, $gatewayOrderId, $status)) {
+                    return self::PAID;
+                }
+                // Nominal tidak cocok: uang ada di Midtrans tapi order tidak dilunasi → "belum pasti" (bukan "belum
+                // dibayar"): kasir tidak menerima uang lagi & slot tidak langsung dilepas.
+                $hadError = true;
 
-                return self::PAID;
+                continue;
             }
 
             if (in_array($normalized, ['PENDING', 'CHALLENGE'], true)) {
@@ -219,35 +225,40 @@ class MidtransReconciliationService
                 continue;
             }
 
-            // Tagihan selisih reschedule BUKAN keranjang yang boleh ditutup: customer tetap berutang dan
-            // booking-nya sudah dibayar sebagian. Sesi Snap yang tidak dibayar cukup dikembalikan jadi
-            // tagihan terbuka (bisa dibayar ulang via invoice / di kasir), rekonsiliasi berhenti menanyakannya.
-            if (($log['type'] ?? null) === 'RESCHEDULE_PRICE_DELTA') {
-                $log['snap_session_closed_by'] = $gatewaySaysFinal ? 'MIDTRANS_STATUS_FINAL' : 'MIDTRANS_NOT_PAID_AFTER_PAYMENT_WINDOW';
-                $payment->update(['payment_gateway' => 'CASHIER_POS', 'payload_log' => $log]);
+            // Ditulis dari data TERBARU yang dikunci: webhook bisa melunasi tagihan ini di sela pengecekan di atas
+            // (dulu tagihan yang baru SUCCESS tertimpa FAILED dari data lama).
+            DB::transaction(function () use ($payment, $gatewaySaysFinal) {
+                $fresh = Payment::whereKey($payment->id)->lockForUpdate()->first();
+                if (! $fresh || $fresh->status !== 'PENDING' || $fresh->payment_gateway !== 'MIDTRANS') {
+                    return;
+                }
+                $log = is_array($fresh->payload_log) ? $fresh->payload_log : [];
 
-                continue;
-            }
+                // Tagihan selisih reschedule BUKAN keranjang yang boleh ditutup: customer tetap berutang dan
+                // booking-nya sudah dibayar sebagian. Sesi Snap yang tidak dibayar cukup dikembalikan jadi
+                // tagihan terbuka (bisa dibayar ulang via invoice / di kasir), rekonsiliasi berhenti menanyakannya.
+                if (($log['type'] ?? null) === 'RESCHEDULE_PRICE_DELTA') {
+                    $log['snap_session_closed_by'] = $gatewaySaysFinal ? 'MIDTRANS_STATUS_FINAL' : 'MIDTRANS_NOT_PAID_AFTER_PAYMENT_WINDOW';
+                    $fresh->update(['payment_gateway' => 'CASHIER_POS', 'payload_log' => $log]);
 
-            $log['closed_by'] = $gatewaySaysFinal ? 'MIDTRANS_STATUS_FINAL' : 'MIDTRANS_NOT_PAID_AFTER_PAYMENT_WINDOW';
-            $payment->update(['status' => 'FAILED', 'payload_log' => $log]);
+                    return;
+                }
+
+                $log['closed_by'] = $gatewaySaysFinal ? 'MIDTRANS_STATUS_FINAL' : 'MIDTRANS_NOT_PAID_AFTER_PAYMENT_WINDOW';
+                $fresh->update(['status' => 'FAILED', 'payload_log' => $log]);
+            });
         }
     }
 
-    private function settle(Order $order, string $gatewayOrderId, array $status): void
+    /** Lunasi satu sesi Midtrans dari data Status API — jalur yang sama dengan webhook (idempoten). */
+    /** @return bool false = nominal tidak cocok dengan tagihan → TIDAK dilunasi (alert KRITIS sudah dicatat). */
+    public function settle(Order $order, string $gatewayOrderId, array $status): bool
     {
         $grossAmount = (float) ($status['gross_amount'] ?? 0);
 
-        // Dibandingkan dengan nominal tagihan PEMILIK sesi ini (bukan "PENDING terbaru" / grand_total order).
-        $bill = Payment::where('order_id', $order->id)->where('status', 'PENDING')->get()
-            ->first(fn (Payment $p) => PaymentOrchestratorService::ownsGatewayId($p, $gatewayOrderId));
-        $expected = $bill !== null ? (float) $bill->amount : (float) $order->grand_total;
-
-        if ($order->grand_total !== null && abs($grossAmount - $expected) > 1) {
-            Log::warning("[ALERT] Midtrans status check: gross_amount tidak cocok dengan grand_total order [{$order->order_number}]", [
-                'gross_amount_from_midtrans' => $grossAmount,
-                'grand_total_in_db' => (float) $order->grand_total,
-            ]);
+        // Sama dengan webhook: nominal dibandingkan dengan sesi / tagihan PEMILIK sesi ini; beda → tidak dilunasi.
+        if (! SnapSessionGuard::amountMatches($order, $gatewayOrderId, $grossAmount, 'MIDTRANS_STATUS_API')) {
+            return false;
         }
 
         Log::info("Midtrans status check: order {$order->order_number} ternyata LUNAS di Midtrans ({$gatewayOrderId}) — dilunasi tanpa webhook.");
@@ -261,6 +272,8 @@ class MidtransReconciliationService
         ]);
 
         Cache::forget($this->cacheKey($order));
+
+        return true;
     }
 
     private function cacheKey(Order $order): string

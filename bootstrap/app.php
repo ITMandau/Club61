@@ -16,13 +16,16 @@ return Application::configure(basePath: dirname(__DIR__))
         commands: __DIR__.'/../routes/console.php',
         health: '/up',
     )
+    // /broadcasting/auth untuk channel privat (notifikasi Filament). Layar jadwal memakai channel publik.
+    ->withBroadcasting(__DIR__.'/../routes/channels.php')
     ->withMiddleware(function (Middleware $middleware) {
         $middleware->trustProxies(at: '*');
         $middleware->statefulApi();
         $middleware->append(\App\Http\Middleware\SecurityHeaders::class);
         // AuthenticateSession: sesi web di perangkat lain otomatis keluar setelah password diganti / direset lewat email
         // (dulu hanya panel admin yang begini — HP customer yang hilang tetap login walau password sudah direset).
-        $middleware->web(append: [\App\Http\Middleware\SetLocale::class, \Illuminate\Session\Middleware\AuthenticateSession::class]);
+        $middleware->web(append: [\App\Http\Middleware\SetLocale::class, \Illuminate\Session\Middleware\AuthenticateSession::class, \App\Http\Middleware\EnsureUserIsActive::class]);
+        $middleware->api(append: [\App\Http\Middleware\EnsureUserIsActive::class]);
     })
     ->withExceptions(function (Exceptions $exceptions) {
         // Enforce JSON responses for all /api/* requests
@@ -72,6 +75,31 @@ return Application::configure(basePath: dirname(__DIR__))
                     'errors' => null,
                 ], $e->getStatusCode());
             }
+        });
+
+        // 4b. Form web kedaluwarsa (419 / CSRF): bukan tampilkan "PAGE EXPIRED", tapi kembalikan user ke form-nya
+        // dengan isian (tanpa kata sandi) + pesan, jadi tinggal kirim ulang. Contoh: halaman login yang lama terbuka
+        // di tab HP, atau tombol Back setelah login. Logout yang kedaluwarsa tetap dituntaskan (user memang mau keluar).
+        // Kalau browser tidak menyimpan cookie sesi sama sekali, redirect akan berulang tanpa hasil → tampilkan
+        // halaman errors/419 yang menyarankan cek cookie. Request Livewire ditangani di browser (livewire-session-expired).
+        $exceptions->render(function (HttpException $e, Request $request) {
+            if ($e->getStatusCode() !== 419 || $request->is('api/*') || $request->expectsJson() || $request->hasHeader('X-Livewire')) {
+                return null;
+            }
+            if (! $request->hasCookie(config('session.cookie'))) {
+                return null;
+            }
+            if ($request->routeIs('logout')) {
+                \Illuminate\Support\Facades\Auth::guard('web')->logout();
+                $request->session()->invalidate();
+                $request->session()->regenerateToken();
+
+                return redirect('/');
+            }
+
+            return redirect()->back()
+                ->withInput($request->except(['_token', 'password', 'password_confirmation', 'current_password']))
+                ->with('session_expired', 'Halaman ini terlalu lama terbuka sehingga sesinya habis. Data Anda belum terkirim — silakan periksa lalu kirim ulang.');
         });
 
         // 5. Log Aktivitas: setiap percobaan membuka halaman / menjalankan aksi tanpa izin (403).
