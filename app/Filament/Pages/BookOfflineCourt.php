@@ -811,8 +811,13 @@ class BookOfflineCourt extends Page
 
         $customer = $this->selectedCustomerId ? User::find($this->selectedCustomerId) : null;
 
+        $courtAfterBenefits = max(0, $this->courtTotal - $this->membershipDiscountAmount - $this->sponsorDiscountAmount);
         $result = app(\App\Services\Finance\VoucherService::class)
-            ->resolve($this->appliedVoucherCode, $customer, max(0, $this->courtTotal - $this->membershipDiscountAmount - $this->sponsorDiscountAmount) + $this->equipmentTotal);
+            ->resolve($this->appliedVoucherCode, $customer, $courtAfterBenefits + $this->equipmentTotal, context: [
+                'channel' => \App\Models\Pos\Voucher::CHANNEL_POS,
+                'amounts' => ['PADEL' => $courtAfterBenefits, 'PADEL_ADDON' => (float) $this->equipmentTotal],
+                'membership_applied' => $this->membershipDiscountAmount > 0,
+            ]);
 
         // 1 transaksi 1 voucher (sama dengan server): kode promo tidak bisa digabung voucher jam corporate. Voucher saldo boleh.
         if ($result['voucher'] && ! $result['voucher']->isCredit() && $this->sponsorDiscountAmount > 0) {
@@ -1779,6 +1784,7 @@ class BookOfflineCourt extends Page
                 'subtotal' => $result['order']->subtotal,
                 'discount_amount' => (float) $result['order']->discount_amount,
                 'voucher_code' => $result['order']->voucher_code,
+                'voucher_note' => app(\App\Services\Finance\PromoVoucherService::class)->receiptNote($result['order']->voucher_code),
                 'tax_amount' => $result['order']->tax_amount,
                 'tax_name' => $this->taxName,
                 'service_charge' => $result['order']->service_charge,
@@ -2215,6 +2221,7 @@ class BookOfflineCourt extends Page
             // Potongan voucher promo ikut tampil di cetak ulang (dulu hilang — hanya struk pertama yang memuatnya).
             'discount_amount' => (float) $order->discount_amount,
             'voucher_code' => $order->voucher_code,
+            'voucher_note' => app(\App\Services\Finance\PromoVoucherService::class)->receiptNote($order->voucher_code),
             'equipments' => \App\Models\Padel\PadelBookingEquipment::with('equipment')
                 ->where('order_id', $order->id)
                 ->get()

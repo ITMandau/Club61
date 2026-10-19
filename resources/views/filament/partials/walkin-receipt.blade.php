@@ -99,6 +99,9 @@
                                         <span>- Rp
                                             {{ number_format($receipt['discount_amount'], 0, ',', '.') }}</span>
                                     </div>
+                                    @if (! empty($receipt['voucher_note']))
+                                        <div data-receipt-voucher-note style="font-size:0.6rem; color:#4B5563;">&nbsp;&nbsp;{{ $receipt['voucher_note'] }}</div>
+                                    @endif
                                 @endif
                                 @if (!empty($receipt['tax_amount']) && $receipt['tax_amount'] > 0)
                                     <div

@@ -201,7 +201,9 @@
 
             <div class="pt-2.5 border-t border-[#E6DAC0] flex items-start justify-between gap-3">
                 <span class="min-w-0 text-[#7A5A52]">Court rental</span>
-                <span class="shrink-0 font-bold tabular-nums whitespace-nowrap" x-text="'Rp ' + formatNumber(currentTicket.court_fee)"></span>
+                {{-- Harga normal (court_fee tersimpan sudah dipotong benefit; potongannya ditulis di baris bawah). --}}
+                <span class="shrink-0 font-bold tabular-nums whitespace-nowrap"
+                      x-text="'Rp ' + formatNumber((parseFloat(currentTicket.court_fee) || 0) + (parseFloat(currentTicket.member_discount_court) || 0) + (parseFloat(currentTicket.sponsor_discount_court) || 0))"></span>
             </div>
             <div class="flex items-start justify-between gap-3" x-show="currentTicket.equipment_fee > 0">
                 <span class="min-w-0 text-[#7A5A52]">Equipment add-ons</span>
@@ -221,6 +223,15 @@
                 <div class="flex items-start justify-between gap-3 font-bold text-[#4F2F2A]">
                     <span class="min-w-0">Corporate voucher</span>
                     <span class="shrink-0 tabular-nums whitespace-nowrap" x-text="'- Rp ' + formatNumber(totalSponsorDiscount)"></span>
+                </div>
+            </template>
+            <template x-if="orderVoucher">
+                <div class="flex items-start justify-between gap-3 font-bold text-emerald-700">
+                    <span class="min-w-0">
+                        <span x-text="'Voucher ' + orderVoucher.code"></span>
+                        <span class="block font-medium text-[11px] leading-snug text-emerald-800/80" x-text="voucherDetail(orderVoucher)"></span>
+                    </span>
+                    <span class="shrink-0 tabular-nums whitespace-nowrap" x-text="'- Rp ' + formatNumber(orderVoucher.discount)"></span>
                 </div>
             </template>
             <template x-if="ticket && ticket.order && ticket.order.tax_amount > 0">

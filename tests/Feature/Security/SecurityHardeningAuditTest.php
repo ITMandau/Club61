@@ -163,7 +163,8 @@ class SecurityHardeningAuditTest extends TestCase
         $holdRes->assertStatus(201);
         $bookingId = $holdRes->json('data.bookings.0.id');
 
-        // Checkout dengan voucher expired tidak mendapatkan diskon
+        // Checkout dengan voucher expired DITOLAK dengan pesannya (dulu diam-diam tanpa diskon → customer ditagih penuh
+        // tanpa tahu potongannya hilang). Tidak ada order yang terbentuk; customer bisa checkout lagi tanpa kode.
         $checkoutRes = $this->withHeader('Authorization', "Bearer {$this->customerToken}")
             ->withHeader('X-Idempotency-Key', \Illuminate\Support\Str::uuid()->toString())
             ->postJson('/api/v1/padel/checkout', [
@@ -172,7 +173,8 @@ class SecurityHardeningAuditTest extends TestCase
                 'payment_method' => 'QRIS',
             ]);
 
-        $checkoutRes->assertStatus(200)
-            ->assertJsonPath('data.discount', 0);
+        $checkoutRes->assertStatus(422)->assertJsonFragment(['success' => false]);
+        $this->assertStringContainsString('kedaluwarsa', (string) $checkoutRes->json('message'));
+        $this->assertSame(0, \App\Models\Pos\Order::count());
     }
 }

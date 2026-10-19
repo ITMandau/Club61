@@ -294,7 +294,7 @@ class Club61PermissionMatrix
                         'actions' => [
                             'View:Marketing' => 'Akses Halaman Marketing',
                             'view_marketing' => 'Lihat Informasi Promo & Kampanye',
-                            'manage_vouchers' => 'Kelola Kupon Diskon & Kode Promo',
+                            'manage_vouchers' => 'Buat / Ubah / Nonaktifkan Kode Promo (di Daftar Voucher — butuh akses Daftar Voucher)',
                         ],
                     ],
                 ],
@@ -318,7 +318,7 @@ class Club61PermissionMatrix
                             'export_ledger' => 'Export Buku Transaksi ke Excel / CSV',
                             'view_ledger_invoice' => 'Lihat Invoice / Struk Salinan Admin dari Buku Transaksi',
                             'process_refund_queue' => 'Proses / Tolak Refund yang Menunggu (Antrian Refund)',
-                            'View:DaftarVoucher' => 'Akses Halaman Daftar Voucher (semua voucher & saldo customer)',
+                            'View:DaftarVoucher' => 'Akses Halaman Daftar Voucher (kode promo & voucher saldo customer)',
                             'View:ImportPenjualan' => 'Akses Halaman Import Penjualan (Excel)',
                             'import_sales_data' => 'Import Data Penjualan Booking Padel & F&B dari Excel',
                         ],

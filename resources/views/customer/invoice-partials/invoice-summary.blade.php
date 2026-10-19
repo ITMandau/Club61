@@ -32,6 +32,15 @@
             <span class="min-w-0">Equipment</span>
             <span class="shrink-0 font-bold text-[#4F2F2A] tabular-nums whitespace-nowrap" x-text="'Rp ' + formatNumber(displayEquipmentFee)"></span>
         </div>
+        <template x-if="orderVoucher">
+            <div data-invoice-voucher class="flex items-start justify-between gap-3 text-emerald-700 font-bold">
+                <span class="min-w-0">
+                    <span x-text="'Voucher ' + orderVoucher.code"></span>
+                    <span class="block font-medium text-[11px] leading-snug text-emerald-800/80" x-text="voucherDetail(orderVoucher)"></span>
+                </span>
+                <span class="shrink-0 tabular-nums whitespace-nowrap" x-text="'- Rp ' + formatNumber(orderVoucher.discount)"></span>
+            </div>
+        </template>
         <template x-if="ticket.order && ticket.order.tax_amount > 0">
             <div class="flex items-start justify-between gap-3">
                 <span class="min-w-0">Tax</span>

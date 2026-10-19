@@ -339,7 +339,8 @@ class PadelBookingApiTest extends TestCase
                 'equipments' => [
                     ['equipment_id' => $this->racket->id, 'quantity' => 2],
                 ],
-                'voucher_code' => 'HEMAT10',
+                // Dulu ada voucher_code "HEMAT10" yang tidak pernah dibuat (diabaikan diam-diam). Kode tidak valid sekarang
+                // ditolak 422 — lihat SecurityHardeningAuditTest::test_voucher_rejected_when_expired_or_quota_exhausted.
                 'payment_method' => 'QRIS',
             ]);
 

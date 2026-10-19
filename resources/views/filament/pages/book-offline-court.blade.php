@@ -657,8 +657,19 @@
                                     <div style="font-family:var(--font-mono, monospace); font-weight:900; font-size:0.75rem; color:#065F46;">{{ $appliedVoucherCode }}</div>
                                     @if ($this->voucherResult['error'])
                                         <div style="font-size:0.6875rem; color:#B91C1C; font-weight:700;">{{ $this->voucherResult['error'] }}</div>
-                                    @else
-                                        <div style="font-size:0.6875rem; color:#047857;">Potongan Rp {{ number_format($this->voucherDiscount, 0, ',', '.') }}</div>
+                                    @elseif ($this->voucherResult['voucher'])
+                                        @php
+                                            $voucherTerms = app(\App\Services\Finance\PromoVoucherService::class)->terms($this->voucherResult['voucher']);
+                                        @endphp
+                                        <div data-voucher-terms style="font-size:0.6875rem; color:#047857; line-height:1.45;">
+                                            @if ($voucherTerms['name'])
+                                                <div style="font-weight:800; color:#065F46;">{{ $voucherTerms['name'] }}</div>
+                                            @endif
+                                            <div>{{ $voucherTerms['headline'] }} &rarr; <strong>potongan Rp {{ number_format($this->voucherDiscount, 0, ',', '.') }}</strong></div>
+                                            @if ($voucherTerms['rules'])
+                                                <div style="color:#5F7F6E;">{{ implode(' · ', $voucherTerms['rules']) }}</div>
+                                            @endif
+                                        </div>
                                     @endif
                                 </div>
                                 <button type="button" wire:click="removeVoucher" style="font-size:0.6875rem; font-weight:800; color:#B91C1C; background:none; border:none; cursor:pointer;">Hapus</button>

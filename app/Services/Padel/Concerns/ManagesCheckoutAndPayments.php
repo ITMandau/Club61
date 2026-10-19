@@ -124,9 +124,17 @@ trait ManagesCheckoutAndPayments
                 $primaryBooking->increment('total_amount', $equipmentTotal);
             }
 
-            // Voucher promo / voucher saldo (VoucherService: aturan sama dengan kasir). Kode tidak valid diabaikan —
-            // halaman checkout sudah memvalidasinya lebih dulu lewat /vouchers/check.
-            $voucherResult = app(\App\Services\Finance\VoucherService::class)->resolve($voucherCode, $user, $courtTotal + $equipmentTotal, lock: true);
+            // Voucher promo / voucher saldo (VoucherService: aturan sama dengan kasir). Kode yang ternyata tidak berlaku saat
+            // bayar (kuota baru habis, benefit member dinyalakan, sudah dipakai akun ini) DITOLAK dengan pesannya — dulu
+            // diabaikan diam-diam sehingga customer ditagih penuh tanpa tahu potongannya hilang.
+            $voucherResult = app(\App\Services\Finance\VoucherService::class)->resolve($voucherCode, $user, $courtTotal + $equipmentTotal, lock: true, context: [
+                'channel' => \App\Models\Pos\Voucher::CHANNEL_ONLINE,
+                'amounts' => ['PADEL' => $courtTotal, 'PADEL_ADDON' => $equipmentTotal],
+                'membership_applied' => (float) $membershipBenefitResult['total_court_discount'] > 0,
+            ]);
+            if ($voucherResult['error']) {
+                throw new HttpException(422, $voucherResult['error']);
+            }
             $this->assertOneVoucherPerTransaction($sponsorBenefitResult, $voucherResult['voucher']);
             $discountAmount = $voucherResult['discount'];
             $appliedVoucherCode = $voucherResult['voucher']?->code;
@@ -1136,7 +1144,11 @@ trait ManagesCheckoutAndPayments
                 }
 
                 // Voucher promo / saldo: di kasir kode yang tidak valid DITOLAK (kasir melihat potongannya di layar).
-                $voucherResult = app(\App\Services\Finance\VoucherService::class)->resolve($voucherCode, $customer, $courtTotal + $equipmentTotal, lock: true);
+                $voucherResult = app(\App\Services\Finance\VoucherService::class)->resolve($voucherCode, $customer, $courtTotal + $equipmentTotal, lock: true, context: [
+                    'channel' => \App\Models\Pos\Voucher::CHANNEL_POS,
+                    'amounts' => ['PADEL' => $courtTotal, 'PADEL_ADDON' => $equipmentTotal],
+                    'membership_applied' => (float) $membershipBenefitResult['total_court_discount'] > 0,
+                ]);
                 if ($voucherResult['error']) {
                     throw new HttpException(422, $voucherResult['error']);
                 }

@@ -170,6 +170,25 @@
                 return parseFloat(this.ticket.sponsor_discount_court) || 0;
             },
 
+            /** Voucher / promo yang memotong order ini (null kalau tidak ada). */
+            get orderVoucher() {
+                return this.ticket && this.ticket.order_voucher ? this.ticket.order_voucher : null;
+            },
+
+            /** Keterangan potongan voucher, mis. "Promo Pembukaan · 20% off court rental (max Rp 50.000)". */
+            voucherDetail(v) {
+                if (!v) return '';
+                if (v.is_credit) return 'Credit voucher';
+                let what = 'Promo';
+                if (v.type === 'PERCENT') {
+                    what = Number(v.value || 0).toLocaleString('id-ID', { maximumFractionDigits: 2 }) + '% off court rental'
+                        + (v.max_discount ? ' (max Rp ' + this.formatNumber(v.max_discount) + ')' : '');
+                } else if (v.type === 'FIXED') {
+                    what = 'Rp ' + this.formatNumber(v.value) + ' off court rental';
+                }
+                return (v.name ? v.name + ' · ' : '') + what;
+            },
+
             get totalSponsorHours() {
                 if (!this.ticket) return 0;
                 if (this.ticket.order_sponsor_hours_consumed !== undefined) return parseFloat(this.ticket.order_sponsor_hours_consumed) || 0;
@@ -945,8 +964,23 @@
             async generateAndSaveTicketPng() {
                 if (!this.currentTicket) return;
 
+                // Rincian bayar: harga normal → potongan → alat → biaya, harus menjumlah ke TOTAL AMOUNT. Sewa lapangan di
+                // order sudah dipotong benefit, jadi harga normalnya dihitung balik (dulu potongannya terpotong dua kali).
+                const sumOrder = this.ticket ? this.ticket.order : null;
+                const voucher = this.orderVoucher;
+                const sumRows = [
+                    ['Padel Court Rental', 'Rp ' + this.formatNumber(this.displayCourtFee + this.totalMemberDiscount + this.totalSponsorDiscount)],
+                    this.totalMemberDiscount > 0 ? ['Membership Discount', '- Rp ' + this.formatNumber(this.totalMemberDiscount)] : null,
+                    this.totalSponsorDiscount > 0 ? ['Corporate Voucher', '- Rp ' + this.formatNumber(this.totalSponsorDiscount)] : null,
+                    ['Equipment Rental (Rackets & Balls)', 'Rp ' + this.formatNumber(this.displayEquipmentFee)],
+                    voucher ? ['Voucher ' + voucher.code + ' — ' + this.voucherDetail(voucher), '- Rp ' + this.formatNumber(voucher.discount)] : null,
+                    ['Tax & Service Fee', 'Rp ' + this.formatNumber(sumOrder ? (parseFloat(sumOrder.tax_amount) || 0) + (parseFloat(sumOrder.service_charge) || 0) : 0)],
+                ].filter(Boolean);
+                const rowGap = 34;
+                const extraH = Math.max(0, sumRows.length - 3) * rowGap;
+
                 const width = 840;
-                const height = 1320;
+                const height = 1320 + extraH;
                 const canvas = document.createElement('canvas');
                 canvas.width = width;
                 canvas.height = height;
@@ -1193,11 +1227,9 @@
                 ctx.font = 'bold 15px sans-serif';
                 ctx.fillText('PAYMENT & FEE SUMMARY', 58, summaryY + 15);
 
-                const sumBoxH = 245;
+                const sumBoxH = 245 + extraH;
                 drawRoundRect(45, summaryY + 28, width - 90, sumBoxH, 16, true, true, '#FFFFFF', '#E6DAC0', 1.5);
 
-                const cFee = this.displayCourtFee;
-                const eFee = this.displayEquipmentFee;
                 const gTotal = this.displayGrandTotal;
 
                 let payMethod = 'QRIS Instant (GoPay/OVO/BCA)';
@@ -1216,7 +1248,7 @@
                 function drawSumRow(y, label, value, isBold = false) {
                     ctx.fillStyle = '#7A5A52';
                     ctx.font = '12px sans-serif';
-                    ctx.fillText(label, 65, y);
+                    ctx.fillText(label, 65, y, 520);
 
                     ctx.fillStyle = isBold ? '#4F2F2A' : '#4F2F2A';
                     ctx.font = isBold ? 'bold 13px sans-serif' : '13px sans-serif';
@@ -1232,33 +1264,27 @@
                     ctx.stroke();
                 }
 
-                // Rincian harus menjumlah ke TOTAL AMOUNT: diskon mengurangi sewa lapangan,
-                // pajak & biaya layanan (per order, dari Pengaturan Biaya & Pajak) ditampilkan terpisah.
-                const discount = this.totalMemberDiscount + this.totalSponsorDiscount;
-                const order = this.ticket ? this.ticket.order : null;
-                const taxAndService = order ? (parseFloat(order.tax_amount) || 0) + (parseFloat(order.service_charge) || 0) : 0;
-
-                drawSumRow(summaryY + 60, discount > 0 ? 'Padel Court Rental (after discount)' : 'Padel Court Rental', 'Rp ' + this.formatNumber(Math.max(0, cFee - discount)), false);
-                drawSumRow(summaryY + 98, 'Equipment Rental (Rackets & Balls)', 'Rp ' + this.formatNumber(eFee), false);
-                drawSumRow(summaryY + 136, 'Tax & Service Fee', 'Rp ' + this.formatNumber(taxAndService), false);
+                // Rincian (sumRows, disusun di atas) — baris tambahan memanjangkan kotak & kanvas sebesar extraH.
+                sumRows.forEach(([label, value], i) => drawSumRow(summaryY + 60 + i * rowGap, label, value, false));
 
                 // Grand Total Highlight Banner
-                drawRoundRect(60, summaryY + 160, width - 120, 68, 12, true, true, '#F7F0DB', '#E6DAC0', 1.5);
+                const bannerY = summaryY + 160 + extraH;
+                drawRoundRect(60, bannerY, width - 120, 68, 12, true, true, '#F7F0DB', '#E6DAC0', 1.5);
                 ctx.fillStyle = '#4F2F2A';
                 ctx.font = 'bold 14px sans-serif';
-                ctx.fillText('TOTAL AMOUNT', 80, summaryY + 192);
+                ctx.fillText('TOTAL AMOUNT', 80, bannerY + 32);
                 ctx.fillStyle = '#7A5A52';
                 ctx.font = '11px sans-serif';
-                ctx.fillText('Paid via ' + payMethod, 80, summaryY + 212);
+                ctx.fillText('Paid via ' + payMethod, 80, bannerY + 52);
 
                 ctx.fillStyle = '#662721';
                 ctx.font = 'bold 22px monospace';
                 ctx.textAlign = 'right';
-                ctx.fillText('Rp ' + this.formatNumber(gTotal), width - 80, summaryY + 202);
+                ctx.fillText('Rp ' + this.formatNumber(gTotal), width - 80, bannerY + 42);
                 ctx.textAlign = 'left';
 
                 // 7. Footer Section
-                const footerY = 1185;
+                const footerY = 1185 + extraH;
                 ctx.strokeStyle = '#E6DAC0';
                 ctx.lineWidth = 1;
                 ctx.beginPath();

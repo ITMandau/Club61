@@ -111,6 +111,7 @@ trait ManagesTicketsAndRefunds
                         'date' => $p->created_at?->toIso8601String(),
                     ])->values());
                 $booking->setAttribute('order_reschedule_forfeited', (float) $orderBookings->sum('reschedule_forfeited_amount'));
+                $booking->setAttribute('order_voucher', $this->orderVoucherInfo($order));
                 $rawMethod = $latestPayment?->payment_method;
                 $methodLabel = $this->formatPaymentMethodLabel($rawMethod, $latestPayment?->payload_log);
 
@@ -149,5 +150,29 @@ trait ManagesTicketsAndRefunds
         ] : null);
 
         return $booking;
+    }
+
+    /**
+     * Voucher yang memotong order ini, untuk rincian invoice. Potongan diambil dari order (nilai saat bayar); jenis &
+     * besaran potongan dari voucher — keduanya dikunci setelah promo dipakai (PromoVoucherService), jadi tetap cocok.
+     */
+    protected function orderVoucherInfo(Order $order): ?array
+    {
+        if (! $order->voucher_code || (float) $order->discount_amount <= 0) {
+            return null;
+        }
+
+        $voucher = \App\Models\Pos\Voucher::where('code', $order->voucher_code)->first();
+        $isCredit = (bool) $voucher?->isCredit();
+
+        return [
+            'code' => $order->voucher_code,
+            'discount' => (float) $order->discount_amount,
+            'is_credit' => $isCredit,
+            'name' => $voucher && ! $isCredit ? $voucher->name : null,
+            'type' => $isCredit ? null : $voucher?->discount_type,
+            'value' => $voucher && ! $isCredit ? (float) $voucher->discount_value : null,
+            'max_discount' => $voucher && ! $isCredit && $voucher->max_discount_amount !== null ? (float) $voucher->max_discount_amount : null,
+        ];
     }
 }

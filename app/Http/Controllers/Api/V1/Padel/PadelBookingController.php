@@ -329,9 +329,19 @@ class PadelBookingController extends Controller
         $validated = $request->validate([
             'code' => ['required', 'string', 'max:30'],
             'amount' => ['required', 'numeric', 'min:0', 'max:1000000000'],
+            // Rincian untuk promo (hanya memotong sewa lapangan) — hanya tampilan; checkout menghitung ulang di server.
+            'court_amount' => ['nullable', 'numeric', 'min:0', 'max:1000000000'],
+            'addon_amount' => ['nullable', 'numeric', 'min:0', 'max:1000000000'],
+            'membership_applied' => ['nullable', 'boolean'],
         ]);
 
-        $result = app(\App\Services\Finance\VoucherService::class)->resolve($validated['code'], $request->user(), (float) $validated['amount']);
+        $amount = (float) $validated['amount'];
+        $court = isset($validated['court_amount']) ? (float) $validated['court_amount'] : $amount;
+        $result = app(\App\Services\Finance\VoucherService::class)->resolve($validated['code'], $request->user(), $amount, context: [
+            'channel' => \App\Models\Pos\Voucher::CHANNEL_ONLINE,
+            'amounts' => ['PADEL' => $court, 'PADEL_ADDON' => (float) ($validated['addon_amount'] ?? max(0, $amount - $court))],
+            'membership_applied' => (bool) ($validated['membership_applied'] ?? false),
+        ]);
         if ($result['error']) {
             return response()->json(['success' => false, 'message' => $result['error']], 422);
         }
@@ -347,6 +357,11 @@ class PadelBookingController extends Controller
                 'value' => (float) $voucher->discount_value,
                 'max_discount' => $voucher->max_discount_amount !== null ? (float) $voucher->max_discount_amount : null,
                 'min_order' => (float) $voucher->min_order_amount,
+                'stack_with_membership' => (bool) $voucher->stack_with_membership,
+                // Rincian aturan yang ditampilkan di checkout (teks dirangkai di halaman).
+                'name' => $voucher->isCredit() ? null : $voucher->name,
+                'channel' => $voucher->channel,
+                'valid_until' => $voucher->valid_until?->timezone(\App\Services\Finance\LedgerReport::TIMEZONE)->format('d M Y'),
                 'available_balance' => $voucher->isCredit() ? app(\App\Services\Finance\VoucherService::class)->availableBalance($voucher) : null,
             ],
         ]);
