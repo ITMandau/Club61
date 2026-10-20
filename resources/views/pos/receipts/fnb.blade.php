@@ -8,7 +8,7 @@
         'BCA_QRIS' => 'QRIS BCA Frontdesk', 'MANDIRI_QRIS' => 'QRIS Bank Mandiri',
         'GOPAY' => 'GoPay / Midtrans QRIS', 'GOPAY_QRIS' => 'GoPay / Midtrans QRIS',
         'OVO' => 'OVO', 'SHOPEEPAY' => 'ShopeePay', 'DANA' => 'DANA',
-        'LIVIN' => 'Livin Mandiri', 'LAINNYA' => 'QRIS Lainnya / Bank Lain', 'MIDTRANS_QRIS' => 'QRIS Otomatis (Kasir)',
+        'LIVIN' => 'Livin Mandiri', 'LAINNYA' => 'QRIS Lainnya / Bank Lain', 'MIDTRANS_QRIS' => 'QRIS Otomatis (Kasir)', 'DOKU_QRIS' => 'QRIS Otomatis (Kasir)',
     ];
 @endphp
 <div data-print-slip id="fnbpos-receipt" class="w-full bg-white rounded-2xl border-2 border-[#D4AF37] p-4 font-mono text-xs space-y-2">

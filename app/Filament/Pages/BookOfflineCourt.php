@@ -170,7 +170,7 @@ class BookOfflineCourt extends Page
         $this->initializeEquipmentQuantities();
         $this->checkPendingDraft();
         // Bayar Otomatis yang masih menunggu (halaman sempat di-refresh / tertutup) → popup dilanjutkan.
-        $this->pendingQris = app(\App\Services\Pos\PosMidtransQrisService::class)->resumeFor('PADEL_FRONTDESK', 'WALK_IN_OFFLINE', auth()->id());
+        $this->pendingQris = app(\App\Services\Pos\PosAutoPayment::class)->resumeFor('PADEL_FRONTDESK', 'WALK_IN_OFFLINE', auth()->id());
 
         if ($this->settleRequest) {
             $this->startSettlement($this->settleRequest);
@@ -1939,15 +1939,15 @@ class BookOfflineCourt extends Page
             return;
         }
 
-        $status = app(\App\Services\Pos\PosMidtransQrisService::class)->status($payment->id);
+        $status = app(\App\Services\Pos\PosAutoPayment::class)->status($payment->id);
 
-        if ($status === \App\Services\Pos\PosMidtransQrisService::PAID) {
+        if ($status === \App\Services\Pos\PosAutoPayment::PAID) {
             $this->completePendingQris($payment->fresh());
-        } elseif ($status !== \App\Services\Pos\PosMidtransQrisService::PENDING) {
+        } elseif ($status !== \App\Services\Pos\PosAutoPayment::PENDING) {
             $this->pendingQris = null;
             $this->posStep = 'selection';
             Notification::make()
-                ->title($status === \App\Services\Pos\PosMidtransQrisService::EXPIRED ? 'QR Kedaluwarsa' : 'QR Dibatalkan')
+                ->title($status === \App\Services\Pos\PosAutoPayment::EXPIRED ? 'QR Kedaluwarsa' : 'QR Dibatalkan')
                 ->body('Pembayaran QRIS tidak diterima. Pesanan dibatalkan dan slot lapangan dilepas.')
                 ->warning()
                 ->send();
@@ -1964,11 +1964,16 @@ class BookOfflineCourt extends Page
             return;
         }
 
-        $status = app(\App\Services\Pos\PosMidtransQrisService::class)->cancel($payment->id);
+        $status = app(\App\Services\Pos\PosAutoPayment::class)->cancel($payment->id);
 
-        if ($status === \App\Services\Pos\PosMidtransQrisService::PAID) {
+        if ($status === \App\Services\Pos\PosAutoPayment::PAID) {
             // Customer ternyata sudah bayar tepat sebelum dibatalkan — uang sudah masuk, transaksi diteruskan.
             $this->completePendingQris($payment->fresh());
+
+            return;
+        }
+        if ($status === \App\Services\Pos\PosAutoPayment::PENDING) {
+            Notification::make()->title('QR Belum Bisa Dibatalkan')->body(\App\Services\Pos\PosAutoPayment::cannotCancelYetMessage())->warning()->send();
 
             return;
         }
@@ -1984,7 +1989,7 @@ class BookOfflineCourt extends Page
         $payment = $this->pendingQrisPayment();
         abort_unless($payment && ($this->pendingQris['is_mock'] ?? false) && ! app()->environment('production'), 403);
 
-        app(\App\Services\Pos\PosMidtransQrisService::class)->simulatePaid($payment->id);
+        app(\App\Services\Pos\PosAutoPayment::class)->simulatePaid($payment->id);
         $this->pollPendingQris();
     }
 

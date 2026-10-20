@@ -377,6 +377,20 @@ Full suite 877 lulus (854 lama + 23 `tests/Feature/Payment/DokuGatewayTest.php`)
 - **VA BTN, BNC & BPD (BJB) dikeluarkan dari daftar kanal DOKU** — Cancel API DOKU tidak mendukungnya, sesi lama tidak bisa ditutup saat ganti metode.
 - **Tanda tangan respons DOKU tidak diverifikasi** — dokumentasi tidak memberi rumus yang bisa diuji; kepercayaan pada respons = TLS ke `api(-sandbox).doku.com` + pencocokan invoice & nominal.
 
+### 15d. Hasil Tahap 3 — QR kasir lewat DOKU (19 Okt 2026, draft belum di-commit)
+
+| Hal | Hasil |
+| :--- | :--- |
+| Cara tampil (§9.1) | **Opsi A, versi resmi.** Dokumentasi DOKU Checkout (Frontend Integration) punya mode pop-up: `jokul-checkout-1.0.0.js` + `loadJokulCheckout(payment.url)`. Isi script itu (dicek 19 Okt): membuat `<iframe src="{payment.url}?view=iframe">` di modal + menutup modal saat DOKU mengirim pesan `closeJokul`. Header halaman DOKU sandbox: `x-frame-options: ALLOW-FROM sandbox.doku.com` (tidak dikenali Chrome, tanpa CSP). SNAP (opsi B) tidak diperlukan. |
+| Keamanan | Script DOKU **tidak** dimuat di halaman admin (menimpa `window.onclick`, menyusun HTML dari URL lewat `innerHTML`, modal menumpuk & tidak pernah dihapus, dan berjalan dengan akses penuh ke sesi kasir). Kasir memakai iframe sendiri dengan URL yang sama (`DokuCheckoutService::popupUrl`, hanya https *.doku.com), `sandbox` **tanpa** `allow-top-navigation` (halaman DOKU tidak bisa memindahkan layar kasir), dan sesi `auto_redirect=false`. Lunas hanya dari webhook bertanda tangan / API status (jalur online yang sama, nominal dicocokkan), bukan dari iframe. |
+| File | `Doku/DokuPosQrisService.php`, `pos/partials/doku-qris-modal.blade.php`; pemilih gateway kasir `Pos/PosAutoPayment.php` (dipakai POS Walk-In, Jual Membership, F&B, `pos:sweep-auto-payments`); pembatalan order bersama `Pos/PosPendingOrderCanceller.php` (dipindah dari `PosMidtransQrisService`, perilaku Midtrans sama). |
+| Batal | Urutan: cek DOKU (sudah bayar → transaksi diteruskan) → sesi DOKU dibatalkan & dibuktikan tertutup → baru order batal. Kasir menekan Batalkan tapi DOKU belum bisa memastikan tertutup (mis. Order Cancellation belum aktif) → ditolak, QR tetap tampil. Kedaluwarsa → tetap dibatalkan (uang terlambat = pembayaran ganda + refund PENDING). |
+| Rekap shift | Provider `DOKU_QRIS` → baris "QRIS Otomatis DOKU (Kasir)", sumber "Dashboard pembayaran online". |
+| Pengaturan | Gateway QR kasir = DOKU bisa dipilih kalau DOKU aktif & kunci terisi; ditolak kalau belum ada metode "Tampil di Kasir" berkanal gateway itu. |
+| Test | `tests/Feature/Pos/DokuQrisPosTest.php` (7). |
+
+**Wajib dicek sebelum dipakai di production (Tahap 3):** QR tampil di iframe di tablet kasir (sandbox, lalu production — header `x-frame-options` production belum dicek); tombol di dalam halaman DOKU (salin / unduh QR) jalan di dalam sandbox iframe; fitur Order Cancellation aktif (tanpa itu kasir tidak bisa membatalkan QR DOKU sebelum kedaluwarsa).
+
 **Wajib dibuktikan di sandbox sebelum production** (§15): status API untuk order yang dibatalkan (kode menganggap tertutup hanya kalau `transaction.status` EXPIRED / `order.status` ORDER_EXPIRED — kalau DOKU melaporkan status lain, ganti metode akan selalu ditolak 503 dan perlu disesuaikan); jawaban API status untuk invoice tidak dikenal (diasumsikan HTTP 404); isi notifikasi QRIS & tiap VA; perilaku `override_notification_url`; tanda tangan lewat Nginx sandbox.
 
 ---

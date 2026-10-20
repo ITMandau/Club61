@@ -112,7 +112,7 @@ class FnbCashierTerminal extends Component
         abort_unless(auth()->user() && auth()->user()->isStaff() && auth()->user()->can('access_pos_terminal'), 403, 'Akses Ditolak: Hanya staf kasir atau admin yang dapat mengakses terminal POS.');
 
         // Bayar Otomatis yang masih menunggu (halaman sempat di-refresh / tertutup) → popup dilanjutkan.
-        $this->pendingQris = app(\App\Services\Pos\PosMidtransQrisService::class)->resumeFor(self::COUNTER, 'FNB_POS', auth()->id());
+        $this->pendingQris = app(\App\Services\Pos\PosAutoPayment::class)->resumeFor(self::COUNTER, 'FNB_POS', auth()->id());
     }
 
     public function getCategoriesProperty()
@@ -761,14 +761,14 @@ class FnbCashierTerminal extends Component
             return;
         }
 
-        $status = app(\App\Services\Pos\PosMidtransQrisService::class)->status($payment->id);
+        $status = app(\App\Services\Pos\PosAutoPayment::class)->status($payment->id);
 
-        if ($status === \App\Services\Pos\PosMidtransQrisService::PAID) {
+        if ($status === \App\Services\Pos\PosAutoPayment::PAID) {
             $this->completePendingQris($payment);
-        } elseif ($status !== \App\Services\Pos\PosMidtransQrisService::PENDING) {
+        } elseif ($status !== \App\Services\Pos\PosAutoPayment::PENDING) {
             $this->pendingQris = null;
             $this->posStep = 'selection';
-            $this->errorMessage = $status === \App\Services\Pos\PosMidtransQrisService::EXPIRED
+            $this->errorMessage = $status === \App\Services\Pos\PosAutoPayment::EXPIRED
                 ? 'QR kedaluwarsa — pembayaran tidak diterima, pesanan dibatalkan.'
                 : 'QR dibatalkan — pesanan dibatalkan.';
         }
@@ -784,9 +784,15 @@ class FnbCashierTerminal extends Component
             return;
         }
 
-        if (app(\App\Services\Pos\PosMidtransQrisService::class)->cancel($payment->id) === \App\Services\Pos\PosMidtransQrisService::PAID) {
+        $status = app(\App\Services\Pos\PosAutoPayment::class)->cancel($payment->id);
+        if ($status === \App\Services\Pos\PosAutoPayment::PAID) {
             // Customer ternyata sudah bayar tepat sebelum dibatalkan — uang sudah masuk, transaksi diteruskan.
             $this->completePendingQris($payment);
+
+            return;
+        }
+        if ($status === \App\Services\Pos\PosAutoPayment::PENDING) {
+            $this->errorMessage = \App\Services\Pos\PosAutoPayment::cannotCancelYetMessage();
 
             return;
         }
@@ -801,7 +807,7 @@ class FnbCashierTerminal extends Component
         $payment = $this->pendingQrisPayment();
         abort_unless($payment && ($this->pendingQris['is_mock'] ?? false) && ! app()->environment('production'), 403);
 
-        app(\App\Services\Pos\PosMidtransQrisService::class)->simulatePaid($payment->id);
+        app(\App\Services\Pos\PosAutoPayment::class)->simulatePaid($payment->id);
         $this->pollPendingQris();
     }
 

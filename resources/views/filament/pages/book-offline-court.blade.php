@@ -931,7 +931,7 @@
     @endif
 
     {{-- QR Midtrans menunggu dibayar customer --}}
-    @include('pos.partials.midtrans-qris-modal', ['pendingQris' => $pendingQris, 'pollAction' => 'pollPendingQris', 'cancelAction' => 'cancelPendingQris', 'simulateAction' => 'simulatePendingQrisPaid'])
+    @include('pos.partials.auto-pay-modal', ['pendingQris' => $pendingQris, 'pollAction' => 'pollPendingQris', 'cancelAction' => 'cancelPendingQris', 'simulateAction' => 'simulatePendingQrisPaid'])
 
     {{-- ============================
      MODAL SUKSES – STRUK POS

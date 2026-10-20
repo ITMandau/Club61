@@ -72,6 +72,8 @@ class PosCashierShift extends Model
         'GOPAY_QRIS' => 'GoPay / Midtrans QRIS',
         // QR dinamis dari layar kasir — uangnya masuk saldo Midtrans, dicek di dashboard Midtrans.
         'MIDTRANS_QRIS' => 'QRIS Otomatis (Kasir)',
+        // Sama, lewat DOKU — uangnya masuk saldo DOKU, dicek di dashboard DOKU.
+        'DOKU_QRIS' => 'QRIS Otomatis DOKU (Kasir)',
         'OVO' => 'OVO',
         'SHOPEEPAY' => 'ShopeePay',
         'DANA' => 'DANA',
@@ -107,7 +109,7 @@ class PosCashierShift extends Model
                 $provider = strtoupper((string) ($log['qris_details']['provider'] ?? $log['qris_provider'] ?? 'LAINNYA'));
                 $key = 'QRIS_'.$provider;
                 $label = 'QRIS — '.(self::QRIS_PROVIDER_LABELS[$provider] ?? $provider);
-                $source = $provider === 'MIDTRANS_QRIS' ? 'Dashboard pembayaran online' : 'Mutasi / dashboard QRIS';
+                $source = in_array($provider, ['MIDTRANS_QRIS', 'DOKU_QRIS'], true) ? 'Dashboard pembayaran online' : 'Mutasi / dashboard QRIS';
             } elseif (in_array($method, ['DEBIT_CARD', 'CREDIT_CARD', 'DEBIT', 'CREDIT', 'EDC_BCA', 'EDC_MANDIRI'], true)) {
                 $edc = $log['edc_details'] ?? $log;
                 $terminal = strtoupper((string) ($edc['terminal'] ?? (in_array($method, ['EDC_BCA', 'EDC_MANDIRI'], true) ? $method : 'EDC_LAINNYA')));

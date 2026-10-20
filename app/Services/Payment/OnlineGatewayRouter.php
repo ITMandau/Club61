@@ -51,8 +51,8 @@ class OnlineGatewayRouter
     /** Gateway yang integrasi pembayaran online customer-nya sudah ada di aplikasi. */
     private const INSTALLED = [self::MIDTRANS, self::DOKU];
 
-    /** Gateway yang integrasi QR otomatis kasirnya sudah ada (DOKU kasir = Modul 27 Tahap 3). */
-    private const POS_INSTALLED = [self::MIDTRANS];
+    /** Gateway yang integrasi QR otomatis kasirnya sudah ada (DOKU kasir = Modul 27 Tahap 3, DokuPosQrisService). */
+    private const POS_INSTALLED = [self::MIDTRANS, self::DOKU];
 
     /** @return array<string, string> */
     public static function labels(): array

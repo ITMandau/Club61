@@ -531,6 +531,16 @@ class MetodePembayaranOnline extends Page implements HasTable
             return;
         }
 
+        // QR kasir lewat gateway yang tidak punya metode "Tampil di Kasir" = tombol Bayar Otomatis hilang diam-diam.
+        $posMethods = array_filter(app(OnlinePaymentMethodService::class)->available(null, $pos), fn (array $m) => $m['show_at_pos'] ?? false);
+        if ($posMethods === []) {
+            Notification::make()->title('Tidak Ada Metode Kasir')
+                ->body('Belum ada metode aktif "Tampil di Kasir" yang punya kanal '.OnlineGatewayRouter::label($pos).'. Aktifkan metodenya dulu (mis. QRIS), supaya Bayar Otomatis di kasir tetap bisa dipakai.')
+                ->danger()->persistent()->send();
+
+            return;
+        }
+
         DB::transaction(function () use ($online, $pos) {
             $setting = PaymentGatewaySetting::query()->lockForUpdate()->first() ?? new PaymentGatewaySetting();
             $setting->fill(['online_gateway' => $online, 'pos_qris_gateway' => $pos])->save();

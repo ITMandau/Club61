@@ -132,7 +132,7 @@ class FnbPosService
                 return [
                     'order' => $order->fresh(['items', 'payments']),
                     'finance' => $finance,
-                    'pending_qris' => app(\App\Services\Pos\PosMidtransQrisService::class)->open($order, 'FNB_COUNTER', $cashier, $payloadLog, (string) ($paymentMeta['pos_online_method'] ?? 'QRIS')),
+                    'pending_qris' => app(\App\Services\Pos\PosAutoPayment::class)->open($order, 'FNB_COUNTER', $cashier, $payloadLog, (string) ($paymentMeta['pos_online_method'] ?? 'QRIS')),
                 ];
             }
 

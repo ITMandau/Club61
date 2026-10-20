@@ -1284,7 +1284,7 @@ trait ManagesCheckoutAndPayments
                     $payloadLog['payment_method'] = 'QRIS';
                     $payloadLog['auto_check_in'] = $autoCheckIn;
 
-                    $pending = app(\App\Services\Pos\PosMidtransQrisService::class)->open($order, 'PADEL_FRONTDESK', $cashier, $payloadLog, (string) ($paymentMeta['pos_online_method'] ?? 'QRIS'));
+                    $pending = app(\App\Services\Pos\PosAutoPayment::class)->open($order, 'PADEL_FRONTDESK', $cashier, $payloadLog, (string) ($paymentMeta['pos_online_method'] ?? 'QRIS'));
 
                     return [
                         'success' => true,

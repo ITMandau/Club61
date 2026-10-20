@@ -618,13 +618,13 @@ class DokuGatewayTest extends TestCase
             && str_contains($r->data()['order']['callback_url'], 'membership_id='));
     }
 
-    public function test_cashier_qr_gateway_cannot_be_doku_yet(): void
+    public function test_cashier_qr_gateway_can_be_doku(): void
     {
         PaymentGatewaySetting::query()->update(['pos_qris_gateway' => 'DOKU']);
         app(OnlineGatewayRouter::class)->flush();
 
-        $this->assertSame('MIDTRANS', app(OnlineGatewayRouter::class)->posQrisGateway());
-        $this->assertSame('DOKU', app(OnlineGatewayRouter::class)->onlineGateway());
-        $this->assertStringContainsString('belum terpasang', (string) app(OnlineGatewayRouter::class)->unavailableReason('DOKU', forPos: true));
+        // Tahap 3: QR kasir lewat DOKU terpasang (alurnya di Tests\Feature\Pos\DokuQrisPosTest).
+        $this->assertSame('DOKU', app(OnlineGatewayRouter::class)->posQrisGateway());
+        $this->assertNull(app(OnlineGatewayRouter::class)->unavailableReason('DOKU', forPos: true));
     }
 }

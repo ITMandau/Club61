@@ -73,7 +73,7 @@ class DokuCheckoutService
      * Bikin tagihan DOKU Checkout. Fail-closed: gagal apa pun dilempar (transaksi checkout di-rollback), tidak pernah
      * dianggap lunas.
      *
-     * @param  array{invoice: string, amount: int, channels: array<int, string>, items: array<int, array{id?: string, name: string, price: int, quantity: int}>, customer: array{name?: ?string, email?: ?string, phone?: ?string}, due_minutes: int, callback_url: string}  $params
+     * @param  array{invoice: string, amount: int, channels: array<int, string>, items: array<int, array{id?: string, name: string, price: int, quantity: int}>, customer: array{name?: ?string, email?: ?string, phone?: ?string}, due_minutes: int, callback_url: string, auto_redirect?: bool}  $params
      * @return array{session_id: string, payment_url: string, token_id: ?string, request_id: string, expires_at: CarbonInterface}
      */
     public function createSession(array $params): array
@@ -118,7 +118,9 @@ class DokuCheckoutService
                 'currency' => 'IDR',
                 'callback_url' => $params['callback_url'],
                 'callback_url_cancel' => $params['callback_url'],
-                'auto_redirect' => true,
+                // Kasir (halaman DOKU di dalam kartu kasir): tidak dialihkan otomatis — layar kasir menutup kartu sendiri
+                // begitu lunas terkonfirmasi.
+                'auto_redirect' => (bool) ($params['auto_redirect'] ?? true),
                 'line_items' => $items,
             ],
             'payment' => [
@@ -266,6 +268,20 @@ class DokuCheckoutService
 
         return ($parts['scheme'] ?? null) === 'https'
             && ($host === 'doku.com' || str_ends_with($host, '.doku.com'));
+    }
+
+    /**
+     * URL halaman bayar mode pop-up resmi DOKU Checkout: jokul-checkout-1.0.0.js memuat `payment.url` + "?view=iframe"
+     * di dalam iframe. Dipakai kasir dengan iframe kita sendiri (tanpa memuat script DOKU di halaman admin). Null kalau
+     * URL bukan halaman DOKU https.
+     */
+    public static function popupUrl(?string $paymentUrl): ?string
+    {
+        if (! is_string($paymentUrl) || ! self::isDokuUrl($paymentUrl)) {
+            return null;
+        }
+
+        return $paymentUrl.(str_contains($paymentUrl, '?') ? '&' : '?').'view=iframe';
     }
 
     /** expired_date DOKU: yyyyMMddHHmmss, waktu WIB (UTC+7). */
