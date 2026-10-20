@@ -55,8 +55,14 @@ class DokuGatewayTest extends TestCase
     /** Request batal yang diterima DOKU palsu. */
     protected array $cancelled = [];
 
-    /** Batal dikabulkan (status jadi EXPIRED) atau diabaikan (status tetap PENDING). */
+    /** Batal dikabulkan (status jadi EXPIRED) atau ditolak DOKU (mis. Order Cancellation belum aktif). */
     protected bool $cancelWorks = true;
+
+    /** Batal dikabulkan tapi API status masih menjawab PENDING sesaat (perilaku sandbox DOKU). */
+    protected bool $cancelLags = false;
+
+    /** Isi "message" jawaban batal DOKU palsu. */
+    protected mixed $cancelMessage = 'SUCCESS';
 
     /** URL halaman bayar yang dijawab DOKU palsu. */
     protected string $checkoutUrl = 'https://sandbox.doku.com/checkout/link/TESTLINK';
@@ -104,11 +110,14 @@ class DokuGatewayTest extends TestCase
 
             if ($path === DokuCheckoutService::CANCEL_PATH) {
                 $this->cancelled[] = $request->data();
-                if ($this->cancelWorks) {
+                if (! $this->cancelWorks) {
+                    return Http::response(['message' => ['Order cancellation is not allowed']], 400);
+                }
+                if (! $this->cancelLags) {
                     $this->statuses[$request->data()['order']['invoice_number']] = 'EXPIRED';
                 }
 
-                return Http::response(['message' => ['SUCCESS']]);
+                return Http::response(['message' => $this->cancelMessage]);
             }
 
             return Http::response([], 404);
@@ -272,11 +281,23 @@ class DokuGatewayTest extends TestCase
         $this->checkoutHttp = 500;
         $this->padelCheckout('BCA_VA')->assertStatus(503);
 
+        // Kanal ditolak DOKU (mis. VA BCA belum aktif untuk akun ini) → customer diminta pilih metode lain, bukan
+        // "gateway tidak bisa dihubungi". Kunci / tanda tangan ditolak (401) → tetap 503 (masalah pengaturan server).
+        $this->checkoutHttp = 400;
+        $this->padelCheckout('BCA_VA', '14:00')->assertStatus(422)->assertJsonPath('message', fn ($m) => str_contains($m, 'pilih metode pembayaran lain'));
+        $this->checkoutHttp = 401;
+        $this->padelCheckout('BCA_VA', '16:00')->assertStatus(503);
+
         $this->checkoutHttp = 200;
         $this->checkoutUrl = 'https://evil.example.com/pay';
         $this->padelCheckout('BCA_VA', '12:00')->assertStatus(503);
 
         $this->assertSame(0, Payment::count(), 'Tidak ada tagihan tanpa sesi DOKU yang sah');
+
+        // Log penolakan: hanya kunci error, data customer tidak ikut tercatat.
+        $detail = \App\Services\Payment\Doku\DokuClient::errorDetail(['message' => ['Channel not available'], 'customer' => ['email' => 'budi@example.test']]);
+        $this->assertSame(['message' => ['Channel not available']], $detail);
+        $this->assertSame('Bad Gateway', \App\Services\Payment\Doku\DokuClient::errorDetail(null, '<html><body><h1>Bad Gateway</h1></body></html>'));
         $this->assertSame(0, PadelBooking::where('status', 'PENDING_PAYMENT')->count());
         $this->assertSame(0, PadelBooking::where('status', 'PAID')->count());
     }
@@ -459,6 +480,31 @@ class DokuGatewayTest extends TestCase
 
         $bill = $this->bill($checkout->json('data.order_id'));
         $this->assertCount(1, DokuSessionGuard::sessionsOf($bill), 'Tidak ada sesi kedua selama sesi lama masih bisa dibayar');
+    }
+
+    public function test_accepted_cancellation_closes_the_session_even_while_the_status_api_still_says_pending(): void
+    {
+        $checkout = $this->padelCheckout('BCA_VA')->assertOk();
+        $first = $this->bill($checkout->json('data.order_id'))->transaction_id;
+        $this->cancelLags = true; // sandbox DOKU 20 Okt 2026: batal "SUCCESS", status tetap PENDING
+
+        $switch = $this->retry($checkout->json('data.booking_id'), 'MANDIRI_VA')->assertOk();
+
+        $bill = $this->bill($checkout->json('data.order_id'));
+        $this->assertSame($first, $this->cancelled[0]['order']['invoice_number']);
+        $this->assertSame('CLOSED', DokuSessionGuard::session($bill, $first)['status']);
+        $this->assertSame('ACTIVE', DokuSessionGuard::session($bill, $switch->json('suffixed_order_id'))['status']);
+    }
+
+    public function test_cancellation_answer_without_success_message_does_not_count_as_closed(): void
+    {
+        $checkout = $this->padelCheckout('BCA_VA')->assertOk();
+        $this->cancelLags = true;
+        $this->cancelMessage = ['PROCESSING'];
+
+        $this->retry($checkout->json('data.booking_id'), 'MANDIRI_VA')->assertStatus(503);
+
+        $this->assertCount(1, DokuSessionGuard::sessionsOf($this->bill($checkout->json('data.order_id'))));
     }
 
     public function test_old_session_already_paid_settles_instead_of_opening_a_new_one(): void

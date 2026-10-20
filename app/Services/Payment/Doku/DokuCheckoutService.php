@@ -45,9 +45,10 @@ class DokuCheckoutService
 
     public function __construct(protected DokuClient $client) {}
 
+    /** Kunci DOKU Checkout ATAU DOKU SNAP terisi (rekonsiliasi & pilihan gateway; createSession mengecek kuncinya sendiri). */
     public function isConfigured(): bool
     {
-        return $this->client->isConfigured();
+        return $this->client->isConfigured() || app(Snap\DokuSnapClient::class)->isConfigured();
     }
 
     /**
@@ -146,8 +147,17 @@ class DokuCheckoutService
         if (! $response || ! in_array($response['status'], [200, 409], true) || ! is_string($paymentUrl) || ! self::isDokuUrl($paymentUrl)) {
             DokuClient::alert("DOKU Checkout gagal membuat tagihan [{$invoice}]", [
                 'http' => $response['status'] ?? null,
-                'error_messages' => $response['json']['error_messages'] ?? $response['json']['error'] ?? null,
+                'kanal' => $channels,
+                'error' => $response['error'] ?? null,
             ]);
+
+            // DOKU menolak ISI tagihan (mis. kanal VA ini belum aktif untuk akun kita / nominal di luar batas kanal):
+            // customer bisa memilih metode lain. Kunci / tanda tangan / server DOKU bermasalah → tetap 503.
+            $status = (int) ($response['status'] ?? 0);
+            if ($status >= 400 && $status < 500 && ! DokuClient::isCredentialError($status, $response['error'] ?? null)) {
+                throw new \Symfony\Component\HttpKernel\Exception\HttpException(422, 'Metode pembayaran ini sedang tidak bisa dipakai. Belum ada tagihan yang dibuat — silakan pilih metode pembayaran lain.');
+            }
+
             throw new PaymentGatewayUnavailableException();
         }
 
@@ -170,6 +180,9 @@ class DokuCheckoutService
      */
     public function state(string $invoice, ?CarbonInterface $expiresAt = null): array
     {
+        if ($snap = self::snapSession($invoice)) {
+            return app(Snap\DokuSnapService::class)->state($invoice, $snap);
+        }
         if (! $this->client->isConfigured()) {
             return ['state' => self::ERROR, 'data' => null];
         }
@@ -221,6 +234,10 @@ class DokuCheckoutService
      */
     public function close(string $invoice, ?string $originalRequestId, ?CarbonInterface $expiresAt = null): array
     {
+        if ($snap = self::snapSession($invoice)) {
+            return app(Snap\DokuSnapService::class)->close($invoice, $snap);
+        }
+
         $before = $this->state($invoice, $expiresAt);
         $early = $this->closeResult($before);
         if ($early !== null) {
@@ -236,6 +253,12 @@ class DokuCheckoutService
 
         $after = $this->state($invoice, $expiresAt);
         $result = $this->closeResult($after);
+        // Dokumentasi DOKU: order yang berhasil dibatalkan langsung tidak bisa dibayar lagi, tapi API status masih
+        // menjawab PENDING beberapa saat (terlihat di sandbox 20 Okt 2026). Pembatalan diterima + status bukan lunas
+        // = tertutup (sama dengan DokuSnapService::close). Pembatalan untuk tagihan yang sudah dibayar ditolak DOKU.
+        if ($result === null && $after['state'] === self::PENDING && self::cancelAccepted($cancel)) {
+            $result = self::CLOSED;
+        }
         if ($result !== null) {
             return ['result' => $result, 'data' => $after['data']];
         }
@@ -248,9 +271,25 @@ class DokuCheckoutService
         return ['result' => 'FAILED', 'data' => $after['data']];
     }
 
+    /** DOKU menerima pembatalan: HTTP 2xx dan message "SUCCESS" (string atau daftar). Bentuk lain = belum terbukti. */
+    private static function cancelAccepted(?array $cancel): bool
+    {
+        if ($cancel === null || $cancel['status'] < 200 || $cancel['status'] >= 300) {
+            return false;
+        }
+
+        $messages = array_filter((array) ($cancel['json']['message'] ?? []), 'is_string');
+
+        return in_array('SUCCESS', array_map(fn (string $m) => strtoupper(trim($m)), $messages), true);
+    }
+
     /** Membatalkan tanpa menunggu bukti (best-effort, mis. setelah tagihan lunas lewat kasir). */
     public function cancel(string $invoice, string $originalRequestId): bool
     {
+        if ($snap = self::snapSession($invoice)) {
+            return app(Snap\DokuSnapService::class)->cancel($invoice, $snap);
+        }
+
         $response = $this->client->post(self::CANCEL_PATH, [
             'order' => ['invoice_number' => $invoice],
             'payment' => ['original_request_id' => $originalRequestId],
@@ -258,6 +297,19 @@ class DokuCheckoutService
         ]);
 
         return $response !== null && $response['status'] >= 200 && $response['status'] < 300;
+    }
+
+    /**
+     * Catatan sesi kalau invoice ini sesi DOKU SNAP (Modul 27b) — dicari dari tagihan pemiliknya (DokuSessionGuard).
+     * Sesi SNAP diteruskan ke DokuSnapService, sehingga pemanggil (rekonsiliasi, webhook, ganti metode, kasir) tidak
+     * perlu tahu sesi itu dibuat lewat Checkout atau SNAP.
+     */
+    public static function snapSession(string $invoice): ?array
+    {
+        $bill = DokuSessionGuard::findBill($invoice);
+        $session = $bill ? DokuSessionGuard::session($bill, $invoice) : null;
+
+        return Snap\DokuSnapService::isSnapSession($session) ? $session : null;
     }
 
     /** URL halaman bayar yang boleh diberikan ke customer: https + domain doku.com. */

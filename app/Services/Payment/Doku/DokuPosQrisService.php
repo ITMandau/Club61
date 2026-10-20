@@ -24,6 +24,9 @@ use Symfony\Component\HttpKernel\Exception\HttpException;
  * halaman admin (script itu menimpa window.onclick, menyusun HTML dari URL lewat innerHTML, dan berjalan dengan akses
  * penuh ke sesi kasir). Iframe diberi sandbox tanpa allow-top-navigation: halaman DOKU tidak bisa memindahkan layar kasir.
  *
+ * DOKU SNAP aktif (Modul 27b) untuk QRIS / VA BCA → tanpa halaman DOKU sama sekali: QR / nomor VA digambar langsung
+ * di kartu kasir (present()['snap']).
+ *
  * Tagihan: order UNPAID + tagihan PENDING gateway DOKU yang terikat shift kasir (pos_shift_id). Sesi dicatat dengan
  * format DokuSessionGuard, jadi webhook DOKU, rekonsiliasi, dan pembayaran ganda memakai jalur online yang sudah ada.
  * Pelunasan lewat PaymentOrchestratorService (pos_shift_id tidak ditimpa → uang masuk rekap shift kasir penerima).
@@ -71,17 +74,33 @@ class DokuPosQrisService
 
         $gross = (int) round($amount);
         $invoice = DokuCheckoutService::newInvoiceNumber($order->order_number);
+        $customer = array_filter([
+            'name' => $order->user?->name ?? $order->customer_name,
+            'email' => $order->user?->email,
+            'phone' => $order->user?->phone,
+        ]);
+
+        // Modul 27b: QRIS / VA BCA lewat DOKU SNAP — QR / nomor VA tampil langsung di kartu kasir (tanpa halaman DOKU).
+        $snapService = app(Snap\DokuSnapService::class);
+        if ($snapService->productFor($channels) !== null) {
+            $snap = $snapService->create($invoice, $gross, $channels, $customer, $this->time->paymentWindowMinutes());
+            $log = array_merge($payloadLog, [
+                'cashier_id' => $cashier->id,
+                'cashier_name' => $cashier->name,
+                'counter' => $counter,
+                'pos_qris' => ['gateway' => OnlineGatewayRouter::DOKU, 'method' => $method, 'expires_at' => $snap['expires_at'], 'is_mock' => false, 'api' => Snap\DokuSnapService::API],
+            ], $method === 'QRIS' ? ['qris_details' => ['provider' => self::PROVIDER, 'rrn' => null, 'sender_name' => null]] : []);
+
+            return $this->storeBill($order, $shift, $invoice, $method, $amount, DokuSessionGuard::recordSnap($log, $invoice, $method, $gross, $snap), $cashier);
+        }
+
         $created = $this->checkout->createSession([
             'invoice' => $invoice,
             'amount' => $gross,
             'channels' => $channels,
             'items' => [['id' => $order->order_number, 'name' => 'Club 61 '.$order->order_number, 'price' => $gross, 'quantity' => 1]],
             // Order F&B tanpa akun: hanya nama (kalau ada) — tidak ada data pribadi yang dikarang.
-            'customer' => array_filter([
-                'name' => $order->user?->name ?? $order->customer_name,
-                'email' => $order->user?->email,
-                'phone' => $order->user?->phone,
-            ]),
+            'customer' => $customer,
             'due_minutes' => $this->time->paymentWindowMinutes(),
             'callback_url' => self::returnUrl($payloadLog['source'] ?? null),
             'auto_redirect' => false,
@@ -102,6 +121,12 @@ class DokuPosQrisService
         ], $method === 'QRIS' ? ['qris_details' => ['provider' => self::PROVIDER, 'rrn' => null, 'sender_name' => null]] : []);
         $log = DokuSessionGuard::record($log, $invoice, $method, $gross, $created['payment_url'], $created['token_id'], $created['request_id'], $created['expires_at']);
 
+        return $this->storeBill($order, $shift, $invoice, $method, $amount, $log, $cashier);
+    }
+
+    /** Tagihan PENDING yang terikat shift kasir + data kartu kasir. */
+    private function storeBill(Order $order, PosCashierShift $shift, string $invoice, string $method, float $amount, array $log, User $cashier): array
+    {
         $payment = Payment::create([
             'order_id' => $order->id,
             'payment_gateway' => OnlineGatewayRouter::DOKU,
@@ -139,6 +164,8 @@ class DokuPosQrisService
             'expires_at' => $pos['expires_at'] ?? now()->toIso8601String(),
             'is_mock' => false,
             'sandbox' => ! app(DokuClient::class)->isProduction(),
+            // DOKU SNAP: QR / nomor VA digambar langsung di kartu kasir (frame_url kosong).
+            'snap' => Snap\DokuSnapService::display($payment),
         ];
     }
 

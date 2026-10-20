@@ -119,6 +119,11 @@
                     </div>
                 </div>
 
+                <!-- DOKU SNAP: QR / nomor VA tagihan yang sedang menunggu (halaman bayar kita sendiri) -->
+                <div x-show="! paymentWindowClosed(currentTicket)">
+                    @include('customer.invoice-partials.doku-snap-panel', ['display' => '(ticket && ticket.pay_display)'])
+                </div>
+
                 <!-- Metode pembayaran terpilih -->
                 <div x-show="! paymentWindowClosed(currentTicket)" class="p-3 rounded-lg bg-white border border-[#E6DAC0] flex items-center gap-3">
                     <span class="w-11 h-8 shrink-0 rounded-lg bg-[#F7F0DB] border border-[#E6DAC0] flex items-center justify-center font-black text-[10px] text-[#662721]" x-text="selectedMethod.badge"></span>
@@ -154,7 +159,8 @@
                 </div>
 
                 <!-- Tombol bayar -->
-                <button type="button" x-show="! paymentWindowClosed(currentTicket)" @click="payNow()" :disabled="isSubmittingPayment"
+                {{-- QR / VA DOKU SNAP sudah tampil untuk metode ini → tombol bayar hanya untuk ganti metode. --}}
+                <button type="button" x-show="! paymentWindowClosed(currentTicket) && ! (ticket && ticket.pay_display && ticket.pay_display.method === selectedMethod.code)" @click="payNow()" :disabled="isSubmittingPayment"
                         class="bk-tap w-full h-12 rounded-lg flex items-center justify-center gap-2 text-xs font-black uppercase tracking-wider bg-[#662721] hover:bg-[#511D18] text-[#F7F0DB] shadow-md active:scale-[0.98] transition-transform disabled:opacity-60 disabled:cursor-not-allowed">
                     <span x-show="isSubmittingPayment" class="w-4 h-4 border-2 border-[#4F2F2A] border-t-transparent rounded-full animate-spin"></span>
                     <span class="whitespace-nowrap" x-text="isSubmittingPayment ? 'Processing…' : (selectedMethod.code === 'CASH' ? 'Confirm with front desk' : (currentTicket.has_pending_delta ? ('Pay balance Rp ' + formatNumber(currentTicket.unpaid_delta)) : 'Pay Now'))"></span>

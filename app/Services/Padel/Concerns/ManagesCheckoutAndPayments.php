@@ -609,6 +609,7 @@ trait ManagesCheckoutAndPayments
                     'snap_token' => $paymentResult['snap_token'] ?? null,
                     'redirect_url' => $paymentResult['redirect_url'] ?? null,
                     'payment_url' => $paymentResult['payment_url'] ?? null,
+                    'checkout_mode' => $paymentResult['checkout_mode'] ?? null,
                     'grand_total' => $chargeTotal,
                     'gateway_fee' => $newGatewayFee,
                     'payment_method' => $paymentMethod,
@@ -832,7 +833,7 @@ trait ManagesCheckoutAndPayments
                     $updates['payment_method'] = $paymentMethod;
                     // Sesi DOKU tidak punya token Snap — token Snap lama tidak boleh tertinggal di tagihan DOKU.
                     $updates['snap_token'] = $paymentResult['gateway'] === 'DOKU' ? null : ($paymentResult['snap_token'] ?? $pendingPayment->snap_token);
-                    $updates['payment_url'] = $paymentResult['payment_url'] ?? $paymentResult['redirect_url'] ?? $pendingPayment->payment_url;
+                    $updates['payment_url'] = ($paymentResult['checkout_mode'] ?? null) === 'SNAP' ? null : ($paymentResult['payment_url'] ?? $paymentResult['redirect_url'] ?? $pendingPayment->payment_url);
                 } else {
                     // Tagihan kasir (bayar nanti) tetap tagihan kasir; percobaan bayar online cukup dicatat.
                     $log['online_payment_method'] = $paymentMethod;
@@ -865,6 +866,7 @@ trait ManagesCheckoutAndPayments
                 'snap_token' => $paymentResult['snap_token'] ?? null,
                 'redirect_url' => $paymentResult['redirect_url'] ?? null,
                 'payment_url' => $paymentResult['payment_url'] ?? null,
+                'checkout_mode' => $paymentResult['checkout_mode'] ?? null,
                 'grand_total' => $grandTotal,
                 'service_charge' => $totalServiceCharge,
                 'gateway_fee' => $totalServiceCharge,
@@ -904,6 +906,7 @@ trait ManagesCheckoutAndPayments
             'snap_token' => $reused['snap_token'] ?? null,
             'redirect_url' => $reused['redirect_url'] ?? null,
             'payment_url' => $reused['payment_url'] ?? null,
+            'checkout_mode' => $reused['checkout_mode'] ?? null,
             'grand_total' => $amount,
             'payment_method' => $paymentMethod,
             'reused_session' => true,

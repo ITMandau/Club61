@@ -1295,6 +1295,9 @@
                                         );
                                     }
                                 });
+                            } else if (data.driver === 'doku' && data.checkout_mode === 'SNAP') {
+                                // DOKU SNAP: QR / nomor VA tampil di halaman invoice kita sendiri (status dicek otomatis).
+                                this.clearSessionAndRedirect(this.createdBookingId, this.createdOrderId);
                             } else if (data.driver === 'doku') {
                                 // DOKU Checkout: halaman bayar DOKU (server memastikan URL https *.doku.com). Selesai / batal
                                 // bayar → DOKU mengembalikan customer ke halaman invoice. WAJIB sebelum cabang di bawah: sesi

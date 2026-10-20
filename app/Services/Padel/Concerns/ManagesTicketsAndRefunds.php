@@ -112,6 +112,10 @@ trait ManagesTicketsAndRefunds
                     ])->values());
                 $booking->setAttribute('order_reschedule_forfeited', (float) $orderBookings->sum('reschedule_forfeited_amount'));
                 $booking->setAttribute('order_voucher', $this->orderVoucherInfo($order));
+                // DOKU SNAP (Modul 27b): teks QR / nomor VA tagihan yang masih menunggu — halaman bayar kita sendiri.
+                $booking->setAttribute('pay_display', \App\Services\Payment\Doku\Snap\DokuSnapService::display(
+                    $order->payments->where('status', 'PENDING')->where('payment_gateway', 'DOKU')->sortByDesc('created_at')->first()
+                ));
                 $rawMethod = $latestPayment?->payment_method;
                 $methodLabel = $this->formatPaymentMethodLabel($rawMethod, $latestPayment?->payload_log);
 

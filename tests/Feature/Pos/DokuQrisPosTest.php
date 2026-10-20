@@ -108,11 +108,12 @@ class DokuQrisPosTest extends TestCase
             }
             if ($path === DokuCheckoutService::CANCEL_PATH) {
                 $this->cancelled[] = $request->data()['order']['invoice_number'];
-                if ($this->cancelWorks) {
-                    $this->statuses[$request->data()['order']['invoice_number']] = 'EXPIRED';
+                if (! $this->cancelWorks) {
+                    return Http::response(['message' => ['Order cancellation is not allowed']], 400);
                 }
 
-                return Http::response(['message' => ['SUCCESS']]);
+                // Pembatalan diterima; API status DOKU tetap PENDING sesaat (perilaku sandbox) — kasus terketat.
+                return Http::response(['message' => 'SUCCESS']);
             }
 
             return Http::response([], 404);

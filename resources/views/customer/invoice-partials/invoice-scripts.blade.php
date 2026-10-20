@@ -281,6 +281,10 @@
                             // Tagihan Rp0 (ditanggung kuota member / voucher jam corporate): lunas tanpa Midtrans.
                             await this.loadTicket(this.currentTicket.id);
                             this.showNotice('Booking Confirmed', json.message || 'Your booking is fully covered and confirmed.', 'success', 'OK');
+                        } else if (json.checkout_mode === 'SNAP') {
+                            // DOKU SNAP: QR / nomor VA tampil di kartu ini (pay_display dari server), status dicek otomatis.
+                            await this.loadTicket(this.currentTicket.id);
+                            this.startAutoPolling(this.currentTicket.id);
                         } else if (json.driver === 'doku' && json.payment_url) {
                             // DOKU Checkout: halaman bayar DOKU; setelah bayar DOKU mengembalikan customer ke invoice ini.
                             window.location.href = json.payment_url;
@@ -329,7 +333,7 @@
                 return t.total_paid > 0 ? 'Your scheduled match time has passed without turnstile check-in. This ticket is now closed.' : 'The 15-minute payment window for this session has ended and the court slots have been released. Please book a new schedule.';
             },
 
-            renderQr(el, text, attempt = 0) {
+            renderQr(el, text, attempt = 0, level = "H") {
                 if (!el) return;
                 text = text ? String(text) : '';
                 if (attempt === 0) el._qrWanted = text;
@@ -342,14 +346,45 @@
                     return;
                 }
                 if (!window.QRCode) {
-                    if (attempt < 40) setTimeout(() => this.renderQr(el, text, attempt + 1), 150);
+                    if (attempt < 40) setTimeout(() => this.renderQr(el, text, attempt + 1, level), 150);
                     return;
                 }
 
                 el.innerHTML = '';
-                new QRCode(el, { text, width: 220, height: 220, colorDark: '#000000', colorLight: '#ffffff', correctLevel: QRCode.CorrectLevel.H });
+                new QRCode(el, { text, width: 220, height: 220, colorDark: '#000000', colorLight: '#ffffff', correctLevel: QRCode.CorrectLevel[level] ?? QRCode.CorrectLevel.H });
                 el.querySelectorAll('img, canvas').forEach(node => { node.style.width = '100%'; node.style.height = '100%'; });
                 el._qrDrawn = text;
+            },
+
+            // ── Halaman bayar DOKU SNAP (QRIS / VA BCA) ─────────────────────────────────────────────────────────
+            snapCountdown(expiresAt) {
+                const ms = new Date(expiresAt).getTime() - this.nowTs;
+                if (isNaN(ms) || ms <= 0) return '00:00';
+                const s = Math.floor(ms / 1000);
+                const h = Math.floor(s / 3600);
+                const mm = String(Math.floor((s % 3600) / 60)).padStart(2, '0');
+                const ss = String(s % 60).padStart(2, '0');
+                return h > 0 ? `${h}:${mm}:${ss}` : `${mm}:${ss}`;
+            },
+
+            async copySnapText(text) {
+                try {
+                    await navigator.clipboard.writeText(String(text || ''));
+                    this.showNotice('Copied', 'Virtual Account number copied.', 'success', 'OK');
+                } catch (e) {
+                    this.showNotice('Copy Failed', 'Please copy the number manually.', 'error', 'Close');
+                }
+            },
+
+            downloadSnapQr(panel) {
+                const node = panel ? panel.querySelector('canvas, img') : null;
+                if (!node) return;
+                const link = document.createElement('a');
+                link.download = 'QRIS-Club61.png';
+                link.href = node.tagName === 'CANVAS' ? node.toDataURL('image/png') : node.src;
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
             },
 
             // Pesanan membership online yang belum dibayar: lanjutkan bayar (order yang sama) / batalkan.
@@ -390,6 +425,10 @@
                     if (json.data.already_paid || payment.is_mock) {
                         await this.refreshMembershipTicket(t.id);
                         this.showNotice('Membership Aktif', json.message, 'success', 'Oke');
+                    } else if (payment.checkout_mode === 'SNAP') {
+                        // DOKU SNAP: QR / nomor VA tampil di kartu membership ini, status dicek otomatis.
+                        await this.refreshMembershipTicket(t.id);
+                        this.pollMembership(t.id);
                     } else if (payment.snap_token && window.snap) {
                         window.snap.pay(payment.snap_token, {
                             onSuccess: () => this.pollMembership(t.id),

@@ -64,6 +64,8 @@
                 {{-- Pesanan online yang belum dibayar: lanjutkan bayar (order yang sama) atau batalkan untuk ganti paket. --}}
                 <template x-if="currentTicket.can_pay_online">
                     <div class="space-y-2.5">
+                        @include('customer.invoice-partials.doku-snap-panel', ['display' => 'currentTicket.pay_display'])
+
                         <div class="p-3 rounded-lg bg-white border border-[#E6DAC0] flex items-center gap-3">
                             <span class="w-11 h-8 shrink-0 rounded-lg bg-[#F7F0DB] border border-[#E6DAC0] flex items-center justify-center font-black text-[10px] text-[#662721]" x-text="selectedMethod.badge"></span>
                             <div class="flex-1 min-w-0">
@@ -76,7 +78,7 @@
                             </button>
                         </div>
 
-                        <button type="button" @click="payMembership()" :disabled="isSubmittingPayment"
+                        <button type="button" x-show="! (currentTicket.pay_display && currentTicket.pay_display.method === selectedMethod.code)" @click="payMembership()" :disabled="isSubmittingPayment"
                                 class="bk-tap w-full h-12 rounded-lg flex items-center justify-center gap-2 text-xs font-black uppercase tracking-wider bg-[#662721] hover:bg-[#511D18] text-[#F7F0DB] shadow-md active:scale-[0.98] transition-transform disabled:opacity-60 disabled:cursor-not-allowed">
                             <span class="whitespace-nowrap" x-text="isSubmittingPayment ? 'Processing…' : ('Pay Rp ' + formatNumber(currentTicket.grand_total))"></span>
                         </button>

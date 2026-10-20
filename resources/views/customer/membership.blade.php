@@ -571,6 +571,13 @@
                     return;
                 }
 
+                // DOKU SNAP: QR / nomor VA tampil di halaman invoice kita sendiri (status dicek otomatis).
+                if (payment && payment.checkout_mode === 'SNAP') {
+                    const membershipId = data.data.membership ? data.data.membership.id : null;
+                    window.location.href = '{{ route('customer.invoice') }}' + (membershipId ? ('?membership_id=' + encodeURIComponent(membershipId)) : '');
+                    return;
+                }
+
                 // 2. Jika Midtrans Snap Token tersedia
                 if (payment && payment.snap_token && window.snap && typeof window.snap.pay === 'function') {
                     btnText.innerText = 'Menunggu Pembayaran...';

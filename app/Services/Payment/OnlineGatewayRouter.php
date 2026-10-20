@@ -270,10 +270,32 @@ class OnlineGatewayRouter
         if (strtoupper($gateway) === self::DOKU) {
             $invoice = DokuCheckoutService::newInvoiceNumber($p['order_number']);
             $dueMinutes = $p['expiry_minutes'] ?? app(\App\Services\Padel\BookingTimeService::class)->paymentWindowMinutes();
+            $channels = app(OnlinePaymentMethodService::class)->channels($method, self::DOKU) ?? [];
+
+            // Modul 27b: QRIS & VA BCA lewat DOKU SNAP (halaman bayar sendiri) kalau SNAP aktif; lainnya DOKU Checkout.
+            $snapService = app(\App\Services\Payment\Doku\Snap\DokuSnapService::class);
+            if ($snapService->productFor($channels) !== null) {
+                $snap = $snapService->create($invoice, (int) $p['amount'], $channels, $p['customer'] ?? [], (int) $dueMinutes);
+
+                return [
+                    'gateway' => self::DOKU,
+                    'driver' => 'doku',
+                    'session_id' => $invoice,
+                    'snap_token' => null,
+                    'payment_url' => null,
+                    'redirect_url' => null,
+                    'checkout_mode' => 'SNAP',
+                    'is_mock' => false,
+                    'snap' => $snap,
+                    'request_id' => $snap['request_id'],
+                    'expires_at' => \Illuminate\Support\Carbon::parse($snap['expires_at']),
+                ];
+            }
+
             $created = app(DokuCheckoutService::class)->createSession([
                 'invoice' => $invoice,
                 'amount' => (int) $p['amount'],
-                'channels' => app(OnlinePaymentMethodService::class)->channels($method, self::DOKU) ?? [],
+                'channels' => $channels,
                 'items' => $p['items'],
                 'customer' => $p['customer'],
                 'due_minutes' => (int) $dueMinutes,
@@ -312,6 +334,9 @@ class OnlineGatewayRouter
     /** Catat sesi yang baru dibuat di payload_log tagihan (format catatan sesi milik gateway-nya). */
     public static function recordSession(array $log, array $created, string $method, float $amount, ?CarbonInterface $expiresAt): array
     {
+        if (($created['gateway'] ?? null) === self::DOKU && ($created['checkout_mode'] ?? null) === 'SNAP') {
+            return DokuSessionGuard::recordSnap($log, $created['session_id'], $method, $amount, $created['snap']);
+        }
         if (($created['gateway'] ?? null) === self::DOKU) {
             return DokuSessionGuard::record($log, $created['session_id'], $method, $amount, $created['payment_url'], $created['token_id'] ?? null, $created['request_id'], $created['expires_at'] ?? $expiresAt);
         }

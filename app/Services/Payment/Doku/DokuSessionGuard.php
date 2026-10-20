@@ -174,9 +174,41 @@ class DokuSessionGuard
         return $log;
     }
 
+    /**
+     * Catat sesi DOKU SNAP (Modul 27b) sebagai sesi aktif tagihan — format sama dengan record() + data SNAP (teks QR /
+     * nomor VA, referensi DOKU) dan 'api' => 'SNAP'. Tanpa payment_url: halaman bayarnya buatan kita sendiri.
+     */
+    public static function recordSnap(array $log, string $invoice, string $method, float $amount, array $snap): array
+    {
+        $log['doku_invoice_id'] = $invoice;
+        $log['doku_invoice_ids'] = array_values(array_unique(array_merge((array) ($log['doku_invoice_ids'] ?? []), [$invoice])));
+        $log['doku_sessions'] = (array) ($log['doku_sessions'] ?? []);
+        $log['doku_sessions'][$invoice] = array_merge($snap, [
+            'method' => strtoupper($method),
+            'amount' => round($amount, 2),
+            'payment_url' => null,
+            'status' => self::ACTIVE,
+            'created_at' => now()->toIso8601String(),
+        ]);
+
+        return $log;
+    }
+
     /** Respons "pakai lagi sesi ini" — bentuknya sama dengan hasil pembuatan sesi (OnlineGatewayRouter::createSession). */
     public static function reusedPayment(array $session): array
     {
+        if (\App\Services\Payment\Doku\Snap\DokuSnapService::isSnapSession($session)) {
+            return [
+                'driver' => 'doku',
+                'snap_token' => null,
+                'redirect_url' => null,
+                'payment_url' => null,
+                'checkout_mode' => 'SNAP',
+                'is_mock' => false,
+                'reused' => true,
+            ];
+        }
+
         return [
             'driver' => 'doku',
             'snap_token' => null,
@@ -282,7 +314,8 @@ class DokuSessionGuard
         return ($meta['status'] ?? self::ACTIVE) === self::ACTIVE
             && strtoupper((string) ($meta['method'] ?? '')) === strtoupper($method)
             && abs((float) ($meta['amount'] ?? 0) - $amount) < 1
-            && ! empty($meta['payment_url'])
+            // Sesi SNAP tidak punya halaman DOKU — yang dipakai lagi teks QR / nomor VA-nya.
+            && (! empty($meta['payment_url']) || (\App\Services\Payment\Doku\Snap\DokuSnapService::isSnapSession($meta) && (! empty($meta['qr_content']) || ! empty($meta['va_number']))))
             && ($expiresAt === null || $expiresAt->gt(now()->addMinute()));
     }
 

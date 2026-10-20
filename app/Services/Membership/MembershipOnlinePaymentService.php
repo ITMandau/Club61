@@ -144,7 +144,7 @@ class MembershipOnlinePaymentService
                 'order' => $order->fresh(),
                 'membership' => $membership->fresh(['balances', 'plan']),
                 // Data internal sesi DOKU (Request-Id untuk pembatalan, token) tidak dikirim ke browser.
-                'payment' => \Illuminate\Support\Arr::except($paymentResult, ['request_id', 'token_id', 'expires_at']),
+                'payment' => \Illuminate\Support\Arr::except($paymentResult, ['request_id', 'token_id', 'expires_at', 'snap']),
                 'already_paid' => false,
             ];
         });

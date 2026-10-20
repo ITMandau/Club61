@@ -58,9 +58,39 @@
                 </button>
             </div>
 
-            {{-- wire:ignore: iframe tidak dimuat ulang oleh render Livewire tiap 3 detik. --}}
+            {{-- wire:ignore: QR / iframe tidak dimuat ulang oleh render Livewire tiap 3 detik. --}}
             <div wire:ignore style="margin-top:0.75rem;">
-                @if($pendingQris['frame_url'])
+                @if(! empty($pendingQris['snap']))
+                    {{-- DOKU SNAP (Modul 27b): QR digambar di layar dari teks QR DOKU / nomor VA — tanpa halaman DOKU. --}}
+                    @php
+                        $snapPay = $pendingQris['snap'];
+                    @endphp
+                    <div data-doku-snap-pos style="text-align:center;">
+                        @if($snapPay['type'] === 'QRIS')
+                            <div style="display:inline-block; padding:0.75rem; border:2px solid #E6DAC0; border-radius:14px; background:#FFFFFF;">
+                                <div style="font-size:0.75rem; font-weight:900; letter-spacing:0.25em; color:#4F2F2A; margin-bottom:0.4rem;">QRIS</div>
+                                <div x-data x-init="
+                                        const draw = (n) => {
+                                            if (! window.QRCode) { if (n < 40) setTimeout(() => draw(n + 1), 150); return; }
+                                            $el.innerHTML = '';
+                                            new QRCode($el, { text: @js($snapPay['qr_content']), width: 260, height: 260, colorDark: '#000000', colorLight: '#ffffff', correctLevel: QRCode.CorrectLevel.M });
+                                        };
+                                        draw(0);"
+                                     role="img" aria-label="QRIS" style="width:260px; height:260px; margin:0 auto;"></div>
+                            </div>
+                            <div style="margin-top:0.5rem; font-size:0.75rem; color:#7A5A52;">Customer scan dengan aplikasi e-wallet / m-banking yang mendukung QRIS.</div>
+                        @else
+                            <div style="padding:1rem; border:2px solid #E6DAC0; border-radius:14px; background:#FCF8EE;">
+                                <div style="font-size:0.75rem; color:#7A5A52;">Nomor Virtual Account {{ $snapPay['bank'] }}</div>
+                                <div style="font-family:var(--font-mono, monospace); font-size:1.5rem; font-weight:900; letter-spacing:0.08em; color:#4F2F2A; word-break:break-all;">{{ $snapPay['va_number'] }}</div>
+                                <div style="margin-top:0.35rem; font-size:0.75rem; color:#7A5A52;">Customer transfer tepat Rp {{ number_format((float) $snapPay['amount'], 0, ',', '.') }} ke nomor ini.</div>
+                            </div>
+                        @endif
+                    </div>
+                    @once
+                        <script src="{{ asset('js/qrcode.min.js') }}"></script>
+                    @endonce
+                @elseif($pendingQris['frame_url'])
                     <iframe x-ref="frame" src="{{ $pendingQris['frame_url'] }}" title="Pembayaran DOKU"
                             sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox allow-downloads"
                             allow="clipboard-write" referrerpolicy="strict-origin-when-cross-origin" loading="eager"
@@ -72,7 +102,7 @@
                 @endif
             </div>
 
-            @if($pendingQris['frame_url'])
+            @if(empty($pendingQris['snap']) && $pendingQris['frame_url'])
                 <div style="margin-top:0.5rem; font-size:0.75rem; color:#7A5A52; text-align:center;">
                     QR tidak tampil?
                     <button type="button" x-on:click="reload()" style="background:none; border:none; padding:0; color:#662721; font-weight:800; text-decoration:underline; cursor:pointer;">Muat ulang</button>
