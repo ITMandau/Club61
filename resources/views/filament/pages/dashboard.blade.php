@@ -40,7 +40,7 @@
     {{-- 1. Hero sapaan + status venue --}}
     <div class="c61-hero">
         <div>
-            <div class="c61-eyebrow"><span class="dot"></span>Club 61 Padel Court &bull; {{ $now->translatedFormat('l, d F Y') }}</div>
+            <div class="c61-eyebrow"><span class="dot"></span>Club 61 Padel &amp; Wellness &bull; {{ $now->translatedFormat('l, d F Y') }}</div>
             <div class="c61-hero-title">Selamat datang, {{ auth()->user()?->name }}</div>
             <div class="c61-hero-sub">Ringkasan operasional hari ini. Data diperbarui setiap halaman dibuka.</div>
         </div>

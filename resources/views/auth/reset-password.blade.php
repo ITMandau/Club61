@@ -10,7 +10,7 @@
              style="background: #FCF8EE; border: 1px solid #E6DAC0; border-radius: 12px; box-shadow: 0 24px 60px -28px rgba(79,47,42,0.45);">
 
             <div class="text-center mb-6">
-                <img src="{{ asset('images/identity/monogram-terracotta.png') }}" alt="Club 61 Padel Court" class="h-14 w-auto mx-auto mb-3">
+                <img src="{{ asset('images/identity/monogram-terracotta.png') }}" alt="Club 61 Padel &amp; Wellness" class="h-14 w-auto mx-auto mb-3">
                 <h1 class="font-display text-2xl font-black text-[#4F2F2A] tracking-wide">Buat Kata Sandi Baru</h1>
                 <p class="text-xs sm:text-sm text-[#7A5A52] mt-1.5 font-medium">Minimal 8 karakter. Setelah disimpan, Anda bisa langsung masuk.</p>
             </div>

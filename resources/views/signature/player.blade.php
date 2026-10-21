@@ -675,7 +675,7 @@
         var sponsors = (state.payload && state.payload.sponsors) || [];
         col.appendChild(el('div', 'sp-label', 'Supported by'));
         if (!sponsors.length) {
-            col.appendChild(el('div', 'sp-name', 'Club 61 Padel Court'));
+            col.appendChild(el('div', 'sp-name', 'Club 61 Padel & Wellness'));
         } else {
             var s = sponsors[Math.floor(Date.now() / 6000) % sponsors.length];
             if (s.logo_url) { var img = el('img', 'sp-logo'); img.src = s.logo_url; img.alt = ''; col.appendChild(img); }
@@ -749,7 +749,7 @@
         else if (state.payload && state.payload.running_texts) {
             items = state.payload.running_texts.filter(function (t) { return t.kind === 'MANUAL'; }).map(function (t) { return t.text; });
         }
-        return items.length ? items : ['Welcome to Club 61 Padel Court'];
+        return items.length ? items : ['Welcome to Club 61 Padel & Wellness'];
     }
 
     function renderTicker(force) {

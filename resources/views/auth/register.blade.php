@@ -6,13 +6,13 @@
 
             <!-- Top Header & Crest -->
             <div class="text-center mb-8">
-                <img src="{{ asset('images/identity/monogram-terracotta.png') }}" alt="Club 61 Padel Court" class="h-14 w-auto mx-auto mb-3">
+                <img src="{{ asset('images/identity/monogram-terracotta.png') }}" alt="Club 61 Padel &amp; Wellness" class="h-14 w-auto mx-auto mb-3">
                 <div class="inline-block px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider mb-2 shadow-sm"
                      style="background: #F7F0DB; border: 1px solid #E6DAC0; color: #662721;">
                     Club 61 Registration
                 </div>
                 <h1 class="font-display text-2xl sm:text-3xl font-black text-[#4F2F2A] tracking-wide">
-                    Bergabung ke Club 61 Padel Court
+                    Bergabung ke Club 61 Padel &amp; Wellness
                 </h1>
                 <p class="text-xs sm:text-sm text-[#7A5A52] mt-1 font-medium">
                     Daftarkan akun member eksklusif Anda untuk menikmati seluruh fasilitas venue.

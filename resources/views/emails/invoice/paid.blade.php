@@ -21,7 +21,7 @@
                     @else
                         <td style="background:#1F170D; border-radius:14px 14px 0 0; padding:20px 24px; text-align:center;">
                             <div style="font-size:20px; font-weight:bold; letter-spacing:4px; color:#FFFFFF;">CLUB 61</div>
-                            <div style="font-size:10px; letter-spacing:4px; color:#F5E2B5; margin-top:2px;">PADEL COURT</div>
+                            <div style="font-size:10px; letter-spacing:4px; color:#F5E2B5; margin-top:2px;">PADEL &amp; WELLNESS</div>
                         </td>
                     @endif
                 </tr>

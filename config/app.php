@@ -13,7 +13,7 @@ return [
     |
     */
 
-    'name' => env('APP_NAME', 'Club 61 Padel Court'),
+    'name' => env('APP_NAME', 'Club 61 Padel & Wellness'),
 
     /*
     |--------------------------------------------------------------------------

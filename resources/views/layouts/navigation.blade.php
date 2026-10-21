@@ -6,11 +6,11 @@
                 <!-- Logo -->
                 <div class="shrink-0 flex items-center">
                     <a href="{{ route('dashboard') }}" class="flex items-center gap-2.5">
-                        <img src="{{ asset('images/identity/monogram-cream.png') }}" alt="Club 61 Padel Court" class="h-10 lg:h-11 w-auto shrink-0">
+                        <img src="{{ asset('images/identity/monogram-cream.png') }}" alt="Club 61 Padel &amp; Wellness" class="h-10 lg:h-11 w-auto shrink-0">
                         {{-- Tablet (md): tulisan disembunyikan, cukup monogram — 5 menu + ikon kanan tidak muat di 768–1023px. --}}
                         <span class="leading-none whitespace-nowrap md:hidden lg:block">
                             <span class="block font-bold text-[16px] sm:text-lg tracking-[0.18em] text-[#F7F0DB]" style="font-stretch: 125%;">CLUB 61</span>
-                            <span class="block text-[9px] font-semibold tracking-[0.32em] text-[#F7F0DB]/70 mt-1">PADEL COURT</span>
+                            <span class="block text-[9px] font-semibold tracking-[0.32em] text-[#F7F0DB]/70 mt-1">PADEL &amp; WELLNESS</span>
                         </span>
                     </a>
                 </div>
@@ -153,10 +153,9 @@
                                     <div class="flex-1 min-w-0">
                                         <div class="flex items-center justify-between">
                                             <span class="text-xs font-black text-[#4F2F2A]">Welcome to Club 61</span>
-                                            <span class="text-[9px] text-[#7A5A52]">Indosat Building</span>
                                         </div>
                                         <p class="text-[11px] text-[#7A5A52] mt-1 leading-snug">
-                                            Play on 3 international-standard padel courts at Gedung Indosat Medan, complete with a lounge &amp; cafe.
+                                            Play on 3 international-standard padel courts at {{ \App\Models\Setting\CompanyProfileSetting::receiptAddress() }}, complete with a lounge &amp; cafe.
                                         </p>
                                     </div>
                                 </div>

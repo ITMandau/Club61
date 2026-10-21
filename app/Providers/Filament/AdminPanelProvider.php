@@ -33,11 +33,11 @@ class AdminPanelProvider extends PanelProvider
             // Laravel saat Filament::getLoginUrl() null), dan logout dari /admin juga diarahkan
             // ke /login lewat binding LogoutResponse custom di AppServiceProvider.
             ->darkMode(false)
-            ->brandName('Club 61 Padel Court')
+            ->brandName('Club 61 Padel & Wellness')
             // Logo panel: monogram + nama brand (resources/views/filament/brand-logo.blade.php).
             ->brandLogo(fn () => view('filament.brand-logo'))
             ->brandLogoHeight('2.25rem')
-            ->favicon(asset('images/club61-logo.png'))
+            ->favicon(asset('images/identity/favicon.png').'?v=2')
             ->maxContentWidth('full')
             // Sidebar bisa diciutkan ke samping jadi strip ikon (tombol di header sidebar);
             // status buka/ciut diingat browser per user.

@@ -1256,7 +1256,7 @@
                 const custName = (this.customerName || 'Customer VIP');
                 drawRow(detailY + 60, 'Ticket Holder Name', custName + ' (VIP Member)', true);
                 drawRow(detailY + 98, 'Booking Schedule', `${bookingTimeStr} (${duration} ${duration > 1 ? 'Hours' : 'Hour'})`, true);
-                drawRow(detailY + 136, 'Court & Venue', `${courtName} • Club 61 Padel Court`, true);
+                drawRow(detailY + 136, 'Court & Venue', `${courtName} • Club 61 Padel & Wellness`, true);
                 drawRow(detailY + 174, 'Check-In Status', isPaid ? 'READY FOR ENTRY (VALID)' : 'AWAITING PAYMENT', true, isPaid);
 
                 // 6. Payment & Fee Summary Section

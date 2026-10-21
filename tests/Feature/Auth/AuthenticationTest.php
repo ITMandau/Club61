@@ -279,6 +279,21 @@ class AuthenticationTest extends TestCase
             ->assertSessionHasErrors(['email' => 'Email wajib diisi.', 'password' => 'Kata sandi wajib diisi.']);
     }
 
+    public function test_failed_login_message_floats_above_the_form_so_the_card_keeps_its_size(): void
+    {
+        $user = User::factory()->create();
+
+        $page = $this->followingRedirects()->from('/login')->post('/login', ['email' => $user->email, 'password' => 'salah-terus'])->assertOk();
+
+        // Pesan tampil di kotak melayang (#login-alert), kolom email ditandai merah — tidak ada baris error di bawah kolom.
+        $page->assertSee('id="login-alert"', false)
+            ->assertSee('Email / nomor HP atau kata sandi salah.')
+            ->assertSee('aria-invalid="true"', false)
+            ->assertDontSee('mt-1.5 text-sm text-rose-700', false);
+
+        $this->get('/login')->assertOk()->assertDontSee('id="login-alert"', false);
+    }
+
     public function test_users_can_logout(): void
     {
         $user = User::factory()->create();
