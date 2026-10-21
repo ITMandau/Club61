@@ -87,9 +87,12 @@
                             </div>
                         @endif
                     </div>
-                    @once
+                    {{-- @assets, bukan <script> biasa: kartu ini muncul lewat update Livewire (tanpa reload), dan tag
+                         <script> yang ikut masuk lewat update tidak dijalankan → QR kosong sampai halaman di-refresh.
+                         @assets dimuat Livewire sekali per halaman, baik saat halaman dibuka maupun saat update. --}}
+                    @assets
                         <script src="{{ asset('js/qrcode.min.js') }}"></script>
-                    @endonce
+                    @endassets
                 @elseif($pendingQris['frame_url'])
                     <iframe x-ref="frame" src="{{ $pendingQris['frame_url'] }}" title="Pembayaran DOKU"
                             sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox allow-downloads"

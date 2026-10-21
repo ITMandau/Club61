@@ -93,7 +93,7 @@ class DokuSnapTest extends TestCase
                 'qris_terminal_id' => 'TID001',
                 'qris_postal_code' => '12345',
                 'bca_partner_service_id' => '19008',
-                'va_length' => 16,
+                'bca_customer_no' => '0',
             ],
         ]);
         PaymentGatewaySetting::query()->update(['online_gateway' => 'DOKU', 'pos_qris_gateway' => 'DOKU']);
@@ -137,9 +137,14 @@ class DokuSnapTest extends TestCase
                     return Http::response(['responseCode' => '2005300', 'responseMessage' => 'Successful']);
                 })(),
                 DokuSnapService::VA_CREATE_PATH => (function () use ($data) {
-                    $this->vaInvoices[$data['virtualAccountNo']] = $data['trxId'];
+                    // DGPC: DOKU melengkapi BIN + prefix sub-BIN jadi nomor VA 16 digit.
+                    $customerNo = $data['customerNo'].str_pad((string) random_int(0, 9999999999), 10, '0', STR_PAD_LEFT);
+                    $vaNumber = $data['partnerServiceId'].$customerNo;
+                    $this->vaInvoices[$vaNumber] = $data['trxId'];
 
-                    return Http::response(['responseCode' => '2002700', 'responseMessage' => 'Successful', 'virtualAccountData' => array_merge($data, ['virtualAccountEmail' => null])]);
+                    return Http::response(['responseCode' => '2002700', 'responseMessage' => 'Successful', 'virtualAccountData' => array_merge($data, [
+                        'customerNo' => $customerNo, 'virtualAccountNo' => $vaNumber, 'virtualAccountEmail' => null,
+                    ])]);
                 })(),
                 DokuSnapService::VA_STATUS_PATH => (function () use ($data) {
                     $invoice = $this->vaInvoices[$data['virtualAccountNo']] ?? null;
@@ -148,10 +153,13 @@ class DokuSnapTest extends TestCase
                         return Http::response(['responseCode' => '4042614', 'responseMessage' => 'Bill not found'], 404);
                     }
 
-                    return Http::response(['responseCode' => '2002600', 'virtualAccountData' => [
-                        'trxId' => $invoice, 'paymentFlagStatus' => $status,
-                        'paidAmount' => ['value' => $status === '00' ? (string) $this->amountOf($invoice) : '0.00', 'currency' => 'IDR'],
-                    ]]);
+                    // Bentuk contoh resmi DOKU: VA yang BELUM dibayar tetap mengisi paidAmount = nominal tagihan.
+                    return Http::response(['responseCode' => '2002600', 'responseMessage' => 'Successful', 'virtualAccountData' => array_filter([
+                        'paymentFlagReason' => $status === '00' ? ['english' => 'Success', 'indonesia' => 'Sukses'] : ['english' => 'Pending', 'indonesia' => 'Belum Terbayar'],
+                        'partnerServiceId' => $data['partnerServiceId'], 'customerNo' => $data['customerNo'], 'virtualAccountNo' => $data['virtualAccountNo'],
+                        'paymentRequestId' => $status === '00' ? 'PRQ-'.$invoice : null,
+                        'paidAmount' => ['value' => number_format($this->amountOf($invoice), 2, '.', ''), 'currency' => 'IDR'],
+                    ], fn ($v) => $v !== null), 'additionalInfo' => ['acquirer' => ['id' => 'BCA'], 'trxId' => $invoice]]);
                 })(),
                 DokuSnapService::VA_DELETE_PATH => (function () use ($data) {
                     $this->vaStatus[$data['trxId']] = 'DELETED';
@@ -275,27 +283,66 @@ class DokuSnapTest extends TestCase
         $this->assertSame('QRIS', $bill->fresh()->payment_method);
     }
 
-    public function test_bca_va_is_created_with_a_16_digit_number_and_shown_with_how_to_pay(): void
+    public function test_bca_va_is_created_the_dgpc_way_and_shows_the_number_made_by_doku(): void
     {
         $checkout = $this->padelCheckout('BCA_VA')->assertOk();
         $this->assertSame('SNAP', $checkout->json('data.checkout_mode'));
 
         $create = $this->sentTo(DokuSnapService::VA_CREATE_PATH)[0];
         $body = $create->data();
-        $this->assertSame('   19008', $body['partnerServiceId'], 'partner service id rata kanan 8 karakter');
-        $this->assertSame($body['partnerServiceId'].$body['customerNo'], $body['virtualAccountNo']);
-        $this->assertSame(16, strlen(preg_replace('/\D/', '', $body['virtualAccountNo'])));
+        // Spesifikasi resmi "SNAP v1.1 - BCA VA - DGPC": BIN rata kanan 8 karakter + prefix sub-BIN, CHANNEL-ID H2H.
+        $this->assertSame('   19008', $body['partnerServiceId']);
+        $this->assertSame('0', $body['customerNo']);
+        $this->assertSame('   190080', $body['virtualAccountNo']);
         $this->assertSame('C', $body['virtualAccountTrxType']);
         $this->assertSame('VIRTUAL_ACCOUNT_BCA', $body['additionalInfo']['channel']);
         $this->assertFalse($body['additionalInfo']['virtualAccountConfig']['reusableStatus']);
         $this->assertSame('Budi', $body['virtualAccountName']);
-        $this->assertSame('VIRTUAL_ACCOUNT_BCA', $create->header('CHANNEL-ID')[0]);
+        $this->assertSame('H2H', $create->header('CHANNEL-ID')[0]);
         $this->assertSame($this->expectedHmac('POST', DokuSnapService::VA_CREATE_PATH, self::TOKEN, $create->body(), $create->header('X-TIMESTAMP')[0], self::SECRET), $create->header('X-SIGNATURE')[0]);
 
+        // Yang tampil = nomor lengkap buatan DOKU (16 digit), bukan yang kita kirim.
         $ticket = $this->getJson('/api/v1/padel/bookings/'.$checkout->json('data.booking_id').'/ticket')->assertOk();
         $this->assertSame('VA', $ticket->json('data.pay_display.type'));
         $this->assertSame('BCA', $ticket->json('data.pay_display.bank'));
-        $this->assertSame(preg_replace('/\D/', '', $body['virtualAccountNo']), $ticket->json('data.pay_display.va_number'));
+        $this->assertMatchesRegularExpression('/^190080\d{10}$/', $ticket->json('data.pay_display.va_number'));
+    }
+
+    public function test_unpaid_va_is_not_paid_even_though_doku_reports_the_bill_amount_as_paid_amount(): void
+    {
+        $checkout = $this->padelCheckout('BCA_VA')->assertOk();
+        $bill = $this->bill($checkout->json('data.order_id'));
+        $bookingId = $checkout->json('data.booking_id');
+
+        // Contoh resmi cek status: "Pending / Belum Terbayar" tapi paidAmount = nominal tagihan, tanpa paymentRequestId.
+        $this->getJson("/api/v1/padel/bookings/{$bookingId}/ticket?verify_payment=1")->assertOk();
+        $this->assertNotEmpty($this->sentTo(DokuSnapService::VA_STATUS_PATH), 'status VA benar-benar dicek');
+        $this->assertSame('PENDING', $bill->fresh()->status);
+        $this->assertSame('PENDING_PAYMENT', PadelBooking::where('order_id', $bill->order_id)->value('status'));
+
+        // Sudah dibayar (paymentRequestId ada, alasan "Success") → lunas.
+        $this->vaStatus[$bill->transaction_id] = '00';
+        \Illuminate\Support\Facades\Cache::flush();
+        $this->getJson("/api/v1/padel/bookings/{$bookingId}/ticket?verify_payment=1")->assertOk()->assertJsonPath('data.status', 'PAID');
+        $this->assertSame('SUCCESS', $bill->fresh()->status);
+    }
+
+    public function test_snap_with_empty_or_malformed_account_data_falls_back_to_doku_checkout_and_says_why(): void
+    {
+        $log = new \Monolog\Handler\TestHandler;
+        config(['logging.channels.doku' => ['driver' => 'monolog', 'handler' => \Monolog\Handler\NullHandler::class]]);
+        \Illuminate\Support\Facades\Log::channel('doku')->getLogger()->setHandlers([$log]);
+        config(['services.doku.snap.qris_terminal_id' => '...', 'services.doku.snap.qris_postal_code' => '']);
+
+        $this->padelCheckout('QRIS')->assertOk()->assertJsonPath('data.checkout_mode', 'REDIRECT');
+
+        $this->assertSame([], $this->sentTo(DokuSnapService::QRIS_GENERATE_PATH), 'isian ngawur tidak dikirim ke DOKU');
+        $warning = collect($log->getRecords())->first(fn ($r) => str_contains($r->message, 'DOKU SNAP QRIS tidak dipakai'));
+        $this->assertNotNull($warning, 'alasan SNAP tidak dipakai tercatat di log DOKU');
+        $this->assertSame(['DOKU_SNAP_QRIS_TERMINAL_ID', 'DOKU_SNAP_QRIS_POSTAL_CODE'], $warning->context['isian']);
+
+        config(['services.doku.snap.bca_partner_service_id' => '19008A']);
+        $this->assertSame(['DOKU_SNAP_BCA_PARTNER_SERVICE_ID'], DokuSnapService::invalidAccountData(DokuSnapService::VA));
     }
 
     public function test_changing_method_expires_the_old_qr_before_creating_the_va(): void
@@ -420,8 +467,8 @@ class DokuSnapTest extends TestCase
         // Kartu kasir menggambar QR sendiri (tanpa iframe / halaman DOKU).
         $html = view('pos.partials.auto-pay-modal', ['pendingQris' => $pending, 'pollAction' => 'poll', 'cancelAction' => 'cancel', 'simulateAction' => 'sim'])->render();
         $this->assertStringContainsString('data-doku-snap-pos', $html);
-        $this->assertStringContainsString('qrcode.min.js', $html);
         $this->assertStringNotContainsString('<iframe', $html);
+        // Library QR dimuat lewat @assets Livewire — dibuktikan di tests/Feature/Pos/AutoPayModalAssetsTest.php.
 
         $this->assertSame(PosAutoPayment::CANCELLED, app(PosAutoPayment::class)->cancel($pending['payment_id']));
         $this->assertCount(1, $this->sentTo(DokuSnapService::QRIS_EXPIRE_PATH));

@@ -74,9 +74,9 @@ return [
             'qris_merchant_id' => env('DOKU_SNAP_QRIS_MERCHANT_ID'),
             'qris_terminal_id' => env('DOKU_SNAP_QRIS_TERMINAL_ID'),
             'qris_postal_code' => env('DOKU_SNAP_QRIS_POSTAL_CODE'),
+            // BIN BCA DOKU (contoh resmi "   19008") + prefix sub-BIN merchant (contoh resmi "0"); sisa nomor VA dibuat DOKU (DGPC).
             'bca_partner_service_id' => env('DOKU_SNAP_BCA_PARTNER_SERVICE_ID'),
-            // Panjang nomor VA (BIN + nomor customer) — DGPC 16 digit untuk BCA (dokumentasi VA SNAP DOKU).
-            'va_length' => (int) env('DOKU_SNAP_VA_LENGTH', 16),
+            'bca_customer_no' => env('DOKU_SNAP_BCA_CUSTOMER_NO', '0'),
         ],
     ],
 

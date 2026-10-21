@@ -10,6 +10,8 @@ use App\Services\Payment\Doku\DokuSessionGuard;
 use App\Services\Payment\GatewayCustomer;
 use Carbon\CarbonInterface;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Log;
 use Symfony\Component\HttpKernel\Exception\HttpException;
 
 /**
@@ -26,6 +28,9 @@ use Symfony\Component\HttpKernel\Exception\HttpException;
 class DokuSnapService
 {
     public const API = 'SNAP';
+
+    /** Header CHANNEL-ID semua request SNAP QRIS & VA (dokumentasi resmi: "Please fill with H2H (Host-To-Host)"). */
+    public const CHANNEL_ID = 'H2H';
 
     public const QRIS = 'QRIS';
 
@@ -59,10 +64,39 @@ class DokuSnapService
             return null;
         }
 
-        return match (self::SUPPORTED[$channels[0]]) {
-            self::QRIS => filled(config('services.doku.snap.qris_merchant_id')) && filled(config('services.doku.snap.qris_terminal_id')) ? self::QRIS : null,
-            self::VA => filled(config('services.doku.snap.bca_partner_service_id')) ? self::VA : null,
-        };
+        $product = self::SUPPORTED[$channels[0]];
+        $invalid = self::invalidAccountData($product);
+        if ($invalid !== []) {
+            // Tanpa ini SNAP diam-diam jatuh ke DOKU Checkout dan tidak ada yang tahu sebabnya (dicatat maks. 1x/10 menit).
+            if (Cache::add('doku_snap_invalid_'.$product, true, now()->addMinutes(10))) {
+                Log::channel('doku')->warning("[ALERT] DOKU SNAP {$product} tidak dipakai (pakai DOKU Checkout): isian .env kosong / format salah", ['isian' => $invalid]);
+            }
+
+            return null;
+        }
+
+        return $product;
+    }
+
+    /**
+     * Data akun SNAP per produk yang kosong / formatnya ditolak DOKU (dokumentasi resmi SNAP QRIS & VA BCA DGPC).
+     *
+     * @return array<int, string> nama variabel .env yang bermasalah
+     */
+    public static function invalidAccountData(string $product): array
+    {
+        $rules = $product === self::QRIS
+            ? [
+                'DOKU_SNAP_QRIS_MERCHANT_ID' => ['qris_merchant_id', '/^[A-Za-z0-9_-]{1,64}$/'],
+                'DOKU_SNAP_QRIS_TERMINAL_ID' => ['qris_terminal_id', '/^[A-Za-z0-9]{3,16}$/'],
+                'DOKU_SNAP_QRIS_POSTAL_CODE' => ['qris_postal_code', '/^\d{5}$/'],
+            ]
+            : [
+                'DOKU_SNAP_BCA_PARTNER_SERVICE_ID' => ['bca_partner_service_id', '/^\d{1,8}$/'],
+                'DOKU_SNAP_BCA_CUSTOMER_NO' => ['bca_customer_no', '/^\d{1,20}$/'],
+            ];
+
+        return array_keys(array_filter($rules, fn (array $rule) => ! preg_match($rule[1], trim((string) config('services.doku.snap.'.$rule[0])))));
     }
 
     public static function isSnapSession(?array $session): bool
@@ -142,7 +176,7 @@ class DokuSnapService
                 'referenceNo' => (string) ($session['reference_no'] ?? ''),
                 'merchantId' => (string) config('services.doku.snap.qris_merchant_id'),
                 'reason' => 'Club 61: tagihan ditutup',
-            ], 'H2H');
+            ], self::CHANNEL_ID);
         } else {
             $response = $this->client->request('DELETE', self::VA_DELETE_PATH, [
                 'partnerServiceId' => (string) ($session['partner_service_id'] ?? ''),
@@ -150,7 +184,7 @@ class DokuSnapService
                 'virtualAccountNo' => (string) ($session['va_number'] ?? ''),
                 'trxId' => $invoice,
                 'additionalInfo' => ['channel' => (string) ($session['channel'] ?? '')],
-            ], (string) ($session['channel'] ?? 'H2H'));
+            ], self::CHANNEL_ID);
         }
 
         return $response !== null && $response['status'] >= 200 && $response['status'] < 300 && self::isSuccessCode($response['json']['responseCode'] ?? null);
@@ -208,7 +242,7 @@ class DokuSnapService
                 'postalCode' => (string) config('services.doku.snap.qris_postal_code'),
                 'feeType' => '1',
             ], fn ($v) => $v !== ''),
-        ], 'H2H');
+        ], self::CHANNEL_ID);
 
         $qr = $response['json']['qrContent'] ?? null;
         if (! $this->accepted($response) || ! is_string($qr) || $qr === '') {
@@ -233,7 +267,7 @@ class DokuSnapService
             'originalPartnerReferenceNo' => $invoice,
             'serviceCode' => '47',
             'merchantId' => (string) config('services.doku.snap.qris_merchant_id'),
-        ], 'H2H');
+        ], self::CHANNEL_ID);
 
         if ($response === null) {
             return ['state' => DokuCheckoutService::ERROR, 'data' => null];
@@ -276,16 +310,11 @@ class DokuSnapService
 
     private function createVa(string $invoice, int $amount, string $channel, array $customer, Carbon $expiresAt): array
     {
+        // DGPC (spesifikasi resmi "SNAP v1.1 - BCA VA - DGPC"): partnerServiceId = BIN rata kanan 8 karakter ("   19008"),
+        // customerNo = prefix sub-BIN merchant ("0"), virtualAccountNo = gabungan keduanya. Nomor VA lengkap dibuat DOKU
+        // dan dibaca dari respons (virtualAccountData.virtualAccountNo).
         $partnerServiceId = str_pad(trim((string) config('services.doku.snap.bca_partner_service_id')), 8, ' ', STR_PAD_LEFT);
-        $customerLength = (int) config('services.doku.snap.va_length', 16) - strlen(trim($partnerServiceId));
-        if ($customerLength < 4 || $customerLength > 20) {
-            DokuClient::alert('DOKU SNAP: DOKU_SNAP_VA_LENGTH / partner service id BCA tidak masuk akal.');
-            throw new PaymentGatewayUnavailableException();
-        }
-        $customerNo = '';
-        for ($i = 0; $i < $customerLength; $i++) {
-            $customerNo .= random_int(0, 9);
-        }
+        $customerNo = trim((string) config('services.doku.snap.bca_customer_no'));
 
         $clean = GatewayCustomer::clean($customer, 'Club 61 Customer');
         $response = $this->client->request('POST', self::VA_CREATE_PATH, array_filter([
@@ -300,11 +329,14 @@ class DokuSnapService
             'additionalInfo' => ['channel' => $channel, 'virtualAccountConfig' => ['reusableStatus' => false]],
             'virtualAccountTrxType' => 'C',
             'expiredDate' => $expiresAt->copy()->timezone('Asia/Jakarta')->format('c'),
-        ], fn ($v) => $v !== null), $channel);
+        ], fn ($v) => $v !== null), self::CHANNEL_ID);
 
         $data = $response['json']['virtualAccountData'] ?? null;
         $vaNumber = is_array($data) ? ($data['virtualAccountNo'] ?? null) : null;
-        if (! $this->accepted($response) || ! is_string($vaNumber) || trim($vaNumber) === '') {
+        // Nomor dari DOKU harus berawalan BIN BCA kita dan sudah dilengkapi DOKU (lebih panjang dari BIN-nya saja).
+        $bin = trim($partnerServiceId);
+        $digits = is_string($vaNumber) ? preg_replace('/\D/', '', $vaNumber) : '';
+        if (! $this->accepted($response) || strlen($digits) <= strlen($bin) || ! str_starts_with($digits, $bin)) {
             $this->failCreate($invoice, $channel, $response);
         }
 
@@ -327,10 +359,8 @@ class DokuSnapService
             'partnerServiceId' => (string) ($session['partner_service_id'] ?? ''),
             'customerNo' => (string) ($session['customer_no'] ?? ''),
             'virtualAccountNo' => (string) ($session['va_number'] ?? ''),
-            'inquiryRequestId' => null,
-            'paymentRequestId' => null,
             'additionalInfo' => (object) [],
-        ], (string) ($session['channel'] ?? 'H2H'));
+        ], self::CHANNEL_ID);
 
         if ($response === null) {
             return ['state' => DokuCheckoutService::ERROR, 'data' => null];
@@ -343,15 +373,16 @@ class DokuSnapService
         if ($response['status'] < 200 || $response['status'] >= 300 || $data === []) {
             return ['state' => DokuCheckoutService::ERROR, 'data' => null];
         }
-        if (isset($data['trxId']) && $data['trxId'] !== '' && $data['trxId'] !== $invoice) {
+        // Contoh resmi menaruh trxId di additionalInfo (bukan di virtualAccountData).
+        $trxId = $json['additionalInfo']['trxId'] ?? $data['trxId'] ?? null;
+        if (is_string($trxId) && $trxId !== '' && $trxId !== $invoice) {
             DokuClient::alert("DOKU SNAP VA: trxId respons tidak cocok [{$invoice}]");
 
             return ['state' => DokuCheckoutService::ERROR, 'data' => null];
         }
 
         $paid = (float) ($data['paidAmount']['value'] ?? 0);
-        $flag = (string) ($data['paymentFlagStatus'] ?? '');
-        $state = ($flag === '00' || ($flag === '' && $paid > 0)) ? DokuCheckoutService::PAID : DokuCheckoutService::PENDING;
+        $state = self::vaPaid($data) ? DokuCheckoutService::PAID : DokuCheckoutService::PENDING;
 
         return ['state' => $state, 'data' => [
             'order' => ['invoice_number' => $invoice, 'amount' => $paid],
@@ -361,6 +392,19 @@ class DokuSnapService
             'channel' => ['id' => $session['channel'] ?? null],
             'virtual_account_info' => ['virtual_account_number' => preg_replace('/\D/', '', (string) ($session['va_number'] ?? ''))],
         ]];
+    }
+
+    /**
+     * VA sudah dibayar menurut cek status SNAP. Contoh resmi DOKU untuk VA yang BELUM dibayar tetap mengisi paidAmount
+     * sebesar tagihan (paymentFlagReason "Pending"/"Belum Terbayar"), jadi paidAmount tidak boleh dipakai sebagai bukti.
+     * Bukti bayar = paymentRequestId ("Mandatory if Payment happened") dan alasan status bukan Pending.
+     */
+    private static function vaPaid(array $data): bool
+    {
+        $paymentRequestId = $data['paymentRequestId'] ?? null;
+        $reason = strtolower(trim((string) ($data['paymentFlagReason']['english'] ?? '')));
+
+        return is_string($paymentRequestId) && trim($paymentRequestId) !== '' && ! str_contains($reason, 'pending');
     }
 
     // ── Bantu ───────────────────────────────────────────────────────────────────────────────────────────────────
