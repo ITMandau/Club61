@@ -807,12 +807,7 @@ trait ManagesRescheduleAndCashier
                 throw new HttpException(422, 'Jam main booking ini sudah dimulai atau lewat, jadi tidak bisa dibatalkan / di-refund.');
             }
 
-            $currLock = $booking->start_time->copy();
-            $endLock = $booking->end_time->copy();
-            while ($currLock->lt($endLock)) {
-                Cache::forget("padel_lock:{$booking->court_id}:{$booking->booking_date->format('Y-m-d')}:" . $currLock->format('Hi'));
-                $currLock->addHour();
-            }
+            $this->releaseSlotCacheLocks($booking);
 
             $refundAmount = 0.0;
             $hadOrder = (bool) $booking->order_id;

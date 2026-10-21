@@ -77,6 +77,15 @@ class User extends Authenticatable implements FilamentUser
             }
         });
 
+        // Password berganti (diganti sendiri di profil, reset lewat email, diganti admin) → semua token aplikasi HP
+        // dicabut: HP yang hilang / token yang dicuri tidak tetap aktif sampai 30 hari. Sesi web di perangkat lain keluar
+        // lewat middleware AuthenticateSession (hash password di sesi tidak cocok lagi); sesi yang sedang dipakai tetap.
+        static::updated(function (User $user) {
+            if ($user->wasChanged('password')) {
+                $user->tokens()->delete();
+            }
+        });
+
         static::saved(function (User $user) {
             if ($user->pendingRole) {
                 $role = Role::findOrCreate($user->pendingRole, 'web');

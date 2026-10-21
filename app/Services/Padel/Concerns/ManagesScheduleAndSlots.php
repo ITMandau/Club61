@@ -399,16 +399,7 @@ trait ManagesScheduleAndSlots
                     }
                 }
 
-                $currLock = $booking->start_time->copy();
-                $endLock = $booking->end_time->copy();
-                while ($currLock->lt($endLock)) {
-                    $lockKey = "padel_lock:{$booking->court_id}:{$booking->booking_date->format('Y-m-d')}:" . $currLock->format('Hi');
-                    Cache::forget($lockKey);
-                    try {
-                        Cache::lock($lockKey)->forceRelease();
-                    } catch (\Throwable $e) {}
-                    $currLock->addHour();
-                }
+                $this->releaseSlotCacheLocks($booking);
 
                 $this->reverseBookingBenefits($booking);
 
@@ -561,6 +552,24 @@ trait ManagesScheduleAndSlots
         return ['LOCKED', 'PENDING_PAYMENT', 'PENDING', 'PAID', 'CHECKED_IN'];
     }
 
+    /**
+     * Lepas kunci cache slot (Tier 1) milik booking ini, per jam. Dipakai setiap jalur yang melepas slot sebelum waktu
+     * tahan habis (slot kedaluwarsa, booking batal, QR kasir dibatalkan) — tanpa ini slot tetap "sedang di-hold pemain
+     * lain" sampai kunci kedaluwarsa sendiri. Kunci DB (Tier 2) tidak bergantung pada ini.
+     */
+    public function releaseSlotCacheLocks(PadelBooking $booking): void
+    {
+        $date = $booking->booking_date->format('Y-m-d');
+        for ($cursor = $booking->start_time->copy(); $cursor->lt($booking->end_time); $cursor->addHour()) {
+            $lockKey = "padel_lock:{$booking->court_id}:{$date}:".$cursor->format('Hi');
+            Cache::forget($lockKey);
+            try {
+                Cache::lock($lockKey)->forceRelease();
+            } catch (\Throwable $e) {
+            }
+        }
+    }
+
     public function releaseExpiredLocks(): int
     {
         // Batas waktu per booking (`expires_at`, diatur di admin). Booking lama / buatan kasir tanpa `expires_at` memakai
@@ -640,16 +649,7 @@ trait ManagesScheduleAndSlots
             foreach ($expiredGroup as $b) {
                 app(\App\Services\Realtime\RealtimeSignal::class)->bookingDates($b->booking_date);
 
-                $currLock = $b->start_time->copy();
-                $endLock = $b->end_time->copy();
-                while ($currLock->lt($endLock)) {
-                    $lockKey = "padel_lock:{$b->court_id}:{$b->booking_date->format('Y-m-d')}:" . $currLock->format('Hi');
-                    Cache::forget($lockKey);
-                    try {
-                        Cache::lock($lockKey)->forceRelease();
-                    } catch (\Throwable $e) {}
-                    $currLock->addHour();
-                }
+                $this->releaseSlotCacheLocks($b);
 
                 $count++;
             }

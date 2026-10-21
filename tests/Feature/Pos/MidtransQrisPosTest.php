@@ -136,6 +136,24 @@ class MidtransQrisPosTest extends TestCase
         $this->assertSame(5, (int) $this->ball->fresh()->stock_quantity);
     }
 
+    public function test_cancelled_qr_frees_the_slot_immediately_for_the_next_payment(): void
+    {
+        $result = $this->checkoutQr();
+        app(PosMidtransQrisService::class)->cancel($result['pending_qris']['payment_id']);
+
+        // Customer batal QRIS lalu bayar EDC / orang lain pesan online: slot yang sama langsung bisa ditahan lagi,
+        // tidak menunggu kunci cache kedaluwarsa ("sedang di-hold pemain lain").
+        $other = User::factory()->customer()->create();
+        $hold = app(PadelBookingService::class)->holdBatchSlots(
+            [['court_id' => $this->court->id, 'start_time' => '14:00:00', 'end_time' => '15:00:00']],
+            $this->bookingDate,
+            $other,
+        );
+
+        $this->assertSame('LOCKED', $hold['bookings'][0]->status);
+        $this->assertSame($other->id, $hold['bookings'][0]->user_id);
+    }
+
     public function test_expired_qr_is_cancelled_by_the_cashier_screen_poll(): void
     {
         $result = $this->checkoutQr();

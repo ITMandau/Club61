@@ -8,6 +8,7 @@ use App\Models\Padel\PadelBookingEquipment;
 use App\Models\Pos\Order;
 use App\Models\Pos\Payment;
 use App\Models\User;
+use App\Support\PhoneNumber;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
@@ -980,26 +981,25 @@ trait ManagesCheckoutAndPayments
     }
 
     /**
-     * Normalisasi nomor telepon ke format lokal Indonesia (08...).
+     * Normalisasi nomor telepon ke format lokal Indonesia (08...) — aturan yang sama dengan login & pendaftaran
+     * (PhoneNumber::normalize): "812…", "62812…", "+62 812-…" → "0812…". String kosong = bukan nomor HP.
      */
     public function normalizePhoneNumber(string $phone): string
     {
-        $phone = preg_replace('/[^0-9+]/', '', trim($phone));
-        if (str_starts_with($phone, '+62')) {
-            $phone = '0' . substr($phone, 3);
-        } elseif (str_starts_with($phone, '62')) {
-            $phone = '0' . substr($phone, 2);
-        }
-
-        return $phone;
+        return PhoneNumber::normalize($phone) ?? '';
     }
 
     /**
      * Cari pelanggan walk-in berdasarkan nomor telepon atau buat akun baru otomatis (Smart Deduplication).
+     * Pencarian = 1 query lewat index users(phone, deleted_at).
      */
     public function findOrCreateWalkInCustomer(string $name, string $phone, ?string $email = null): User
     {
         $cleanPhone = $this->normalizePhoneNumber($phone);
+        // Bukan nomor HP tidak pernah dicocokkan (where phone = '' bisa mengenai akun lain).
+        if ($cleanPhone === '') {
+            throw new HttpException(422, 'Nomor HP tidak valid (minimal 8 digit angka).');
+        }
         $customer = User::where('phone', $cleanPhone)->first();
 
         if ($customer) {
@@ -1013,9 +1013,8 @@ trait ManagesCheckoutAndPayments
             $fallbackEmail = "walkin-{$ulid}@walkin.club61.internal";
         }
 
-        $rawPassword = strlen($cleanPhone) >= 6
-            ? substr($cleanPhone, -6)
-            : (empty($cleanPhone) ? '123456' : str_pad($cleanPhone, 6, '0', STR_PAD_LEFT));
+        // Password awal walk-in = 6 digit terakhir HP (disengaja). Nomor sudah pasti ≥ 8 digit di sini.
+        $rawPassword = substr($cleanPhone, -6);
 
         return User::create([
             'name' => \App\Support\PersonName::clean($name),

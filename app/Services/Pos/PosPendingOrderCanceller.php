@@ -20,7 +20,10 @@ class PosPendingOrderCanceller
     /** @return string 'PAID' kalau tagihan ternyata sudah lunas, selain itu 'CANCELLED'. */
     public static function cancel(Payment $payment, string $closedBy): string
     {
-        return DB::transaction(function () use ($payment, $closedBy) {
+        $bookingService = app(PadelBookingService::class);
+        $released = [];
+
+        $result = DB::transaction(function () use ($payment, $closedBy, $bookingService, &$released) {
             $order = Order::whereKey($payment->order_id)->lockForUpdate()->firstOrFail();
             $payment = Payment::whereKey($payment->id)->lockForUpdate()->firstOrFail();
 
@@ -40,14 +43,14 @@ class PosPendingOrderCanceller
             $order->update(['payment_status' => 'CANCELLED']);
             MembershipOnlinePaymentService::cancelForCancelledOrder($order);
 
-            $bookingService = app(PadelBookingService::class);
             PadelBooking::where('order_id', $order->id)
                 ->whereIn('status', ['PENDING_PAYMENT', 'LOCKED', 'PENDING'])
                 ->lockForUpdate()
                 ->get()
-                ->each(function (PadelBooking $booking) use ($bookingService) {
+                ->each(function (PadelBooking $booking) use ($bookingService, &$released) {
                     $bookingService->reverseBookingBenefits($booking);
                     $booking->update(['status' => 'CANCELLED']);
+                    $released[] = $booking;
                 });
 
             // Bola (habis pakai) dipotong saat checkout → kembalikan stoknya.
@@ -62,5 +65,13 @@ class PosPendingOrderCanceller
 
             return 'CANCELLED';
         });
+
+        // Setelah pembatalan tersimpan (cache tidak ikut di-rollback): slotnya langsung bisa dipakai lagi — kasir yang
+        // ganti ke EDC / customer online tidak mendapat "sedang di-hold pemain lain" sampai kunci kedaluwarsa.
+        foreach ($released as $booking) {
+            $bookingService->releaseSlotCacheLocks($booking);
+        }
+
+        return $result;
     }
 }

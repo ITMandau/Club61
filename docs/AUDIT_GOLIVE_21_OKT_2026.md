@@ -178,6 +178,16 @@ Catatan G2–G4:
 | G1 | *Opsional — hanya kalau keputusan 16 Okt diubah:* driver `mock` hanya untuk `local,testing` (allowlist, 3 baris). | `PaymentManager.php:35` | Env `staging` → webhook mock ditolak. |
 
 ### Tahap 2 — Kasir & akun (tanpa keputusan, ±1 sesi)
+
+**Status 21 Okt 2026: G8, G9, G12 SUDAH diperbaiki (belum di-commit), G37 selesai di tahap 1.** Full suite 1000 lolos.
+- G8: helper `releaseSlotCacheLocks()` (3 salinan loop digabung) + dipanggil setelah pembatalan QR kasir tersimpan.
+- G9: `normalizePhoneNumber` = `PhoneNumber::normalize`; bukan nomor HP → 422, tidak pernah `where phone = ''`.
+  Pencarian = 1 query lewat index `users(phone, deleted_at)` (dibuktikan EXPLAIN di test); input HP kasir `wire:model`
+  biasa (bukan live) → tidak query per ketikan. **Belum dicek: akun lama ber-HP tanpa 0 / dobel di DB production.**
+- G12 (koreksi): ganti sendiri di profil & reset email **ternyata sudah** mencabut token; yang bolong hanya admin
+  mengganti sandi. Sekarang dicabut di model `User` (semua jalur). Sesi web perangkat lain sudah ditangani
+  `AuthenticateSession`. Efek samping kecil: kalau `BCRYPT_ROUNDS` diubah, login web pertama me-rehash sandi →
+  token aplikasi user itu ikut dicabut sekali.
 | ID | Perbaikan | File | Test |
 |---|---|---|---|
 | G8 | Pelepasan kunci cache `padel_lock:*` dipindah ke satu helper (sekarang hanya ada di pelepas slot), dipakai juga saat QR kasir dibatalkan. | `ManagesScheduleAndSlots.php:402-411`, `PosPendingOrderCanceller.php:50` | Batalkan QRIS → slot langsung bisa dibayar EDC / dibooking online. |

@@ -647,12 +647,10 @@ class BookOfflineCourt extends Page
             return $this->selectedCustomerId ? User::find($this->selectedCustomerId) : null;
         }
 
-        $digits = preg_replace('/\D/', '', (string) $this->walkInPhone);
-        if (strlen($digits) < 8) {
-            return null;
-        }
+        // Bukan nomor HP ("" / < 8 digit) → tidak dicari sama sekali. Nomor sah = 1 query lewat index users(phone).
+        $phone = app(PadelBookingService::class)->normalizePhoneNumber((string) $this->walkInPhone);
 
-        return User::where('phone', app(PadelBookingService::class)->normalizePhoneNumber((string) $this->walkInPhone))->first();
+        return $phone === '' ? null : User::where('phone', $phone)->first();
     }
 
     public function updatedWalkInName(): void
