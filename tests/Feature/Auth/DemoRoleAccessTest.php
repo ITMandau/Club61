@@ -87,7 +87,8 @@ class DemoRoleAccessTest extends TestCase
             ->assertSet('showCancelRefundModal', true)
             ->call('openRescheduleModal', $booking->id)
             ->assertSet('showRescheduleModal', false);
-        $this->assertFalse(\App\Filament\Pages\AntrianRefund::canAccess(), 'Admin tidak bisa menyetujui refund');
+        // Audit G11: admin menyetujui refund di Antrian Refund — tapi tidak pernah refund yang ia ajukan sendiri.
+        $this->assertTrue(\App\Filament\Pages\AntrianRefund::canAccess(), 'Admin menyetujui refund (aturan dua orang)');
 
         $this->actingAs(User::factory()->superAdmin()->create());
         Livewire::test(KelolaPemesanan::class)

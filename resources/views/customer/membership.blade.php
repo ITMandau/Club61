@@ -300,11 +300,11 @@
                             <svg class="w-4 h-4 text-[#F7F0DB]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
                             </svg>
-                            <span id="btnSubmitText">Bayar via Midtrans Snap (Cashless) &rarr;</span>
+                            <span id="btnSubmitText">Bayar Sekarang (Cashless) &rarr;</span>
                         </button>
 
                         <div class="text-center text-[10px] text-[#7A5A52] leading-tight">
-                            Dengan mengklik tombol bayar, Anda menyetujui syarat &amp; ketentuan membership Club 61. Transaksi dienkripsi 256-bit oleh Midtrans.
+                            Dengan mengklik tombol bayar, Anda menyetujui syarat &amp; ketentuan membership Club 61. Pembayaran diproses dengan aman oleh penyedia pembayaran resmi.
                         </div>
                     </div>
                 </div>
@@ -502,7 +502,7 @@
             const btn = document.getElementById('btnSubmitCheckout');
             const btnText = document.getElementById('btnSubmitText');
             btn.disabled = true;
-            btnText.innerText = 'Menghubungkan Midtrans...';
+            btnText.innerText = 'Menghubungkan pembayaran...';
 
             try {
                 const token = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
@@ -524,7 +524,7 @@
                 // Masih ada pesanan paket LAIN yang belum dibayar → arahkan ke pesanan itu (lanjut bayar / batalkan).
                 if (res.status === 409 && data.data && data.data.pending_purchase) {
                     btn.disabled = false;
-                    btnText.innerText = 'Bayar via Midtrans Snap (Cashless) →';
+                    btnText.innerText = 'Bayar Sekarang (Cashless) →';
                     showLuxuryNotice({
                         title: 'Ada Pesanan Belum Dibayar',
                         message: data.message,
@@ -596,7 +596,7 @@
                         onPending: function(result) {
                             showLuxuryNotice({
                                 title: 'Menunggu Pembayaran',
-                                message: 'Silakan selesaikan transaksi cashless Anda sesuai instruksi Midtrans sebelum batas waktu berakhir.',
+                                message: 'Silakan selesaikan transaksi cashless Anda sesuai instruksi pembayaran sebelum batas waktu berakhir.',
                                 type: 'info',
                                 btnText: 'Cek Status Invoice &rarr;',
                                 onConfirm: function() {
@@ -606,7 +606,7 @@
                         },
                         onError: function(result) {
                             btn.disabled = false;
-                            btnText.innerText = 'Bayar via Midtrans Snap (Cashless) \u2192';
+                            btnText.innerText = 'Bayar Sekarang (Cashless) \u2192';
                             showLuxuryNotice({
                                 title: 'Pembayaran Dibatalkan',
                                 message: 'Transaksi tidak berhasil atau dibatalkan. Silakan coba kembali atau pilih saluran pembayaran lainnya.',
@@ -616,7 +616,7 @@
                         },
                         onClose: function() {
                             btn.disabled = false;
-                            btnText.innerText = 'Bayar via Midtrans Snap (Cashless) \u2192';
+                            btnText.innerText = 'Bayar Sekarang (Cashless) \u2192';
                         }
                     });
                     return;
@@ -641,7 +641,7 @@
 
             } catch (err) {
                 btn.disabled = false;
-                btnText.innerText = 'Bayar via Midtrans Snap (Cashless) \u2192';
+                btnText.innerText = 'Bayar Sekarang (Cashless) \u2192';
                 showLuxuryNotice({
                     title: 'Terjadi Kesalahan',
                     message: err.message || 'Gagal memproses pembayaran membership.',

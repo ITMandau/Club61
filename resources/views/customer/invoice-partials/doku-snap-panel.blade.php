@@ -78,7 +78,7 @@
             <span>We confirm your payment automatically — this page updates by itself.</span>
         </div>
         <template x-if="{{ $display }}.sandbox">
-            <p class="text-[10px] leading-snug rounded-lg px-2.5 py-1.5 bg-amber-50 border border-amber-200 text-amber-900">Test mode (DOKU sandbox): pay with the DOKU simulator, not a real banking or e-wallet app.</p>
+            <p class="text-[10px] leading-snug rounded-lg px-2.5 py-1.5 bg-amber-50 border border-amber-200 text-amber-900">Test mode (sandbox): pay with the payment simulator, not a real banking or e-wallet app.</p>
         </template>
     </div>
 </template>

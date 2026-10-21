@@ -143,7 +143,7 @@ class DokuSessionGuard
                 return ['action' => self::PAID, 'session_id' => $invoice, 'status' => $closed['data']];
             }
             if ($closed['result'] === 'FAILED') {
-                throw new HttpException(503, 'Pembayaran sebelumnya belum bisa ditutup karena DOKU sedang tidak bisa dihubungi. Coba lagi beberapa saat — jangan bayar memakai kode / VA yang lama.');
+                throw new HttpException(503, 'Pembayaran sebelumnya belum bisa ditutup karena layanan pembayaran sedang tidak bisa dihubungi. Coba lagi beberapa saat — jangan bayar memakai kode / VA yang lama.');
             }
 
             $log = self::withStatus($log, $invoice, self::CLOSED);

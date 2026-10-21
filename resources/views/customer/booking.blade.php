@@ -227,7 +227,7 @@
                 dateTabs: [],
                 activeDate: '{{ now()->format("Y-m-d") }}',
                 minDate: '{{ now()->format("Y-m-d") }}',
-                maxDate: '{{ now()->addDays(59)->format("Y-m-d") }}',
+                maxDate: '{{ now()->addDays(\App\Services\Padel\PadelBookingService::MAX_DAYS_AHEAD)->format("Y-m-d") }}',
                 // Tiap kotak = 1 jam; jam berurutan di lapangan yang sama digabung jadi satu sesi saat lanjut.
                 selectedSlots: [],
                 matrixRows: [],

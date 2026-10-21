@@ -3,6 +3,7 @@
 namespace App\Http\Requests\Auth;
 
 use App\Models\User;
+use App\Services\Auth\LoginThrottle;
 use App\Support\PhoneNumber;
 use Illuminate\Auth\Events\Lockout;
 use Illuminate\Contracts\Validation\ValidationRule;
@@ -66,6 +67,8 @@ class LoginRequest extends FormRequest
         // Batas percobaan dihitung dari identitas yang SUDAH di-resolve: dulu kuncinya teks mentah, jadi
         // "admin", email, nomor HP (0812…/+62812…) untuk akun yang sama masing-masing dapat jatah 5x.
         $this->resolvedLogin = Str::lower($login);
+        // Akun sebenarnya (atau null kalau tidak terdaftar) untuk jeda bertahap per akun — lihat LoginThrottle.
+        $this->targetUser = User::where('email', $login)->first();
         $this->ensureIsNotRateLimited();
 
         $credentials = [
@@ -75,11 +78,12 @@ class LoginRequest extends FormRequest
 
         if (! Auth::attempt($credentials, $this->boolean('remember'))) {
             $this->hitRateLimits();
+            $delay = LoginThrottle::failed($this->targetUser, $this->loginIdentity());
 
             // Beri tahu sebelum terkunci, supaya user sempat beralih ke "Lupa kata sandi?".
             $remaining = RateLimiter::remaining($this->throttleKey(), self::MAX_ATTEMPTS_ACCOUNT_IP);
-            $message = trans('auth.failed');
-            if ($remaining > 0 && $remaining <= 2) {
+            $message = $delay > 0 ? self::waitMessage($delay) : trans('auth.failed');
+            if ($delay === 0 && $remaining > 0 && $remaining <= 2) {
                 $message .= ' '.trans_choice('auth.remaining', $remaining, ['count' => $remaining]);
             }
 
@@ -99,26 +103,33 @@ class LoginRequest extends FormRequest
         }
 
         RateLimiter::clear($this->throttleKey());
-        RateLimiter::clear($this->accountThrottleKey());
+        LoginThrottle::succeeded(Auth::user());
     }
 
     /** Identitas login setelah alias/nomor HP di-resolve ke email (null sebelum authenticate() jalan). */
     protected ?string $resolvedLogin = null;
 
+    /** Akun yang dicoba (null = tidak terdaftar). */
+    protected ?User $targetUser = null;
+
     /** Maks gagal per akun + IP (pengguna sah yang salah ketik). */
     public const MAX_ATTEMPTS_ACCOUNT_IP = 5;
 
-    /** Maks gagal per akun dari IP mana pun dalam 15 menit (penyerang yang berganti-ganti IP). */
-    public const MAX_ATTEMPTS_ACCOUNT = 20;
-
-    /** Maks gagal per IP ke akun mana pun per menit (password spraying ke banyak akun). */
+    /**
+     * Maks gagal per IP ke akun mana pun per menit (password spraying ke banyak akun). Penyerang yang berganti-ganti IP
+     * ke satu akun ditahan jeda bertahap per akun (LoginThrottle), bukan kunci total.
+     */
     public const MAX_ATTEMPTS_IP = 30;
 
     protected function hitRateLimits(): void
     {
         RateLimiter::hit($this->throttleKey());
-        RateLimiter::hit($this->accountThrottleKey(), 15 * 60);
         RateLimiter::hit($this->ipThrottleKey());
+    }
+
+    public static function waitMessage(int $seconds): string
+    {
+        return trans('auth.throttle', ['seconds' => $seconds, 'minutes' => (int) ceil($seconds / 60)]);
     }
 
     /**
@@ -128,9 +139,14 @@ class LoginRequest extends FormRequest
      */
     public function ensureIsNotRateLimited(): void
     {
+        // Akun sedang ditunda (terlalu sering salah dari IP mana pun) → tolak tanpa memeriksa sandi.
+        $wait = LoginThrottle::waitSeconds($this->targetUser, $this->loginIdentity());
+        if ($wait > 0) {
+            throw ValidationException::withMessages(['email' => self::waitMessage($wait)]);
+        }
+
         $limits = [
             $this->throttleKey() => self::MAX_ATTEMPTS_ACCOUNT_IP,
-            $this->accountThrottleKey() => self::MAX_ATTEMPTS_ACCOUNT,
             $this->ipThrottleKey() => self::MAX_ATTEMPTS_IP,
         ];
 
@@ -164,11 +180,6 @@ class LoginRequest extends FormRequest
     public function throttleKey(): string
     {
         return Str::transliterate($this->loginIdentity().'|'.$this->ip());
-    }
-
-    public function accountThrottleKey(): string
-    {
-        return 'login-account:'.Str::transliterate($this->loginIdentity());
     }
 
     public function ipThrottleKey(): string

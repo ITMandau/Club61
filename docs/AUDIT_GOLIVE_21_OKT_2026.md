@@ -196,6 +196,23 @@ Catatan G2–G4:
 | G37 | `whereDate('created_at', hari ini)` → rentang `created_at` 00:00–23:59 (zona aplikasi) + index `orders(created_at)` — **migrasi baru** (digabung dengan G31/G35 jadi satu migrasi). | `BookOfflineCourt.php:2445,2456`, `FnbPosService.php:90-93` | Statistik walk-in & nomor antrian F&B tetap sama. |
 
 ### Tahap 3 — Butuh keputusan (dikerjakan setelah dijawab)
+
+**Keputusan user 21 Okt 2026 & status (belum di-commit, full suite 1013 lolos):**
+- **G6:** teks checkout "H-3" & "No refunds" **dibiarkan sengaja** (sistem tetap mengizinkan reschedule s.d. 2 jam untuk
+  kasus mendesak). S&K membership belum ada — dibiarkan. **Dikerjakan:** semua teks yang dilihat customer tidak lagi
+  menyebut Midtrans / DOKU (checkout, membership, invoice, panel bayar sandbox, 2 pesan error 503 ganti metode).
+- **G11 — dikerjakan:** `process_refund_queue` dikeluarkan dari BACKDOOR → preset role admin ikut punya; pengaju tidak
+  bisa memproses / menolak refund yang ia ajukan sendiri (server 403 + tombol nonaktif), super_admin boleh semuanya,
+  refund otomatis sistem bebas. **Di production, role admin yang sudah ada TIDAK otomatis dapat izin ini** — super_admin
+  mencentang "Proses / Tolak Refund" di Roles & Hak Akses (tercatat di Log Aktivitas).
+- **G17 — dikerjakan:** maks 4 jam per pemesanan & 4 jam belum dibayar per akun (dihitung dalam jam), maks 30 hari ke
+  depan (API + kalender halaman booking); permintaan per akun bergiliran (cache lock). Kasir walk-in tidak dibatasi.
+- **G13 — dikerjakan:** kunci total diganti jeda bertahap per akun (`App\Services\Auth\LoginThrottle`), web & API sama:
+  5 kali salah bebas, lalu 30 dtk → 1 → 2 … menit, maks 1 jam; selama menunggu sandi tidak diperiksa. Hilang saat login
+  berhasil, saat sandi diganti/direset, atau 24 jam. Setiap penundaan masuk Log Aktivitas (`auth.login_delayed`, IP ikut;
+  KRITIS saat 1 jam). **Sekalian menutup celah:** login API dulu hanya dibatasi per menit per teks identitas (varian
+  0812/+62/812 = hitungan terpisah) tanpa batas per akun.
+- **G20, G10, G15, G14:** dilewati dulu (keputusan user).
 | ID | Yang dikerjakan setelah ada jawaban |
 |---|---|
 | G6 | Halaman Syarat & Ketentuan / Privasi / Refund (isi dari PM/legal) + samakan teks checkout & membership dengan aturan sistem (atau ubah aturan sistemnya). |

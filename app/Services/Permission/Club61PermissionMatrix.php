@@ -38,11 +38,12 @@ class Club61PermissionMatrix
         // Log aktivitas berisi siapa melakukan refund, perubahan izin, dan data pelanggan.
         'View:LogAktivitas',
         'export_activity_logs',
-        // Buku Transaksi (Modul 17): seluruh omzet, data customer & bukti bayar; antrian refund = mengeluarkan uang.
+        // Buku Transaksi (Modul 17): seluruh omzet, data customer & bukti bayar.
+        // process_refund_queue TIDAK di sini (audit G11): admin / manager menyetujui refund, tapi tidak pernah refund
+        // yang ia ajukan sendiri — hanya super_admin yang boleh mengajukan sekaligus menyetujui (RefundQueueService).
         'View:BukuTransaksi',
         'export_ledger',
         'view_ledger_invoice',
-        'process_refund_queue',
         // Daftar Voucher: saldo voucher customer = uang customer yang masih disimpan klub.
         'View:DaftarVoucher',
         // Import penjualan soft opening: menulis order, booking, akun customer & Buku Transaksi langsung tanpa kasir.

@@ -85,15 +85,19 @@ class PadelBookingController extends Controller
     public function hold(Request $request): JsonResponse
     {
         $validated = $request->validate([
-            'booking_date' => ['required', 'date_format:Y-m-d', 'after_or_equal:today'],
+            'booking_date' => ['required', 'date_format:Y-m-d', 'after_or_equal:today',
+                'before_or_equal:'.now()->addDays(PadelBookingService::MAX_DAYS_AHEAD)->toDateString()],
             'slots' => ['required', 'array', 'min:1'],
             'slots.*.court_id' => ['required', 'string'],
             'slots.*.start_time' => ['required', 'date_format:H:i'],
             'slots.*.end_time' => ['required', 'date_format:H:i'],
             'coach_id' => ['nullable', 'string'],
+        ], [
+            'booking_date.before_or_equal' => 'Booking paling jauh '.PadelBookingService::MAX_DAYS_AHEAD.' hari dari hari ini.',
         ]);
 
-        $holdData = $this->bookingService->holdBatchSlots(
+        // Batas jam per pemesanan & per akun (audit G17) — kasir walk-in memakai holdBatchSlots langsung, tidak dibatasi.
+        $holdData = $this->bookingService->holdForCustomer(
             $validated['slots'],
             $validated['booking_date'],
             $request->user(),

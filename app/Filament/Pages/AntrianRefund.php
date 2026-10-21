@@ -107,6 +107,9 @@ class AntrianRefund extends Page implements HasTable
                     ->color('success')
                     ->visible(fn (Refund $r) => $r->status === 'PENDING')
                     ->authorize(fn () => auth()->user()?->can('process_refund_queue') ?? false)
+                    // Pengajuan sendiri diputuskan orang lain (kecuali super_admin) — server tetap menolak juga.
+                    ->disabled(fn (Refund $r) => ! RefundQueueService::canDecide($r, auth()->user()))
+                    ->tooltip(fn (Refund $r) => RefundQueueService::canDecide($r, auth()->user()) ? null : 'Anda yang mengajukan — harus diputuskan admin lain atau super admin')
                     ->modalHeading(fn (Refund $r) => 'Proses refund '.BukuTransaksi::rupiah($r->refund_amount))
                     ->modalDescription('Pastikan uang SUDAH dikembalikan ke customer sebelum menyimpan. Tercatat di Buku Transaksi sebagai uang keluar & di Log Aktivitas (kritis).')
                     ->modalSubmitActionLabel('Uang sudah dikembalikan')
@@ -126,6 +129,9 @@ class AntrianRefund extends Page implements HasTable
                     ->color('danger')
                     ->visible(fn (Refund $r) => $r->status === 'PENDING')
                     ->authorize(fn () => auth()->user()?->can('process_refund_queue') ?? false)
+                    // Pengajuan sendiri diputuskan orang lain (kecuali super_admin) — server tetap menolak juga.
+                    ->disabled(fn (Refund $r) => ! RefundQueueService::canDecide($r, auth()->user()))
+                    ->tooltip(fn (Refund $r) => RefundQueueService::canDecide($r, auth()->user()) ? null : 'Anda yang mengajukan — harus diputuskan admin lain atau super admin')
                     ->modalHeading(fn (Refund $r) => 'Tolak refund '.BukuTransaksi::rupiah($r->refund_amount))
                     ->modalDescription('Tidak ada uang keluar & Buku Transaksi tidak berubah. Booking tetap batal. Uangnya dijadikan voucher saldo atas nama customer (bisa dipakai untuk booking berikutnya). Alasan wajib diisi dan tercatat di Log Aktivitas (kritis).')
                     ->modalSubmitActionLabel('Tolak refund')

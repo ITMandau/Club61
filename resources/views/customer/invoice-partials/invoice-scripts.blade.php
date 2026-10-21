@@ -602,7 +602,7 @@
                     // Popup Snap tidak termuat (client key kosong / snap.js diblokir) → halaman pembayaran Midtrans.
                     window.location.href = redirectUrl;
                 } else {
-                    this.showNotice('Loading Gateway', 'Midtrans payment gateway component is loading. Please try again shortly.', 'info', 'Close');
+                    this.showNotice('Loading Payment', 'The payment page is still loading. Please try again shortly.', 'info', 'Close');
                 }
             },
 

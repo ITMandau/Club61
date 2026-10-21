@@ -110,7 +110,7 @@ class SnapSessionGuard
                 return ['action' => self::PAID, 'session_id' => $sessionId, 'status' => $closed['status']];
             }
             if ($closed['result'] === MidtransService::CLOSE_FAILED) {
-                throw new HttpException(503, 'Pembayaran sebelumnya belum bisa ditutup karena Midtrans sedang tidak bisa dihubungi. Coba lagi beberapa saat — jangan bayar memakai kode / VA yang lama.');
+                throw new HttpException(503, 'Pembayaran sebelumnya belum bisa ditutup karena layanan pembayaran sedang tidak bisa dihubungi. Coba lagi beberapa saat — jangan bayar memakai kode / VA yang lama.');
             }
 
             // Popup yang belum pernah dibuka (Midtrans belum mengenalnya) TIDAK bisa dimatikan dan masih bisa dibuka

@@ -116,14 +116,58 @@ class BukuTransaksiTest extends TestCase
         foreach (['admin', 'cashier'] as $role) {
             $user = User::factory()->role($role)->create();
             $this->actingAs($user)->get(BukuTransaksi::getUrl())->assertForbidden();
-            $this->actingAs($user)->get(AntrianRefund::getUrl())->assertForbidden();
             $this->actingAs($user)->get(route('admin.buku-transaksi.export', ['format' => 'pdf']))->assertForbidden();
         }
 
-        foreach (['View:BukuTransaksi', 'export_ledger', 'view_ledger_invoice', 'process_refund_queue'] as $permission) {
+        foreach (['View:BukuTransaksi', 'export_ledger', 'view_ledger_invoice'] as $permission) {
             $this->assertContains($permission, Club61PermissionMatrix::BACKDOOR_PERMISSIONS);
             $this->assertNotContains($permission, Club61PermissionMatrix::defaultRolePermissions('admin'));
         }
+
+        // Antrian Refund (audit G11): admin menyetujui refund (dengan aturan dua orang); kasir & resepsionis tidak.
+        $this->assertNotContains('process_refund_queue', Club61PermissionMatrix::BACKDOOR_PERMISSIONS);
+        $this->assertContains('process_refund_queue', Club61PermissionMatrix::defaultRolePermissions('admin'));
+        $this->actingAs(User::factory()->role('admin')->create())->get(AntrianRefund::getUrl())->assertOk();
+        foreach (['cashier', 'receptionist'] as $role) {
+            $this->assertNotContains('process_refund_queue', Club61PermissionMatrix::defaultRolePermissions($role));
+            $this->actingAs(User::factory()->role($role)->create())->get(AntrianRefund::getUrl())->assertForbidden();
+        }
+    }
+
+    public function test_a_refund_is_decided_by_a_second_person_unless_super_admin(): void
+    {
+        $order = $this->paidWalkIn();
+        $paymentId = Payment::where('order_id', $order->id)->value('id');
+        $refundBy = fn (?User $requester) => Refund::create([
+            'order_id' => $order->id, 'payment_id' => $paymentId, 'requested_by_id' => $requester?->id,
+            'refund_amount' => 1000, 'reason' => 'Pembatalan booking', 'status' => 'PENDING',
+        ]);
+        $adminA = User::factory()->role('admin')->create(['name' => 'Admin A']);
+        $adminB = User::factory()->role('admin')->create(['name' => 'Admin B']);
+        $service = app(RefundQueueService::class);
+
+        // Diajukan admin A → admin A tidak bisa memproses / menolak sendiri, tombolnya pun nonaktif.
+        $own = $refundBy($adminA);
+        foreach ([fn () => $service->process($own, $adminA, 'TRANSFER_BANK', 'TRF-OWN'), fn () => $service->reject($own, $adminA, 'Ditolak sendiri')] as $decide) {
+            try {
+                $decide();
+                $this->fail('Pengaju tidak boleh memutuskan refund-nya sendiri');
+            } catch (HttpException $e) {
+                $this->assertSame(403, $e->getStatusCode());
+            }
+        }
+        $this->assertSame('PENDING', $own->fresh()->status);
+        $this->actingAs($adminA);
+        Livewire::test(AntrianRefund::class)->assertTableActionDisabled('process', $own)->assertTableActionDisabled('reject', $own);
+
+        // Admin B (orang kedua) bisa.
+        $this->assertSame('PROCESSED', $service->process($own, $adminB, 'TRANSFER_BANK', 'TRF-B')->status);
+
+        // super_admin pegang hak penuh: boleh memutuskan pengajuannya sendiri.
+        $this->assertSame('PROCESSED', $service->process($refundBy($this->owner), $this->owner, 'TRANSFER_BANK', 'TRF-OWNER')->status);
+
+        // Refund otomatis dari sistem (tanpa pengaju) → siapa pun yang berizin.
+        $this->assertSame('PROCESSED', $service->process($refundBy(null), $adminA, 'TRANSFER_BANK', 'TRF-SYS')->status);
     }
 
     public function test_one_row_per_payment_and_summary_cards_follow_prd_definitions(): void
@@ -414,7 +458,10 @@ class BukuTransaksiTest extends TestCase
         ]);
 
         try {
-            app(RefundQueueService::class)->process($refund, $this->adminWith(['View:BukuTransaksi']), 'TRANSFER_BANK', 'TRF-1');
+            // Kasir tidak pernah punya izin memutuskan refund (admin sekarang punya — audit G11).
+            $cashier = User::factory()->role('cashier')->create();
+            $cashier->givePermissionTo('View:BukuTransaksi');
+            app(RefundQueueService::class)->process($refund, $cashier, 'TRANSFER_BANK', 'TRF-1');
             $this->fail('Tanpa izin process_refund_queue harus ditolak');
         } catch (HttpException $e) {
             $this->assertSame(403, $e->getStatusCode());

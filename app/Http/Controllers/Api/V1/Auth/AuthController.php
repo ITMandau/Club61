@@ -3,7 +3,9 @@
 namespace App\Http\Controllers\Api\V1\Auth;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Auth\LoginRequest;
 use App\Models\User;
+use App\Services\Auth\LoginThrottle;
 use App\Support\PersonName;
 use App\Support\PhoneNumber;
 use Illuminate\Http\JsonResponse;
@@ -82,10 +84,20 @@ class AuthController extends Controller
             $user = $normalizedPhone ? User::where('phone', $normalizedPhone)->first() : null;
         }
 
+        // Jeda bertahap per akun, sama dengan login web (G13): sedang ditunda → ditolak tanpa memeriksa sandi.
+        $wait = LoginThrottle::waitSeconds($user, $identifier);
+        if ($wait > 0) {
+            return $this->tooManyAttempts($wait);
+        }
+
         if (! $user || ! Hash::check($validated['password'], $user->password)) {
             // Login API tidak lewat Auth::attempt(), jadi event Failed bawaan tidak terpicu — catat manual.
             // Akun yang dicoba dicatat sebagai subject, bukan pelaku (pemilik akun bukan yang mencoba).
             \App\Services\Audit\ActivityLogger::loginFailed($identifier, $user, viaApi: true);
+            $delay = LoginThrottle::failed($user, $identifier, viaApi: true);
+            if ($delay > 0) {
+                return $this->tooManyAttempts($delay);
+            }
 
             return response()->json([
                 'success' => false,
@@ -102,6 +114,7 @@ class AuthController extends Controller
             ], 403);
         }
 
+        LoginThrottle::succeeded($user);
         $token = $user->createToken('flutter-mobile-app')->plainTextToken;
 
         \App\Services\Audit\ActivityLogger::record(
@@ -145,5 +158,14 @@ class AuthController extends Controller
             'success' => true,
             'message' => 'Logout berhasil. Token telah dicabut.',
         ]);
+    }
+
+    private function tooManyAttempts(int $seconds): JsonResponse
+    {
+        return response()->json([
+            'success' => false,
+            'message' => LoginRequest::waitMessage($seconds),
+            'errors' => null,
+        ], 429)->header('Retry-After', (string) $seconds);
     }
 }
