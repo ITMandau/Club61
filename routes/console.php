@@ -17,7 +17,7 @@ Artisan::command('inspire', function () {
 // Cadangan webhook DOKU (Modul 27): notifikasi yang belum tuntas & tagihan DOKU yang masih menunggu. Tanpa kunci = dilewati.
 \Illuminate\Support\Facades\Schedule::command('payment:reconcile-doku')->everyFiveMinutes()->withoutOverlapping(10)->runInBackground();
 // Jejak notifikasi DOKU disimpan 90 hari.
-\Illuminate\Support\Facades\Schedule::command('model:prune', ['--model' => [\App\Models\Payment\DokuNotification::class]])->dailyAt('02:45')->withoutOverlapping();
+\Illuminate\Support\Facades\Schedule::command('model:prune', ['--model' => [\App\Models\Payment\DokuNotification::class, \App\Models\Payment\DokuSnapVaNumber::class]])->dailyAt('02:45')->withoutOverlapping();
 // Bayar Otomatis kasir (QR / VA) yang ditinggal sampai kedaluwarsa → order ikut dibatalkan (bukan UNPAID selamanya).
 \Illuminate\Support\Facades\Schedule::command('pos:sweep-auto-payments')->everyFiveMinutes()->withoutOverlapping(10)->runInBackground();
 // Retensi Log Aktivitas (Modul 16) — default simpan 24 bulan, atur lewat AUDIT_RETENTION_MONTHS.

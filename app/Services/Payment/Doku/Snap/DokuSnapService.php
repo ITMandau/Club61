@@ -3,12 +3,14 @@
 namespace App\Services\Payment\Doku\Snap;
 
 use App\Exceptions\PaymentGatewayUnavailableException;
+use App\Models\Payment\DokuSnapVaNumber;
 use App\Models\Pos\Payment;
 use App\Services\Payment\Doku\DokuCheckoutService;
 use App\Services\Payment\Doku\DokuClient;
 use App\Services\Payment\Doku\DokuSessionGuard;
 use App\Services\Payment\GatewayCustomer;
 use Carbon\CarbonInterface;
+use Illuminate\Database\QueryException;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
@@ -145,7 +147,9 @@ class DokuSnapService
     public function close(string $invoice, array $session): array
     {
         $before = $this->state($invoice, $session);
-        if ($early = self::closeResult($before['state'])) {
+        // "Tidak ditemukan" tetap dibatalkan dulu (hapus VA / expire QR): jaga-jaga kalau jawaban itu keliru, sesi
+        // yang masih hidup jangan sampai ditinggal tanpa ditutup.
+        if ($before['state'] !== DokuCheckoutService::NOT_FOUND && $early = self::closeResult($before['state'])) {
             return ['result' => $early, 'data' => $before['data']];
         }
 
@@ -154,8 +158,10 @@ class DokuSnapService
         $result = self::closeResult($after['state']);
 
         // QR yang di-expire / VA yang dihapus tidak bisa dibayar lagi walau query status belum menyebutnya batal —
-        // asal DOKU menerima pembatalannya dan statusnya bukan lunas.
-        if ($result === null && $cancelled && $after['state'] === DokuCheckoutService::PENDING) {
+        // asal DOKU menerima pembatalannya dan statusnya bukan lunas. Jawaban cek status untuk VA yang sudah dihapus
+        // tidak didokumentasikan DOKU, jadi "tidak terbaca" (ERROR) sesudah pembatalan diterima juga = tertutup.
+        // Tagihan yang sudah dibayar tidak bisa dihapus/di-expire, dan PAID sesudahnya tetap dilaporkan PAID.
+        if ($cancelled && in_array($after['state'], [DokuCheckoutService::PENDING, DokuCheckoutService::ERROR], true)) {
             $result = DokuCheckoutService::CLOSED;
         }
         if ($result !== null) {
@@ -272,12 +278,16 @@ class DokuSnapService
         if ($response === null) {
             return ['state' => DokuCheckoutService::ERROR, 'data' => null];
         }
-        $json = $response['json'] ?? [];
+        $json = is_array($response['json'] ?? null) ? $response['json'] : [];
         $status = (string) ($json['latestTransactionStatus'] ?? '');
-        if ($response['status'] === 404 || $status === '07') {
+        // Dokumentasi DOKU (Query QR): 404xx01 "Transaction Not Found" & latestTransactionStatus 07. 404 lain belum
+        // pasti artinya → ERROR (dicoba lagi), sesi tidak pernah dianggap hilang.
+        if ($status === '07' || self::caseCode($json['responseCode'] ?? null, '404') === '01') {
             return ['state' => DokuCheckoutService::NOT_FOUND, 'data' => null];
         }
         if ($response['status'] < 200 || $response['status'] >= 300 || $status === '') {
+            $this->unrecognised($invoice, 'QRIS', $response);
+
             return ['state' => DokuCheckoutService::ERROR, 'data' => null];
         }
         // Jawaban untuk tagihan lain = janggal; jangan dipakai.
@@ -339,6 +349,7 @@ class DokuSnapService
         if (! $this->accepted($response) || strlen($digits) <= strlen($bin) || ! str_starts_with($digits, $bin)) {
             $this->failCreate($invoice, $channel, $response);
         }
+        self::rememberVaNumber($digits, $invoice);
 
         return [
             'api' => self::API,
@@ -365,12 +376,28 @@ class DokuSnapService
         if ($response === null) {
             return ['state' => DokuCheckoutService::ERROR, 'data' => null];
         }
-        $json = $response['json'] ?? [];
+        $json = is_array($response['json'] ?? null) ? $response['json'] : [];
         $data = is_array($json['virtualAccountData'] ?? null) ? $json['virtualAccountData'] : [];
-        if ($response['status'] === 404 || str_starts_with((string) ($json['responseCode'] ?? ''), '404')) {
+        // Daftar kode VA DOKU tidak memuat 404 apa pun; dipakai kode kasus SNAP BI (sama dengan tabel kode DOKU untuk
+        // produk lain): 01 Transaction Not Found, 12 Invalid Bill/VA (diblokir / tidak ada), 19 tagihan kedaluwarsa,
+        // 14 Paid Bill = SUDAH DIBAYAR. Kode lain / 404 tanpa kode SNAP → ERROR (dicoba lagi).
+        $case = self::caseCode($json['responseCode'] ?? null, '404');
+        if ($case === '01' || $case === '12') {
             return ['state' => DokuCheckoutService::NOT_FOUND, 'data' => null];
         }
+        if ($case === '19') {
+            return ['state' => DokuCheckoutService::CLOSED, 'data' => null];
+        }
+        if ($case === '14') {
+            if (Cache::add("doku_snap_paid_bill:{$invoice}", true, now()->addDay())) {
+                DokuClient::alert("DOKU SNAP VA [{$invoice}] dijawab \"Paid Bill\" (sudah dibayar) tapi detail pembayarannya tidak terbaca — cek manual di dashboard DOKU.");
+            }
+
+            return ['state' => DokuCheckoutService::ERROR, 'data' => null];
+        }
         if ($response['status'] < 200 || $response['status'] >= 300 || $data === []) {
+            $this->unrecognised($invoice, 'VA', $response);
+
             return ['state' => DokuCheckoutService::ERROR, 'data' => null];
         }
         // Contoh resmi menaruh trxId di additionalInfo (bukan di virtualAccountData).
@@ -413,6 +440,61 @@ class DokuSnapService
     public static function money(int|float $amount): string
     {
         return number_format(round((float) $amount), 2, '.', '');
+    }
+
+    /**
+     * Nomor VA → invoice untuk notifikasi VA tanpa trxId. Gagal mencatat (mis. migrasi belum dijalankan) tidak boleh
+     * menggagalkan pembayaran: pencarian jatuh ke cara lama.
+     */
+    private static function rememberVaNumber(string $digits, string $invoice): void
+    {
+        try {
+            DokuSnapVaNumber::create(['va_number' => $digits, 'invoice_number' => $invoice]);
+        } catch (QueryException $e) {
+            report($e);
+        }
+    }
+
+    /**
+     * Invoice sesi VA SNAP dengan nomor ini (yang terbaru dulu); dicocokkan lagi dengan sesi yang tercatat di tagihan.
+     * Null = tidak tercatat (VA dibuat sebelum pencatatan ada / tabel belum dimigrasi) → pemanggil memakai cara lama.
+     */
+    public static function invoiceForVaNumber(string $digits): ?string
+    {
+        try {
+            $invoices = DokuSnapVaNumber::where('va_number', $digits)->orderByDesc('id')->limit(5)->pluck('invoice_number');
+        } catch (QueryException $e) {
+            report($e);
+
+            return null;
+        }
+
+        foreach ($invoices as $invoice) {
+            $bill = DokuSessionGuard::findBill($invoice);
+            $session = $bill ? DokuSessionGuard::session($bill, $invoice) : null;
+            if (self::isSnapSession($session) && preg_replace('/\D/', '', (string) ($session['va_number'] ?? '')) === $digits) {
+                return $invoice;
+            }
+        }
+
+        return null;
+    }
+
+    /** Kode kasus (2 digit terakhir) responseCode SNAP "HTTP(3) + layanan(2) + kasus(2)", mis. "4042601" → "01". */
+    private static function caseCode(mixed $responseCode, string $http): ?string
+    {
+        return is_string($responseCode) && preg_match('/^'.$http.'\d{2}(\d{2})$/', $responseCode, $m) ? $m[1] : null;
+    }
+
+    /** Jawaban cek status yang tidak bisa dibaca → ERROR; dicatat sekali sejam per invoice supaya terlihat di log. */
+    private function unrecognised(string $invoice, string $product, array $response): void
+    {
+        if (Cache::add("doku_snap_unrecognised:{$invoice}", true, now()->addHour())) {
+            Log::channel('doku')->warning("DOKU SNAP {$product} [{$invoice}]: jawaban cek status tidak dikenali — dianggap error, dicoba lagi.", [
+                'http' => $response['status'] ?? null,
+                'responseCode' => is_array($response['json'] ?? null) ? ($response['json']['responseCode'] ?? null) : null,
+            ]);
+        }
     }
 
     /** responseCode SNAP: 3 digit pertama = HTTP; 2xx = sukses. */

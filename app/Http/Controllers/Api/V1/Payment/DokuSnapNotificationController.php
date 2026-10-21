@@ -116,13 +116,13 @@ class DokuSnapNotificationController extends Controller
             $notification = DokuNotification::where('request_id', $requestId)->firstOrFail();
         }
 
-        if (! in_array($notification->result, [DokuNotification::PROCESSED, DokuNotification::IGNORED, DokuNotification::REJECTED], true)) {
+        if (! DokuNotification::isFinal($notification->result)) {
             $id = $notification->id;
             dispatch(fn () => app(DokuNotificationProcessor::class)->process($id))->afterResponse();
         }
     }
 
-    /** Notifikasi VA tanpa trxId: cari sesi SNAP dengan nomor VA itu (tagihan DOKU 7 hari terakhir). */
+    /** Notifikasi VA tanpa trxId: cari sesi SNAP dengan nomor VA itu (dicatat saat VA dibuat). */
     private function invoiceForVa(string $virtualAccountNo): ?string
     {
         $digits = preg_replace('/\D/', '', $virtualAccountNo);
@@ -130,7 +130,12 @@ class DokuSnapNotificationController extends Controller
             return null;
         }
 
-        foreach (Payment::where('payment_gateway', 'DOKU')->where('created_at', '>=', now()->subDays(7))->latest()->get() as $bill) {
+        if ($invoice = DokuSnapService::invoiceForVaNumber($digits)) {
+            return $invoice;
+        }
+
+        // Cadangan untuk VA yang dibuat sebelum pencatatan nomor VA ada: tagihan DOKU 7 hari terakhir.
+        foreach (Payment::where('payment_gateway', 'DOKU')->where('created_at', '>=', now()->subDays(7))->latest()->get(['id', 'order_id', 'transaction_id', 'payload_log', 'created_at']) as $bill) {
             foreach (DokuSessionGuard::sessionsOf($bill) as $invoice) {
                 $session = DokuSessionGuard::session($bill, $invoice);
                 if (DokuSnapService::isSnapSession($session) && preg_replace('/\D/', '', (string) ($session['va_number'] ?? '')) === $digits) {

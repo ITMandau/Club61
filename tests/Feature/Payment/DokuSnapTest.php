@@ -62,12 +62,26 @@ class DokuSnapTest extends TestCase
     /** Nominal yang dilaporkan lunas (default nominal sesi). */
     protected array $paidAmounts = [];
 
+    /** Jawaban mentah cek status per invoice: [body, http status] — menimpa jawaban normal di atas. */
+    protected array $vaRaw = [];
+
+    protected array $qrisRaw = [];
+
+    /** Jawaban cek status untuk VA yang sudah dihapus. */
+    protected array $deletedVaAnswer = [['responseCode' => '4042601', 'responseMessage' => 'Transaction Not Found'], 404];
+
+    /** false = DOKU menolak delete-va. */
+    protected bool $vaDeleteWorks = true;
+
+    /** Folder kunci buatan test (dihapus di tearDown). */
+    protected string $keyDir;
+
     protected function setUp(): void
     {
         parent::setUp();
         Club61PermissionMatrix::syncAllPermissions('web');
 
-        $dir = storage_path('framework/testing/doku-snap-'.Str::random(8));
+        $dir = $this->keyDir = storage_path('framework/testing/doku-snap-'.Str::random(8));
         @mkdir($dir, 0700, true);
         $cnf = $dir.'/openssl.cnf';
         file_put_contents($cnf, "[ req ]\ndistinguished_name = req_dn\n[ req_dn ]\n");
@@ -105,6 +119,14 @@ class DokuSnapTest extends TestCase
         $this->date = now()->next(Carbon::WEDNESDAY)->format('Y-m-d');
     }
 
+    protected function tearDown(): void
+    {
+        if (isset($this->keyDir)) {
+            \Illuminate\Support\Facades\File::deleteDirectory($this->keyDir);
+        }
+        parent::tearDown();
+    }
+
     private function makeKey(string $cnf): array
     {
         $key = openssl_pkey_new(['private_key_bits' => 2048, 'private_key_type' => OPENSSL_KEYTYPE_RSA, 'config' => $cnf]);
@@ -125,12 +147,14 @@ class DokuSnapTest extends TestCase
                     'responseCode' => '2004700', 'responseMessage' => 'Successful', 'referenceNo' => 'REF-'.$data['partnerReferenceNo'],
                     'partnerReferenceNo' => $data['partnerReferenceNo'], 'qrContent' => '00020101021226QRIS-'.$data['partnerReferenceNo'],
                 ]),
-                DokuSnapService::QRIS_QUERY_PATH => Http::response([
-                    'responseCode' => '2005100', 'originalPartnerReferenceNo' => $data['originalPartnerReferenceNo'],
-                    'latestTransactionStatus' => $this->qrisStatus[$data['originalPartnerReferenceNo']] ?? '03',
-                    'amount' => ['value' => (string) $this->amountOf($data['originalPartnerReferenceNo']), 'currency' => 'IDR'],
-                    'paidTime' => '2026-10-20T10:00:00+07:00',
-                ]),
+                DokuSnapService::QRIS_QUERY_PATH => isset($this->qrisRaw[$data['originalPartnerReferenceNo']])
+                    ? Http::response(...$this->qrisRaw[$data['originalPartnerReferenceNo']])
+                    : Http::response([
+                        'responseCode' => '2005100', 'originalPartnerReferenceNo' => $data['originalPartnerReferenceNo'],
+                        'latestTransactionStatus' => $this->qrisStatus[$data['originalPartnerReferenceNo']] ?? '03',
+                        'amount' => ['value' => (string) $this->amountOf($data['originalPartnerReferenceNo']), 'currency' => 'IDR'],
+                        'paidTime' => '2026-10-20T10:00:00+07:00',
+                    ]),
                 DokuSnapService::QRIS_EXPIRE_PATH => (function () use ($data) {
                     $this->qrisStatus[$data['partnerReferenceNo']] = '05';
 
@@ -148,9 +172,14 @@ class DokuSnapTest extends TestCase
                 })(),
                 DokuSnapService::VA_STATUS_PATH => (function () use ($data) {
                     $invoice = $this->vaInvoices[$data['virtualAccountNo']] ?? null;
+                    if (isset($this->vaRaw[$invoice])) {
+                        return Http::response(...$this->vaRaw[$invoice]);
+                    }
                     $status = $this->vaStatus[$invoice] ?? '01';
                     if ($status === 'DELETED') {
-                        return Http::response(['responseCode' => '4042614', 'responseMessage' => 'Bill not found'], 404);
+                        // Jawaban DOKU untuk VA yang sudah dihapus tidak didokumentasikan; default kode SNAP standar
+                        // "Transaction Not Found" (kasus 01).
+                        return Http::response(...$this->deletedVaAnswer);
                     }
 
                     // Bentuk contoh resmi DOKU: VA yang BELUM dibayar tetap mengisi paidAmount = nominal tagihan.
@@ -162,6 +191,9 @@ class DokuSnapTest extends TestCase
                     ], fn ($v) => $v !== null), 'additionalInfo' => ['acquirer' => ['id' => 'BCA'], 'trxId' => $invoice]]);
                 })(),
                 DokuSnapService::VA_DELETE_PATH => (function () use ($data) {
+                    if (! $this->vaDeleteWorks) {
+                        return Http::response(['responseCode' => '5003100', 'responseMessage' => 'General Error'], 500);
+                    }
                     $this->vaStatus[$data['trxId']] = 'DELETED';
 
                     return Http::response(['responseCode' => '2003100', 'responseMessage' => 'Successful']);
@@ -374,6 +406,169 @@ class DokuSnapTest extends TestCase
         $this->padelCheckout('QRIS', '12:00')->assertOk()->assertJsonPath('data.checkout_mode', 'REDIRECT');
     }
 
+    // ── Kode 404 SNAP (G2): dibaca per kode kasus, bukan semua "tidak ditemukan" ───────────────────────────────
+
+    private function captureDokuLog(): \Monolog\Handler\TestHandler
+    {
+        $log = new \Monolog\Handler\TestHandler;
+        config(['logging.channels.doku' => ['driver' => 'monolog', 'handler' => \Monolog\Handler\NullHandler::class]]);
+        \Illuminate\Support\Facades\Log::channel('doku')->getLogger()->setHandlers([$log]);
+
+        return $log;
+    }
+
+    /** @return array{0: string, 1: array} invoice & sesi SNAP dari checkout */
+    private function snapSession(string $method, string $start = '10:00'): array
+    {
+        $bill = $this->bill($this->padelCheckout($method, $start)->assertOk()->json('data.order_id'));
+
+        return [$bill->transaction_id, DokuSessionGuard::session($bill, $bill->transaction_id)];
+    }
+
+    public function test_va_status_404_is_read_by_case_code_and_paid_bill_is_never_taken_as_not_found(): void
+    {
+        $log = $this->captureDokuLog();
+        [$invoice, $session] = $this->snapSession('BCA_VA');
+        $snap = app(DokuSnapService::class);
+        $state = function (array|string $body, int $http = 404) use ($snap, $invoice, $session) {
+            $this->vaRaw[$invoice] = [$body, $http];
+
+            return $snap->state($invoice, $session)['state'];
+        };
+
+        // Kode kasus SNAP: 14 = Paid Bill → tagihan SUDAH dibayar, tidak boleh dianggap hilang/tertutup.
+        $this->assertSame(DokuCheckoutService::ERROR, $state(['responseCode' => '4042614', 'responseMessage' => 'Paid Bill']));
+        $this->assertSame(DokuCheckoutService::ERROR, $state(['responseCode' => '4042614', 'responseMessage' => 'Paid Bill']));
+        $alerts = collect($log->getRecords())->filter(fn ($r) => str_contains($r->message, '[ALERT]') && str_contains($r->message, $invoice));
+        $this->assertCount(1, $alerts, 'Paid Bill memicu satu [ALERT], tidak berulang');
+
+        // 404 lain / 404 tanpa kode SNAP (mis. halaman nginx) = belum pasti → ERROR (dicoba lagi).
+        $this->assertSame(DokuCheckoutService::ERROR, $state(['responseCode' => '4042618', 'responseMessage' => 'Inconsistent Request']));
+        $this->assertSame(DokuCheckoutService::ERROR, $state('<html>404 Not Found</html>'));
+        $this->assertSame(DokuCheckoutService::ERROR, $state(['responseCode' => '4042608', 'responseMessage' => 'Invalid Merchant']));
+
+        // Yang memang berarti tidak ada / tidak bisa dibayar lagi.
+        $this->assertSame(DokuCheckoutService::NOT_FOUND, $state(['responseCode' => '4042601', 'responseMessage' => 'Transaction Not Found']));
+        $this->assertSame(DokuCheckoutService::NOT_FOUND, $state(['responseCode' => '4042612', 'responseMessage' => 'Invalid Bill/Virtual Account']));
+        $this->assertSame(DokuCheckoutService::CLOSED, $state(['responseCode' => '4042619', 'responseMessage' => 'Invalid Bill/Virtual Account']));
+    }
+
+    public function test_qris_query_404_is_not_found_only_for_transaction_not_found(): void
+    {
+        [$invoice, $session] = $this->snapSession('QRIS');
+        $snap = app(DokuSnapService::class);
+        $state = function (array|string $body, int $http = 404) use ($snap, $invoice, $session) {
+            $this->qrisRaw[$invoice] = [$body, $http];
+
+            return $snap->state($invoice, $session)['state'];
+        };
+
+        $this->assertSame(DokuCheckoutService::ERROR, $state(['responseCode' => '4045118', 'responseMessage' => 'Inconsistent Request']));
+        $this->assertSame(DokuCheckoutService::ERROR, $state('<html>404 Not Found</html>'));
+        $this->assertSame(DokuCheckoutService::NOT_FOUND, $state(['responseCode' => '4045101', 'responseMessage' => 'Transaction Not Found']));
+        $this->assertSame(DokuCheckoutService::NOT_FOUND, $state(['responseCode' => '2005100', 'originalPartnerReferenceNo' => $invoice, 'latestTransactionStatus' => '07'], 200));
+    }
+
+    public function test_closing_a_va_that_doku_reports_not_found_still_deletes_it(): void
+    {
+        [$invoice, $session] = $this->snapSession('BCA_VA');
+        $this->vaRaw[$invoice] = [['responseCode' => '4042601', 'responseMessage' => 'Transaction Not Found'], 404];
+
+        $closed = app(DokuSnapService::class)->close($invoice, $session);
+
+        $this->assertSame(DokuCheckoutService::NOT_FOUND, $closed['result']);
+        $this->assertCount(1, $this->sentTo(DokuSnapService::VA_DELETE_PATH), 'VA tetap diminta dihapus di DOKU');
+        $this->assertSame($invoice, $this->sentTo(DokuSnapService::VA_DELETE_PATH)[0]->data()['trxId']);
+    }
+
+    public function test_va_deleted_by_doku_counts_as_closed_even_if_the_status_answer_after_it_is_unreadable(): void
+    {
+        $this->captureDokuLog();
+        [$invoice, $session] = $this->snapSession('BCA_VA');
+        $snap = app(DokuSnapService::class);
+        $this->deletedVaAnswer = [['responseCode' => '4042600', 'responseMessage' => 'Invalid Transaction Status'], 404];
+
+        // DOKU menerima delete-va → tidak bisa dibayar lagi → ganti metode tetap jalan.
+        $this->assertSame(DokuCheckoutService::CLOSED, $snap->close($invoice, $session)['result']);
+
+        // DOKU menolak delete-va dan statusnya tidak terbaca → BELUM pasti tertutup.
+        [$other, $otherSession] = $this->snapSession('BCA_VA', '12:00');
+        $this->vaDeleteWorks = false;
+        $this->vaRaw[$other] = [['responseCode' => '4042600', 'responseMessage' => 'Invalid Transaction Status'], 404];
+        $this->assertSame('FAILED', $snap->close($other, $otherSession)['result']);
+    }
+
+    // ── Rekonsiliasi (G3) & notifikasi yang tidak pernah tuntas (G4) ────────────────────────────────────────────
+
+    public function test_reconcile_runs_when_only_snap_keys_are_set(): void
+    {
+        [$invoice] = $this->snapSession('BCA_VA');
+        // Kunci DOKU Checkout dikosongkan (rencana mematikan non-SNAP); SNAP tetap terisi.
+        config(['services.doku.client_id' => '', 'services.doku.secret_key' => '']);
+        $this->app->forgetInstance(\App\Services\Payment\Doku\DokuClient::class);
+        $this->app->forgetInstance(DokuCheckoutService::class);
+
+        $notification = DokuNotification::create([
+            'request_id' => 'SNAP-VA-RETRY-1', 'invoice_number' => $invoice, 'status' => 'SUCCESS',
+            'amount' => $this->amountOf($invoice), 'result' => DokuNotification::RETRY, 'attempts' => 1, 'received_at' => now()->subMinutes(10),
+        ]);
+        $this->vaStatus[$invoice] = '00';
+
+        $this->artisan('payment:reconcile-doku')->doesntExpectOutputToContain('dilewati')->assertSuccessful();
+
+        $this->assertSame(DokuNotification::PROCESSED, $notification->fresh()->result);
+        $this->assertSame('SUCCESS', Payment::where('transaction_id', $invoice)->value('status'));
+    }
+
+    public function test_success_notification_that_runs_out_of_attempts_is_alerted_once_and_leaves_the_queue(): void
+    {
+        $log = $this->captureDokuLog();
+        $notification = DokuNotification::create([
+            'request_id' => 'SNAP-VA-LOST-1', 'invoice_number' => 'INV-TIDAK-DIKENAL-1', 'status' => 'SUCCESS', 'amount' => 250000,
+            'result' => DokuNotification::UNMATCHED, 'attempts' => DokuNotification::MAX_ATTEMPTS - 1, 'received_at' => now()->subHours(3),
+        ]);
+
+        app(\App\Services\Payment\Doku\DokuNotificationProcessor::class)->process($notification->id);
+        app(\App\Services\Payment\Doku\DokuNotificationProcessor::class)->process($notification->id);
+        $this->artisan('payment:reconcile-doku')->assertSuccessful();
+
+        $this->assertSame(DokuNotification::EXHAUSTED, $notification->fresh()->result);
+        $this->assertSame(DokuNotification::MAX_ATTEMPTS, $notification->fresh()->attempts, 'tidak diproses lagi setelah habis');
+        $alerts = collect($log->getRecords())->filter(fn ($r) => str_contains($r->message, '[ALERT]') && str_contains($r->message, 'INV-TIDAK-DIKENAL-1'));
+        $this->assertCount(1, $alerts);
+        $this->assertStringContainsString('cek manual', $alerts->first()->message);
+
+        $activity = \App\Models\Audit\ActivityLog::where('event', 'payment.doku_notification_unresolved')->sole();
+        $this->assertSame('CRITICAL', $activity->severity);
+        $this->assertSame('INV-TIDAK-DIKENAL-1', $activity->meta['invoice']);
+
+        // DOKU mengirim ulang notifikasi yang sama → tidak diproses & tidak di-alert lagi.
+        $this->assertTrue(DokuNotification::isFinal(DokuNotification::EXHAUSTED));
+    }
+
+    public function test_unresolved_notification_older_than_the_retry_window_is_alerted_once_by_the_reconciler(): void
+    {
+        $log = $this->captureDokuLog();
+        $stale = DokuNotification::create([
+            'request_id' => 'SNAP-VA-STALE-1', 'invoice_number' => 'INV-BASI-1', 'status' => 'SUCCESS', 'amount' => 150000,
+            'result' => DokuNotification::RETRY, 'attempts' => 4, 'received_at' => now()->subHours(DokuNotification::RETRY_HOURS + 1),
+        ]);
+        // Notifikasi non-lunas yang basi juga dikeluarkan dari antrean, tapi bukan peringatan KRITIS.
+        $expired = DokuNotification::create([
+            'request_id' => 'SNAP-QR-STALE-1', 'invoice_number' => 'INV-BASI-2', 'status' => 'EXPIRED',
+            'result' => DokuNotification::RECEIVED, 'attempts' => 0, 'received_at' => now()->subHours(DokuNotification::RETRY_HOURS + 1),
+        ]);
+
+        $this->artisan('payment:reconcile-doku')->assertSuccessful();
+        $this->artisan('payment:reconcile-doku')->assertSuccessful();
+
+        $this->assertSame(DokuNotification::EXHAUSTED, $stale->fresh()->result);
+        $this->assertSame(DokuNotification::EXHAUSTED, $expired->fresh()->result);
+        $this->assertCount(1, collect($log->getRecords())->filter(fn ($r) => str_contains($r->message, 'INV-BASI-1')));
+        $this->assertSame('CRITICAL', \App\Models\Audit\ActivityLog::where('event', 'payment.doku_notification_unresolved')->where('meta->invoice', 'INV-BASI-1')->value('severity'));
+        $this->assertSame('WARNING', \App\Models\Audit\ActivityLog::where('event', 'payment.doku_notification_unresolved')->where('meta->invoice', 'INV-BASI-2')->value('severity'));
+    }
+
     // ── Masuk: token untuk DOKU & notifikasi ────────────────────────────────────────────────────────────────────
 
     private function dokuTokenRequest(?string $timestamp = null, ?\OpenSSLAsymmetricKey $key = null): \Illuminate\Testing\TestResponse
@@ -426,6 +621,42 @@ class DokuSnapTest extends TestCase
         $this->assertSame('SUCCESS', $bill->fresh()->status);
         $this->assertSame('PAID', PadelBooking::where('order_id', $bill->order_id)->value('status'));
         $this->assertSame(DokuNotification::PROCESSED, DokuNotification::where('request_id', 'SNAP-VA-112')->value('result'));
+    }
+
+    private function vaNotificationWithoutTrxId(array $session, string $externalId): \Illuminate\Testing\TestResponse
+    {
+        $token = $this->dokuTokenRequest()->json('accessToken');
+
+        return $this->withHeaders(['Authorization' => 'Bearer '.$token, 'X-EXTERNAL-ID' => $externalId])->postJson('/api/v1/payments/doku-snap/v1.1/transfer-va/payment', [
+            'partnerServiceId' => $session['partner_service_id'], 'customerNo' => $session['customer_no'], 'virtualAccountNo' => $session['va_number'],
+            'paymentRequestId' => 'PRQ-'.$externalId, 'paidAmount' => ['value' => number_format((float) $session['amount'], 2, '.', ''), 'currency' => 'IDR'],
+        ]);
+    }
+
+    public function test_va_notification_without_trx_id_finds_its_bill_from_the_recorded_va_number(): void
+    {
+        [$invoice, $session] = $this->snapSession('BCA_VA');
+        $digits = preg_replace('/\D/', '', $session['va_number']);
+        $this->assertSame($invoice, \App\Models\Payment\DokuSnapVaNumber::where('va_number', $digits)->value('invoice_number'), 'nomor VA dicatat saat dibuat');
+        $this->flushHeaders();
+
+        // 8 hari kemudian: cara lama (tagihan 7 hari terakhir) sudah tidak menjangkau → yang menemukan adalah catatan nomor VA.
+        $this->travel(8)->days();
+        $this->vaNotificationWithoutTrxId($session, '331')->assertOk();
+
+        $this->assertSame($invoice, DokuNotification::where('request_id', 'SNAP-VA-331')->value('invoice_number'));
+    }
+
+    public function test_va_payment_and_lookup_still_work_before_the_va_number_table_is_migrated(): void
+    {
+        \Illuminate\Support\Facades\Schema::drop('doku_snap_va_numbers');
+
+        [$invoice, $session] = $this->snapSession('BCA_VA');
+        $this->assertNotEmpty($session['va_number'], 'VA tetap dibuat walau pencatatan nomor VA gagal');
+        $this->flushHeaders();
+
+        $this->vaNotificationWithoutTrxId($session, '341')->assertOk();
+        $this->assertSame($invoice, DokuNotification::where('request_id', 'SNAP-VA-341')->value('invoice_number'), 'cara lama tetap menemukan tagihannya');
     }
 
     public function test_qris_notification_settles_the_paid_qr(): void

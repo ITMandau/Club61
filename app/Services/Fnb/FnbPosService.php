@@ -86,10 +86,13 @@ class FnbPosService
 
             // Nomor antrian sederhana untuk dipanggil di konter — reset harian, dihitung dari
             // jumlah order F&B hari ini (pola sama dengan PosCashierShift::generateShiftNumber()).
-            $today = now('Asia/Jakarta')->toDateString();
+            // Rentang hari WIB (bukan whereDate) supaya index orders(created_at) terpakai.
             $queueNumber = Order::query()
                 ->whereHas('items', fn ($q) => $q->where('item_type', 'FNB'))
-                ->whereDate('created_at', $today)
+                ->whereBetween('created_at', [
+                    now('Asia/Jakarta')->startOfDay()->setTimezone(config('app.timezone')),
+                    now('Asia/Jakarta')->endOfDay()->setTimezone(config('app.timezone')),
+                ])
                 ->count() + 1;
 
             $order = Order::create([

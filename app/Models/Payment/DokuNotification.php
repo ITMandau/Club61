@@ -27,6 +27,12 @@ class DokuNotification extends Model
     /** Tagihan pemilik invoice belum ditemukan (mis. notifikasi datang sebelum sesi tersimpan) → diproses ulang. */
     public const UNMATCHED = 'unmatched';
 
+    /** Batas percobaan / jendela proses ulang habis tanpa tuntas → [ALERT] sekali, tidak diproses lagi (cek manual). */
+    public const EXHAUSTED = 'exhausted';
+
+    /** Hasil akhir: tidak diproses lagi, termasuk saat DOKU mengirim ulang notifikasi yang sama. */
+    public const FINAL_RESULTS = [self::PROCESSED, self::IGNORED, self::REJECTED, self::EXHAUSTED];
+
     public const KEEP_DAYS = 90;
 
     /** Diproses ulang paling lama sejauh ini & sebanyak ini (setelahnya cukup rekonsiliasi status). */
@@ -45,6 +51,11 @@ class DokuNotification extends Model
             'received_at' => 'datetime',
             'processed_at' => 'datetime',
         ];
+    }
+
+    public static function isFinal(?string $result): bool
+    {
+        return in_array($result, self::FINAL_RESULTS, true);
     }
 
     public function prunable(): Builder

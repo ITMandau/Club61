@@ -2440,9 +2440,15 @@ class BookOfflineCourt extends Page
         // Statistik & riwayat transaksi walk-in HARI INI — di-cache 10 detik. Angka ini cuma buat
         // ditampilin di pojok layar (bukan input keputusan transaksi), jadi selisih beberapa detik
         // gak masalah, tapi query-nya sendiri gak perlu jalan ulang di SETIAP klik slot/tombol lain.
-        $walkInStatsCacheKey = 'pos_walkin_stats_today:' . now()->format('Y-m-d');
-        $walkInStatsToday = Cache::remember($walkInStatsCacheKey, 10, function () {
-            $query = \App\Models\Pos\Order::where('order_type', 'WALK_IN')->whereDate('created_at', now());
+        // "Hari ini" = hari WIB sebagai rentang created_at (bukan whereDate) supaya index orders(order_type, created_at)
+        // terpakai — whereDate membungkus kolom dengan DATE() dan memaksa MySQL menyisir semua order.
+        $todayRange = [
+            Carbon::now('Asia/Jakarta')->startOfDay()->setTimezone(config('app.timezone')),
+            Carbon::now('Asia/Jakarta')->endOfDay()->setTimezone(config('app.timezone')),
+        ];
+        $walkInStatsCacheKey = 'pos_walkin_stats_today:' . now('Asia/Jakarta')->format('Y-m-d');
+        $walkInStatsToday = Cache::remember($walkInStatsCacheKey, 10, function () use ($todayRange) {
+            $query = \App\Models\Pos\Order::where('order_type', 'WALK_IN')->whereBetween('created_at', $todayRange);
 
             return [
                 'count' => (clone $query)->count(),
@@ -2450,10 +2456,10 @@ class BookOfflineCourt extends Page
             ];
         });
 
-        $recentWalkInOrdersCacheKey = 'pos_walkin_recent_orders:' . now()->format('Y-m-d');
-        $recentWalkInOrderIds = Cache::remember($recentWalkInOrdersCacheKey, 10, function () {
+        $recentWalkInOrdersCacheKey = 'pos_walkin_recent_orders:' . now('Asia/Jakarta')->format('Y-m-d');
+        $recentWalkInOrderIds = Cache::remember($recentWalkInOrdersCacheKey, 10, function () use ($todayRange) {
             return \App\Models\Pos\Order::where('order_type', 'WALK_IN')
-                ->whereDate('created_at', now())
+                ->whereBetween('created_at', $todayRange)
                 ->latest()
                 ->limit(8)
                 ->pluck('id');

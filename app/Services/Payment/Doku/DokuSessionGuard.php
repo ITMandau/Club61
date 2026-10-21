@@ -261,7 +261,9 @@ class DokuSessionGuard
         }
 
         $found = 0;
-        $bills = Payment::where('status', 'SUCCESS')
+        // Index payments(payment_gateway, status, updated_at); order dimuat sekaligus (bukan satu query per tagihan).
+        $bills = Payment::with('order')
+            ->where('status', 'SUCCESS')
             ->where('payment_gateway', 'DOKU')
             ->where('updated_at', '>=', now()->subHours(self::SIBLING_WATCH_HOURS))
             ->get()
