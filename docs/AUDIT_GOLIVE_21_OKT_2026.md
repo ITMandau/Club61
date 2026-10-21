@@ -212,7 +212,14 @@ Catatan G2–G4:
   berhasil, saat sandi diganti/direset, atau 24 jam. Setiap penundaan masuk Log Aktivitas (`auth.login_delayed`, IP ikut;
   KRITIS saat 1 jam). **Sekalian menutup celah:** login API dulu hanya dibatasi per menit per teks identitas (varian
   0812/+62/812 = hitungan terpisah) tanpa batas per akun.
-- **G20, G10, G15, G14:** dilewati dulu (keputusan user).
+- **G20, G10, G15:** dilewati dulu (keputusan user).
+- **G14 — DITUNDA sampai setelah go-live (keputusan user).** Pemetaan ulang: pola "panggil gateway di dalam transaksi"
+  ada di ±9 alur (checkout online, bayar ulang selisih & penuh + tutup sesi lama, membership online ×2, QR kasir
+  walk-in / F&B / membership; DOKU & Midtrans). Dampak nyata terbatas: hanya saat gateway lambat, waktu tunggu dibatasi
+  (DOKU Checkout 10 dtk, SNAP 20 dtk + 1 ulang, MySQL lock wait 50 dtk), yang ikut menunggu hanya baris bersama (stok
+  bola, voucher promo), gagal = rollback otomatis. Refactor 3 fase menukar rollback otomatis dengan banyak langkah
+  pembatalan manual per alur → risiko data tidak cocok lebih besar daripada masalahnya. Kalau dikerjakan nanti: satu
+  alur per waktu, mulai checkout online. Opsi murah SUDAH dikerjakan (21 Okt): timeout SNAP 20 → 10 dtk (sama dengan DOKU Checkout & Midtrans).
 | ID | Yang dikerjakan setelah ada jawaban |
 |---|---|
 | G6 | Halaman Syarat & Ketentuan / Privasi / Refund (isi dari PM/legal) + samakan teks checkout & membership dengan aturan sistem (atau ubah aturan sistemnya). |

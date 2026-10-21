@@ -34,7 +34,11 @@ class DokuSnapClient
     /** Jam DOKU vs jam server boleh selisih sebanyak ini pada permintaan token masuk (tolak replay lama). */
     public const MAX_CLOCK_SKEW_SECONDS = 300;
 
-    public const TIMEOUT_SECONDS = 20;
+    /**
+     * Sama dengan DOKU Checkout & Midtrans (10 dtk): panggilan ini bisa berjalan di dalam transaksi DB yang mengunci baris
+     * (audit G14, refactor ditunda) — jangan menunggu lama. Terburuk ± 40 dtk kalau token ditolak lalu diulang sekali.
+     */
+    public const TIMEOUT_SECONDS = 10;
 
     public function isEnabled(): bool
     {
