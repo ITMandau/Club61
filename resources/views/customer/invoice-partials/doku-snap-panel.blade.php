@@ -1,6 +1,6 @@
 {{--
     Halaman bayar DOKU SNAP buatan sendiri (Modul 27b): QRIS (QR digambar di browser dari teks QR DOKU) atau nomor
-    VA BCA + cara bayar. Variabel: $display = ekspresi Alpine data pay_display (DokuSnapService::display), mis.
+    VA (BCA / Mandiri / BRI / BNI / BSI) + cara bayar. Variabel: $display = ekspresi Alpine data pay_display (DokuSnapService::display), mis.
     'currentTicket.pay_display'. Status lunas dicek server (polling invoice yang sudah ada) — panel ini hanya tampilan.
 --}}
 <template x-if="{{ $display }}">
@@ -69,6 +69,14 @@
                             </ol>
                         </details>
                     </div>
+                </template>
+                {{-- Bank lain (Mandiri / BRI / BNI / BSI): langkah umum — nama menu tiap aplikasi bank berbeda. --}}
+                <template x-if="{{ $display }}.bank !== 'BCA'">
+                    <ol class="list-decimal pl-4 space-y-0.5 text-[11px] text-[#7A5A52]">
+                        <li>Open your <b x-text="({{ $display }}.bank || 'bank')"></b> mobile banking, internet banking, or ATM.</li>
+                        <li>Choose the <b>Virtual Account</b> payment / transfer menu and enter the number above.</li>
+                        <li>Check that the name and amount are right, then confirm.</li>
+                    </ol>
                 </template>
             </div>
         </template>

@@ -15,6 +15,7 @@ use App\Services\Payment\Doku\DokuCheckoutService;
 use App\Services\Payment\Doku\DokuSessionGuard;
 use App\Services\Payment\Doku\Snap\DokuSnapClient;
 use App\Services\Payment\Doku\Snap\DokuSnapService;
+use App\Services\Payment\Doku\Snap\DokuSnapVaAccounts;
 use App\Services\Payment\OnlineGatewayRouter;
 use App\Services\Permission\Club61PermissionMatrix;
 use App\Services\Pos\PosAutoPayment;
@@ -704,6 +705,164 @@ class DokuSnapTest extends TestCase
         $this->assertSame(PosAutoPayment::CANCELLED, app(PosAutoPayment::class)->cancel($pending['payment_id']));
         $this->assertCount(1, $this->sentTo(DokuSnapService::QRIS_EXPIRE_PATH));
         $this->assertSame('CANCELLED', Order::find($pending['order_id'])->payment_status);
+    }
+
+    // ── VA bank lain lewat SNAP (Partner Service ID diisi admin) ───────────────────────────────────────────────
+
+    private function setSnapVa(array $accounts): void
+    {
+        PaymentGatewaySetting::query()->firstOrFail()->update(['doku_snap_va' => $accounts]);
+        app(DokuSnapVaAccounts::class)->flush();
+    }
+
+    public function test_other_bank_va_uses_snap_only_after_its_partner_service_id_is_set(): void
+    {
+        // Belum diisi → tetap DOKU Checkout, tanpa [ALERT] (memang belum dipakai, bukan salah isi).
+        $log = $this->captureDokuLog();
+        $this->padelCheckout('BNI_VA')->assertOk()->assertJsonPath('data.checkout_mode', 'REDIRECT');
+        $this->assertSame([], $this->sentTo(DokuSnapService::VA_CREATE_PATH));
+        $this->assertFalse(collect($log->getRecords())->contains(fn ($r) => str_contains($r->message, 'tidak dipakai')));
+
+        $this->setSnapVa(['VIRTUAL_ACCOUNT_BNI' => ['partner_service_id' => '98829172', 'customer_no' => '7']]);
+        $checkout = $this->padelCheckout('BNI_VA', '12:00')->assertOk()->assertJsonPath('data.checkout_mode', 'SNAP');
+
+        $body = $this->sentTo(DokuSnapService::VA_CREATE_PATH)[0]->data();
+        $this->assertSame('98829172', $body['partnerServiceId']);
+        $this->assertSame('7', $body['customerNo']);
+        $this->assertSame('988291727', $body['virtualAccountNo']);
+        $this->assertSame('VIRTUAL_ACCOUNT_BNI', $body['additionalInfo']['channel']);
+        $this->assertSame('C', $body['virtualAccountTrxType']);
+
+        $bookingId = $checkout->json('data.booking_id');
+        $ticket = $this->getJson("/api/v1/padel/bookings/{$bookingId}/ticket")->assertOk();
+        $this->assertSame('BNI', $ticket->json('data.pay_display.bank'));
+        $this->assertMatchesRegularExpression('/^988291727\d{10}$/', $ticket->json('data.pay_display.va_number'));
+
+        // Lunas lewat cek status SNAP (bukan paidAmount saja).
+        $bill = $this->bill($checkout->json('data.order_id'));
+        $this->vaStatus[$bill->transaction_id] = '00';
+        $this->getJson("/api/v1/padel/bookings/{$bookingId}/ticket?verify_payment=1")->assertOk()->assertJsonPath('data.status', 'PAID');
+        $this->assertSame('SUCCESS', $bill->fresh()->status);
+        $this->assertSame('BNI_VA', $bill->fresh()->payment_method);
+    }
+
+    public function test_bsi_va_has_its_own_method_and_uses_the_bsi_snap_channel_name(): void
+    {
+        // "VA Bank Lain" di DOKU sekarang Permata saja; BSI punya metode sendiri (nonaktif sampai diaktifkan admin).
+        $methods = app(\App\Services\Payment\OnlinePaymentMethodService::class);
+        $this->assertSame(['VIRTUAL_ACCOUNT_BANK_PERMATA'], $methods->channels('BSI_VA', OnlineGatewayRouter::DOKU));
+        $this->assertSame(['VIRTUAL_ACCOUNT_BANK_SYARIAH_MANDIRI'], $methods->channels('BSI_SYARIAH_VA', OnlineGatewayRouter::DOKU));
+        $this->assertFalse($methods->all()['BSI_SYARIAH_VA']['is_active']);
+        $this->padelCheckout('BSI_SYARIAH_VA')->assertStatus(422);
+
+        \App\Models\Pos\OnlinePaymentMethod::where('code', 'BSI_SYARIAH_VA')->firstOrFail()->update(['is_active' => true]);
+        $this->setSnapVa(['VIRTUAL_ACCOUNT_BANK_SYARIAH_MANDIRI' => ['partner_service_id' => '6059', 'customer_no' => '']]);
+        $checkout = $this->padelCheckout('BSI_SYARIAH_VA', '12:00')->assertOk()->assertJsonPath('data.checkout_mode', 'SNAP');
+
+        $body = $this->sentTo(DokuSnapService::VA_CREATE_PATH)[0]->data();
+        // Dokumentasi resmi SNAP BSI VA: channel "VIRTUAL_ACCOUNT_BSI" (beda dari kode DOKU Checkout).
+        $this->assertSame('VIRTUAL_ACCOUNT_BSI', $body['additionalInfo']['channel']);
+        $this->assertSame('    6059', $body['partnerServiceId']);
+        $this->getJson('/api/v1/padel/bookings/'.$checkout->json('data.booking_id').'/ticket')->assertJsonPath('data.pay_display.bank', 'BSI');
+
+        // Hapus VA (ganti metode / batal) memakai nama kanal SNAP yang sama.
+        $bill = $this->bill($checkout->json('data.order_id'));
+        $session = DokuSessionGuard::session($bill, $bill->transaction_id);
+        $this->assertTrue(app(DokuSnapService::class)->cancel($bill->transaction_id, $session));
+        $this->assertSame('VIRTUAL_ACCOUNT_BSI', $this->sentTo(DokuSnapService::VA_DELETE_PATH)[0]->data()['additionalInfo']['channel']);
+    }
+
+    public function test_cashier_va_uses_snap_and_shows_the_number_on_the_cashier_card(): void
+    {
+        $this->setSnapVa(['VIRTUAL_ACCOUNT_BANK_MANDIRI' => ['partner_service_id' => '70002', 'customer_no' => '0']]);
+        \App\Models\Pos\OnlinePaymentMethod::where('code', 'MANDIRI_VA')->firstOrFail()->update(['show_at_pos' => true]);
+        $cashier = User::factory()->cashier()->create(['is_active' => true]);
+        PosCashierShift::create([
+            'shift_number' => 'SFT-SNAP-0002', 'counter' => 'PADEL_FRONTDESK', 'status' => 'OPEN',
+            'opened_by_id' => $cashier->id, 'opened_at' => now(), 'starting_cash' => 0, 'expected_cash' => 0,
+        ]);
+        $order = Order::create(['order_number' => 'ORD-SNAP-VA-1', 'order_type' => 'WALK_IN', 'subtotal' => 200000, 'grand_total' => 200000, 'payment_status' => 'UNPAID']);
+
+        $pending = app(\App\Services\Payment\Doku\DokuPosQrisService::class)->open($order, 'PADEL_FRONTDESK', $cashier, ['source' => 'WALK_IN_OFFLINE'], 'MANDIRI_VA');
+
+        $this->assertNull($pending['frame_url'], 'tanpa halaman DOKU');
+        $this->assertSame('VA', $pending['snap']['type']);
+        $this->assertSame('Mandiri', $pending['snap']['bank']);
+        $this->assertMatchesRegularExpression('/^700020\d{10}$/', $pending['snap']['va_number']);
+        $this->assertSame('VIRTUAL_ACCOUNT_BANK_MANDIRI', $this->sentTo(DokuSnapService::VA_CREATE_PATH)[0]->data()['additionalInfo']['channel']);
+
+        $html = view('pos.partials.auto-pay-modal', ['pendingQris' => $pending, 'pollAction' => 'poll', 'cancelAction' => 'cancel', 'simulateAction' => 'sim'])->render();
+        $this->assertStringContainsString('Nomor Virtual Account Mandiri', $html);
+        $this->assertStringNotContainsString('<iframe', $html);
+    }
+
+    /** Isian form Edit metode bawaan (nama, badge, nominal) + DOKU SNAP. */
+    private function editData(\App\Models\Pos\OnlinePaymentMethod $method, array $snap = []): array
+    {
+        return ['label' => $method->label, 'description' => $method->description, 'badge' => $method->badge, 'min_amount' => null, 'max_amount' => null] + $snap;
+    }
+
+    public function test_snap_va_data_is_edited_inside_the_method_form_only_while_doku_is_used(): void
+    {
+        $this->actingAs(User::factory()->superAdmin()->create());
+        $bri = \App\Models\Pos\OnlinePaymentMethod::where('code', 'BRI_VA')->firstOrFail();
+        $page = \Livewire\Livewire::test(\App\Filament\Pages\MetodePembayaranOnline::class)->assertTableColumnVisible('doku_route');
+        \Livewire\Livewire::test(\App\Filament\Pages\MetodePembayaranOnline::class)->mountTableAction('edit', $bri)
+            ->assertMountedActionModalSee(['DOKU SNAP', 'Partner Service ID (BIN)', 'Configure di bank BRI']);
+
+        $page->callTableAction('edit', $bri, $this->editData($bri, ['doku_snap_partner_service_id' => '12362', 'doku_snap_customer_no' => '1']))
+            ->assertHasNoTableActionErrors();
+        $this->assertSame(['VIRTUAL_ACCOUNT_BRI' => ['partner_service_id' => '12362', 'customer_no' => '1']], app(DokuSnapVaAccounts::class)->saved());
+        $this->assertSame('SNAP', app(DokuSnapService::class)->routeFor(['VIRTUAL_ACCOUNT_BRI']));
+        $this->assertSame('CHECKOUT', app(DokuSnapService::class)->routeFor(['VIRTUAL_ACCOUNT_BNI']));
+        $this->assertTrue(\App\Models\Audit\ActivityLog::where('subject_type', 'PaymentGatewaySetting')->where('severity', 'CRITICAL')->exists(), 'tercatat di Log Aktivitas');
+
+        // Isian ngawur dikirim langsung (melewati form) ditolak server — metodenya juga tidak ikut tersimpan.
+        $page->call('saveSettings', $bri, $this->editData($bri, ['doku_snap_partner_service_id' => '12AB']) + ['label' => 'BRI Ganti']);
+        $page->call('saveSettings', $bri, $this->editData($bri, ['doku_snap_partner_service_id' => '', 'doku_snap_customer_no' => '5']));
+        $cimb = \App\Models\Pos\OnlinePaymentMethod::where('code', 'CIMB_VA')->firstOrFail();
+        $page->call('saveSettings', $cimb, $this->editData($cimb, ['doku_snap_partner_service_id' => '55555']) + ['label' => 'CIMB Ganti']);
+        $this->assertSame('12362', app(DokuSnapVaAccounts::class)->saved()['VIRTUAL_ACCOUNT_BRI']['partner_service_id']);
+        $this->assertArrayNotHasKey('VIRTUAL_ACCOUNT_BANK_CIMB', app(DokuSnapVaAccounts::class)->saved());
+        $this->assertSame($bri->label, $bri->fresh()->label);
+        $this->assertSame($cimb->label, $cimb->fresh()->label);
+
+        // Dikosongkan → bank itu kembali lewat DOKU Checkout.
+        $page->call('saveSettings', $bri, $this->editData($bri, ['doku_snap_partner_service_id' => '', 'doku_snap_customer_no' => '']));
+        $this->assertSame([], app(DokuSnapVaAccounts::class)->saved());
+        $this->assertSame('CHECKOUT', app(DokuSnapService::class)->routeFor(['VIRTUAL_ACCOUNT_BRI']));
+
+        // Gateway Midtrans di kedua tempat → bagian & kolom DOKU disembunyikan; data SNAP tetap tersimpan.
+        $page->call('saveSettings', $bri, $this->editData($bri, ['doku_snap_partner_service_id' => '12362', 'doku_snap_customer_no' => '1']));
+        PaymentGatewaySetting::query()->firstOrFail()->update(['online_gateway' => 'MIDTRANS', 'pos_qris_gateway' => 'MIDTRANS']);
+        app(OnlineGatewayRouter::class)->flush();
+        $midtransPage = \Livewire\Livewire::test(\App\Filament\Pages\MetodePembayaranOnline::class)->assertTableColumnHidden('doku_route');
+        $this->assertFalse($midtransPage->instance()->dokuInUse());
+        $midtransPage->mountTableAction('edit', $bri)->assertMountedActionModalDontSee('Partner Service ID (BIN)');
+        $this->assertSame('12362', app(DokuSnapVaAccounts::class)->saved()['VIRTUAL_ACCOUNT_BRI']['partner_service_id']);
+    }
+
+    public function test_snap_va_data_needs_the_gateway_permission_even_for_method_editors(): void
+    {
+        $editor = User::factory()->create();
+        $editor->givePermissionTo('manage_online_payment_methods');
+        $this->actingAs($editor);
+        $bri = \App\Models\Pos\OnlinePaymentMethod::where('code', 'BRI_VA')->firstOrFail();
+        $page = new \App\Filament\Pages\MetodePembayaranOnline;
+
+        // Nama / nominal tetap bisa diubah (isian SNAP terkunci & tidak dikirim).
+        $page->saveSettings($bri, ['label' => 'BRIVA', 'badge' => 'BRI']);
+        $this->assertSame('BRIVA', $bri->fresh()->label);
+
+        // Isian SNAP dikirim paksa tanpa izin gateway → 403, metode tidak berubah.
+        try {
+            $page->saveSettings($bri, ['label' => 'BRI Paksa', 'badge' => 'BRI', 'doku_snap_partner_service_id' => '99999']);
+            $this->fail('tanpa izin gateway harus ditolak');
+        } catch (\Symfony\Component\HttpKernel\Exception\HttpException $e) {
+            $this->assertSame(403, $e->getStatusCode());
+        }
+        $this->assertSame('BRIVA', $bri->fresh()->label);
+        $this->assertSame([], app(DokuSnapVaAccounts::class)->saved());
     }
 
     public function test_snap_is_not_used_without_complete_keys(): void

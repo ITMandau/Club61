@@ -17,8 +17,9 @@ use Illuminate\Support\Facades\Log;
 use Symfony\Component\HttpKernel\Exception\HttpException;
 
 /**
- * Modul 27b — QRIS (MPM) & VA BCA lewat DOKU SNAP. Halaman bayar dibuat sendiri (teks QR / nomor VA), jadi tidak ada
- * halaman DOKU yang dibuka customer.
+ * Modul 27b — QRIS (MPM) & VA (BCA, Mandiri, BRI, BNI, BSI — DokuSnapVaAccounts) lewat DOKU SNAP. Halaman bayar dibuat
+ * sendiri (teks QR / nomor VA), jadi tidak ada halaman DOKU yang dibuka customer. VA bank yang Partner Service ID-nya
+ * belum diisi tetap lewat DOKU Checkout.
  *
  * Sesi SNAP dicatat di format DokuSessionGuard (doku_sessions[invoice] + 'api' => 'SNAP'), invoice = partnerReferenceNo
  * (QRIS) / trxId (VA). DokuCheckoutService::state()/close()/cancel() meneruskan sesi SNAP ke kelas ini, jadi webhook,
@@ -38,8 +39,15 @@ class DokuSnapService
 
     public const VA = 'VA';
 
-    /** Kanal DOKU (nama di OnlinePaymentCatalog::DOKU_CHANNELS) yang sudah lewat SNAP. */
-    public const SUPPORTED = ['QRIS' => self::QRIS, 'VIRTUAL_ACCOUNT_BCA' => self::VA];
+    /** Kanal DOKU (nama di OnlinePaymentCatalog::DOKU_CHANNELS) yang bisa lewat SNAP (VA: lihat DokuSnapVaAccounts). */
+    public const SUPPORTED = [
+        'QRIS' => self::QRIS,
+        'VIRTUAL_ACCOUNT_BCA' => self::VA,
+        'VIRTUAL_ACCOUNT_BANK_MANDIRI' => self::VA,
+        'VIRTUAL_ACCOUNT_BRI' => self::VA,
+        'VIRTUAL_ACCOUNT_BNI' => self::VA,
+        'VIRTUAL_ACCOUNT_BANK_SYARIAH_MANDIRI' => self::VA,
+    ];
 
     public const QRIS_GENERATE_PATH = '/snap-adapter/b2b/v1.0/qr/qr-mpm-generate';
 
@@ -53,10 +61,7 @@ class DokuSnapService
 
     public const VA_STATUS_PATH = '/orders/v1.0/transfer-va/status';
 
-    /** Nama bank untuk kanal VA (tampilan & struk). */
-    public const BANKS = ['VIRTUAL_ACCOUNT_BCA' => 'BCA'];
-
-    public function __construct(protected DokuSnapClient $client) {}
+    public function __construct(protected DokuSnapClient $client, protected DokuSnapVaAccounts $vaAccounts) {}
 
     /** SNAP bisa dipakai untuk kanal ini (aktif, kunci lengkap, data akun kanalnya terisi)? Null = pakai DOKU Checkout. */
     public function productFor(array $channels): ?string
@@ -67,11 +72,16 @@ class DokuSnapService
         }
 
         $product = self::SUPPORTED[$channels[0]];
-        $invalid = self::invalidAccountData($product);
+        // VA bank yang belum diisi di admin (dan bukan BCA dari .env) = memang lewat DOKU Checkout, bukan kesalahan.
+        if ($product === self::VA && $this->vaAccounts->account($channels[0]) === null && $channels[0] !== 'VIRTUAL_ACCOUNT_BCA') {
+            return null;
+        }
+
+        $invalid = self::invalidAccountData($product, $channels[0]);
         if ($invalid !== []) {
             // Tanpa ini SNAP diam-diam jatuh ke DOKU Checkout dan tidak ada yang tahu sebabnya (dicatat maks. 1x/10 menit).
-            if (Cache::add('doku_snap_invalid_'.$product, true, now()->addMinutes(10))) {
-                Log::channel('doku')->warning("[ALERT] DOKU SNAP {$product} tidak dipakai (pakai DOKU Checkout): isian .env kosong / format salah", ['isian' => $invalid]);
+            if (Cache::add('doku_snap_invalid_'.$product.'_'.$channels[0], true, now()->addMinutes(10))) {
+                Log::channel('doku')->warning("[ALERT] DOKU SNAP {$product} tidak dipakai (pakai DOKU Checkout): isian kosong / format salah", ['kanal' => $channels[0], 'isian' => $invalid]);
             }
 
             return null;
@@ -81,12 +91,23 @@ class DokuSnapService
     }
 
     /**
-     * Data akun SNAP per produk yang kosong / formatnya ditolak DOKU (dokumentasi resmi SNAP QRIS & VA BCA DGPC).
+     * Data akun SNAP per produk yang kosong / formatnya ditolak DOKU (dokumentasi resmi SNAP QRIS & VA DGPC).
      *
-     * @return array<int, string> nama variabel .env yang bermasalah
+     * @return array<int, string> nama isian (.env / admin) yang bermasalah
      */
-    public static function invalidAccountData(string $product): array
+    public static function invalidAccountData(string $product, string $channel = 'VIRTUAL_ACCOUNT_BCA'): array
     {
+        if ($product === self::VA) {
+            $account = app(DokuSnapVaAccounts::class)->account($channel);
+            // Isian admin: Partner Service ID wajib, prefix customer no. boleh kosong.
+            if ($account !== null && $account['source'] === 'ADMIN') {
+                return DokuSnapVaAccounts::invalidReason($account) === null ? [] : ['SNAP VA '.DokuSnapVaAccounts::bank($channel).' (Metode Pembayaran Online → SNAP VA DOKU)'];
+            }
+            if ($channel !== 'VIRTUAL_ACCOUNT_BCA') {
+                return ['SNAP VA '.(DokuSnapVaAccounts::bank($channel) ?? $channel).' (Metode Pembayaran Online → SNAP VA DOKU)'];
+            }
+        }
+
         $rules = $product === self::QRIS
             ? [
                 'DOKU_SNAP_QRIS_MERCHANT_ID' => ['qris_merchant_id', '/^[A-Za-z0-9_-]{1,64}$/'],
@@ -99,6 +120,12 @@ class DokuSnapService
             ];
 
         return array_keys(array_filter($rules, fn (array $rule) => ! preg_match($rule[1], trim((string) config('services.doku.snap.'.$rule[0])))));
+    }
+
+    /** Jalur DOKU untuk satu metode: 'SNAP' atau 'CHECKOUT' (tampilan admin). */
+    public function routeFor(array $channels): string
+    {
+        return $this->productFor($channels) !== null ? self::API : 'CHECKOUT';
     }
 
     public static function isSnapSession(?array $session): bool
@@ -320,11 +347,16 @@ class DokuSnapService
 
     private function createVa(string $invoice, int $amount, string $channel, array $customer, Carbon $expiresAt): array
     {
-        // DGPC (spesifikasi resmi "SNAP v1.1 - BCA VA - DGPC"): partnerServiceId = BIN rata kanan 8 karakter ("   19008"),
-        // customerNo = prefix sub-BIN merchant ("0"), virtualAccountNo = gabungan keduanya. Nomor VA lengkap dibuat DOKU
-        // dan dibaca dari respons (virtualAccountData.virtualAccountNo).
-        $partnerServiceId = str_pad(trim((string) config('services.doku.snap.bca_partner_service_id')), 8, ' ', STR_PAD_LEFT);
-        $customerNo = trim((string) config('services.doku.snap.bca_customer_no'));
+        // DGPC (spesifikasi resmi "SNAP v1.1 - BCA VA - DGPC", sama untuk Mandiri / BRI / BNI / BSI): partnerServiceId = BIN
+        // rata kanan 8 karakter ("   19008"), customerNo = prefix sub-BIN merchant ("0"), virtualAccountNo = gabungan
+        // keduanya. Nomor VA lengkap dibuat DOKU dan dibaca dari respons (virtualAccountData.virtualAccountNo).
+        $account = $this->vaAccounts->account($channel);
+        $snapChannel = DokuSnapVaAccounts::snapChannel($channel);
+        if ($account === null || $snapChannel === null) {
+            throw new \InvalidArgumentException("Kanal VA DOKU SNAP belum diatur [{$channel}].");
+        }
+        $partnerServiceId = str_pad($account['partner_service_id'], 8, ' ', STR_PAD_LEFT);
+        $customerNo = $account['customer_no'];
 
         $clean = GatewayCustomer::clean($customer, 'Club 61 Customer');
         $response = $this->client->request('POST', self::VA_CREATE_PATH, array_filter([
@@ -336,7 +368,7 @@ class DokuSnapService
             'virtualAccountPhone' => $clean['phone'] ?? null,
             'trxId' => $invoice,
             'totalAmount' => ['value' => self::money($amount), 'currency' => 'IDR'],
-            'additionalInfo' => ['channel' => $channel, 'virtualAccountConfig' => ['reusableStatus' => false]],
+            'additionalInfo' => ['channel' => $snapChannel, 'virtualAccountConfig' => ['reusableStatus' => false]],
             'virtualAccountTrxType' => 'C',
             'expiredDate' => $expiresAt->copy()->timezone('Asia/Jakarta')->format('c'),
         ], fn ($v) => $v !== null), self::CHANNEL_ID);
@@ -354,8 +386,9 @@ class DokuSnapService
         return [
             'api' => self::API,
             'product' => self::VA,
-            'channel' => $channel,
-            'bank' => self::BANKS[$channel] ?? null,
+            // Nama kanal SNAP (dipakai lagi saat hapus VA — additionalInfo.channel).
+            'channel' => $snapChannel,
+            'bank' => DokuSnapVaAccounts::bank($channel),
             'request_id' => $response['external_id'],
             'partner_service_id' => (string) ($data['partnerServiceId'] ?? $partnerServiceId),
             'customer_no' => (string) ($data['customerNo'] ?? $customerNo),

@@ -2,6 +2,7 @@
 
 namespace App\Models\Pos;
 
+use App\Services\Payment\Doku\Snap\DokuSnapVaAccounts;
 use App\Services\Payment\OnlineGatewayRouter;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\DB;
@@ -12,7 +13,13 @@ use Illuminate\Support\Facades\DB;
  */
 class PaymentGatewaySetting extends Model
 {
-    protected $fillable = ['online_gateway', 'pos_qris_gateway'];
+    protected $fillable = ['online_gateway', 'pos_qris_gateway', 'doku_snap_va'];
+
+    protected function casts(): array
+    {
+        // Partner Service ID + prefix customer no. SNAP VA per kanal (DokuSnapVaAccounts).
+        return ['doku_snap_va' => 'array'];
+    }
 
     protected static function booted(): void
     {
@@ -21,6 +28,9 @@ class PaymentGatewaySetting extends Model
         });
 
         // Flush setelah commit — lihat catatan yang sama di OnlinePaymentMethod.
-        static::saved(fn () => DB::afterCommit(fn () => app(OnlineGatewayRouter::class)->flush()));
+        static::saved(fn () => DB::afterCommit(function () {
+            app(OnlineGatewayRouter::class)->flush();
+            app(DokuSnapVaAccounts::class)->flush();
+        }));
     }
 }
