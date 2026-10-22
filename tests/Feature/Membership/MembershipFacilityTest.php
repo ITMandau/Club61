@@ -244,6 +244,31 @@ class MembershipFacilityTest extends TestCase
             ->assertDontSee('Free VIP Valet Parking');
     }
 
+    public function test_plan_description_lines_become_a_check_list_on_the_membership_page(): void
+    {
+        $this->pool();
+        $plan = $this->plan([['facility' => 'PADEL', 'quota_type' => 'HOURS', 'quota_value' => 10]], [
+            'name' => 'Daytime Weekend I',
+            'duration_days' => 182,
+            'description' => "Berlaku weekday pukul 06:00-18:00\r\n- Termasuk weekend\n\n• Semua lapangan <b>indoor</b>\n",
+        ]);
+
+        $this->assertSame(['Berlaku weekday pukul 06:00-18:00', 'Termasuk weekend', 'Semua lapangan <b>indoor</b>'], $plan->descriptionLines());
+
+        // Poin yang ditulis dalam satu baris dengan pemisah " * " / " • " juga dipecah.
+        $inline = new MembershipPlan(['description' => '* Harga per jam: Rp190.000 * Masa aktif: 30 hari • Senin–Jumat 06.00–18.00']);
+        $this->assertSame(['Harga per jam: Rp190.000', 'Masa aktif: 30 hari', 'Senin–Jumat 06.00–18.00'], $inline->descriptionLines());
+
+        // Detail tampil di kartu benefit utama, di bawah deskripsi "10 Jam Padel Court".
+        $this->actingAs($this->customer)->get(route('customer.membership', ['plan' => $plan->id]))
+            ->assertOk()
+            ->assertSee('data-plan-detail="'.$plan->id.'"', false)
+            ->assertSee('Detail Paket:')
+            ->assertSeeInOrder(['Rincian Hak Akses', '10 Jam Padel Court', 'Detail Paket:', 'Berlaku weekday pukul 06:00-18:00', 'Termasuk weekend', 'Semua lapangan'])
+            ->assertSee('Semua lapangan &lt;b&gt;indoor&lt;/b&gt;', false) // teks admin tetap di-escape
+            ->assertDontSee('- Termasuk weekend');
+    }
+
     public function test_deactivated_facility_is_hidden_from_sales_pages(): void
     {
         $pool = $this->pool();
