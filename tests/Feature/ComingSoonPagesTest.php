@@ -2,7 +2,6 @@
 
 namespace Tests\Feature;
 
-use App\Filament\Pages\DaftarVoucher;
 use App\Filament\Pages\KelolaClub;
 use App\Filament\Pages\KelolaKaryawan;
 use App\Filament\Pages\KelolaTurnamen;
@@ -36,7 +35,8 @@ class ComingSoonPagesTest extends TestCase
             KelolaClub::class => ['4 Padel Arena', 'Finnish Cedar Sauna', 'WiFi 300 Mbps'],
             KelolaKaryawan::class => ['Coach Budi Santoso', 'Siti Hair Stylist', 'Komisi 15%'],
             KelolaTurnamen::class => ['Club 61 Open Championship 2026', 'Rp 25.000.000', '24 / 32 Pasang'],
-            Marketing::class => ['HAPPYHOUR', 'WELLNESSPACK', 'MEMBERGETMEMBER', 'Terpakai: 48 / 100'],
+            // Marketing = iklan digital (belum dibangun); kode promo dikelola di Daftar Voucher.
+            Marketing::class => ['HAPPYHOUR', 'Buat Promo'],
         ];
 
         foreach ($dummy as $page => $texts) {
@@ -50,19 +50,18 @@ class ComingSoonPagesTest extends TestCase
 
         // Link ke halaman yang sudah jalan.
         $this->get(KelolaClub::getUrl())->assertSee(MasterData::getUrl(), false);
-        $this->get(Marketing::getUrl())->assertSee(DaftarVoucher::getUrl(), false);
     }
 
     public function test_links_only_show_pages_the_staff_can_open(): void
     {
-        $role = Role::create(['name' => 'marketing_only', 'guard_name' => 'web']);
-        $role->syncPermissions(['View:Marketing']);
+        $role = Role::create(['name' => 'club_only', 'guard_name' => 'web']);
+        $role->syncPermissions(['View:KelolaClub']);
         $staff = User::factory()->create();
         $staff->syncRoles([$role]);
 
-        $this->actingAs($staff)->get(Marketing::getUrl())->assertOk()
+        $this->actingAs($staff)->get(KelolaClub::getUrl())->assertOk()
             ->assertSee('Segera Hadir')
-            ->assertDontSee(DaftarVoucher::getUrl(), false)
+            ->assertDontSee(MasterData::getUrl(), false)
             ->assertDontSee('Sudah bisa dipakai sekarang');
     }
 

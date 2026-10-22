@@ -7,8 +7,9 @@
         <meta name="viewport" content="width=device-width, initial-scale=1">
         <meta name="csrf-token" content="{{ csrf_token() }}">
 
-        <title>{{ config('app.name', 'Club 61 Padel Court') }} - Play. Compete. Connect.</title>
-        <link rel="icon" type="image/png" href="{{ asset('images/identity/monogram-terracotta.png') }}">
+        <title>{{ config('app.name', 'Club 61 Padel & Wellness') }} - Play. Compete. Connect.</title>
+        <link rel="icon" type="image/png" href="{{ asset('images/identity/favicon.png').'?v=2' }}">
+        <link rel="apple-touch-icon" href="{{ asset('images/identity/apple-touch-icon.png').'?v=2' }}">
         <meta name="theme-color" content="#662721">
 
         <!-- Google Fonts: Luxury Serif & Athletic Sans -->

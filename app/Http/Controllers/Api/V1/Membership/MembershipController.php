@@ -218,7 +218,7 @@ class MembershipController extends Controller
                     'order' => $order->fresh(),
                     'membership' => $membership->fresh(['balances', 'plan']),
                     // Data internal sesi DOKU (Request-Id untuk pembatalan, token) tidak dikirim ke browser.
-                    'payment' => \Illuminate\Support\Arr::except($paymentResult, ['request_id', 'token_id', 'expires_at']),
+                    'payment' => \Illuminate\Support\Arr::except($paymentResult, ['request_id', 'token_id', 'expires_at', 'snap']),
                 ];
             });
 
@@ -378,6 +378,10 @@ class MembershipController extends Controller
                     'can_pay_online' => $m->status === 'PENDING_PAYMENT' && ! $m->sold_by_admin_id
                         && $order?->order_type === 'MEMBERSHIP' && $order?->payment_status === 'UNPAID',
                     'payment_method' => $latestPayment?->payment_method,
+                    // DOKU SNAP (Modul 27b): teks QR / nomor VA yang masih menunggu dibayar — halaman bayar kita sendiri.
+                    'pay_display' => $m->status === 'PENDING_PAYMENT'
+                        ? \App\Services\Payment\Doku\Snap\DokuSnapService::display($order?->payments->first(fn ($p) => $p->status === 'PENDING' && $p->payment_gateway === 'DOKU'))
+                        : null,
                     'subtotal' => (float) ($order?->subtotal ?? $m->purchase_price_snapshot ?? 0),
                     'discount_amount' => (float) ($order?->discount_amount ?? 0),
                     'tax_amount' => (float) ($order?->tax_amount ?? 0),

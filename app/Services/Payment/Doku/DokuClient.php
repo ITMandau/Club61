@@ -114,11 +114,41 @@ class DokuClient
         }
 
         $json = $response->json();
+        $error = $response->successful() ? null : self::errorDetail(is_array($json) ? $json : null, $response->body());
         Log::channel('doku')->info("{$method} {$path} → HTTP {$response->status()}", array_filter([
             'request_id' => $requestId,
-            'error_messages' => is_array($json) ? ($json['error_messages'] ?? $json['error'] ?? null) : null,
+            'error' => $error,
         ]));
 
-        return ['status' => $response->status(), 'json' => is_array($json) ? $json : null, 'request_id' => $requestId];
+        return ['status' => $response->status(), 'json' => is_array($json) ? $json : null, 'request_id' => $requestId, 'error' => $error];
+    }
+
+    /**
+     * Alasan penolakan dari DOKU untuk log. Bentuk error DOKU tidak seragam (error_messages / error / message), jadi
+     * hanya kunci-kunci error itu yang diambil — bukan seluruh body (bisa memuat data customer). Body bukan JSON
+     * (mis. halaman error proxy) → 300 karakter pertama.
+     */
+    public static function errorDetail(?array $json, string $rawBody = ''): mixed
+    {
+        if ($json !== null) {
+            $picked = array_intersect_key($json, array_flip(['error_messages', 'error', 'errors', 'message', 'code', 'status', 'error_code', 'error_message']));
+
+            return $picked !== [] ? $picked : ['keys' => array_keys($json)];
+        }
+
+        $text = trim(preg_replace('/\s+/', ' ', strip_tags($rawBody)) ?? '');
+
+        return $text === '' ? null : mb_substr($text, 0, 300);
+    }
+
+    /** Penolakan karena kunci / tanda tangan kita (masalah pengaturan server), bukan karena isi tagihan. */
+    public static function isCredentialError(int $status, mixed $error): bool
+    {
+        if (in_array($status, [401, 403], true)) {
+            return true;
+        }
+        $text = strtolower(is_string($error) ? $error : (string) json_encode($error));
+
+        return str_contains($text, 'client_id') || str_contains($text, 'client-id') || str_contains($text, 'signature');
     }
 }

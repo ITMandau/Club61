@@ -1,16 +1,38 @@
 <x-guest-layout theme="terracotta">
     {{-- Brand guideline Club 61: Terakota (dominan) #662721, Cokelat #4F2F2A, Cream #F7F0DB — pola sama dengan halaman depan.
          HP: form dulu (tujuan utama halaman ini), panel venue di bawahnya. Layar lebar: panel venue kiri, form kanan. --}}
+    {{-- Pesan gagal masuk / status (mis. kata sandi berhasil diubah) melayang di atas halaman — dulu ditaruh di bawah kolom
+         email sehingga kartu form (dan panel foto di sebelahnya) ikut memanjang 2–3 baris setiap kali ada pesan. --}}
+    @php($loginError = $errors->first('email') ?: $errors->first('password'))
+    @php($loginStatus = session('status'))
+    @if($loginError || $loginStatus)
+        <div id="login-alert" role="alert" aria-live="assertive"
+             class="fixed z-50 top-4 inset-x-4 sm:inset-x-auto sm:left-1/2 sm:-translate-x-1/2 sm:w-[30rem] flex items-start gap-3 p-4 rounded-lg border shadow-[0_18px_40px_-18px_rgba(79,47,42,0.55)] {{ $loginError ? 'bg-rose-50 border-rose-200 text-rose-800' : 'bg-club-paper border-club-line text-club-terra' }}">
+            <svg class="w-5 h-5 shrink-0 mt-px" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true">
+                @if($loginError)
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+                @else
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                @endif
+            </svg>
+            <p class="flex-1 text-sm font-medium leading-snug">{{ $loginError ?: $loginStatus }}</p>
+            <button type="button" onclick="document.getElementById('login-alert').remove()" aria-label="Tutup pesan"
+                    class="shrink-0 -m-1 p-1 rounded opacity-70 hover:opacity-100 cursor-pointer">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+            </button>
+        </div>
+    @endif
+
     <div class="w-full max-w-6xl mx-auto my-auto">
         <div class="grid grid-cols-1 lg:grid-cols-12 gap-5 lg:gap-6 items-stretch">
 
             {{-- ============ PANEL VENUE ============ --}}
             <div class="order-2 lg:order-1 lg:col-span-7 relative overflow-hidden rounded-xl bg-club-terra-dark text-club-cream min-h-[420px] lg:min-h-[600px] flex flex-col">
-                <img src="{{ asset('images/club-hero.jpg') }}" alt="Club 61 Padel Court" class="absolute inset-0 w-full h-full object-cover">
+                <img src="{{ asset('images/club-hero.jpg') }}" alt="Club 61 Padel &amp; Wellness" class="absolute inset-0 w-full h-full object-cover">
                 <div class="absolute inset-0" style="background: linear-gradient(180deg, rgba(30,18,15,0.62) 0%, rgba(30,18,15,0.35) 40%, rgba(30,18,15,0.9) 100%);"></div>
 
                 <div class="relative z-10 p-6 sm:p-8 flex items-start justify-between gap-4">
-                    <img src="{{ asset('images/identity/logo-cream.png') }}" alt="Club 61 Padel Court" class="h-[90px] sm:h-24 w-auto">
+                    <img src="{{ asset('images/identity/logo-cream.png').'?v=2' }}" alt="Club 61 Padel & Wellness" class="h-[90px] sm:h-24 w-auto">
                     <span class="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-club-cream/30 bg-[rgba(30,18,15,0.55)] text-[11px] font-bold uppercase tracking-wider text-club-cream">
                         <span class="w-2 h-2 rounded-full bg-emerald-400 motion-safe:animate-pulse"></span>
                         Venue live &bull; {{ $companyProfile->court_count }} COURTS OPEN
@@ -42,7 +64,7 @@
                 <div class="relative z-10 bg-club-terra px-6 sm:px-8 py-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1.5 text-xs">
                     <span class="flex items-center gap-2 text-club-cream/90">
                         <span class="w-1.5 h-1.5 rounded-full bg-club-cream/70"></span>
-                        Gedung Indosat Medan &bull; {{ $companyProfile->localized('operating_hours_text') }}
+                        {{ \App\Models\Setting\CompanyProfileSetting::receiptAddress() }} &bull; {{ $companyProfile->localized('operating_hours_text') }}
                     </span>
                     <span class="font-semibold tracking-wide text-club-cream">{{ $companyProfile->portal_domain_text }}</span>
                 </div>
@@ -93,8 +115,6 @@
                 </div>
                 @endif
 
-                <x-auth-session-status class="mb-4 text-sm text-club-terra bg-club-cream p-3 rounded-md border border-club-line" :status="session('status')" />
-
                 <form method="POST" action="{{ route('login') }}" class="space-y-5">
                     @csrf
 
@@ -108,9 +128,9 @@
                             </span>
                             <input id="email" type="text" name="email" value="{{ old('email') }}" required autofocus autocomplete="username"
                                    placeholder="nama@email.com atau 0812xxxxxxxx"
-                                   class="w-full h-12 pl-10 pr-4 rounded-md bg-white border border-club-line text-club-brown placeholder-club-muted/70 text-[15px] focus:border-club-terra focus:ring-2 focus:ring-club-terra/20 outline-none transition">
+                                   @if($errors->has('email')) aria-invalid="true" aria-describedby="login-alert" @endif
+                                   class="w-full h-12 pl-10 pr-4 rounded-md bg-white border {{ $errors->has('email') ? 'border-rose-400 focus:border-rose-500 focus:ring-rose-200' : 'border-club-line focus:border-club-terra focus:ring-club-terra/20' }} text-club-brown placeholder-club-muted/70 text-[15px] focus:ring-2 outline-none transition">
                         </div>
-                        <x-input-error :messages="$errors->get('email')" class="mt-1.5 text-sm text-rose-700" />
                     </div>
 
                     <div>
@@ -125,7 +145,8 @@
                                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
                             </span>
                             <input id="password" type="password" name="password" required autocomplete="current-password" placeholder="••••••••••"
-                                   class="w-full h-12 pl-10 pr-12 rounded-md bg-white border border-club-line text-club-brown placeholder-club-muted/70 text-[15px] focus:border-club-terra focus:ring-2 focus:ring-club-terra/20 outline-none transition">
+                                   @if($errors->has('password')) aria-invalid="true" aria-describedby="login-alert" @endif
+                                   class="w-full h-12 pl-10 pr-12 rounded-md bg-white border {{ $errors->has('password') ? 'border-rose-400 focus:border-rose-500 focus:ring-rose-200' : 'border-club-line focus:border-club-terra focus:ring-club-terra/20' }} text-club-brown placeholder-club-muted/70 text-[15px] focus:ring-2 outline-none transition">
                             <button type="button" onclick="togglePasswordVisibility()" aria-label="Lihat atau sembunyikan kata sandi"
                                     class="absolute inset-y-0 right-0 w-12 flex items-center justify-center text-club-muted hover:text-club-terra transition-colors cursor-pointer">
                                 <svg id="eye-icon" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -134,7 +155,6 @@
                                 </svg>
                             </button>
                         </div>
-                        <x-input-error :messages="$errors->get('password')" class="mt-1.5 text-sm text-rose-700" />
                     </div>
 
                     <label for="remember_me" class="inline-flex items-center gap-2.5 cursor-pointer select-none">

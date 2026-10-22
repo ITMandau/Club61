@@ -5,6 +5,7 @@ namespace App\Console\Commands;
 use App\Models\Payment\DokuNotification;
 use App\Models\Pos\Order;
 use App\Models\Pos\Payment;
+use App\Services\Payment\Doku\DokuCheckoutService;
 use App\Services\Payment\Doku\DokuClient;
 use App\Services\Payment\Doku\DokuNotificationProcessor;
 use App\Services\Payment\Doku\DokuReconciliationService;
@@ -15,7 +16,7 @@ use Illuminate\Support\Facades\Cache;
 /**
  * Jaring pengaman DOKU (Modul 27), tiap 5 menit:
  *   1. Notifikasi yang belum tuntas (status DOKU belum sinkron, tagihan belum ditemukan, proses setelah respons gagal)
- *      diproses ulang.
+ *      diproses ulang. Yang tetap tidak tuntas setelah 30 percobaan / 48 jam → EXHAUSTED + [ALERT] sekali.
  *   2. Tagihan DOKU yang masih PENDING ditanyakan statusnya ke DOKU (webhook hilang) → lunas / ditutup.
  *   3. Sesi lain dari tagihan yang sudah lunas: ikut dibayar → pembayaran ganda + refund; masih menunggu → ditutup.
  *   4. Lunas lewat cek status tapi notifikasinya tidak pernah masuk → [ALERT] URL notifikasi di dashboard DOKU.
@@ -30,9 +31,11 @@ class ReconcileDokuPayments extends Command
     /** Batas per putaran supaya tidak membanjiri API DOKU. */
     private const MAX_ORDERS_PER_RUN = 100;
 
-    public function handle(DokuReconciliationService $reconciler, DokuNotificationProcessor $processor, DokuClient $client): int
+    public function handle(DokuReconciliationService $reconciler, DokuNotificationProcessor $processor, DokuCheckoutService $checkout): int
     {
-        if (! $client->isConfigured()) {
+        // Kunci DOKU Checkout ATAU SNAP: hanya-SNAP (non-SNAP dimatikan) tetap direkonsiliasi. Sesi Checkout tanpa
+        // kuncinya dibaca ERROR → dicoba lagi, tidak pernah dianggap tertutup.
+        if (! $checkout->isConfigured()) {
             $this->line('Kunci DOKU kosong — dilewati.');
 
             return self::SUCCESS;
@@ -50,6 +53,11 @@ class ReconcileDokuPayments extends Command
             ->pluck('id');
         foreach ($pending as $id) {
             $processor->process((int) $id);
+        }
+        // Yang sudah keluar dari jendela proses ulang tanpa tuntas → [ALERT] sekali, tidak lagi diam-diam.
+        $exhausted = $processor->exhaustStale();
+        if ($exhausted > 0) {
+            $this->warn("Notifikasi DOKU tidak tuntas & dikeluarkan dari antrean: {$exhausted} (cek log [ALERT]).");
         }
 
         // 2. Tagihan DOKU yang masih menunggu.
@@ -88,17 +96,19 @@ class ReconcileDokuPayments extends Command
         }
 
         // 4. Lunas lewat cek status ≥ 15 menit lalu tanpa notifikasi sama sekali (sekali per invoice).
-        Payment::where('payment_gateway', 'DOKU')
+        // Disaring di database (bukan menarik semua tagihan + JSON-nya ke PHP); notifikasi dicek sekali untuk semuanya.
+        $invoices = Payment::where('payment_gateway', 'DOKU')
             ->where('status', 'SUCCESS')
             ->whereBetween('updated_at', [now()->subHours(DokuSessionGuard::SIBLING_WATCH_HOURS), now()->subMinutes(15)])
-            ->get()
-            ->filter(fn (Payment $p) => ($p->payload_log['confirmed_via'] ?? null) === 'DOKU_STATUS_API')
-            ->each(function (Payment $p) {
-                if (! DokuNotification::where('invoice_number', $p->transaction_id)->exists()
-                    && Cache::add("doku_missing_notification:{$p->transaction_id}", true, now()->addDays(3))) {
-                    DokuClient::alert("DOKU: [{$p->transaction_id}] lunas lewat cek status tapi notifikasinya tidak pernah masuk — cek URL notifikasi di dashboard DOKU (per kanal).");
-                }
-            });
+            ->where('payload_log->confirmed_via', 'DOKU_STATUS_API')
+            ->whereNotNull('transaction_id')
+            ->pluck('transaction_id');
+        $notified = $invoices->isEmpty() ? [] : DokuNotification::whereIn('invoice_number', $invoices)->distinct()->pluck('invoice_number')->all();
+        foreach ($invoices->diff($notified) as $invoice) {
+            if (Cache::add("doku_missing_notification:{$invoice}", true, now()->addDays(3))) {
+                DokuClient::alert("DOKU: [{$invoice}] lunas lewat cek status tapi notifikasinya tidak pernah masuk — cek URL notifikasi di dashboard DOKU (per kanal).");
+            }
+        }
 
         return self::SUCCESS;
     }

@@ -154,6 +154,43 @@ class WalkInBookingTest extends TestCase
         $this->assertEquals($existingCustomer->id, $result2->id);
     }
 
+    /** Kasir mengetik HP tanpa 0 / dengan spasi → akun member lama tetap ketemu (aturan sama dengan login & daftar). */
+    public function test_phone_typed_without_leading_zero_finds_the_existing_member(): void
+    {
+        $member = User::factory()->customer()->create(['name' => 'Member Lama', 'phone' => '081277788899', 'is_active' => true]);
+        $count = User::count();
+
+        foreach (['81277788899', '812 7778 8899', '+62 812-7778-8899'] as $typed) {
+            $this->assertSame($member->id, $this->service->findOrCreateWalkInCustomer('Kasir Ketik', $typed)->id, $typed);
+        }
+        $this->assertSame($count, User::count(), 'tidak ada akun walk-in dobel');
+        $this->assertSame('081277788899', $this->service->normalizePhoneNumber('81277788899'));
+    }
+
+    /** Bukan nomor HP → ditolak, tidak pernah dicocokkan ke akun lain (where phone = '' / IS NULL). */
+    public function test_walk_in_lookup_rejects_input_that_is_not_a_phone_number(): void
+    {
+        User::factory()->customer()->create(['phone' => null]);
+
+        foreach (['', '1234', 'budi@example.com'] as $typed) {
+            try {
+                $this->service->findOrCreateWalkInCustomer('Kosong', $typed);
+                $this->fail("'{$typed}' seharusnya ditolak");
+            } catch (\Symfony\Component\HttpKernel\Exception\HttpException $e) {
+                $this->assertSame(422, $e->getStatusCode());
+            }
+        }
+    }
+
+    /** Pencarian akun walk-in = 1 query lewat index users(phone, deleted_at), bukan menyisir tabel users. */
+    public function test_walk_in_phone_lookup_uses_the_phone_index(): void
+    {
+        $sql = User::where('phone', '081234567890')->toSql();
+        $plan = collect(\Illuminate\Support\Facades\DB::select('EXPLAIN QUERY PLAN '.$sql, ['081234567890']))->pluck('detail')->implode(' | ');
+
+        $this->assertStringContainsString('USING INDEX users_phone_deleted_at_unique', $plan);
+    }
+
     /**
      * Test 3: Nomor telepon baru membuat user baru dengan registration_source = 'WALK_IN' dan email sintetis.
      */

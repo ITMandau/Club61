@@ -30,6 +30,15 @@ class PadelBookingService
     /** Modul 21: reschedule biasa paling lambat sekian jam sebelum jam main (keputusan PM). */
     public const RESCHEDULE_CUTOFF_HOURS = 2;
 
+    /** Audit G17 — batas tahan slot lewat aplikasi / website customer (kasir walk-in tidak dibatasi). */
+    public const MAX_HOLD_HOURS_PER_REQUEST = 4;
+
+    /** Jam yang sedang ditahan & belum dibayar per akun (LOCKED / menunggu pembayaran). */
+    public const MAX_UNPAID_HOURS_PER_USER = 4;
+
+    /** Paling jauh sekian hari dari hari ini. */
+    public const MAX_DAYS_AHEAD = 30;
+
     /** Batas akhir reschedule booking ini; lewat dari ini jadwal tidak bisa dipindah lagi. */
     public static function rescheduleDeadline(\App\Models\Padel\PadelBooking $booking): \Carbon\Carbon
     {

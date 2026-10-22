@@ -53,7 +53,7 @@ class DokuNotificationController extends Controller
 
         $notification = $this->store($requestId, $data);
 
-        if (in_array($notification->result, [DokuNotification::PROCESSED, DokuNotification::IGNORED, DokuNotification::REJECTED], true)) {
+        if (DokuNotification::isFinal($notification->result)) {
             return response()->json(['success' => true, 'message' => 'Already processed.']);
         }
 

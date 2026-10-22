@@ -43,7 +43,7 @@
     {{-- Header --}}
     <div class="c61-hero">
         <div>
-            <div class="c61-eyebrow"><span class="dot"></span>Financial Business Intelligence &bull; Club 61 Padel Court</div>
+            <div class="c61-eyebrow"><span class="dot"></span>Financial Business Intelligence &bull; Club 61 Padel &amp; Wellness</div>
             <div class="c61-hero-title">Laporan Uang Masuk &amp; Analisis Finansial</div>
             <div class="c61-hero-sub">
                 Rekapitulasi uang masuk dari kasir &amp; Midtrans, refund, dan pendapatan bersih semua lini (padel, add-on, F&amp;B, membership). Angkanya sama dengan Buku Transaksi.

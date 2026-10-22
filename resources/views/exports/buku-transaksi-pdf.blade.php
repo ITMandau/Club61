@@ -47,7 +47,7 @@
                     <img src="{{ $logo }}" style="height:34px; vertical-align:middle; margin-right:8px;">
                 @endif
                 <span style="vertical-align:middle;"><h1 style="display:inline;">Buku Transaksi Terpadu</h1></span>
-                <div class="muted" style="margin-top:3px;">Club 61 Padel Court{{ $company?->address_line ? ' · '.$company->address_line : '' }}</div>
+                <div class="muted" style="margin-top:3px;">Club 61 Padel &amp; Wellness{{ $company?->address_line ? ' · '.$company->address_line : '' }}</div>
             </td>
             <td style="width:40%; text-align:right;" class="muted">
                 <div style="font-size:10px; font-weight:bold; color:#1F170D;">{{ $periodLabel }}</div>

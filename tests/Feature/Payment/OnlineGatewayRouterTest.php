@@ -75,10 +75,10 @@ class OnlineGatewayRouterTest extends TestCase
         $this->assertSame('MIDTRANS', $this->router()->onlineGateway());
         $this->assertStringContainsString('Kunci DOKU', (string) $this->router()->unavailableReason('DOKU'));
 
-        // Aktif + kunci terisi → DOKU. QR kasir lewat DOKU belum ada (Tahap 3) → tetap Midtrans.
+        // Aktif + kunci terisi → DOKU, termasuk QR kasir (Tahap 3: DokuPosQrisService).
         config(['services.doku.secret_key' => 'SK-test']);
         $this->assertSame('DOKU', $this->router()->onlineGateway());
-        $this->assertSame('MIDTRANS', $this->router()->posQrisGateway());
+        $this->assertSame('DOKU', $this->router()->posQrisGateway());
         $this->assertTrue($this->router()->isUsable('MIDTRANS'));
         $this->assertNotNull($this->router()->unavailableReason('PAYPAL'));
     }

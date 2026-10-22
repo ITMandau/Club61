@@ -171,7 +171,11 @@ class CorporateVoucherPromoComboTest extends TestCase
         // Kasir mematikan jam corporate â†’ kode promo bisa dipakai.
         $component->call('toggleSponsorVoucherBenefit')
             ->set('voucherInput', 'DISKON100K')->call('applyVoucher')
-            ->assertSet('appliedVoucherCode', 'DISKON100K');
+            ->assertSet('appliedVoucherCode', 'DISKON100K')
+            // Kasir melihat rincian aturan voucher, bukan hanya nominal potongannya.
+            ->assertSeeHtml('data-voucher-terms')
+            ->assertSee('sewa lapangan')
+            ->assertSee('1x per akun');
         $this->assertEquals(100000.0, $component->instance()->voucherDiscount);
 
         // Jam corporate dinyalakan lagi â†’ kode promo dilepas.

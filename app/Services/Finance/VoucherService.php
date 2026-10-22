@@ -24,12 +24,22 @@ class VoucherService
     /** Order yang sudah mengklaim potongan voucher tapi belum dibayar sama sekali (saldonya sedang "dipesan"). */
     private const RESERVING_STATUSES = ['UNPAID', 'PENDING_PAYMENT'];
 
+    /** Order yang menghitung "sudah memakai promo ini" untuk aturan 1x per akun (T3): lunas + yang masih menunggu bayar. */
+    private const PROMO_HOLDING_STATUSES = ['PAID', 'PARTIALLY_PAID', 'UNPAID', 'PENDING_PAYMENT'];
+
     /**
      * Potongan voucher untuk satu order. Wajib dipanggil di dalam transaksi DB kalau $lock = true.
      *
+     * $context (promo, PRD Modul 22 §3–§5):
+     *  - channel: 'ONLINE' | 'POS' — kanal transaksi (promo bisa dibatasi online / kasir saja);
+     *  - amounts: ['PADEL' => sewa lapangan, 'PADEL_ADDON' => add-on] — promo hanya memotong kategori yang dicentang
+     *    (PADEL = sewa lapangan saja). Tanpa amounts, seluruh $orderAmount dianggap sewa lapangan;
+     *  - membership_applied: transaksi ini memakai benefit member (promo yang tidak boleh digabung → ditolak).
+     * Voucher saldo (CREDIT) tetap memotong seluruh $orderAmount (lapangan + add-on).
+     *
      * @return array{voucher: ?Voucher, discount: float, error: ?string}
      */
-    public function resolve(?string $code, ?User $customer, float $orderAmount, bool $lock = false): array
+    public function resolve(?string $code, ?User $customer, float $orderAmount, bool $lock = false, array $context = []): array
     {
         $code = strtoupper(trim((string) $code));
         if ($code === '') {
@@ -66,7 +76,46 @@ class VoucherService
             return ['voucher' => $voucher, 'discount' => round(min($available, $orderAmount), 2), 'error' => null];
         }
 
-        // Promo: kuota dipotong permanen saat lunas (consume), jadi order yang sudah mengklaim kode ini tapi belum
+        // ---- Promo ----
+        if ($voucher->valid_from && $voucher->valid_from->gt(now())) {
+            return $fail('Promo ini baru berlaku mulai '.$voucher->valid_from->timezone(LedgerReport::TIMEZONE)->format('d M Y').'.');
+        }
+
+        $channel = $context['channel'] ?? null;
+        if ($channel && $voucher->channel === Voucher::CHANNEL_ONLINE && $channel !== Voucher::CHANNEL_ONLINE) {
+            return $fail('Promo ini hanya berlaku untuk booking online.');
+        }
+        if ($channel && $voucher->channel === Voucher::CHANNEL_POS && $channel !== Voucher::CHANNEL_POS) {
+            return $fail('Promo ini hanya berlaku untuk transaksi di kasir.');
+        }
+
+        if (! empty($context['membership_applied']) && ! $voucher->stack_with_membership) {
+            return $fail('Promo ini tidak bisa digabung dengan benefit member. Matikan benefit member untuk memakai promo.');
+        }
+
+        // Nilai yang boleh dipotong = jumlah kategori yang dicentang di promo (PADEL = sewa lapangan, tanpa add-on).
+        $amounts = $context['amounts'] ?? ['PADEL' => $orderAmount];
+        $base = round((float) collect($voucher->promoCategories())->sum(fn (string $category) => (float) ($amounts[$category] ?? 0)), 2);
+        if ($base <= 0) {
+            return $fail('Promo ini tidak berlaku untuk item di transaksi ini.');
+        }
+
+        // T3 — 1x per akun per promo (pembagian merata). Dihitung dari order lunas + yang masih menunggu bayar milik akun
+        // ini; order yang kedaluwarsa / batal tidak dihitung lagi, jadi jatahnya kembali (T2).
+        if (! $customer) {
+            return $fail('Promo ini butuh akun customer.');
+        }
+        $alreadyUsed = $this->freshRead(Order::where('voucher_code', $voucher->code)
+            ->where('user_id', $customer->id)
+            ->whereIn('payment_status', self::PROMO_HOLDING_STATUSES)
+            // Order lunas yang dibatalkan & promonya sudah dikembalikan (restoreCreditForCancelledOrder) tidak dihitung.
+            ->whereNull('voucher_restored_at'), $lock)
+            ->exists();
+        if ($alreadyUsed) {
+            return $fail('Promo ini sudah pernah kamu pakai — satu akun hanya bisa memakai promo yang sama sekali.');
+        }
+
+        // Kuota dipotong permanen saat lunas (consume), jadi order yang sudah mengklaim kode ini tapi belum
         // lunas ikut dihitung — kalau tidak, checkout paralel saat kuota tinggal 1 bisa sama-sama lolos.
         if ($voucher->quota !== null) {
             $reservedInFlight = $this->freshRead(Order::where('voucher_code', $voucher->code)
@@ -78,18 +127,18 @@ class VoucherService
         }
 
         $minOrder = (float) ($voucher->min_order_amount ?? 0);
-        if ($orderAmount < $minOrder) {
-            return $fail('Minimal transaksi untuk voucher ini Rp '.number_format($minOrder, 0, ',', '.').'.');
+        if ($base < $minOrder) {
+            return $fail('Minimal transaksi untuk voucher ini Rp '.number_format($minOrder, 0, ',', '.').' (dihitung dari '.strtolower(implode(' + ', array_map(fn ($c) => Voucher::PROMO_CATEGORIES[$c], $voucher->promoCategories()))).').');
         }
 
-        if ($voucher->discount_type === 'PERCENT') {
-            $calc = $orderAmount * ((float) $voucher->discount_value / 100);
+        if ($voucher->discount_type === Voucher::TYPE_PERCENT) {
+            $calc = $base * ((float) $voucher->discount_value / 100);
             $discount = $voucher->max_discount_amount ? min($calc, (float) $voucher->max_discount_amount) : $calc;
         } else {
             $discount = (float) $voucher->discount_value;
         }
 
-        return ['voucher' => $voucher, 'discount' => round(min($discount, $orderAmount), 2), 'error' => null];
+        return ['voucher' => $voucher, 'discount' => round(min($discount, $base, $orderAmount), 2), 'error' => null];
     }
 
     /** Sisa saldo voucher CREDIT dikurangi potongan yang sedang dipesan order belum bayar. */
@@ -163,8 +212,29 @@ class VoucherService
         }
 
         $voucher = Voucher::where('code', $order->voucher_code)->lockForUpdate()->first();
-        if (! $voucher || ! $voucher->isCredit() || ! $order->payments()->where('status', 'SUCCESS')->exists()) {
-            return; // belum lunas = saldonya memang belum terpotong
+        if (! $voucher || ! $order->payments()->where('status', 'SUCCESS')->exists()) {
+            return; // belum lunas = saldo / kuota memang belum terpotong
+        }
+
+        // Promo (T2): kuota yang terpotong saat lunas dikembalikan. Jatah 1x per akun ikut kembali karena order dengan
+        // voucher_restored_at tidak dihitung lagi di resolve().
+        if (! $voucher->isCredit()) {
+            if ($voucher->quota !== null) {
+                $voucher->quota = (int) $voucher->quota + 1;
+            }
+            $voucher->used_count = max(0, (int) $voucher->used_count - 1);
+            $voucher->save();
+            $order->forceFill(['voucher_restored_at' => now()])->save();
+
+            ActivityLogger::record(
+                module: 'FINANCE',
+                event: 'voucher.restored',
+                description: 'Kuota promo '.$voucher->code.' dikembalikan 1 (order '.$order->order_number.' dibatalkan)',
+                subject: $order,
+                meta: ['voucher' => $voucher->code, 'no_order' => $order->order_number],
+            );
+
+            return;
         }
 
         $voucher->balance = round((float) $voucher->balance + (float) $order->discount_amount, 2);

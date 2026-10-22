@@ -12,8 +12,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="robots" content="noindex, nofollow">
     <meta name="theme-color" content="#662721">
-    <title>{{ $title }} &middot; Club 61 Padel Court</title>
-    <link rel="icon" type="image/png" href="{{ asset('images/identity/monogram-terracotta.png') }}">
+    <title>{{ $title }} &middot; Club 61 Padel &amp; Wellness</title>
+    <link rel="icon" type="image/png" href="{{ asset('images/identity/favicon.png').'?v=2' }}">
+    <link rel="apple-touch-icon" href="{{ asset('images/identity/apple-touch-icon.png').'?v=2' }}">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800&family=Source+Serif+4:opsz,wght@8..60,600;8..60,700&display=swap" rel="stylesheet">
@@ -50,7 +51,7 @@
 <body>
     <main class="card" role="main">
         <div class="band">
-            <img src="{{ asset('images/identity/logo-cream.png') }}" alt="Club 61 Padel Court">
+            <img src="{{ asset('images/identity/logo-cream.png').'?v=2' }}" alt="Club 61 Padel & Wellness">
             <span class="code" aria-label="Kode error {{ $code }}">{{ $code }}</span>
         </div>
         <div class="body">

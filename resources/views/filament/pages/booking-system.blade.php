@@ -414,7 +414,7 @@
             <div class="c61-modal">
                 <div class="c61-modal-head">
                     <div>
-                        <div class="c61-modal-eyebrow">Gate Access &bull; Club 61 Padel Court</div>
+                        <div class="c61-modal-eyebrow">Gate Access &bull; Club 61 Padel &amp; Wellness</div>
                         <div class="c61-modal-title">Scan QR / Verifikasi Check-In Gate</div>
                     </div>
                     <button type="button" wire:click="closeCheckInModal()" class="c61-modal-close">&times;</button>

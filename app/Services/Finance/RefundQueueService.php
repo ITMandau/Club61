@@ -39,6 +39,7 @@ class RefundQueueService
 
         return DB::transaction(function () use ($refund, $by, $method, $reference, $notes) {
             $locked = $this->lockPending($refund);
+            $this->assertSecondPerson($locked, $by);
             $locked->update([
                 'status' => 'PROCESSED',
                 'refund_method' => $method,
@@ -82,6 +83,7 @@ class RefundQueueService
 
         return DB::transaction(function () use ($refund, $by, $reason, $issueVoucher) {
             $locked = $this->lockPending($refund);
+            $this->assertSecondPerson($locked, $by);
             $locked->update([
                 'status' => 'REJECTED',
                 'processed_by_id' => $by->id,
@@ -149,6 +151,25 @@ class RefundQueueService
     {
         if (! $by->can('process_refund_queue')) {
             throw new HttpException(403, 'Akses ditolak: Anda tidak memiliki izin [process_refund_queue].');
+        }
+    }
+
+    /**
+     * Dua orang (audit G11): refund yang diajukan seseorang diputuskan (diproses / ditolak) orang lain. super_admin
+     * memegang hak penuh — boleh memutuskan pengajuannya sendiri. Refund otomatis dari sistem (tanpa pengaju) boleh
+     * diputuskan siapa pun yang berizin.
+     */
+    public static function canDecide(Refund $refund, User $by): bool
+    {
+        return $refund->requested_by_id === null
+            || $refund->requested_by_id !== $by->getKey()
+            || $by->hasRole('super_admin');
+    }
+
+    private function assertSecondPerson(Refund $refund, User $by): void
+    {
+        if (! self::canDecide($refund, $by)) {
+            throw new HttpException(403, 'Refund ini Anda ajukan sendiri — harus diputuskan admin lain atau super admin.');
         }
     }
 

@@ -8,5 +8,5 @@ Buka link berikut untuk membuat kata sandi baru:
 Link ini berlaku {{ $minutes }} menit dan hanya bisa dipakai sekali.
 Kalau Anda tidak merasa meminta reset, abaikan email ini. Kata sandi lama Anda tetap aman.
 
-Club 61 Padel Court
+Club 61 Padel & Wellness
 {{ \App\Models\Setting\CompanyProfileSetting::receiptAddress() }}

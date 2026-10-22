@@ -4,7 +4,8 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>CLUB 61 POS - Frontdesk & Cashier Terminal</title>
-    <link rel="icon" type="image/png" href="{{ asset('images/club61-logo.png') }}">
+    <link rel="icon" type="image/png" href="{{ asset('images/identity/favicon.png').'?v=2' }}">
+    <link rel="apple-touch-icon" href="{{ asset('images/identity/apple-touch-icon.png').'?v=2' }}">
     {{-- Brand guideline: Cheltenham Classic (judul) & Acumin Variable Concept (teks) — selama webfont berlisensinya
          belum dipasang, tampil dengan padanan terdekat: Source Serif 4 & Archivo (lihat tailwind.config.js). --}}
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -28,7 +29,8 @@
                             Terminal 01
                         </span>
                     </div>
-                    <div class="text-[11px] text-[#F7F0DB]/70 font-medium -mt-0.5 whitespace-nowrap">Club 61 Padel Court &bull; Gedung Indosat Medan</div>
+                    @php($venueAddress = \App\Models\Setting\CompanyProfileSetting::receiptAddress())
+                    <div class="text-[11px] text-[#F7F0DB]/70 font-medium -mt-0.5 whitespace-nowrap truncate max-w-[24rem]" title="{{ $venueAddress }}">Club 61 Padel &amp; Wellness &bull; {{ $venueAddress }}</div>
                 </div>
             </div>
 

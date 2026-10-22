@@ -342,7 +342,7 @@ class SignatureService
                 ->values()->all();
         }
 
-        $logoUrl = $template['logo_url'] ?? (! empty($template['logo_path']) ? self::publicFileUrl($template['logo_path']) : '/images/identity/logo-cream.png');
+        $logoUrl = $template['logo_url'] ?? (! empty($template['logo_path']) ? self::publicFileUrl($template['logo_path']) : '/images/identity/logo-cream.png?v=2');
 
         return [
             'generated_at' => now()->toIso8601String(),

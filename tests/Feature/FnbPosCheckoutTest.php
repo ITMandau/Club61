@@ -508,6 +508,42 @@ class FnbPosCheckoutTest extends TestCase
         ]);
     }
 
+    public function test_queue_number_counts_only_fnb_orders_of_the_current_wib_day(): void
+    {
+        // "Hari ini" = hari WIB, berapa pun zona waktu aplikasi — diuji dengan aplikasi ber-zona UTC (server yang
+        // APP_TIMEZONE-nya belum diatur), tempat whereDate lama salah hitung untuk order 00:00–07:00 WIB.
+        $timezone = [config('app.timezone'), date_default_timezone_get()];
+        config(['app.timezone' => 'UTC']);
+        date_default_timezone_set('UTC');
+        \Carbon\Carbon::setTestNow(\Carbon\Carbon::parse('2026-10-21 09:00:00', 'Asia/Jakarta')->setTimezone('UTC'));
+        try {
+            $existing = function (string $wib, string $itemType) {
+                $order = Order::create(['order_number' => 'ORD-Q-'.\Illuminate\Support\Str::random(6), 'order_type' => 'DINE_IN', 'subtotal' => 38000, 'grand_total' => 38000]);
+                \App\Models\Pos\OrderItem::create(['order_id' => $order->id, 'item_type' => $itemType, 'item_name' => 'Item', 'quantity' => 1, 'unit_price' => 38000, 'subtotal' => 38000]);
+                Order::whereKey($order->id)->update(['created_at' => \Carbon\Carbon::parse($wib, 'Asia/Jakarta')->setTimezone(config('app.timezone'))]);
+            };
+            $existing('2026-10-20 23:30:00', 'FNB');   // kemarin (WIB) → tidak dihitung
+            $existing('2026-10-21 00:30:00', 'FNB');   // hari ini, lewat tengah malam WIB → dihitung
+            $existing('2026-10-21 08:00:00', 'PADEL'); // bukan F&B → tidak dihitung
+
+            $this->openFnbShift();
+            $this->actingAs($this->cashier);
+            Livewire::test(FnbCashierTerminal::class)
+                ->set('customerName', 'Antrian Pagi')
+                ->call('addToCart', $this->latte->id)
+                ->call('proceedToPayment')
+                ->call('setPaymentMethod', 'QRIS')
+                ->set('qrisMode', 'MANUAL')->set('qrisRrn', '123456789013')
+                ->call('submitFnbCheckout');
+
+            $this->assertSame(2, (int) Order::where('customer_name', 'Antrian Pagi')->value('queue_number'));
+        } finally {
+            \Carbon\Carbon::setTestNow();
+            config(['app.timezone' => $timezone[0]]);
+            date_default_timezone_set($timezone[1]);
+        }
+    }
+
     public function test_transaction_history_tab_lists_orders_with_status_and_can_reopen_receipt(): void
     {
         $this->openFnbShift();

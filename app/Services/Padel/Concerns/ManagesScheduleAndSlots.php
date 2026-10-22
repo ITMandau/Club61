@@ -168,6 +168,52 @@ trait ManagesScheduleAndSlots
     }
 
     /**
+     * Tahan slot untuk customer (aplikasi / website) dengan batas audit G17: maks MAX_HOLD_HOURS_PER_REQUEST jam per
+     * permintaan dan maks MAX_UNPAID_HOURS_PER_USER jam belum dibayar per akun (dihitung dalam jam — satu slot panjang
+     * tidak bisa dipakai mengakali batas). Permintaan satu akun dijalankan bergiliran supaya dua permintaan bersamaan
+     * tidak sama-sama lolos. Batas hari ke depan divalidasi di controller.
+     *
+     * @throws HttpException
+     */
+    public function holdForCustomer(array $slots, string $bookingDate, User $user, ?string $coachId = null): array
+    {
+        $hours = fn (iterable $ranges) => collect($ranges)->sum(function ($r) use ($bookingDate) {
+            $start = $r['start_time'] instanceof Carbon ? $r['start_time'] : Carbon::parse("{$bookingDate} {$r['start_time']}");
+            $end = $r['end_time'] instanceof Carbon ? $r['end_time'] : Carbon::parse("{$bookingDate} {$r['end_time']}");
+
+            return max(0, $start->diffInMinutes($end, false)) / 60;
+        });
+
+        $requested = $hours($slots);
+        if ($requested > self::MAX_HOLD_HOURS_PER_REQUEST) {
+            throw new HttpException(422, 'Maksimal '.self::MAX_HOLD_HOURS_PER_REQUEST.' jam dalam satu pemesanan.');
+        }
+
+        try {
+            return Cache::lock("padel_customer_hold:{$user->id}", 30)->block(10, function () use ($slots, $bookingDate, $user, $coachId, $hours, $requested) {
+                // Tahan yang sudah habis waktunya dilepas dulu supaya tidak ikut terhitung.
+                $this->releaseExpiredLocks();
+
+                $unpaid = $hours(PadelBooking::where('user_id', $user->id)
+                    ->whereIn('status', ['LOCKED', 'PENDING_PAYMENT', 'PENDING'])
+                    // Booking lunas yang dipindah jadwal dengan selisih belum dibayar bukan slot "tertahan".
+                    ->where('reschedule_count', 0)
+                    ->get(['start_time', 'end_time'])
+                    ->map(fn (PadelBooking $b) => ['start_time' => $b->start_time, 'end_time' => $b->end_time]));
+
+                if ($unpaid + $requested > self::MAX_UNPAID_HOURS_PER_USER) {
+                    throw new HttpException(422, 'Masih ada '.$unpaid.' jam yang belum dibayar. Maksimal '.self::MAX_UNPAID_HOURS_PER_USER
+                        .' jam tertahan per akun — selesaikan pembayaran atau tunggu batas waktunya habis dulu.');
+                }
+
+                return $this->holdBatchSlots($slots, $bookingDate, $user, $coachId);
+            });
+        } catch (\Illuminate\Contracts\Cache\LockTimeoutException $e) {
+            throw new HttpException(429, 'Permintaan sebelumnya masih diproses. Coba lagi sebentar.');
+        }
+    }
+
+    /**
      * Mengunci multi-slot jam lapangan secara ATOMIK (All-or-Nothing).
      * Mencegah Race Condition / Concurrency Collision dengan Two-Tier Defense:
      * 1. Distributed Cache Multi-Lock (Sorted Keys anti-deadlock)
@@ -399,16 +445,7 @@ trait ManagesScheduleAndSlots
                     }
                 }
 
-                $currLock = $booking->start_time->copy();
-                $endLock = $booking->end_time->copy();
-                while ($currLock->lt($endLock)) {
-                    $lockKey = "padel_lock:{$booking->court_id}:{$booking->booking_date->format('Y-m-d')}:" . $currLock->format('Hi');
-                    Cache::forget($lockKey);
-                    try {
-                        Cache::lock($lockKey)->forceRelease();
-                    } catch (\Throwable $e) {}
-                    $currLock->addHour();
-                }
+                $this->releaseSlotCacheLocks($booking);
 
                 $this->reverseBookingBenefits($booking);
 
@@ -561,6 +598,24 @@ trait ManagesScheduleAndSlots
         return ['LOCKED', 'PENDING_PAYMENT', 'PENDING', 'PAID', 'CHECKED_IN'];
     }
 
+    /**
+     * Lepas kunci cache slot (Tier 1) milik booking ini, per jam. Dipakai setiap jalur yang melepas slot sebelum waktu
+     * tahan habis (slot kedaluwarsa, booking batal, QR kasir dibatalkan) — tanpa ini slot tetap "sedang di-hold pemain
+     * lain" sampai kunci kedaluwarsa sendiri. Kunci DB (Tier 2) tidak bergantung pada ini.
+     */
+    public function releaseSlotCacheLocks(PadelBooking $booking): void
+    {
+        $date = $booking->booking_date->format('Y-m-d');
+        for ($cursor = $booking->start_time->copy(); $cursor->lt($booking->end_time); $cursor->addHour()) {
+            $lockKey = "padel_lock:{$booking->court_id}:{$date}:".$cursor->format('Hi');
+            Cache::forget($lockKey);
+            try {
+                Cache::lock($lockKey)->forceRelease();
+            } catch (\Throwable $e) {
+            }
+        }
+    }
+
     public function releaseExpiredLocks(): int
     {
         // Batas waktu per booking (`expires_at`, diatur di admin). Booking lama / buatan kasir tanpa `expires_at` memakai
@@ -640,16 +695,7 @@ trait ManagesScheduleAndSlots
             foreach ($expiredGroup as $b) {
                 app(\App\Services\Realtime\RealtimeSignal::class)->bookingDates($b->booking_date);
 
-                $currLock = $b->start_time->copy();
-                $endLock = $b->end_time->copy();
-                while ($currLock->lt($endLock)) {
-                    $lockKey = "padel_lock:{$b->court_id}:{$b->booking_date->format('Y-m-d')}:" . $currLock->format('Hi');
-                    Cache::forget($lockKey);
-                    try {
-                        Cache::lock($lockKey)->forceRelease();
-                    } catch (\Throwable $e) {}
-                    $currLock->addHour();
-                }
+                $this->releaseSlotCacheLocks($b);
 
                 $count++;
             }

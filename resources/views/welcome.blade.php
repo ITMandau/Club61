@@ -3,19 +3,20 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>CLUB 61 - Padel Court Medan</title>
-    <link rel="icon" type="image/png" href="{{ asset('images/identity/monogram-terracotta.png') }}">
+    <title>CLUB 61 - Padel &amp; Wellness Medan</title>
+    <link rel="icon" type="image/png" href="{{ asset('images/identity/favicon.png').'?v=2' }}">
+    <link rel="apple-touch-icon" href="{{ asset('images/identity/apple-touch-icon.png').'?v=2' }}">
     <meta name="theme-color" content="#662721">
 
     <!-- Social share preview (WhatsApp/Facebook/Twitter) -->
     <meta property="og:type" content="website">
-    <meta property="og:title" content="Club 61 Padel Court - Medan">
+    <meta property="og:title" content="Club 61 Padel &amp; Wellness - Medan">
     <meta property="og:description" content="{{ $companyProfile->renderedHeroSubtitle() }}">
-    <meta property="og:image" content="{{ asset('images/club61-logo-with-text.png') }}">
+    <meta property="og:image" content="{{ asset('images/club61-logo-with-text.png').'?v=2' }}">
     <meta name="twitter:card" content="summary_large_image">
-    <meta name="twitter:title" content="Club 61 Padel Court - Medan">
+    <meta name="twitter:title" content="Club 61 Padel &amp; Wellness - Medan">
     <meta name="twitter:description" content="{{ $companyProfile->renderedHeroSubtitle() }}">
-    <meta name="twitter:image" content="{{ asset('images/club61-logo-with-text.png') }}">
+    <meta name="twitter:image" content="{{ asset('images/club61-logo-with-text.png').'?v=2' }}">
 
     {{-- Brand guideline: Cheltenham Classic (judul) & Acumin Variable Concept (teks) — selama webfont berlisensinya
          belum dipasang, tampil dengan padanan terdekat: Source Serif 4 & Archivo (lihat tailwind.config.js). --}}
@@ -32,11 +33,11 @@
     {{-- ============ NAVIGASI ============ --}}
     <header class="sticky top-0 z-50 bg-club-terra border-b border-club-terra-dark">
         <div class="{{ $wrap }} h-16 lg:h-[76px] flex items-center justify-between gap-4">
-            <a href="#top" class="flex items-center gap-3 shrink-0" aria-label="Club 61 Padel Court">
+            <a href="#top" class="flex items-center gap-3 shrink-0" aria-label="Club 61 Padel &amp; Wellness">
                 <img src="{{ asset('images/identity/monogram-cream.png') }}" alt="" class="h-10 lg:h-12 w-auto">
                 <span class="hidden min-[440px]:block leading-none whitespace-nowrap">
                     <span class="block font-bold text-[17px] lg:text-xl tracking-[0.18em] text-club-cream" style="font-stretch: 125%;">CLUB 61</span>
-                    <span class="block text-[9px] lg:text-[10px] font-semibold tracking-[0.34em] text-club-cream/70 mt-1">PADEL COURT</span>
+                    <span class="block text-[9px] lg:text-[10px] font-semibold tracking-[0.34em] text-club-cream/70 mt-1">PADEL &amp; WELLNESS</span>
                 </span>
             </a>
 
@@ -266,7 +267,7 @@
                     <h2 class="font-display font-semibold text-[2rem] sm:text-5xl leading-tight">{{ __('site.why_us_headline') }}</h2>
                 </div>
                 <div class="relative rounded-lg overflow-hidden min-h-[18rem] flex-1">
-                    <img src="{{ asset('images/club61-reception.jpg') }}" alt="Resepsionis Club61 Padel Court" class="absolute inset-0 w-full h-full object-cover">
+                    <img src="{{ asset('images/club61-reception.jpg') }}" alt="Resepsionis Club 61 Padel &amp; Wellness" class="absolute inset-0 w-full h-full object-cover">
                     <div class="absolute inset-0" style="background: linear-gradient(0deg, rgba(79,47,42,0.9) 0%, rgba(79,47,42,0.08) 60%, transparent 100%);"></div>
                     <div class="absolute left-6 right-6 bottom-6 text-club-cream">
                         <div class="text-[11px] font-bold uppercase tracking-[0.18em] text-club-cream/80 mb-1.5">{{ __('site.why_us_photo_eyebrow') }}</div>
@@ -397,7 +398,7 @@
     <footer class="bg-club-terra-dark text-club-cream/75">
         <div class="{{ $wrap }} py-12 lg:py-14 flex flex-col md:flex-row md:items-center md:justify-between gap-8">
             <div class="flex items-center gap-6">
-                <img src="{{ asset('images/identity/logo-cream.png') }}" alt="Club 61 Padel Court" class="h-24 w-auto shrink-0">
+                <img src="{{ asset('images/identity/logo-cream.png').'?v=2' }}" alt="Club 61 Padel & Wellness" class="h-24 w-auto shrink-0">
                 @if($companyProfile->footer_tagline)
                     <p class="text-sm leading-relaxed max-w-sm">{{ $companyProfile->localized('footer_tagline') }}</p>
                 @endif
@@ -421,7 +422,7 @@
         </div>
         <div class="border-t border-club-cream/10">
             {{-- pb-24 di HP: baris terakhir tidak tertutup tombol WhatsApp melayang. --}}
-            <p class="{{ $wrap }} pt-5 pb-24 md:pb-5 text-xs">&copy; {{ date('Y') }} Club 61 Padel Court. {{ $companyProfile->address_line }}</p>
+            <p class="{{ $wrap }} pt-5 pb-24 md:pb-5 text-xs">&copy; {{ date('Y') }} Club 61 Padel &amp; Wellness. {{ $companyProfile->address_line }}</p>
         </div>
     </footer>
 

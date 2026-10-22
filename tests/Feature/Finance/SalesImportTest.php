@@ -22,6 +22,7 @@ use DateTimeImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Storage;
 use Livewire\Livewire;
 use OpenSpout\Common\Entity\Cell;
 use OpenSpout\Common\Entity\Row;
@@ -47,9 +48,15 @@ class SalesImportTest extends TestCase
 
     protected FnbMenu $toast;
 
+    /** File sementara buatan test (dihapus di tearDown). */
+    private array $tempFiles = [];
+
     protected function setUp(): void
     {
         parent::setUp();
+        // File asli import disimpan ke disk 'local' — di test pakai disk palsu supaya storage/app/sales-imports tidak
+        // terisi file hasil test.
+        Storage::fake('local');
         Club61PermissionMatrix::syncAllPermissions('web');
         Carbon::setTestNow(Carbon::parse('2026-10-12 10:00:00', 'Asia/Jakarta')->setTimezone(config('app.timezone')));
 
@@ -65,14 +72,28 @@ class SalesImportTest extends TestCase
 
     protected function tearDown(): void
     {
+        foreach ($this->tempFiles as $file) {
+            if (is_file($file)) {
+                unlink($file);
+            }
+        }
         Carbon::setTestNow();
         parent::tearDown();
+    }
+
+    /** Path .xlsx sementara; tempnam() membuat file kosong tanpa ekstensi, keduanya dihapus di tearDown. */
+    private function tempXlsx(string $prefix): string
+    {
+        $base = tempnam(sys_get_temp_dir(), $prefix);
+        array_push($this->tempFiles, $base, $base.'.xlsx');
+
+        return $base.'.xlsx';
     }
 
     /** File .xlsx dengan judul kolom template + baris data (array per baris, urutan kolom template). */
     protected function xlsx(array $padelRows = [], array $fnbRows = []): string
     {
-        $path = tempnam(sys_get_temp_dir(), 'imp').'.xlsx';
+        $path = $this->tempXlsx('imp');
         $writer = new Writer();
         $writer->openToFile($path);
         $writer->getCurrentSheet()->setName(SalesImportService::SHEET_PADEL);
@@ -130,7 +151,7 @@ class SalesImportTest extends TestCase
 
     public function test_template_has_the_import_sheets_and_reference_lists(): void
     {
-        $path = tempnam(sys_get_temp_dir(), 'tpl').'.xlsx';
+        $path = $this->tempXlsx('tpl');
         app(SalesImportTemplate::class)->build($path);
 
         $reader = new \OpenSpout\Reader\XLSX\Reader();
@@ -494,7 +515,7 @@ class SalesImportTest extends TestCase
 
     public function test_file_from_the_old_template_with_end_time_column_still_works(): void
     {
-        $path = tempnam(sys_get_temp_dir(), 'imp').'.xlsx';
+        $path = $this->tempXlsx('imp');
         $writer = new Writer();
         $writer->openToFile($path);
         $writer->getCurrentSheet()->setName(SalesImportService::SHEET_PADEL);
@@ -541,7 +562,6 @@ class SalesImportTest extends TestCase
 
     public function test_import_is_kept_in_history_with_the_original_file(): void
     {
-        \Illuminate\Support\Facades\Storage::fake('local');
         $path = $this->xlsx(
             [$this->padel(['paid_at' => '2026-10-05 14:30', 'name' => 'Budi', 'phone' => '081234567890', 'court' => 'Court 1', 'date' => '2026-10-05', 'start' => '15:00', 'duration' => '2', 'price' => '700000', 'total' => '700000'])],
             [$this->fnb(['paid_at' => '2026-10-05 15:10', 'type' => 'Dine-In', 'menu' => 'Iced Spanish Latte', 'qty' => '1', 'price' => '38000', 'total' => '38000'])],
@@ -554,7 +574,7 @@ class SalesImportTest extends TestCase
         $this->assertSame(['soft-opening.xlsx', 1, 1, 1, 'IMPORTED'], [$batch->file_name, $batch->padel_transactions, $batch->padel_bookings, $batch->fnb_transactions, $batch->status]);
         $this->assertEquals(700000, (float) $batch->padel_total);
         $this->assertCount(1, $batch->new_customer_ids);
-        \Illuminate\Support\Facades\Storage::disk('local')->assertExists($batch->file_path);
+        Storage::disk('local')->assertExists($batch->file_path);
 
         $this->actingAs($this->admin);
         Livewire::test(ImportPenjualan::class)
@@ -566,7 +586,6 @@ class SalesImportTest extends TestCase
 
     public function test_cancelling_an_import_removes_its_data_and_frees_the_schedule(): void
     {
-        \Illuminate\Support\Facades\Storage::fake('local');
         $andi = User::factory()->customer()->create(['name' => 'Andi', 'phone' => '081234567890']);
         $path = $this->xlsx(
             [

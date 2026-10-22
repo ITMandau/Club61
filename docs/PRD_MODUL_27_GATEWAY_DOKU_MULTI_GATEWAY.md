@@ -322,7 +322,11 @@ URL notifikasi yang didaftarkan di dashboard DOKU (per kanal):
 | 7 | Request ulang dengan `Request-Id` sama membalas tagihan asli (409) | Timeout bikin tagihan → tagihan yatim dibatalkan rekonsiliasi. |
 | 8 | Tanda tangan webhook lolos lewat Nginx sandbox (body & path utuh) | Perbaiki konfigurasi proxy sebelum Tahap 2 lanjut. |
 
-_Hasil uji: (diisi setelah Tahap 0)._
+_Hasil uji (20 Okt 2026, server pre-production `sandbox.club61.id` + DOKU sandbox):_
+- **#8 lolos** — notifikasi DOKU lewat Nginx diterima, tanda tangan sah (notifikasi #1, VA). URL notifikasi harus diisi di halaman kanal **biasa (non-SNAP)**; URL di halaman konfigurasi SNAP tidak dipakai DOKU Checkout.
+- Notifikasi SUCCESS bisa datang **sebelum** API status DOKU ikut SUCCESS (±16 detik) → dicatat `retry`, lalu lunas lewat cek status. Sesuai rancangan (notifikasi tidak pernah dipercaya tanpa konfirmasi API status).
+- `DOKU_IS_PRODUCTION=true` dengan kunci sandbox → `400 invalid_client_id` (permintaan ke `api.doku.com`). Mode production hanya bersama Client ID + Secret Key production.
+- QRIS **tidak bisa** disimulasikan di sandbox DOKU (Simulator hanya OVO, ShopeePay, LinkAja) → jalur QR kasir diuji dengan VA di sandbox; QRIS dibuktikan dengan transaksi kecil di production (Tahap 4).
 
 ### 15a. Keputusan 15 Okt 2026 — booking online belum dibayar tidak bisa dibayar di kasir (sudah diterapkan)
 
@@ -376,6 +380,48 @@ Full suite 877 lulus (854 lama + 23 `tests/Feature/Payment/DokuGatewayTest.php`)
 - **"Catat dulu baru panggil DOKU" (§10.1 no. 3) diganti.** Checkout membuat sesi di dalam transaksi yang mengunci slot; membongkarnya berisiko. Pengganti: notifikasi yang datang sebelum sesi tersimpan disimpan sebagai `unmatched` dan diproses ulang, dan rekonsiliasi status menangkap pembayarannya begitu sesi tersimpan.
 - **VA BTN, BNC & BPD (BJB) dikeluarkan dari daftar kanal DOKU** — Cancel API DOKU tidak mendukungnya, sesi lama tidak bisa ditutup saat ganti metode.
 - **Tanda tangan respons DOKU tidak diverifikasi** — dokumentasi tidak memberi rumus yang bisa diuji; kepercayaan pada respons = TLS ke `api(-sandbox).doku.com` + pencocokan invoice & nominal.
+
+### 15d. Hasil Tahap 3 — QR kasir lewat DOKU (19 Okt 2026, draft belum di-commit)
+
+| Hal | Hasil |
+| :--- | :--- |
+| Cara tampil (§9.1) | **Opsi A, versi resmi.** Dokumentasi DOKU Checkout (Frontend Integration) punya mode pop-up: `jokul-checkout-1.0.0.js` + `loadJokulCheckout(payment.url)`. Isi script itu (dicek 19 Okt): membuat `<iframe src="{payment.url}?view=iframe">` di modal + menutup modal saat DOKU mengirim pesan `closeJokul`. Header halaman DOKU sandbox: `x-frame-options: ALLOW-FROM sandbox.doku.com` (tidak dikenali Chrome, tanpa CSP). SNAP (opsi B) tidak diperlukan. |
+| Keamanan | Script DOKU **tidak** dimuat di halaman admin (menimpa `window.onclick`, menyusun HTML dari URL lewat `innerHTML`, modal menumpuk & tidak pernah dihapus, dan berjalan dengan akses penuh ke sesi kasir). Kasir memakai iframe sendiri dengan URL yang sama (`DokuCheckoutService::popupUrl`, hanya https *.doku.com), `sandbox` **tanpa** `allow-top-navigation` (halaman DOKU tidak bisa memindahkan layar kasir), dan sesi `auto_redirect=false`. Lunas hanya dari webhook bertanda tangan / API status (jalur online yang sama, nominal dicocokkan), bukan dari iframe. |
+| File | `Doku/DokuPosQrisService.php`, `pos/partials/doku-qris-modal.blade.php`; pemilih gateway kasir `Pos/PosAutoPayment.php` (dipakai POS Walk-In, Jual Membership, F&B, `pos:sweep-auto-payments`); pembatalan order bersama `Pos/PosPendingOrderCanceller.php` (dipindah dari `PosMidtransQrisService`, perilaku Midtrans sama). |
+| Batal | Urutan: cek DOKU (sudah bayar → transaksi diteruskan) → sesi DOKU dibatalkan & dibuktikan tertutup → baru order batal. Kasir menekan Batalkan tapi DOKU belum bisa memastikan tertutup (mis. Order Cancellation belum aktif) → ditolak, QR tetap tampil. Kedaluwarsa → tetap dibatalkan (uang terlambat = pembayaran ganda + refund PENDING). |
+| Rekap shift | Provider `DOKU_QRIS` → baris "QRIS Otomatis DOKU (Kasir)", sumber "Dashboard pembayaran online". |
+| Pengaturan | Gateway QR kasir = DOKU bisa dipilih kalau DOKU aktif & kunci terisi; ditolak kalau belum ada metode "Tampil di Kasir" berkanal gateway itu. |
+| Test | `tests/Feature/Pos/DokuQrisPosTest.php` (7). |
+
+**Wajib dicek sebelum dipakai di production (Tahap 3):** QR tampil di iframe di tablet kasir (sandbox, lalu production — header `x-frame-options` production belum dicek); tombol di dalam halaman DOKU (salin / unduh QR) jalan di dalam sandbox iframe; fitur Order Cancellation aktif (tanpa itu kasir tidak bisa membatalkan QR DOKU sebelum kedaluwarsa).
+
+**Temuan sandbox 20 Okt 2026 (ganti metode gagal 503):** `POST /checkout/v3/cancellations` menjawab HTTP 200 `message: "SUCCESS"`, tapi API status masih `PENDING` sesaat sesudahnya. Dokumentasi DOKU: order yang berhasil dibatalkan langsung tidak bisa dibayar lagi. Maka `DokuCheckoutService::close()` sekarang menganggap sesi **tertutup** kalau pembatalan diterima (2xx + message `SUCCESS`, string atau daftar) **dan** status bukan lunas — sama dengan aturan SNAP. Jawaban batal lain (ditolak / tanpa `SUCCESS`) tetap diblok (503 / kasir tetap PENDING). Test: `DokuGatewayTest` (batal diterima + status PENDING → ganti metode jalan; jawaban tanpa `SUCCESS` → 503).
+
+### 15e. Modul 27b — DOKU SNAP untuk QRIS & VA BCA (20 Okt 2026, draft belum di-commit)
+
+Alasan: sales DOKU mengonfirmasi API non-SNAP akan dihentikan; di akun production VA BCA hanya tersedia sebagai SNAP. Scope pertama (kejar tayang): **QRIS + VA BCA**. Metode DOKU lain tetap lewat DOKU Checkout sampai dipindah.
+
+| Hal | Isi |
+| :--- | :--- |
+| Saklar | `.env`: `DOKU_SNAP_ENABLED=true` + kunci lengkap → metode yang kanalnya `QRIS` / `VIRTUAL_ACCOUNT_BCA` otomatis lewat SNAP; kunci tidak lengkap / saklar mati → kembali DOKU Checkout. Gateway tetap "DOKU" di admin. |
+| Kunci (`.env`, path file) | `DOKU_SNAP_CLIENT_ID`, `DOKU_SNAP_CLIENT_SECRET`, `DOKU_SNAP_PRIVATE_KEY_PATH` (+ passphrase), `DOKU_SNAP_DOKU_PUBLIC_KEY_PATH`, `DOKU_SNAP_QRIS_MERCHANT_ID`, `DOKU_SNAP_QRIS_TERMINAL_ID`, `DOKU_SNAP_QRIS_POSTAL_CODE`, `DOKU_SNAP_BCA_PARTNER_SERVICE_ID`, `DOKU_SNAP_BCA_CUSTOMER_NO` (default `0`). Mode sandbox/production ikut `DOKU_IS_PRODUCTION`. Format dicek sebelum dikirim (terminal ID huruf/angka 3–16, kode pos 5 angka, BIN BCA ≤8 angka, prefix angka); salah / kosong → SNAP produk itu tidak dipakai (DOKU Checkout) + `[ALERT] DOKU SNAP … tidak dipakai` di log DOKU (maks. 1x/10 menit) berisi nama isian yang salah. |
+| Keluar (kita → DOKU) | Token B2B `POST /authorization/v1/access-token/b2b` (SHA256withRSA `clientId|X-TIMESTAMP`, cache 15 menit). Transaksi: HMAC-SHA512(clientSecret, `METHOD:path:token:sha256(body):X-TIMESTAMP`), header `X-PARTNER-ID`, `X-EXTERNAL-ID` (angka), `CHANNEL-ID`. QRIS: `qr-mpm-generate` / `qr-mpm-query` / `qr-expire`. VA: `create-va` (tipe C, 16 digit, `reusableStatus=false`) / `orders/v1.0/transfer-va/status` / `delete-va`. Rumus dicocokkan dengan SDK resmi `doku/doku-php-library` (tanpa memasang library). |
+| Masuk (DOKU → kita) | Token: `POST /api/v1/payments/doku-snap/v1.0/access-token/b2b` (tanda tangan RSA DOKU dicek dengan public key DOKU, jam ±5 menit) → JWT RS256 kita. Notifikasi VA: `/api/v1/payments/doku-snap/v1.1/transfer-va/payment`; QRIS: `/api/v1/payments/doku-snap/v1.0/qr/qr-mpm-notify` — wajib membawa JWT kita, disimpan di `doku_notifications`, dilunasi HANYA setelah API status SNAP menyatakan lunas & nominal cocok. |
+| Tampilan | Halaman bayar sendiri: invoice (padel & membership) menampilkan QR (digambar di browser, koreksi M) / nomor VA + salin + cara bayar BCA + hitung mundur; checkout & beli membership langsung ke invoice. Kartu kasir menggambar QR / nomor VA sendiri. Tidak ada halaman DOKU → request `sse-subscribe` halaman DOKU hilang. |
+| Jalur yang dipakai ulang | Sesi SNAP dicatat di format `DokuSessionGuard` (`api: SNAP`); `DokuCheckoutService::state/close/cancel` meneruskannya ke `DokuSnapService`, jadi ganti metode, rekonsiliasi, pembayaran ganda, kasir, dan pembersih tidak diubah. |
+| Test | `tests/Feature/Payment/DokuSnapTest.php` (12). Uji mutasi: token notifikasi selalu sah → gagal; rumus HMAC diubah → gagal; aturan lunas VA kembali ke `paidAmount > 0` → gagal; validasi format dimatikan → gagal. |
+
+**Hasil uji pre-production dengan akun DOKU production (20 Okt 2026) + koreksi dari dokumentasi resmi** (`developers.doku.com` — BCA VA SNAP, spesifikasi "SNAP v1.1 - BCA VA - DGPC", QRIS SNAP, Check Status SNAP):
+
+| Temuan | Koreksi |
+| :--- | :--- |
+| Token B2B dibalas HTTP 500 (tanpa responseCode) untuk semua bentuk body | Penyebab: **Merchant Public Key belum diisi** di dashboard (Settings → Account → API Keys). Setelah diisi → `2007300`. |
+| QRIS `4004701` terminalId / VA `4002701` partnerServiceId | Isian `.env` masih placeholder `...` → sekarang dicek format sebelum dikirim. Terminal ID: label terminal di QRIS statis merchant (mis. `A01`) — konfirmasi DOKU. |
+| VA BCA dibuat dengan nomor acak 11 digit (cara MGPC, butuh BIN khusus) | DGPC resmi: `partnerServiceId` `"   19008"`, `customerNo` = prefix sub-BIN (`"0"`), `virtualAccountNo` = gabungannya; nomor lengkap dibuat DOKU dan dibaca dari respons (harus berawalan BIN). |
+| `CHANNEL-ID` VA = nama kanal | Dokumentasi: `H2H` untuk semua request QRIS & VA. |
+| **VA belum dibayar bisa dianggap lunas**: contoh resmi cek status VA "Pending / Belum Terbayar" tetap mengisi `paidAmount` = nominal tagihan, dan `paymentFlagStatus` tidak ada | Lunas HANYA kalau `paymentRequestId` terisi ("Mandatory if Payment happened") dan `paymentFlagReason.english` bukan Pending. `trxId` status dibaca dari `additionalInfo.trxId`. |
+
+**Belum terbukti (wajib dicek di sandbox SNAP):** kode `responseCode` sukses tiap API, isi `paymentFlagReason` VA yang sudah dibayar, format & header notifikasi VA/QRIS (termasuk `X-SIGNATURE` notifikasi — sekarang yang dicek JWT kita), path notifikasi yang dipanggil DOKU, dan balasan yang diterima DOKU (`2002500` VA, `2005200` QRIS). Semua tercatat di `storage/logs/doku-*.log` (`SNAP … → HTTP …` + `responseCode`).
 
 **Wajib dibuktikan di sandbox sebelum production** (§15): status API untuk order yang dibatalkan (kode menganggap tertutup hanya kalau `transaction.status` EXPIRED / `order.status` ORDER_EXPIRED — kalau DOKU melaporkan status lain, ganti metode akan selalu ditolak 503 dan perlu disesuaikan); jawaban API status untuk invoice tidak dikenal (diasumsikan HTTP 404); isi notifikasi QRIS & tiap VA; perilaku `override_notification_url`; tanda tangan lewat Nginx sandbox.
 

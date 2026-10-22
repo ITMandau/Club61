@@ -52,10 +52,11 @@ class LogAktivitas extends Page implements HasTable
         'FNB' => 'F&B',
         'MEMBERSHIP' => 'Membership',
         'SPONSOR' => 'Sponsor',
+        'MARKETING' => 'Marketing & Promo',
         'MASTER_DATA' => 'Master Data',
         'USER_ROLE' => 'User & Hak Akses',
         'CONTENT' => 'Konten Website',
-        'SIGNATURE' => 'Signature (Layar TV)',
+        'SIGNATURE' => 'Digital Signage',
         'AUTH' => 'Login & Keamanan',
         'SYSTEM' => 'Sistem',
     ];

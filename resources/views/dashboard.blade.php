@@ -41,10 +41,10 @@
                             <div class="max-w-2xl min-w-0">
                                 <span class="inline-flex items-center px-3 py-1 rounded-full text-[10px] font-extrabold uppercase tracking-widest bg-[#E6DAC0]/20 text-[#F7F0DB] border border-[#E6DAC0]/40 mb-3">Member Portal</span>
                                 <h1 class="font-display text-3xl sm:text-4xl font-extrabold tracking-tight leading-none text-[#F7F0DB]">
-                                    CLUB 61 <span class="text-[#E6DAC0] font-alex font-normal text-4xl sm:text-5xl block">Padel Court</span>
+                                    CLUB 61 <span class="text-[#E6DAC0] font-alex font-normal text-4xl sm:text-5xl block">Padel &amp; Wellness</span>
                                 </h1>
                                 <p class="text-xs sm:text-sm text-emerald-100/85 mt-3 leading-relaxed">
-                                    Welcome back, <span class="font-bold text-white">{{ Auth::user()->name }}</span>. Padel courts at Gedung Indosat Medan, plus sauna and a cafe lounge.
+                                    Welcome back, <span class="font-bold text-white">{{ Auth::user()->name }}</span>. Padel courts at {{ \App\Models\Setting\CompanyProfileSetting::receiptAddress() }}, plus sauna and a cafe lounge.
                                 </p>
 
                                 <div class="mt-5 grid grid-cols-1 sm:flex sm:flex-wrap items-center gap-2.5">
@@ -65,7 +65,7 @@
                                 <div class="p-3.5 rounded-lg bg-white/10 border border-white/15">
                                     <div class="text-[10px] uppercase font-bold text-[#F7F0DB]/70">Courts</div>
                                     <div class="text-sm font-black text-white mt-0.5">{{ $activeCourtCount }} {{ \Illuminate\Support\Str::plural('court', $activeCourtCount) }} open</div>
-                                    <div class="text-[10px] text-[#F7F0DB]/60 mt-0.5">Gedung Indosat Medan</div>
+                                    <div class="text-[10px] text-[#F7F0DB]/60 mt-0.5 line-clamp-2">{{ \App\Models\Setting\CompanyProfileSetting::receiptAddress() }}</div>
                                 </div>
                                 <div class="p-3.5 rounded-lg bg-[#662721]/20 border border-[#662721]/40">
                                     <div class="text-[10px] uppercase font-bold text-[#F7F0DB]">Wellness</div>
@@ -332,7 +332,7 @@
 
                     {{-- Info venue --}}
                     <section class="rounded-xl bg-white/90 border border-[#E6DAC0] p-4 sm:p-5 text-xs">
-                        <div class="font-bold text-sm mb-2.5">Club 61 Padel Court Medan</div>
+                        <div class="font-bold text-sm mb-2.5">Club 61 Padel &amp; Wellness Medan</div>
                         <dl class="space-y-2 text-[#7A5A52] leading-relaxed">
                             {{-- Alamat & jam dari Konten Website → Fakta Venue (sama dengan halaman depan). --}}
                             @php($venue = \App\Models\Setting\CompanyProfileSetting::venueInfo())

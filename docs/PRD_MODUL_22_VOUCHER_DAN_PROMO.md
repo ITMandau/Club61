@@ -201,6 +201,23 @@ Voucher masuk Voucher Saya; masa berlaku dihitung sejak terbit (mis. 30 hari).
 
 ## 10. Rencana Implementasi
 
+**Status 19 Okt 2026 — Tahap 2 selesai (draft, belum di-commit):**
+- Promo dibuat / diubah / dinonaktifkan di **Daftar Voucher** (Keuangan) — satu tabel untuk kode promo & voucher saldo
+  customer, dibedakan di kolom Kode & Asal (keputusan user 19 Okt: satu pintu, bukan halaman/tab terpisah). Semua isian
+  §4.2; kolom Dipakai menampilkan total potongan order lunas; status Terjadwal untuk promo yang belum mulai. Izin
+  `manage_vouchers`; tanpa izin = hanya melihat. Semua perubahan di Log Aktivitas (modul Marketing & Promo).
+  Menu **Marketing** kembali "Segera Hadir" — disiapkan untuk iklan digital / upload materi promosi.
+- Rincian voucher tampil di kasir & checkout (nama, potongan, syarat), dan potongan voucher tampil di invoice customer,
+  popup konfirmasi bayar, gambar e-ticket, serta struk kasir.
+- Aturan di `VoucherService::resolve()` (online & kasir): periode mulai–berakhir (WIB), kanal, kategori `PADEL` = sewa
+  lapangan saja (minimal transaksi juga dihitung dari situ), T3 1x per akun, saklar gabung benefit member, kuota.
+- T2: order tidak dibayar / batal → kuota & jatah akun kembali; order lunas yang dibatalkan admin → kuota promo kembali.
+- Promo yang sudah dipakai: kode, potongan, dan kategori dikunci (periode, kuota, kanal, aturan gabung masih bisa diubah).
+- Checkout online sekarang **menolak** kode yang tidak berlaku saat bayar (dulu diabaikan diam-diam → ditagih penuh).
+- Migrasi `2026_10_18_120001_add_promo_fields_to_vouchers_table` — jalankan `php artisan migrate`.
+- **Belum:** saklar "boleh digabung voucher sponsor" — sementara tetap aturan 1 transaksi = 1 voucher (promo tidak bisa
+  digabung voucher jam corporate). Tahap 1 (voucher saldo sekali pakai + hangus), tahap 3–4.
+
 | Tahap | Isi | Perkiraan |
 | :--- | :--- | :--- |
 | 1 | Voucher saldo: sekali pakai + hangus (kolom nilai hangus) + peringatan sisa hangus, kembali utuh saat kedaluwarsa / batal, masa berlaku di pengaturan, kolom hangus di Daftar Voucher | ½–1 hari |

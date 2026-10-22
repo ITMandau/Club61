@@ -170,7 +170,7 @@ class BookOfflineCourt extends Page
         $this->initializeEquipmentQuantities();
         $this->checkPendingDraft();
         // Bayar Otomatis yang masih menunggu (halaman sempat di-refresh / tertutup) → popup dilanjutkan.
-        $this->pendingQris = app(\App\Services\Pos\PosMidtransQrisService::class)->resumeFor('PADEL_FRONTDESK', 'WALK_IN_OFFLINE', auth()->id());
+        $this->pendingQris = app(\App\Services\Pos\PosAutoPayment::class)->resumeFor('PADEL_FRONTDESK', 'WALK_IN_OFFLINE', auth()->id());
 
         if ($this->settleRequest) {
             $this->startSettlement($this->settleRequest);
@@ -647,12 +647,10 @@ class BookOfflineCourt extends Page
             return $this->selectedCustomerId ? User::find($this->selectedCustomerId) : null;
         }
 
-        $digits = preg_replace('/\D/', '', (string) $this->walkInPhone);
-        if (strlen($digits) < 8) {
-            return null;
-        }
+        // Bukan nomor HP ("" / < 8 digit) → tidak dicari sama sekali. Nomor sah = 1 query lewat index users(phone).
+        $phone = app(PadelBookingService::class)->normalizePhoneNumber((string) $this->walkInPhone);
 
-        return User::where('phone', app(PadelBookingService::class)->normalizePhoneNumber((string) $this->walkInPhone))->first();
+        return $phone === '' ? null : User::where('phone', $phone)->first();
     }
 
     public function updatedWalkInName(): void
@@ -811,8 +809,13 @@ class BookOfflineCourt extends Page
 
         $customer = $this->selectedCustomerId ? User::find($this->selectedCustomerId) : null;
 
+        $courtAfterBenefits = max(0, $this->courtTotal - $this->membershipDiscountAmount - $this->sponsorDiscountAmount);
         $result = app(\App\Services\Finance\VoucherService::class)
-            ->resolve($this->appliedVoucherCode, $customer, max(0, $this->courtTotal - $this->membershipDiscountAmount - $this->sponsorDiscountAmount) + $this->equipmentTotal);
+            ->resolve($this->appliedVoucherCode, $customer, $courtAfterBenefits + $this->equipmentTotal, context: [
+                'channel' => \App\Models\Pos\Voucher::CHANNEL_POS,
+                'amounts' => ['PADEL' => $courtAfterBenefits, 'PADEL_ADDON' => (float) $this->equipmentTotal],
+                'membership_applied' => $this->membershipDiscountAmount > 0,
+            ]);
 
         // 1 transaksi 1 voucher (sama dengan server): kode promo tidak bisa digabung voucher jam corporate. Voucher saldo boleh.
         if ($result['voucher'] && ! $result['voucher']->isCredit() && $this->sponsorDiscountAmount > 0) {
@@ -1779,6 +1782,7 @@ class BookOfflineCourt extends Page
                 'subtotal' => $result['order']->subtotal,
                 'discount_amount' => (float) $result['order']->discount_amount,
                 'voucher_code' => $result['order']->voucher_code,
+                'voucher_note' => app(\App\Services\Finance\PromoVoucherService::class)->receiptNote($result['order']->voucher_code),
                 'tax_amount' => $result['order']->tax_amount,
                 'tax_name' => $this->taxName,
                 'service_charge' => $result['order']->service_charge,
@@ -1933,15 +1937,15 @@ class BookOfflineCourt extends Page
             return;
         }
 
-        $status = app(\App\Services\Pos\PosMidtransQrisService::class)->status($payment->id);
+        $status = app(\App\Services\Pos\PosAutoPayment::class)->status($payment->id);
 
-        if ($status === \App\Services\Pos\PosMidtransQrisService::PAID) {
+        if ($status === \App\Services\Pos\PosAutoPayment::PAID) {
             $this->completePendingQris($payment->fresh());
-        } elseif ($status !== \App\Services\Pos\PosMidtransQrisService::PENDING) {
+        } elseif ($status !== \App\Services\Pos\PosAutoPayment::PENDING) {
             $this->pendingQris = null;
             $this->posStep = 'selection';
             Notification::make()
-                ->title($status === \App\Services\Pos\PosMidtransQrisService::EXPIRED ? 'QR Kedaluwarsa' : 'QR Dibatalkan')
+                ->title($status === \App\Services\Pos\PosAutoPayment::EXPIRED ? 'QR Kedaluwarsa' : 'QR Dibatalkan')
                 ->body('Pembayaran QRIS tidak diterima. Pesanan dibatalkan dan slot lapangan dilepas.')
                 ->warning()
                 ->send();
@@ -1958,11 +1962,16 @@ class BookOfflineCourt extends Page
             return;
         }
 
-        $status = app(\App\Services\Pos\PosMidtransQrisService::class)->cancel($payment->id);
+        $status = app(\App\Services\Pos\PosAutoPayment::class)->cancel($payment->id);
 
-        if ($status === \App\Services\Pos\PosMidtransQrisService::PAID) {
+        if ($status === \App\Services\Pos\PosAutoPayment::PAID) {
             // Customer ternyata sudah bayar tepat sebelum dibatalkan — uang sudah masuk, transaksi diteruskan.
             $this->completePendingQris($payment->fresh());
+
+            return;
+        }
+        if ($status === \App\Services\Pos\PosAutoPayment::PENDING) {
+            Notification::make()->title('QR Belum Bisa Dibatalkan')->body(\App\Services\Pos\PosAutoPayment::cannotCancelYetMessage())->warning()->send();
 
             return;
         }
@@ -1978,7 +1987,7 @@ class BookOfflineCourt extends Page
         $payment = $this->pendingQrisPayment();
         abort_unless($payment && ($this->pendingQris['is_mock'] ?? false) && ! app()->environment('production'), 403);
 
-        app(\App\Services\Pos\PosMidtransQrisService::class)->simulatePaid($payment->id);
+        app(\App\Services\Pos\PosAutoPayment::class)->simulatePaid($payment->id);
         $this->pollPendingQris();
     }
 
@@ -2215,6 +2224,7 @@ class BookOfflineCourt extends Page
             // Potongan voucher promo ikut tampil di cetak ulang (dulu hilang — hanya struk pertama yang memuatnya).
             'discount_amount' => (float) $order->discount_amount,
             'voucher_code' => $order->voucher_code,
+            'voucher_note' => app(\App\Services\Finance\PromoVoucherService::class)->receiptNote($order->voucher_code),
             'equipments' => \App\Models\Padel\PadelBookingEquipment::with('equipment')
                 ->where('order_id', $order->id)
                 ->get()
@@ -2428,9 +2438,15 @@ class BookOfflineCourt extends Page
         // Statistik & riwayat transaksi walk-in HARI INI — di-cache 10 detik. Angka ini cuma buat
         // ditampilin di pojok layar (bukan input keputusan transaksi), jadi selisih beberapa detik
         // gak masalah, tapi query-nya sendiri gak perlu jalan ulang di SETIAP klik slot/tombol lain.
-        $walkInStatsCacheKey = 'pos_walkin_stats_today:' . now()->format('Y-m-d');
-        $walkInStatsToday = Cache::remember($walkInStatsCacheKey, 10, function () {
-            $query = \App\Models\Pos\Order::where('order_type', 'WALK_IN')->whereDate('created_at', now());
+        // "Hari ini" = hari WIB sebagai rentang created_at (bukan whereDate) supaya index orders(order_type, created_at)
+        // terpakai — whereDate membungkus kolom dengan DATE() dan memaksa MySQL menyisir semua order.
+        $todayRange = [
+            Carbon::now('Asia/Jakarta')->startOfDay()->setTimezone(config('app.timezone')),
+            Carbon::now('Asia/Jakarta')->endOfDay()->setTimezone(config('app.timezone')),
+        ];
+        $walkInStatsCacheKey = 'pos_walkin_stats_today:' . now('Asia/Jakarta')->format('Y-m-d');
+        $walkInStatsToday = Cache::remember($walkInStatsCacheKey, 10, function () use ($todayRange) {
+            $query = \App\Models\Pos\Order::where('order_type', 'WALK_IN')->whereBetween('created_at', $todayRange);
 
             return [
                 'count' => (clone $query)->count(),
@@ -2438,10 +2454,10 @@ class BookOfflineCourt extends Page
             ];
         });
 
-        $recentWalkInOrdersCacheKey = 'pos_walkin_recent_orders:' . now()->format('Y-m-d');
-        $recentWalkInOrderIds = Cache::remember($recentWalkInOrdersCacheKey, 10, function () {
+        $recentWalkInOrdersCacheKey = 'pos_walkin_recent_orders:' . now('Asia/Jakarta')->format('Y-m-d');
+        $recentWalkInOrderIds = Cache::remember($recentWalkInOrdersCacheKey, 10, function () use ($todayRange) {
             return \App\Models\Pos\Order::where('order_type', 'WALK_IN')
-                ->whereDate('created_at', now())
+                ->whereBetween('created_at', $todayRange)
                 ->latest()
                 ->limit(8)
                 ->pluck('id');

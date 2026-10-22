@@ -245,6 +245,25 @@ class CompanyProfileContentTest extends TestCase
         $response->assertSee('https://instagram.com/club61', false);
     }
 
+    public function test_login_panel_and_customer_home_use_the_address_from_website_content_not_a_hardcoded_building(): void
+    {
+        CompanyProfileSetting::current()->update(['address_line' => 'Jl. Alamat Baru No. 9, Medan.', 'portal_domain_text' => 'club61.id']);
+
+        // Panel kiri login: alamat (tanpa titik akhir) + domain portal dari Konten Website.
+        $this->get('/login')->assertOk()
+            ->assertSee('Jl. Alamat Baru No. 9, Medan')
+            ->assertSee('club61.id')
+            ->assertDontSee('Gedung Indosat Medan');
+
+        // Home customer (hero, kartu Courts, menu navigasi) memakai alamat yang sama.
+        $this->actingAs(User::factory()->customer()->create());
+        $this->get('/dashboard')->assertOk()
+            ->assertSee('Padel courts at Jl. Alamat Baru No. 9, Medan, plus sauna')
+            ->assertSee('padel courts at Jl. Alamat Baru No. 9, Medan, complete with')
+            ->assertDontSee('Gedung Indosat Medan')
+            ->assertDontSee('Indosat Building');
+    }
+
     public function test_customer_home_and_my_club_show_address_and_hours_from_website_content(): void
     {
         $settings = CompanyProfileSetting::current();

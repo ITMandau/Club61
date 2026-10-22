@@ -60,6 +60,24 @@ return [
         'is_production' => (bool) env('DOKU_IS_PRODUCTION', false),
         // Opsional: path harus sama dengan URL notifikasi yang didaftarkan di dashboard DOKU.
         'notification_url' => env('DOKU_NOTIFICATION_URL'),
+
+        // DOKU SNAP (Modul 27b) — QRIS & VA BCA lewat API SNAP Bank Indonesia, halaman bayar buatan kita sendiri.
+        // Aktif → metode yang didukung SNAP (lihat DokuSnapService::SUPPORTED) memakai SNAP; metode DOKU lain tetap
+        // lewat DOKU Checkout. Kunci privat & public key DOKU berupa FILE (path), bukan isi kunci di .env.
+        'snap' => [
+            'enabled' => (bool) env('DOKU_SNAP_ENABLED', false),
+            'client_id' => env('DOKU_SNAP_CLIENT_ID', env('DOKU_CLIENT_ID')),
+            'client_secret' => env('DOKU_SNAP_CLIENT_SECRET'),
+            'private_key_path' => env('DOKU_SNAP_PRIVATE_KEY_PATH'),
+            'private_key_passphrase' => env('DOKU_SNAP_PRIVATE_KEY_PASSPHRASE'),
+            'doku_public_key_path' => env('DOKU_SNAP_DOKU_PUBLIC_KEY_PATH'),
+            'qris_merchant_id' => env('DOKU_SNAP_QRIS_MERCHANT_ID'),
+            'qris_terminal_id' => env('DOKU_SNAP_QRIS_TERMINAL_ID'),
+            'qris_postal_code' => env('DOKU_SNAP_QRIS_POSTAL_CODE'),
+            // BIN BCA DOKU (contoh resmi "   19008") + prefix sub-BIN merchant (contoh resmi "0"); sisa nomor VA dibuat DOKU (DGPC).
+            'bca_partner_service_id' => env('DOKU_SNAP_BCA_PARTNER_SERVICE_ID'),
+            'bca_customer_no' => env('DOKU_SNAP_BCA_CUSTOMER_NO', '0'),
+        ],
     ],
 
 ];

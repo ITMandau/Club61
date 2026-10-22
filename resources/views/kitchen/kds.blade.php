@@ -4,7 +4,8 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>CLUB 61 KDS - Kitchen &amp; Bar Display</title>
-    <link rel="icon" type="image/png" href="{{ asset('images/club61-logo.png') }}">
+    <link rel="icon" type="image/png" href="{{ asset('images/identity/favicon.png').'?v=2' }}">
+    <link rel="apple-touch-icon" href="{{ asset('images/identity/apple-touch-icon.png').'?v=2' }}">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@87.5..125,400..800&family=Source+Serif+4:opsz,wght@8..60,400..700&family=JetBrains+Mono:wght@600;700;800&display=swap" rel="stylesheet">

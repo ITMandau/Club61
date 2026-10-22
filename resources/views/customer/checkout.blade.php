@@ -140,7 +140,7 @@
                     <section class="bg-white/90 rounded-xl border border-[#E6DAC0] shadow-[0_8px_30px_rgba(79,47,42,0.08)] p-4 sm:p-5">
                         <div class="mb-3">
                             <div class="text-[11px] font-extrabold uppercase tracking-wider text-[#662721]">Payment method</div>
-                            <div class="text-[11px] text-[#7A5A52]">Paid online via Midtrans — confirmed automatically.</div>
+                            <div class="text-[11px] text-[#7A5A52]">Paid online — confirmed automatically.</div>
                         </div>
 
                         <div x-show="grandTotal <= 0" class="flex items-center gap-3 p-3.5 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-900">
@@ -258,6 +258,13 @@
                             <span x-show="promoDiscount > 0" x-text="(promoVoucher ? promoVoucher.code : '') + ' applied — you save Rp ' + formatNumber(promoDiscount)"></span>
                             <span x-show="promoDiscount <= 0">This voucher does not apply to the current total.</span>
                         </div>
+                        <template x-if="promoApplied && promoTerms">
+                            <div data-voucher-terms class="px-3 py-2 rounded-xl bg-emerald-50 border border-emerald-200 text-[11px] leading-relaxed text-emerald-900">
+                                <div x-show="promoTerms.name" class="font-bold" x-text="promoTerms.name"></div>
+                                <div x-text="promoTerms.headline"></div>
+                                <div x-show="promoTerms.rules.length" class="text-emerald-800/80" x-text="promoTerms.rules.join(' · ')"></div>
+                            </div>
+                        </template>
 
                         {{-- Voucher saldo milik customer (refund yang dijadikan voucher) --}}
                         <template x-if="myVouchers.length > 0 && !promoApplied">
@@ -296,7 +303,7 @@
                             <span class="shrink-0 tabular-nums whitespace-nowrap" x-text="'- Rp ' + formatNumber(sponsorVoucherDiscountAmount)"></span>
                         </div>
                         <div x-show="promoApplied && promoDiscount > 0" class="flex items-start justify-between gap-3 font-bold text-emerald-700">
-                            <span class="min-w-0">Voucher discount</span>
+                            <span class="min-w-0" x-text="'Voucher discount' + (promoVoucher && promoVoucher.type === 'PERCENT' ? ' (' + formatPercent(promoVoucher.value) + ')' : '')"></span>
                             <span class="shrink-0 tabular-nums whitespace-nowrap" x-text="'- Rp ' + formatNumber(promoDiscount)"></span>
                         </div>
                         {{-- Biaya layanan / admin & pajak dari panel admin --}}
@@ -330,7 +337,7 @@
 
                     <div class="flex items-center justify-center gap-1.5 text-[10px] text-[#7A5A52]">
                         <svg class="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" /></svg>
-                        <span>Secure payment by Midtrans</span>
+                        <span>Secure online payment</span>
                     </div>
                 </aside>
             </div>
@@ -377,6 +384,37 @@
                             <div class="text-sm font-black tabular-nums shrink-0" x-text="'Rp ' + formatNumber(item.price)"></div>
                         </div>
                     </template>
+                    {{-- Rincian dari harga sewa ke total bayar — sama dengan ringkasan di samping (potongan, alat, biaya, pajak). --}}
+                    <div x-show="addonsTotal > 0 || membershipDiscountAmount > 0 || sponsorVoucherDiscountAmount > 0 || promoDiscount > 0 || (isAdminFeeApplicable && calculatedAdminFee > 0) || (isTaxApplicable && calculatedTax > 0)"
+                         data-confirm-breakdown class="px-4 py-3 space-y-1.5 text-xs text-[#662721]">
+                        <div x-show="addonsTotal > 0" class="flex items-start justify-between gap-3">
+                            <span class="min-w-0">Equipment add-ons</span>
+                            <span class="shrink-0 font-bold tabular-nums whitespace-nowrap" x-text="'Rp ' + formatNumber(addonsTotal)"></span>
+                        </div>
+                        <div x-show="membershipDiscountAmount > 0" class="flex items-start justify-between gap-3 font-bold">
+                            <span class="min-w-0" x-text="'Membership' + (membershipBenefit ? ' · ' + membershipBenefit.plan_name : '')"></span>
+                            <span class="shrink-0 tabular-nums whitespace-nowrap" x-text="'- Rp ' + formatNumber(membershipDiscountAmount)"></span>
+                        </div>
+                        <div x-show="sponsorVoucherDiscountAmount > 0" class="flex items-start justify-between gap-3 font-bold">
+                            <span class="min-w-0">Corporate voucher</span>
+                            <span class="shrink-0 tabular-nums whitespace-nowrap" x-text="'- Rp ' + formatNumber(sponsorVoucherDiscountAmount)"></span>
+                        </div>
+                        <div x-show="promoApplied && promoDiscount > 0" class="flex items-start justify-between gap-3 font-bold text-emerald-700">
+                            <span class="min-w-0">
+                                <span x-text="'Voucher ' + (promoVoucher ? promoVoucher.code : '')"></span>
+                                <span x-show="promoTerms" class="block font-medium text-[11px] text-emerald-800/80" x-text="promoTerms ? ((promoTerms.name ? promoTerms.name + ' · ' : '') + promoTerms.headline) : ''"></span>
+                            </span>
+                            <span class="shrink-0 tabular-nums whitespace-nowrap" x-text="'- Rp ' + formatNumber(promoDiscount)"></span>
+                        </div>
+                        <div x-show="isAdminFeeApplicable && calculatedAdminFee > 0" class="flex items-start justify-between gap-3">
+                            <span class="min-w-0" x-text="financeSettings.admin_fee_name || 'Service fee'"></span>
+                            <span class="shrink-0 font-bold tabular-nums whitespace-nowrap" x-text="'Rp ' + formatNumber(calculatedAdminFee)"></span>
+                        </div>
+                        <div x-show="isTaxApplicable && calculatedTax > 0" class="flex items-start justify-between gap-3">
+                            <span class="min-w-0" x-text="financeSettings.tax_name || 'Tax'"></span>
+                            <span class="shrink-0 font-bold tabular-nums whitespace-nowrap" x-text="'Rp ' + formatNumber(calculatedTax)"></span>
+                        </div>
+                    </div>
                     <div class="flex items-center justify-between gap-3 px-4 py-3 bg-[#F7F0DB] rounded-b-lg">
                         <div class="min-w-0">
                             <div class="text-xs font-bold text-[#7A5A52]">Total to pay</div>
@@ -738,6 +776,12 @@
 
                 toggleMembershipBenefit() {
                     this.useMembershipBenefit = !this.useMembershipBenefit;
+                    // Promo yang tidak boleh digabung benefit member dilepas saat benefit dinyalakan lagi (server juga menolak).
+                    if (this.useMembershipBenefit && this.membershipDiscountAmount > 0 && this.promoIsDiscount && !this.promoVoucher.stack_with_membership) {
+                        const code = this.promoVoucher.code;
+                        this.removePromo();
+                        this.showNotice('Promo Code Removed', `${code} can't be combined with your membership benefit. Turn the membership benefit off if you'd rather use the promo code.`, 'info', 'Got It');
+                    }
                 },
 
                 toggleSponsorVoucherBenefit() {
@@ -890,9 +934,14 @@
                     return Math.max(0, courtAfterMembership - this.sponsorVoucherDiscountAmount) + this.addonsTotal;
                 },
 
+                // Promo hanya memotong sewa lapangan (PRD Modul 22 §5) — add-on raket/bola tidak ikut. Voucher saldo tetap semua.
+                get promoCourtBase() {
+                    return Math.max(0, Math.max(0, this.subtotal - this.membershipDiscountAmount) - this.sponsorVoucherDiscountAmount);
+                },
+
                 get promoDiscount() {
                     const v = this.promoVoucher;
-                    const base = this.voucherBase;
+                    const base = v && v.type !== 'CREDIT' ? this.promoCourtBase : this.voucherBase;
                     if (!this.promoApplied || !v || base <= 0 || base < (v.min_order || 0)) return 0;
                     let discount = 0;
                     if (v.type === 'CREDIT') {
@@ -904,6 +953,34 @@
                         discount = v.value || 0;
                     }
                     return Math.round(Math.min(discount, base));
+                },
+
+                formatPercent(value) {
+                    return Number(value || 0).toLocaleString('id-ID', { maximumFractionDigits: 2 }) + '%';
+                },
+
+                /** Rincian aturan voucher yang terpasang — sama dengan yang dicek server saat cek kode & checkout. */
+                get promoTerms() {
+                    const v = this.promoVoucher;
+                    if (!v) return null;
+                    const until = v.valid_until ? 'Valid until ' + v.valid_until : null;
+                    if (v.type === 'CREDIT') {
+                        return { name: null, headline: 'Credit voucher · Rp ' + this.formatNumber(Math.round(v.available_balance || 0)) + ' available', rules: [until].filter(Boolean) };
+                    }
+                    const headline = v.type === 'PERCENT'
+                        ? this.formatPercent(v.value) + ' off court rental' + (v.max_discount ? ' (max Rp ' + this.formatNumber(v.max_discount) + ')' : '')
+                        : 'Rp ' + this.formatNumber(v.value) + ' off court rental';
+                    return {
+                        name: v.name || null,
+                        headline,
+                        rules: [
+                            v.min_order > 0 ? 'Min. court rental Rp ' + this.formatNumber(v.min_order) : null,
+                            until,
+                            v.channel === 'ONLINE' ? 'Online booking only' : null,
+                            v.stack_with_membership ? 'Can be combined with membership' : 'Not combinable with membership',
+                            'Once per account',
+                        ].filter(Boolean),
+                    };
                 },
 
                 get isTaxApplicable() {
@@ -1014,7 +1091,10 @@
                                 'Accept': 'application/json',
                                 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
                             },
-                            body: JSON.stringify({ code, amount: this.voucherBase }),
+                            body: JSON.stringify({
+                                code, amount: this.voucherBase, court_amount: this.promoCourtBase, addon_amount: this.addonsTotal,
+                                membership_applied: this.membershipDiscountAmount > 0,
+                            }),
                         });
                         const json = await res.json().catch(() => ({}));
                         if (res.ok && json.success && this.corporateVoucherOn && json.data.type !== 'CREDIT') {
@@ -1215,6 +1295,9 @@
                                         );
                                     }
                                 });
+                            } else if (data.driver === 'doku' && data.checkout_mode === 'SNAP') {
+                                // DOKU SNAP: QR / nomor VA tampil di halaman invoice kita sendiri (status dicek otomatis).
+                                this.clearSessionAndRedirect(this.createdBookingId, this.createdOrderId);
                             } else if (data.driver === 'doku') {
                                 // DOKU Checkout: halaman bayar DOKU (server memastikan URL https *.doku.com). Selesai / batal
                                 // bayar → DOKU mengembalikan customer ke halaman invoice. WAJIB sebelum cabang di bawah: sesi

@@ -85,15 +85,19 @@ class PadelBookingController extends Controller
     public function hold(Request $request): JsonResponse
     {
         $validated = $request->validate([
-            'booking_date' => ['required', 'date_format:Y-m-d', 'after_or_equal:today'],
+            'booking_date' => ['required', 'date_format:Y-m-d', 'after_or_equal:today',
+                'before_or_equal:'.now()->addDays(PadelBookingService::MAX_DAYS_AHEAD)->toDateString()],
             'slots' => ['required', 'array', 'min:1'],
             'slots.*.court_id' => ['required', 'string'],
             'slots.*.start_time' => ['required', 'date_format:H:i'],
             'slots.*.end_time' => ['required', 'date_format:H:i'],
             'coach_id' => ['nullable', 'string'],
+        ], [
+            'booking_date.before_or_equal' => 'Booking paling jauh '.PadelBookingService::MAX_DAYS_AHEAD.' hari dari hari ini.',
         ]);
 
-        $holdData = $this->bookingService->holdBatchSlots(
+        // Batas jam per pemesanan & per akun (audit G17) — kasir walk-in memakai holdBatchSlots langsung, tidak dibatasi.
+        $holdData = $this->bookingService->holdForCustomer(
             $validated['slots'],
             $validated['booking_date'],
             $request->user(),
@@ -329,9 +333,19 @@ class PadelBookingController extends Controller
         $validated = $request->validate([
             'code' => ['required', 'string', 'max:30'],
             'amount' => ['required', 'numeric', 'min:0', 'max:1000000000'],
+            // Rincian untuk promo (hanya memotong sewa lapangan) — hanya tampilan; checkout menghitung ulang di server.
+            'court_amount' => ['nullable', 'numeric', 'min:0', 'max:1000000000'],
+            'addon_amount' => ['nullable', 'numeric', 'min:0', 'max:1000000000'],
+            'membership_applied' => ['nullable', 'boolean'],
         ]);
 
-        $result = app(\App\Services\Finance\VoucherService::class)->resolve($validated['code'], $request->user(), (float) $validated['amount']);
+        $amount = (float) $validated['amount'];
+        $court = isset($validated['court_amount']) ? (float) $validated['court_amount'] : $amount;
+        $result = app(\App\Services\Finance\VoucherService::class)->resolve($validated['code'], $request->user(), $amount, context: [
+            'channel' => \App\Models\Pos\Voucher::CHANNEL_ONLINE,
+            'amounts' => ['PADEL' => $court, 'PADEL_ADDON' => (float) ($validated['addon_amount'] ?? max(0, $amount - $court))],
+            'membership_applied' => (bool) ($validated['membership_applied'] ?? false),
+        ]);
         if ($result['error']) {
             return response()->json(['success' => false, 'message' => $result['error']], 422);
         }
@@ -347,6 +361,11 @@ class PadelBookingController extends Controller
                 'value' => (float) $voucher->discount_value,
                 'max_discount' => $voucher->max_discount_amount !== null ? (float) $voucher->max_discount_amount : null,
                 'min_order' => (float) $voucher->min_order_amount,
+                'stack_with_membership' => (bool) $voucher->stack_with_membership,
+                // Rincian aturan yang ditampilkan di checkout (teks dirangkai di halaman).
+                'name' => $voucher->isCredit() ? null : $voucher->name,
+                'channel' => $voucher->channel,
+                'valid_until' => $voucher->valid_until?->timezone(\App\Services\Finance\LedgerReport::TIMEZONE)->format('d M Y'),
                 'available_balance' => $voucher->isCredit() ? app(\App\Services\Finance\VoucherService::class)->availableBalance($voucher) : null,
             ],
         ]);
