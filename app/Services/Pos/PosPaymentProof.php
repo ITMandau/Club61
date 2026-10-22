@@ -116,7 +116,7 @@ class PosPaymentProof
      *
      * @throws HttpException 422
      */
-    public static function validate(string $method, array $input, float $amount): array
+    public static function validate(string $method, array $input, float $amount, ?string $ignorePaymentId = null): array
     {
         $method = strtoupper(trim($method));
         $text = fn (string $key) => trim((string) ($input[$key] ?? ''));
@@ -136,7 +136,7 @@ class PosPaymentProof
             if (! preg_match('/^[A-Z0-9]{6,32}$/', $rrn)) {
                 throw new HttpException(422, 'Nomor RRN QRIS wajib diisi (minimal 6 karakter huruf/angka) dari bukti bayar customer.');
             }
-            self::assertNotUsedBefore('payload_log->qris_details->rrn', $rrn, "RRN QRIS {$rrn} sudah pernah dipakai di transaksi lain. Periksa ulang bukti bayar customer.");
+            self::assertNotUsedBefore('payload_log->qris_details->rrn', $rrn, "RRN QRIS {$rrn} sudah pernah dipakai di transaksi lain. Periksa ulang bukti bayar customer.", [], $ignorePaymentId);
 
             return ['qris_details' => [
                 'provider' => $provider,
@@ -160,7 +160,7 @@ class PosPaymentProof
             if (! preg_match('/^[A-Z0-9]{3,12}$/', $trace)) {
                 throw new HttpException(422, 'Trace number dari slip EDC wajib diisi (3-12 karakter huruf/angka).');
             }
-            self::assertNotUsedBefore('payload_log->edc_details->approval_code', $approval, "Approval code {$approval} sudah pernah dipakai di transaksi lain. Periksa ulang slip EDC.", ['payload_log->edc_details->trace_number' => $trace]);
+            self::assertNotUsedBefore('payload_log->edc_details->approval_code', $approval, "Approval code {$approval} sudah pernah dipakai di transaksi lain. Periksa ulang slip EDC.", ['payload_log->edc_details->trace_number' => $trace], $ignorePaymentId);
 
             return ['edc_details' => [
                 'terminal' => $method,
@@ -183,7 +183,7 @@ class PosPaymentProof
         if (! preg_match('/^[A-Z0-9\-\/]{4,40}$/', $reference)) {
             throw new HttpException(422, 'Nomor referensi transfer wajib diisi (minimal 4 karakter) dari bukti transfer.');
         }
-        self::assertNotUsedBefore('payload_log->transfer_details->reference', $reference, "Nomor referensi transfer {$reference} sudah pernah dipakai di transaksi lain.");
+        self::assertNotUsedBefore('payload_log->transfer_details->reference', $reference, "Nomor referensi transfer {$reference} sudah pernah dipakai di transaksi lain.", [], $ignorePaymentId);
 
         return ['transfer_details' => [
             'bank' => $bank,
@@ -193,7 +193,7 @@ class PosPaymentProof
     }
 
     /** Satu bukti bayar hanya boleh melunasi satu transaksi (cegah 1 struk dipakai berulang). */
-    private static function assertNotUsedBefore(string $jsonPath, string $value, string $message, array $alsoMatch = []): void
+    private static function assertNotUsedBefore(string $jsonPath, string $value, string $message, array $alsoMatch = [], ?string $ignorePaymentId = null): void
     {
         // Data lama walk-in menyimpan nilai apa adanya (bisa huruf kecil) dan membership lama memakai key qris_rrn.
         $paths = [$jsonPath];
@@ -203,6 +203,8 @@ class PosPaymentProof
         $variants = array_values(array_unique([$value, strtolower($value)]));
 
         $query = Payment::query()->where('status', 'SUCCESS')
+            // Koreksi metode bayar oleh admin: bukti milik pembayaran itu sendiri bukan "dipakai transaksi lain".
+            ->when($ignorePaymentId, fn ($q) => $q->whereKeyNot($ignorePaymentId))
             ->where(function ($q) use ($paths, $variants) {
                 foreach ($paths as $path) {
                     $q->orWhereIn($path, $variants);

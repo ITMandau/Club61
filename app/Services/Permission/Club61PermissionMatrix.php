@@ -157,6 +157,8 @@ class Club61PermissionMatrix
                             'apply_pos_voucher' => 'Terapkan Voucher Diskon & Promosi',
                             'open_pos_shift' => 'Buka Sesi Shift Kasir Baru',
                             'close_pos_shift' => 'Tutup Sesi Shift & Rekonsiliasi Kas',
+                            // Admin / manager: shift yang selisih (toleransi Rp0) & koreksi metode bayar salah klik kasir.
+                            'approve_shift_closing' => 'Review Shift Kasir: Setujui / Tolak Selisih & Koreksi Metode Bayar',
                             'View:JualMembership' => 'Akses Halaman POS Jual Membership',
                             'sell_membership' => 'Jual & Aktivasi Membership Kasir',
                             'process_fnb_order' => 'Proses Transaksi & Pembayaran Menu F&B di Kasir',

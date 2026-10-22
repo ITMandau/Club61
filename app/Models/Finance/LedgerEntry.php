@@ -5,6 +5,7 @@ namespace App\Models\Finance;
 use App\Models\Pos\Order;
 use App\Models\Pos\Payment;
 use App\Models\Pos\Refund;
+use App\Models\User;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Model;
 use LogicException;
@@ -76,12 +77,66 @@ class LedgerEntry extends Model
             'total_amount' => 'decimal:2',
             'benefit_amount' => 'decimal:2',
             'meta' => 'array',
+            'method_corrected_at' => 'datetime',
         ];
+    }
+
+    /**
+     * Satu-satunya pengecualian immutable: koreksi METODE BAYAR oleh admin (salah klik kasir, mis. QRIS padahal debit).
+     * Nominal, kategori, waktu & semua kolom lain tetap tidak bisa diubah; metode & bukti asli disimpan di kolom
+     * original_* dan siapa / kapan di method_corrected_*. Hanya lewat correctPaymentMethod() (PaymentMethodCorrection).
+     */
+    public const METHOD_CORRECTION_COLUMNS = [
+        'payment_method', 'payment_method_label', 'payment_reference',
+        'method_corrected_at', 'method_corrected_by_id', 'method_corrected_by_name',
+        'original_payment_method', 'original_payment_method_label', 'original_payment_reference',
+    ];
+
+    private static bool $correctingMethod = false;
+
+    /**
+     * @param  iterable<LedgerEntry>  $entries  baris buku milik pembayaran yang dikoreksi
+     * @param  array{payment_method: ?string, payment_method_label: ?string, payment_reference: ?string}  $method
+     */
+    public static function correctPaymentMethod(iterable $entries, array $method, User $by): int
+    {
+        $count = 0;
+        self::$correctingMethod = true;
+        try {
+            foreach ($entries as $entry) {
+                $changes = [
+                    'payment_method' => $method['payment_method'],
+                    'payment_method_label' => $method['payment_method_label'],
+                    'payment_reference' => $method['payment_reference'],
+                    'method_corrected_at' => now(),
+                    'method_corrected_by_id' => $by->getKey(),
+                    'method_corrected_by_name' => mb_substr((string) $by->name, 0, 150),
+                ];
+                // Koreksi kedua dst. tidak menimpa metode asli kasir.
+                if ($entry->method_corrected_at === null) {
+                    $changes += [
+                        'original_payment_method' => $entry->payment_method,
+                        'original_payment_method_label' => $entry->payment_method_label,
+                        'original_payment_reference' => $entry->payment_reference,
+                    ];
+                }
+                $entry->forceFill($changes)->save();
+                $count++;
+            }
+        } finally {
+            self::$correctingMethod = false;
+        }
+
+        return $count;
     }
 
     protected static function booted(): void
     {
-        static::updating(function () {
+        static::updating(function (LedgerEntry $entry) {
+            if (self::$correctingMethod && array_diff(array_keys($entry->getDirty()), self::METHOD_CORRECTION_COLUMNS) === []) {
+                return;
+            }
+
             throw new LogicException('Baris buku transaksi tidak boleh diubah. Koreksi dicatat sebagai baris baru (refund).');
         });
 

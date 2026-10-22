@@ -216,7 +216,17 @@ Dokumen pelacak progres (Single Source of Truth). Status di bawah ini hasil audi
 - [x] POS Walk-In Padel (`/admin/book-offline-court`) dan POS Kasir F&B (`/pos`).
 - [x] Shift kasir (`pos_cashier_shifts`) dengan rekonsiliasi setoran per metode bayar.
 - [x] Role **Resepsionis** (POS walk-in + scan / input kode booking).
-- [ ] **Riwayat shift kasir:** ringkasan shift cuma muncul sekali di modal saat tutup shift, belum ada halaman daftar shift lama & laporan selisih (over / short).
+- [~] **Tutup shift Fase 1 (22 Okt 2026, POS Padel & F&B sama — `ShiftClosingService` + trait `ClosesPosShift`):**
+  - Blind: kasir mengetik angka struk settlement / Audit Report EDC & aplikasi QRIS tanpa melihat angka sistem. Kalau selisih, angkanya dibekukan.
+  - EDC per mesin per loket: dihitung sejak settlement terakhir (`pos_edc_settlements`), jadi "Settle sekarang" & "Belum settle (ganti shift)" sama-sama bisa dicocokkan.
+  - Toleransi Rp0. Selisih → catatan wajib → status Perlu Review → diputuskan pemegang izin `approve_shift_closing` (default admin; penutup shift tidak mereview sendiri, kecuali super_admin).
+  - Koreksi metode bayar salah klik oleh admin (`PaymentMethodCorrection`): nominal tetap, Buku Transaksi tetap satu baris dengan tanda "Dikoreksi siapa / kapan (asal: …)".
+  - Baris form tutup shift = hanya metode yang ada transaksinya di shift itu (+ batch EDC sejak settlement terakhir; tiap mesin debit & kredit). Salah klik dikoreksi admin saat itu juga — Review Shift Kasir menampilkan shift "Sedang buka". Kalau baru ketahuan saat tutup: baris pindahan tampil "tidak diketik" di detail, admin putuskan; baris yang sudah diketik kasir tetap dihitung walau transaksinya dipindah.
+  - Cetak ulang Z-Report dari Detail Shift Kasir (isi = `pos.partials.z-report-body` yang sama dengan POS, bertanda CETAK ULANG + reviewer, log `shift.z_report_reprinted`).
+  - Analytics: kanal dipisah POS Frontdesk Padel / POS Kasir F&B / kasir lainnya / Payment Gateway Online (rincian per gateway DOKU / Midtrans dari pembayaran asal); teks "Midtrans" di Analytics diganti.
+  - Pengingat di POS: shift dibuka sejak kemarin / > 12 jam, EDC belum di-settle menjelang 22.00, EDC kemarin belum di-settle saat buka shift.
+  - Halaman Keuangan → **Review Shift Kasir** + detail shift. Z-Report bisa dicetak di kedua loket.
+- [ ] **Riwayat shift kasir Fase 2:** filter lengkap, Excel per shift, cetak ulang Z dari panel, kasir melihat shift miliknya. **Fase 3:** Tutup Harian per tanggal (dana masuk rekening H+1, MDR) + Excel per hari + kolom Shift di Excel Buku Transaksi.
 - [ ] **Split bill** EQUAL & BY_ITEM (SKEMA SAJA).
 - [ ] Keranjang terpadu (padel + kafe + raket + merch dalam 1 struk).
 - [ ] POS Wellness, Gym, Merchandise (lihat modul masing-masing).

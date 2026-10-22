@@ -61,7 +61,7 @@
         .fnbpos-history-table td { padding: 0.6rem 0.75rem; font-size: 0.75rem; border-top: 1px solid #EFE6D2; vertical-align: middle; white-space: nowrap; }
         .fnbpos-history-table td.fnbpos-cell-clip { max-width: 9rem; overflow: hidden; text-overflow: ellipsis; }
     </style>
-    @include('pos.partials.receipt-print-style', ['selectors' => ['#fnbpos-receipt']])
+    @include('pos.partials.receipt-print-style', ['selectors' => ['#fnbpos-receipt', '#printable-z-report']])
 
     @if($errorMessage)
         <div class="fixed top-4 right-4 z-[10000] max-w-sm p-4 rounded-xl shadow-2xl" style="background: #FEE2E2; border: 1.5px solid #FCA5A5; color: #991B1B;">
@@ -149,6 +149,9 @@
                         <button type="button" wire:click="openShiftModal" class="font-mono text-[10px] font-bold text-[#F7F0DB] bg-[#662721] px-2 py-0.5 rounded-md border border-[#662721]">Buka Shift</button>
                     @endif
                 </div>
+
+                {{-- Pengingat: shift lupa ditutup / EDC belum di-settle menjelang 22.00. --}}
+                @include('pos.partials.shift-warnings')
 
                 {{-- Tipe pesanan: satu ketukan (bukan dropdown). Bawa Pulang tidak punya meja — kolom meja disembunyikan. --}}
                 <div class="grid grid-cols-2 gap-2 mb-2">
@@ -436,6 +439,7 @@
             <div class="fnbpos-modal-dialog">
                 <div class="font-display font-black text-lg text-[#4F2F2A]">Buka Shift Kasir F&amp;B</div>
                 <p class="text-xs text-[#4F2F2A]">Loket beroperasi 100% Cashless (QRIS / EDC). Tidak ada modal kas fisik yang perlu dihitung.</p>
+                @include('pos.partials.shift-open-edc')
                 <textarea wire:model="openingNotes" class="fnbpos-input" placeholder="Catatan pembukaan (opsional)"></textarea>
                 <div class="flex justify-end gap-2">
                     <button type="button" wire:click="$set('showOpenShiftModal', false)" class="fnbpos-pay-btn">Batal</button>
@@ -445,137 +449,7 @@
         </div>
     @endif
 
-    {{-- ================= MODAL: TUTUP SHIFT & REKONSILIASI SETTLEMENT ================= --}}
-    @if($showCloseShiftModal && $this->activeShift)
-        <div class="fnbpos-modal-backdrop">
-            <div class="fnbpos-modal-dialog" style="max-width:720px;">
-                <div style="display:flex; justify-content:space-between; align-items:flex-start;">
-                    <div>
-                        <span style="font-size:0.625rem; font-weight:900; color:#BE123C; text-transform:uppercase; letter-spacing:0.06em; background:#FFF1F2; border:1px solid #FECDD3; border-radius:4px; padding:0.08rem 0.4rem;">Closing Register</span>
-                        <div class="font-display font-black text-lg text-[#4F2F2A] mt-1">Tutup Shift &amp; Rekonsiliasi Settlement</div>
-                        <div class="text-[11px] text-[#7A5A52]">{{ $this->activeShift->shift_number }} &bull; dibuka {{ $this->activeShift->openedBy?->name ?? 'Kasir' }} ({{ $this->activeShift->opened_at->setTimezone('Asia/Jakarta')->format('d/m/Y H:i') }} WIB)</div>
-                    </div>
-                    <button type="button" wire:click="$set('showCloseShiftModal', false)" style="background:none; border:none; font-size:1.25rem; color:#662721; cursor:pointer;">&times;</button>
-                </div>
-
-                <div style="background:#ECFDF5; border:1.5px solid #6EE7B7; border-radius:8px; padding:0.6rem 0.8rem; font-size:0.75rem; color:#065F46; font-weight:700;">
-                    Cetak struk settlement di tiap mesin EDC &amp; cek mutasi QRIS, lalu ketik totalnya per kategori di bawah. Sistem menghitung selisih terhadap transaksi yang tercatat di POS.
-                </div>
-
-                @if(empty($closingBreakdown))
-                    <div class="text-xs text-center py-6 text-[#9CA3AF]">Belum ada transaksi di shift ini — tidak ada yang perlu direkonsiliasi.</div>
-                @else
-                    <div style="overflow-x:auto;">
-                        <table style="width:100%; font-size:0.75rem; border-collapse:collapse;">
-                            <thead>
-                                <tr style="background:#F7F0DB; color:#4F2F2A; text-transform:uppercase; font-size:0.65rem; letter-spacing:0.04em;">
-                                    <th style="text-align:left; padding:0.5rem;">Kategori Pembayaran</th>
-                                    <th style="text-align:center; padding:0.5rem;">Trx</th>
-                                    <th style="text-align:right; padding:0.5rem;">Tercatat POS</th>
-                                    <th style="text-align:right; padding:0.5rem; width:170px;">Settlement EDC/QRIS</th>
-                                    <th style="text-align:right; padding:0.5rem;">Selisih</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                @php $totalSystem = 0; $totalSettled = 0; $allFilled = true; @endphp
-                                @foreach($closingBreakdown as $row)
-                                    @php
-                                        $rawInput = str_replace(['.', ',', ' ', 'Rp', 'rp'], '', trim((string) ($settlementInputs[$row['key']] ?? '')));
-                                        $isFilled = $rawInput !== '' && ctype_digit($rawInput);
-                                        $settled = $isFilled ? (float) $rawInput : null;
-                                        $diff = $isFilled ? $settled - $row['system_amount'] : null;
-                                        $totalSystem += $row['system_amount'];
-                                        $totalSettled += $settled ?? 0;
-                                        $allFilled = $allFilled && $isFilled;
-                                    @endphp
-                                    <tr wire:key="settle-{{ $row['key'] }}" style="border-bottom:1px solid #EFE6D2;">
-                                        <td style="padding:0.5rem;">
-                                            <div style="font-weight:800; color:#4F2F2A;">{{ $row['label'] }}</div>
-                                            <div style="font-size:0.65rem; color:#9CA3AF;">Cek: {{ $row['source'] }}</div>
-                                        </td>
-                                        <td style="padding:0.5rem; text-align:center;">{{ $row['count'] }}</td>
-                                        <td style="padding:0.5rem; text-align:right; font-family:monospace; font-weight:800;">Rp {{ number_format($row['system_amount'], 0, ',', '.') }}</td>
-                                        <td style="padding:0.5rem;">
-                                            <input type="text" inputmode="numeric" wire:model.live.debounce.400ms="settlementInputs.{{ $row['key'] }}" class="fnbpos-input" style="text-align:right;" placeholder="Nominal struk">
-                                        </td>
-                                        <td style="padding:0.5rem; text-align:right; font-family:monospace; font-weight:900; color:{{ $diff === null ? '#9CA3AF' : (abs($diff) < 0.01 ? '#15803D' : '#BE123C') }};">
-                                            @if($diff === null)
-                                                &mdash;
-                                            @elseif(abs($diff) < 0.01)
-                                                COCOK
-                                            @else
-                                                {{ $diff > 0 ? '+' : '-' }}Rp {{ number_format(abs($diff), 0, ',', '.') }}
-                                            @endif
-                                        </td>
-                                    </tr>
-                                @endforeach
-                                <tr style="background:#F7F0DB; font-weight:900;">
-                                    <td style="padding:0.5rem;" colspan="2">TOTAL</td>
-                                    <td style="padding:0.5rem; text-align:right; font-family:monospace;">Rp {{ number_format($totalSystem, 0, ',', '.') }}</td>
-                                    <td style="padding:0.5rem; text-align:right; font-family:monospace;">{{ $allFilled ? 'Rp '.number_format($totalSettled, 0, ',', '.') : '—' }}</td>
-                                    <td style="padding:0.5rem; text-align:right; font-family:monospace; color:{{ ! $allFilled ? '#9CA3AF' : (abs($totalSettled - $totalSystem) < 0.01 ? '#15803D' : '#BE123C') }};">
-                                        @if(! $allFilled)
-                                            &mdash;
-                                        @elseif(abs($totalSettled - $totalSystem) < 0.01)
-                                            COCOK
-                                        @else
-                                            {{ $totalSettled - $totalSystem > 0 ? '+' : '-' }}Rp {{ number_format(abs($totalSettled - $totalSystem), 0, ',', '.') }}
-                                        @endif
-                                    </td>
-                                </tr>
-                            </tbody>
-                        </table>
-                    </div>
-                @endif
-
-                <div>
-                    <label class="text-xs font-bold text-[#4F2F2A] block mb-1">Catatan Penutupan <span class="font-normal text-[#9CA3AF]">(wajib diisi kalau ada selisih)</span></label>
-                    <textarea wire:model="closingNotes" rows="2" class="fnbpos-input" placeholder="Penjelasan selisih, nomor batch settlement, catatan serah terima..."></textarea>
-                </div>
-
-                <div class="flex justify-end gap-2">
-                    <button type="button" wire:click="$set('showCloseShiftModal', false)" class="fnbpos-pay-btn">Batal</button>
-                    <button type="button" wire:click="executeCloseShift" wire:loading.attr="disabled" class="fnbpos-pay-btn" style="background:#BE123C; color:#FFFFFF; border-color:#BE123C;">Tutup Shift &amp; Simpan Rekonsiliasi</button>
-                </div>
-            </div>
-        </div>
-    @endif
-
-    {{-- ================= MODAL: LAPORAN Z SHIFT ================= --}}
-    @if($showShiftReportModal && $reportShiftData)
-        <div class="fnbpos-modal-backdrop">
-            <div class="fnbpos-modal-dialog" style="max-width:560px;">
-                <div class="font-display font-black text-lg text-[#4F2F2A]">Laporan Shift {{ $reportShiftData['shift_number'] }}</div>
-                <div class="text-xs text-[#4F2F2A] space-y-1 font-mono">
-                    <div class="flex justify-between"><span>Dibuka</span><span>{{ $reportShiftData['opened_at'] }} ({{ $reportShiftData['opened_by'] }})</span></div>
-                    <div class="flex justify-between"><span>Ditutup</span><span>{{ $reportShiftData['closed_at'] }} ({{ $reportShiftData['closed_by'] }})</span></div>
-                    <div class="flex justify-between"><span>Total Transaksi</span><span>{{ $reportShiftData['total_transactions'] }}</span></div>
-                    <div class="flex justify-between font-bold border-t pt-1 mt-1"><span>Total Penjualan</span><span>Rp {{ number_format($reportShiftData['total_sales'], 0, ',', '.') }}</span></div>
-                </div>
-
-                @if(! empty($reportShiftData['reconciliation']))
-                    <div class="text-xs font-mono border-t border-dashed border-[#E6DAC0] pt-2 space-y-1.5">
-                        <div class="font-bold text-[#4F2F2A] uppercase text-[10px] tracking-wider">Rekonsiliasi Settlement</div>
-                        @foreach($reportShiftData['reconciliation'] as $row)
-                            <div>
-                                <div class="font-bold text-[#4F2F2A]">{{ $row['label'] }} ({{ $row['count'] }} trx)</div>
-                                <div class="flex justify-between text-[#4F2F2A]"><span>POS Rp {{ number_format($row['system_amount'], 0, ',', '.') }} / Settlement Rp {{ number_format($row['settled_amount'], 0, ',', '.') }}</span>
-                                    <span style="color:{{ abs($row['difference']) < 0.01 ? '#15803D' : '#BE123C' }}; font-weight:900;">{{ abs($row['difference']) < 0.01 ? 'COCOK' : (($row['difference'] > 0 ? '+' : '-').'Rp '.number_format(abs($row['difference']), 0, ',', '.')) }}</span>
-                                </div>
-                            </div>
-                        @endforeach
-                        <div class="flex justify-between font-black border-t pt-1" style="color:{{ abs($reportShiftData['total_difference']) < 0.01 ? '#15803D' : '#BE123C' }};">
-                            <span>Total Selisih</span>
-                            <span>{{ abs($reportShiftData['total_difference']) < 0.01 ? 'COCOK (Rp 0)' : (($reportShiftData['total_difference'] > 0 ? '+' : '-').'Rp '.number_format(abs($reportShiftData['total_difference']), 0, ',', '.')) }}</span>
-                        </div>
-                        @if($reportShiftData['closing_notes'])
-                            <div class="text-[#7A5A52]">Catatan: {{ $reportShiftData['closing_notes'] }}</div>
-                        @endif
-                    </div>
-                @endif
-
-                <button type="button" wire:click="$set('showShiftReportModal', false)" class="fnbpos-pay-btn active">Tutup</button>
-            </div>
-        </div>
-    @endif
+    {{-- Tutup shift blind + laporan Z (sama dengan POS Padel) — App\Livewire\Concerns\ClosesPosShift. --}}
+    @include('pos.partials.shift-close-modal')
+    @include('pos.partials.shift-report-modal')
 </div>

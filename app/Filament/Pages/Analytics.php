@@ -4,6 +4,7 @@ namespace App\Filament\Pages;
 
 use App\Models\Finance\LedgerEntry;
 use App\Models\Padel\PadelBooking;
+use App\Models\Pos\Payment;
 use App\Services\Finance\LedgerAnalytics;
 use App\Services\Finance\LedgerReport;
 use App\Services\Padel\CourtOccupancy;
@@ -11,6 +12,7 @@ use App\Services\Padel\PadelBookingService;
 use BackedEnum;
 use BezhanSalleh\FilamentShield\Traits\HasPageShield;
 use Filament\Pages\Page;
+use Illuminate\Database\Eloquent\Builder;
 use Livewire\Attributes\Locked;
 use UnitEnum;
 
@@ -48,8 +50,16 @@ class Analytics extends Page
         'COACHING' => ['label' => 'Pelatih & Coaching Session', 'sub' => 'Sesi privat / kelas bersama pelatih', 'soon' => true],
     ];
 
-    /** Sumber uang yang dibayar online lewat Midtrans; sumber lain = dibayar di kasir. */
+    /** Sumber uang yang dibayar online lewat payment gateway (DOKU / Midtrans); sumber lain = dibayar di kasir. */
     public const ONLINE_SOURCES = ['ONLINE_PADEL', 'RESCHEDULE_DELTA_ONLINE', 'ONLINE_MEMBERSHIP'];
+
+    /** Kasir per loket: frontdesk padel (walk-in, pelunasan selisih, jual membership) & kasir F&B. */
+    public const COUNTER_SOURCES = [
+        'padel' => ['POS_WALKIN_PADEL', 'RESCHEDULE_DELTA_POS', 'POS_MEMBERSHIP'],
+        'fnb' => ['POS_FNB'],
+    ];
+
+    public const GATEWAY_LABELS = ['DOKU' => 'DOKU', 'MIDTRANS' => 'Midtrans'];
 
     #[Locked]
     public string $preset = LedgerReport::DEFAULT_PRESET;
@@ -110,6 +120,7 @@ class Analytics extends Page
             'periodLabel' => BukuTransaksi::periodLabel($this->preset, ...$this->customDates()),
             'summary' => $summary,
             'channels' => $this->channels(LedgerAnalytics::breakdown($base, 'source')),
+            'gateways' => $this->gateways($base),
             'byMethod' => LedgerAnalytics::breakdown($base, 'method'),
             'serviceLines' => $this->serviceLines($byCategory->all()),
             'membership' => ['sales' => $membership, 'others' => $summary['money_net'] - $membership],
@@ -121,21 +132,65 @@ class Analytics extends Page
     }
 
     /**
-     * Uang masuk bersih per kanal: kasir (semua POS) vs online (Midtrans).
+     * Uang masuk bersih per kanal: POS Frontdesk Padel, POS F&B, kasir lain (impor / lainnya), dan online.
      *
      * @param  list<array<string, mixed>>  $bySource
-     * @return array{cashier: array{money_net: float, transactions: int}, online: array{money_net: float, transactions: int}}
+     * @return array<'padel'|'fnb'|'other'|'online', array{money_net: float, transactions: int}>
      */
     private function channels(array $bySource): array
     {
-        $channels = ['cashier' => ['money_net' => 0.0, 'transactions' => 0], 'online' => ['money_net' => 0.0, 'transactions' => 0]];
+        $empty = ['money_net' => 0.0, 'transactions' => 0];
+        $channels = ['padel' => $empty, 'fnb' => $empty, 'other' => $empty, 'online' => $empty];
         foreach ($bySource as $row) {
-            $key = in_array($row['key'], self::ONLINE_SOURCES, true) ? 'online' : 'cashier';
+            $key = match (true) {
+                in_array($row['key'], self::ONLINE_SOURCES, true) => 'online',
+                in_array($row['key'], self::COUNTER_SOURCES['padel'], true) => 'padel',
+                in_array($row['key'], self::COUNTER_SOURCES['fnb'], true) => 'fnb',
+                default => 'other',
+            };
             $channels[$key]['money_net'] += $row['money_net'];
             $channels[$key]['transactions'] += $row['transactions'];
         }
 
         return $channels;
+    }
+
+    /**
+     * Uang masuk online per payment gateway (dari pembayaran asal baris buku), supaya transaksi lama Midtrans & DOKU
+     * terlihat terpisah. Baris tanpa pembayaran yang dikenali masuk "Lainnya".
+     *
+     * @return list<array{label: string, money_net: float, transactions: int}>
+     */
+    private function gateways(Builder $base): array
+    {
+        $online = (clone $base)->whereIn('source', self::ONLINE_SOURCES);
+        $sum = fn (Builder $q) => (clone $q)->toBase()->selectRaw("COALESCE(SUM(total_amount), 0) as money_net,
+            COUNT(DISTINCT CASE WHEN entry_type <> 'REFUND' THEN payment_id END) as transactions")->first();
+
+        $rows = [];
+        $known = ['money_net' => 0.0, 'transactions' => 0];
+        $gateways = Payment::query()->whereIn('id', (clone $online)->select('payment_id'))->distinct()->pluck('payment_gateway');
+        foreach ($gateways as $gateway) {
+            $r = $sum((clone $online)->whereIn('payment_id', Payment::query()->where('payment_gateway', $gateway)->select('id')));
+            $rows[] = [
+                'label' => self::GATEWAY_LABELS[$gateway] ?? ucfirst(strtolower((string) $gateway)),
+                'money_net' => (float) $r->money_net,
+                'transactions' => (int) $r->transactions,
+            ];
+            $known['money_net'] += (float) $r->money_net;
+            $known['transactions'] += (int) $r->transactions;
+        }
+
+        $all = $sum($online);
+        if (abs((float) $all->money_net - $known['money_net']) >= 0.005 || (int) $all->transactions > $known['transactions']) {
+            $rows[] = [
+                'label' => 'Lainnya',
+                'money_net' => (float) $all->money_net - $known['money_net'],
+                'transactions' => max(0, (int) $all->transactions - $known['transactions']),
+            ];
+        }
+
+        return collect($rows)->sortByDesc('money_net')->values()->all();
     }
 
     /**

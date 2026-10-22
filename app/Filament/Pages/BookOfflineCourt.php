@@ -21,6 +21,7 @@ use UnitEnum;
 class BookOfflineCourt extends Page
 {
     use \App\Livewire\Concerns\AutoPrintsReceipts;
+    use \App\Livewire\Concerns\ClosesPosShift;
     use HasPageShield;
 
     protected static string | BackedEnum | null $navigationIcon = 'heroicon-o-building-storefront';
@@ -39,12 +40,7 @@ class BookOfflineCourt extends Page
     public bool $showOpenShiftModal = false;
     public string $openingNotes = '';
 
-    public bool $showCloseShiftModal = false;
-    public string $closingNotes = '';
-    public ?array $closingShiftSummary = null;
 
-    public bool $showShiftReportModal = false;
-    public ?array $reportShiftData = null;
 
     // Tanggal Booking Aktif
     public string $bookingDate;
@@ -950,7 +946,7 @@ class BookOfflineCourt extends Page
             $shiftNumber = PosCashierShift::generateShiftNumber('PADEL_FRONTDESK');
 
             // 100% Cashless: tidak ada modal kas fisik, jadi starting_cash/expected_cash selalu 0.
-            PosCashierShift::create([
+            $shift = PosCashierShift::create([
                 'shift_number' => $shiftNumber,
                 'counter' => 'PADEL_FRONTDESK',
                 'status' => 'OPEN',
@@ -960,6 +956,7 @@ class BookOfflineCourt extends Page
                 'expected_cash' => 0.00,
                 'opening_notes' => trim($this->openingNotes) ?: null,
             ]);
+            $this->recordOpeningSettlements($shift);
 
             Notification::make()
                 ->title('Shift Kasir Berhasil Dibuka')
@@ -973,110 +970,20 @@ class BookOfflineCourt extends Page
         }
     }
 
-    public function prepareCloseShift(): void
+    protected function shiftCounter(): string
     {
-        $shift = $this->activeShift;
-        if (! $shift) {
-            Notification::make()
-                ->title('Tidak Ada Shift Aktif')
-                ->body('Belum ada shift kasir yang terbuka saat ini.')
-                ->warning()
-                ->send();
-            return;
-        }
-
-        if ($shift->pendingAutoPaymentCount() > 0) {
-            Notification::make()->title('Shift Belum Bisa Ditutup')->body(PosCashierShift::PENDING_AUTO_PAYMENT_MESSAGE)->warning()->send();
-
-            return;
-        }
-
-        $summary = $shift->calculateSummary();
-        $this->closingShiftSummary = $summary;
-        $this->closingNotes = '';
-        $this->showCloseShiftModal = true;
+        return 'PADEL_FRONTDESK';
     }
 
-    public function executeCloseShift(): void
+    protected function shiftNotice(string $level, string $title, string $body): void
     {
-        $user = auth()->user();
-        abort_unless(
-            $user && $user->can('close_pos_shift'),
-            403,
-            'Akses ditolak: Anda tidak memiliki izin [close_pos_shift] untuk menutup sesi shift kasir.'
-        );
-
-        $shift = $this->activeShift;
-
-        if (! $shift) {
-            $this->showCloseShiftModal = false;
-            return;
-        }
-
-        if ($shift->pendingAutoPaymentCount() > 0) {
-            $this->showCloseShiftModal = false;
-            Notification::make()->title('Shift Belum Bisa Ditutup')->body(PosCashierShift::PENDING_AUTO_PAYMENT_MESSAGE)->warning()->send();
-
-            return;
-        }
-
-        // 100% Cashless: tidak ada blind cash count fisik, jadi actual_cash & cash_difference selalu 0.
-        $summary = $shift->calculateSummary();
-        $actualCash = 0.00;
-        $cashDifference = 0.00;
-
-        $shift->update([
-            'status' => 'CLOSED',
-            'closed_by_id' => $user?->id,
-            'closed_at' => Carbon::now('Asia/Jakarta'),
-            'expected_cash' => $summary['expected_cash'],
-            'actual_cash' => $actualCash,
-            'cash_difference' => $cashDifference,
-            'total_cash_sales' => $summary['total_cash_sales'],
-            'total_edc_bca_sales' => $summary['total_edc_bca_sales'],
-            'total_edc_mandiri_sales' => $summary['total_edc_mandiri_sales'],
-            'total_qris_sales' => $summary['total_qris_sales'],
-            'total_other_sales' => $summary['total_other_sales'],
-            'total_sales' => $summary['total_sales'],
-            'total_transactions' => $summary['total_transactions'],
-            'closing_notes' => trim($this->closingNotes) ?: null,
-        ]);
-
-        $this->reportShiftData = [
-            'shift_number' => $shift->shift_number,
-            'counter' => $shift->counter,
-            'opened_by' => $shift->openedBy?->name ?? 'Kasir',
-            'closed_by' => $user?->name ?? 'Kasir',
-            'opened_at' => $shift->opened_at->setTimezone('Asia/Jakarta')->format('d/m/Y H:i'),
-            'closed_at' => Carbon::now('Asia/Jakarta')->format('d/m/Y H:i'),
-            'starting_cash' => (float) $shift->starting_cash,
-            'total_cash_sales' => $summary['total_cash_sales'],
-            'total_edc_bca_sales' => $summary['total_edc_bca_sales'],
-            'total_edc_mandiri_sales' => $summary['total_edc_mandiri_sales'],
-            'total_qris_sales' => $summary['total_qris_sales'],
-            'total_other_sales' => $summary['total_other_sales'],
-            'total_sales' => $summary['total_sales'],
-            'total_transactions' => $summary['total_transactions'],
-            'expected_cash' => $summary['expected_cash'],
-            'actual_cash' => $actualCash,
-            'cash_difference' => $cashDifference,
-            'closing_notes' => $shift->closing_notes,
-        ];
-
-        $this->showCloseShiftModal = false;
-        $this->showShiftReportModal = true;
-
-        Notification::make()
-            ->title('Shift Kasir Berhasil Ditutup')
-            ->body("Sesi {$shift->shift_number} resmi ditutup. Rekapitulasi kas selesai.")
-            ->success()
-            ->send();
-    }
-
-    public function closeShiftReportModal(): void
-    {
-        $this->showShiftReportModal = false;
-        $this->reportShiftData = null;
+        $notification = Notification::make()->title($title)->body($body);
+        match ($level) {
+            'success' => $notification->success(),
+            'danger' => $notification->danger(),
+            default => $notification->warning(),
+        };
+        $notification->send();
     }
 
     protected function getDraftCacheKey(): string

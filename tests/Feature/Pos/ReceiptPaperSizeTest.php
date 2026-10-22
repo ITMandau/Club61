@@ -84,9 +84,14 @@ class ReceiptPaperSizeTest extends TestCase
         Livewire::test(JualMembership::class)->assertSee('club61PrintReceipt', false)->assertDontSee('width: 78mm', false);
 
         $views = [
-            'filament/pages/book-offline-court.blade.php' => ["club61PrintReceipt('#printable-pos-receipt')", "club61PrintReceipt('#printable-z-report')"],
+            // Z-Report kedua loket ada di partial bersama (pos.partials.shift-report-modal) dengan gaya cetak 58mm.
+            'filament/pages/book-offline-court.blade.php' => ["club61PrintReceipt('#printable-pos-receipt')", "@include('pos.partials.shift-report-modal')", "'#printable-z-report'"],
+            'pos/partials/shift-report-modal.blade.php' => ["club61PrintReceipt('#printable-z-report')", "@include('pos.partials.z-report-body'"],
+            'pos/partials/z-report-body.blade.php' => ['id="printable-z-report"'],
+            // Cetak ulang Z-Report dari Detail Shift Kasir (admin) — isi & printer sama.
+            'filament/pages/partials/z-report-reprint-modal.blade.php' => ['window.club61PrintReceipt(this.$refs.doc)', "@include('pos.partials.z-report-body'"],
             'pos/receipts/membership.blade.php' => ["club61PrintReceipt('#printable-membership-receipt')"],
-            'livewire/pos/fnb-cashier-terminal.blade.php' => ["club61PrintReceipt('#fnbpos-receipt')", "@include('pos.partials.receipt-print-style'"],
+            'livewire/pos/fnb-cashier-terminal.blade.php' => ["club61PrintReceipt('#fnbpos-receipt')", "@include('pos.partials.receipt-print-style'", "@include('pos.partials.shift-report-modal')", "'#printable-z-report'"],
             'filament/pages/partials/ledger-invoice-modal.blade.php' => ['window.club61PrintReceipt(this.$refs.doc)'],
         ];
         foreach ($views as $view => $needles) {

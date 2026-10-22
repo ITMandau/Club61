@@ -11,7 +11,6 @@ use App\Services\Finance\TaxAndFeeService;
 use Carbon\Carbon;
 use Illuminate\Contracts\View\View;
 use Illuminate\Support\Facades\Cache;
-use Illuminate\Support\Facades\DB;
 use Livewire\Component;
 use Livewire\WithPagination;
 
@@ -25,6 +24,7 @@ use Livewire\WithPagination;
 class FnbCashierTerminal extends Component
 {
     use \App\Livewire\Concerns\AutoPrintsReceipts;
+    use \App\Livewire\Concerns\ClosesPosShift;
     use WithPagination;
 
     private const COUNTER = 'FNB_COUNTER';
@@ -82,23 +82,7 @@ class FnbCashierTerminal extends Component
 
     public bool $showOpenShiftModal = false;
 
-    public bool $showCloseShiftModal = false;
-
-    public bool $showShiftReportModal = false;
-
     public string $openingNotes = '';
-
-    public string $closingNotes = '';
-
-    public ?array $closingShiftSummary = null;
-
-    /** Rincian per kategori settlement saat modal tutup shift dibuka (snapshot sistem). */
-    public array $closingBreakdown = [];
-
-    /** Angka dari struk settlement EDC / mutasi QRIS yang diketik kasir, per kunci kategori. */
-    public array $settlementInputs = [];
-
-    public ?array $reportShiftData = null;
 
     public ?array $completedOrderData = null;
 
@@ -263,7 +247,7 @@ class FnbCashierTerminal extends Component
             $shiftNumber = PosCashierShift::generateShiftNumber(self::COUNTER);
 
             // 100% Cashless: tidak ada modal kas fisik.
-            PosCashierShift::create([
+            $shift = PosCashierShift::create([
                 'shift_number' => $shiftNumber,
                 'counter' => self::COUNTER,
                 'status' => 'OPEN',
@@ -273,6 +257,7 @@ class FnbCashierTerminal extends Component
                 'expected_cash' => 0.00,
                 'opening_notes' => trim($this->openingNotes) ?: null,
             ]);
+            $this->recordOpeningSettlements($shift);
 
             $this->errorMessage = null;
             $this->showOpenShiftModal = false;
@@ -281,188 +266,15 @@ class FnbCashierTerminal extends Component
         }
     }
 
-    public function prepareCloseShift(): void
+    protected function shiftCounter(): string
     {
-        $shift = $this->activeShift;
-        if (! $shift) {
-            $this->errorMessage = 'Belum ada shift kasir F&B yang terbuka saat ini.';
-
-            return;
-        }
-
-        if ($shift->pendingAutoPaymentCount() > 0) {
-            $this->errorMessage = PosCashierShift::PENDING_AUTO_PAYMENT_MESSAGE;
-
-            return;
-        }
-
-        $this->closingShiftSummary = $shift->calculateSummary();
-        $this->closingBreakdown = $shift->settlementBreakdown();
-        $this->settlementInputs = collect($this->closingBreakdown)->mapWithKeys(fn (array $row) => [$row['key'] => ''])->all();
-        $this->closingNotes = '';
-        $this->errorMessage = null;
-        $this->showCloseShiftModal = true;
+        return self::COUNTER;
     }
 
-    /**
-     * Tutup shift + rekonsiliasi settlement per kategori pembayaran. Angka sistem SELALU
-     * dihitung ulang dari database di dalam transaksi terkunci (lockForUpdate), bukan dari
-     * snapshot yang dikirim balik oleh browser — supaya tidak bisa dimanipulasi dari sisi
-     * klien, dan supaya 2 kasir yang menekan "Tutup Shift" bersamaan tidak menutup shift
-     * yang sama dua kali.
-     */
-    public function executeCloseShift(): void
+    /** Layar F&B memakai baris pesan di atas layar (errorMessage), bukan notifikasi Filament. */
+    protected function shiftNotice(string $level, string $title, string $body): void
     {
-        $user = auth()->user();
-        abort_unless(
-            $user && $user->can('close_pos_shift'),
-            403,
-            'Akses ditolak: Anda tidak memiliki izin [close_pos_shift] untuk menutup sesi shift kasir.'
-        );
-
-        $this->errorMessage = null;
-
-        $result = DB::transaction(function () use ($user) {
-            $shift = PosCashierShift::query()
-                ->where('counter', self::COUNTER)
-                ->where('status', 'OPEN')
-                ->latest('opened_at')
-                ->lockForUpdate()
-                ->first();
-
-            if (! $shift) {
-                return ['status' => 'NO_SHIFT'];
-            }
-
-            if ($shift->pendingAutoPaymentCount() > 0) {
-                return ['status' => 'PENDING_AUTO'];
-            }
-
-            $breakdown = $shift->settlementBreakdown();
-
-            // Ada transaksi baru masuk setelah modal closing dibuka — angka yang diketik kasir
-            // tidak lagi sesuai kondisi sistem, jadi minta cek ulang, jangan dipaksakan.
-            if ($this->breakdownSignature($breakdown) !== $this->breakdownSignature($this->closingBreakdown)) {
-                return ['status' => 'CHANGED', 'breakdown' => $breakdown];
-            }
-
-            $reconciliation = [];
-            $totalDifference = 0.0;
-            $hasDifference = false;
-
-            foreach ($breakdown as $row) {
-                $normalized = str_replace(['.', ',', ' ', 'Rp', 'rp'], '', trim((string) ($this->settlementInputs[$row['key']] ?? '')));
-
-                if ($normalized === '' || ! ctype_digit($normalized)) {
-                    return ['status' => 'INVALID', 'label' => $row['label']];
-                }
-
-                $settled = (float) $normalized;
-                $difference = $settled - $row['system_amount'];
-                $totalDifference += $difference;
-                $hasDifference = $hasDifference || abs($difference) > 0.009;
-
-                $reconciliation[] = $row + [
-                    'settled_amount' => $settled,
-                    'difference' => $difference,
-                ];
-            }
-
-            if ($hasDifference && trim($this->closingNotes) === '') {
-                return ['status' => 'NEED_NOTES'];
-            }
-
-            $summary = $shift->calculateSummary();
-
-            $shift->update([
-                'status' => 'CLOSED',
-                'closed_by_id' => $user->id,
-                'closed_at' => Carbon::now('Asia/Jakarta'),
-                'expected_cash' => $summary['expected_cash'],
-                'actual_cash' => 0.00,
-                'cash_difference' => 0.00,
-                'total_cash_sales' => $summary['total_cash_sales'],
-                'total_edc_bca_sales' => $summary['total_edc_bca_sales'],
-                'total_edc_mandiri_sales' => $summary['total_edc_mandiri_sales'],
-                'total_qris_sales' => $summary['total_qris_sales'],
-                'total_other_sales' => $summary['total_other_sales'],
-                'total_sales' => $summary['total_sales'],
-                'total_transactions' => $summary['total_transactions'],
-                'settlement_reconciliation' => $reconciliation,
-                'settlement_difference' => $totalDifference,
-                'closing_notes' => trim($this->closingNotes) ?: null,
-            ]);
-
-            return [
-                'status' => 'CLOSED',
-                'shift' => $shift,
-                'summary' => $summary,
-                'reconciliation' => $reconciliation,
-                'total_difference' => $totalDifference,
-            ];
-        });
-
-        if ($result['status'] === 'NO_SHIFT') {
-            $this->showCloseShiftModal = false;
-
-            return;
-        }
-
-        if ($result['status'] === 'PENDING_AUTO') {
-            $this->showCloseShiftModal = false;
-            $this->errorMessage = PosCashierShift::PENDING_AUTO_PAYMENT_MESSAGE;
-
-            return;
-        }
-
-        if ($result['status'] === 'CHANGED') {
-            $previousInputs = $this->settlementInputs;
-            $this->closingBreakdown = $result['breakdown'];
-            $this->settlementInputs = collect($result['breakdown'])->mapWithKeys(fn (array $row) => [$row['key'] => $previousInputs[$row['key']] ?? ''])->all();
-            $this->errorMessage = 'Ada transaksi baru masuk saat closing. Angka sistem sudah diperbarui — cek ulang nominal settlement sebelum menutup shift.';
-
-            return;
-        }
-
-        if ($result['status'] === 'INVALID') {
-            $this->errorMessage = "Isi nominal settlement untuk kategori \"{$result['label']}\" (angka rupiah, contoh: 150000).";
-
-            return;
-        }
-
-        if ($result['status'] === 'NEED_NOTES') {
-            $this->errorMessage = 'Ada selisih antara catatan POS dan settlement EDC/QRIS. Wajib isi catatan penutupan sebagai penjelasan selisih.';
-
-            return;
-        }
-
-        $shift = $result['shift'];
-
-        $this->reportShiftData = [
-            'shift_number' => $shift->shift_number,
-            'counter' => $shift->counter,
-            'opened_by' => $shift->openedBy?->name ?? 'Kasir',
-            'closed_by' => $user->name,
-            'opened_at' => $shift->opened_at->setTimezone('Asia/Jakarta')->format('d/m/Y H:i'),
-            'closed_at' => Carbon::now('Asia/Jakarta')->format('d/m/Y H:i'),
-            'total_sales' => $result['summary']['total_sales'],
-            'total_transactions' => $result['summary']['total_transactions'],
-            'reconciliation' => $result['reconciliation'],
-            'total_difference' => $result['total_difference'],
-            'closing_notes' => $shift->closing_notes,
-        ];
-
-        $this->closingBreakdown = [];
-        $this->settlementInputs = [];
-        $this->showCloseShiftModal = false;
-        $this->showShiftReportModal = true;
-    }
-
-    private function breakdownSignature(array $breakdown): string
-    {
-        return collect($breakdown)
-            ->map(fn (array $row) => $row['key'].':'.$row['count'].':'.number_format((float) $row['system_amount'], 2, '.', ''))
-            ->implode('|');
+        $this->errorMessage = $level === 'success' ? null : $body;
     }
 
     // ==========================================

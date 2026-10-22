@@ -419,17 +419,31 @@ class LedgerWriter
         $cashierId = $atCounter ? ($log['settled_by'] ?? $log['cashier_id'] ?? $order->cashier_id) : null;
         $cashierName = $atCounter ? ($log['settled_by_name'] ?? $log['cashier_name'] ?? ($cashierId ? User::whereKey($cashierId)->value('name') : null)) : null;
 
+        return $this->orderSnapshot($order) + [
+            'cashier_id' => is_string($cashierId) ? $cashierId : null,
+            'cashier_name' => $cashierName ? mb_substr((string) $cashierName, 0, 150) : null,
+            'pos_shift_id' => $payment->pos_shift_id,
+            'payment_gateway' => $payment->payment_gateway,
+        ] + $this->methodSnapshot($payment);
+    }
+
+    /**
+     * Metode, label & bukti bayar seperti yang ditulis ke buku — dipakai juga koreksi metode bayar oleh admin
+     * (PaymentMethodCorrection) supaya hasil koreksi berformat sama dengan baris normal.
+     *
+     * @return array{payment_method: ?string, payment_method_label: string, payment_reference: ?string}
+     */
+    public function methodSnapshot(Payment $payment): array
+    {
+        $log = is_array($payment->payload_log) ? $payment->payload_log : [];
+
         try {
             $label = app(PadelBookingService::class)->formatPaymentMethodLabel($payment->payment_method, $log);
         } catch (\Throwable) {
             $label = $payment->payment_method;
         }
 
-        return $this->orderSnapshot($order) + [
-            'cashier_id' => is_string($cashierId) ? $cashierId : null,
-            'cashier_name' => $cashierName ? mb_substr((string) $cashierName, 0, 150) : null,
-            'pos_shift_id' => $payment->pos_shift_id,
-            'payment_gateway' => $payment->payment_gateway,
+        return [
             'payment_method' => $payment->payment_method,
             'payment_method_label' => mb_substr((string) $label, 0, 120),
             'payment_reference' => mb_substr((string) $this->paymentReference($payment, $log), 0, 120) ?: null,

@@ -130,6 +130,8 @@ class AdminPanelProvider extends PanelProvider
                 \App\Filament\Pages\LogAktivitas::class,
                 \App\Filament\Pages\BukuTransaksi::class,
                 \App\Filament\Pages\AntrianRefund::class,
+                \App\Filament\Pages\ReviewShiftKasir::class,
+                \App\Filament\Pages\DetailShiftKasir::class,
                 \App\Filament\Pages\DaftarVoucher::class,
                 \App\Filament\Pages\ImportPenjualan::class,
                 \App\Filament\Pages\Signature::class,
