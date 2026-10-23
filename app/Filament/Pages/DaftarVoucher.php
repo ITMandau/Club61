@@ -123,17 +123,25 @@ class DaftarVoucher extends Page implements HasTable
 
     public function table(Table $table): Table
     {
-        $orders = fn () => Order::query()->whereColumn('orders.voucher_code', 'vouchers.code')
+        // Kampanye kode unik (B): order dihitung dari kode-kodenya.
+        $orders = fn () => Order::query()->where(fn ($q) => $q->whereColumn('orders.voucher_code', 'vouchers.code')
+            ->orWhereIn('orders.voucher_code', DB::table('vouchers as campaign_codes')->select('campaign_codes.code')
+                ->whereColumn('campaign_codes.campaign_id', 'vouchers.id')))
             ->whereIn('payment_status', self::COUNTED_STATUSES)->whereNull('voucher_restored_at');
         $promo = app(PromoVoucherService::class);
 
         return $table
             ->query(Voucher::query()
+                // Kode unik (B) tidak ditampilkan satu per satu — cukup baris kampanyenya (daftar kode lewat Unduh CSV).
+                ->whereNull('vouchers.campaign_id')
                 ->select('vouchers.*')
                 ->addSelect([
                     'report_discount' => $orders()->selectRaw('COALESCE(SUM(discount_amount), 0)'),
                     'report_orders' => $orders()->selectRaw('COUNT(*)'),
+                    'campaign_used' => DB::table('vouchers as cu')->selectRaw('COALESCE(SUM(cu.used_count), 0)')->whereColumn('cu.campaign_id', 'vouchers.id'),
+                    'campaign_total' => DB::table('vouchers as ct')->selectRaw('COUNT(*)')->whereColumn('ct.campaign_id', 'vouchers.id'),
                 ])
+                ->withCount('claims')
                 ->with(['user:id,name,phone', 'refund:id,order_id,padel_booking_id', 'refund.booking:id,booking_code', 'refund.order:id,order_number']))
             ->defaultSort('created_at', 'desc')
             ->paginated([25, 50, 100])
@@ -144,14 +152,14 @@ class DaftarVoucher extends Page implements HasTable
                     ->icon('heroicon-o-plus')
                     ->authorize(fn () => self::canManagePromo())
                     ->modalHeading('Buat promo baru')
-                    ->modalDescription('Cara sebar A — satu kode umum untuk semua orang (disebar lewat sosmed, WhatsApp, spanduk). Satu akun hanya bisa memakai promo yang sama sekali; promo hanya memotong sewa lapangan.')
+                    ->modalDescription('A = satu kode untuk semua orang · B = banyak kode berbeda (unduh CSV, bagikan satu per satu) · C = customer klaim lewat link ke akunnya. Satu akun hanya bisa memakai promo yang sama sekali; promo hanya memotong sewa lapangan.')
                     ->modalSubmitActionLabel('Simpan promo')
                     ->modalWidth('3xl')
                     ->schema(fn () => $this->promoForm(null))
                     ->fillForm(fn () => $this->formDefaults(null))
                     ->action(fn (array $data) => $this->run(
                         fn () => app(PromoVoucherService::class)->create($data, auth()->user()),
-                        fn (Voucher $v) => "Promo {$v->code} dibuat.",
+                        fn (Voucher $v) => 'Promo '.app(PromoVoucherService::class)->label($v).' dibuat.',
                     )),
             ])
             ->columns([
@@ -159,8 +167,12 @@ class DaftarVoucher extends Page implements HasTable
                     ->label('Kode')
                     ->fontFamily('mono')
                     ->weight('bold')
-                    ->searchable(['code', 'name'])
-                    ->copyable()
+                    // Cari kode unik (B) juga menemukan kampanyenya.
+                    ->searchable(query: fn (Builder $query, string $search) => $query->where(fn ($q) => $q
+                        ->where('vouchers.code', 'like', "%{$search}%")->orWhere('vouchers.name', 'like', "%{$search}%")
+                        ->orWhereIn('vouchers.id', Voucher::where('code', 'like', "%{$search}%")->whereNotNull('campaign_id')->select('campaign_id'))))
+                    ->formatStateUsing(fn ($state, Voucher $v) => $v->isCampaign() ? $v->campaign_total.' kode unik' : $state)
+                    ->copyable(fn (Voucher $v) => ! $v->isCampaign())
                     ->copyMessage('Kode voucher disalin')
                     ->description(fn (Voucher $v) => $v->isCredit() ? 'Voucher saldo' : ($v->name ?: 'Kode promo')),
                 TextColumn::make('user.name')
@@ -171,7 +183,12 @@ class DaftarVoucher extends Page implements HasTable
                     ->description(fn (Voucher $v) => $v->user?->phone),
                 TextColumn::make('origin')
                     ->label('Asal')
-                    ->state(fn (Voucher $v) => $v->isCredit() ? 'Refund ditolak' : 'Kode promo')
+                    ->state(fn (Voucher $v) => match (true) {
+                        $v->isCredit() => 'Refund ditolak',
+                        $v->isCampaign() => 'Kode unik massal',
+                        $v->isClaim() => 'Klaim ke akun',
+                        default => 'Kode promo',
+                    })
                     ->description(fn (Voucher $v) => $v->isCredit()
                         ? ($v->refund?->booking?->booking_code ?? $v->refund?->order?->order_number)
                         : (Voucher::CHANNELS[$v->channel] ?? null)),
@@ -185,10 +202,17 @@ class DaftarVoucher extends Page implements HasTable
                     ->label('Sisa')
                     ->alignEnd()
                     ->weight('bold')
-                    ->state(fn (Voucher $v) => $v->isCredit() ? BukuTransaksi::rupiah($v->balance) : ($v->quota === null ? 'Tanpa batas' : $v->quota.' kali')),
+                    ->state(fn (Voucher $v) => match (true) {
+                        $v->isCredit() => BukuTransaksi::rupiah($v->balance),
+                        $v->isCampaign() => max(0, (int) $v->campaign_total - (int) $v->campaign_used).' kode',
+                        $v->isClaim() => $v->quota === null ? 'Klaim tanpa batas' : $v->quota.' klaim',
+                        default => $v->quota === null ? 'Tanpa batas' : $v->quota.' kali',
+                    })
+                    ->description(fn (Voucher $v) => $v->isClaim() ? 'Diklaim '.$v->claims_count.' akun' : null),
                 TextColumn::make('used_count')
                     ->label('Dipakai')
                     ->alignCenter()
+                    ->state(fn (Voucher $v) => $v->isCampaign() ? (int) $v->campaign_used : (int) $v->used_count)
                     ->suffix('x')
                     ->sortable()
                     ->description(fn (Voucher $v) => ! $v->isCredit() && $v->report_orders > 0
@@ -239,9 +263,33 @@ class DaftarVoucher extends Page implements HasTable
                     ->modalCancelActionLabel('Tutup')
                     ->modalContent(fn (Voucher $v) => view('filament.pages.partials.voucher-usage', [
                         'voucher' => $v,
-                        'orders' => Order::where('voucher_code', $v->code)->with('user:id,name')->latest()->limit(50)->get(),
+                        'orders' => Order::query()
+                            ->when($v->isCampaign(),
+                                fn ($q) => $q->whereIn('voucher_code', Voucher::where('campaign_id', $v->id)->select('code')),
+                                fn ($q) => $q->where('voucher_code', $v->code))
+                            ->with('user:id,name')->latest()->limit(50)->get(),
                         'available' => app(VoucherService::class)->availableBalance($v),
+                        'campaignStats' => $v->isCampaign() ? app(PromoVoucherService::class)->campaignStats($v) : null,
+                        'claimCount' => $v->isClaim() ? $v->claims()->count() : 0,
                     ])),
+
+                // ---- Cara sebar B / C ----
+                Action::make('downloadCodes')
+                    ->label('Unduh CSV kode')
+                    ->icon('heroicon-o-arrow-down-tray')
+                    ->color('gray')
+                    ->visible(fn (Voucher $v) => $v->isCampaign() && self::canManagePromo())
+                    ->url(fn (Voucher $v) => route('admin.voucher-codes.export', $v)),
+                Action::make('claimLink')
+                    ->label('Link klaim')
+                    ->icon('heroicon-o-link')
+                    ->color('gray')
+                    ->visible(fn (Voucher $v) => $v->isClaim())
+                    ->modalHeading(fn (Voucher $v) => 'Link klaim '.$v->code)
+                    ->modalDescription('Sebar link ini (banner, bio Instagram, WhatsApp). Customer login → Klaim → voucher masuk Voucher Saya.')
+                    ->modalSubmitAction(false)
+                    ->modalCancelActionLabel('Tutup')
+                    ->modalContent(fn (Voucher $v) => view('filament.pages.partials.voucher-claim-link', ['url' => route('promo.claim', $v->code)])),
 
                 // ---- Kode promo ----
                 Action::make('edit')
@@ -251,8 +299,8 @@ class DaftarVoucher extends Page implements HasTable
                     ->authorize(fn () => self::canManagePromo())
                     ->modalHeading(fn (Voucher $v) => 'Ubah promo '.$v->code)
                     ->modalDescription(fn (Voucher $v) => app(PromoVoucherService::class)->hasBeenUsed($v)
-                        ? 'Promo ini sudah dipakai — kode, potongan, dan kategori dikunci. Periode, kuota, kanal, dan aturan gabung masih bisa diubah.'
-                        : null)
+                        ? 'Promo ini sudah dipakai'.($v->isClaim() ? ' / diklaim' : '').' — kode, potongan, dan kategori dikunci. Periode, kuota, kanal, dan aturan gabung masih bisa diubah.'.($v->isCampaign() ? ' Perubahan berlaku untuk semua kode kampanye ini.' : '')
+                        : ($v->isCampaign() ? 'Perubahan berlaku untuk semua kode kampanye ini.' : null))
                     ->modalSubmitActionLabel('Simpan perubahan')
                     ->modalWidth('3xl')
                     ->schema(fn (Voucher $record) => $this->promoForm($record))
@@ -260,7 +308,7 @@ class DaftarVoucher extends Page implements HasTable
                     ->action(fn (Voucher $record, array $data) => $this->run(
                         // Isian yang dikunci (disabled) tidak ikut terkirim — pakai nilai yang tersimpan.
                         fn () => app(PromoVoucherService::class)->update($record, $data + $this->formDefaults($record), auth()->user()),
-                        fn (Voucher $v) => "Promo {$v->code} diperbarui.",
+                        fn (Voucher $v) => 'Promo '.app(PromoVoucherService::class)->label($v).' diperbarui.',
                     )),
                 Action::make('togglePromo')
                     ->label(fn (Voucher $v) => $v->is_active ? 'Nonaktifkan' : 'Aktifkan')
@@ -275,7 +323,7 @@ class DaftarVoucher extends Page implements HasTable
                         : 'Kode bisa dipakai lagi selama masih dalam periode dan kuota.')
                     ->action(fn (Voucher $record) => $this->run(
                         fn () => app(PromoVoucherService::class)->setActive($record, ! $record->is_active, auth()->user()),
-                        fn (Voucher $v) => 'Promo '.$v->code.($v->is_active ? ' diaktifkan.' : ' dinonaktifkan.'),
+                        fn (Voucher $v) => 'Promo '.app(PromoVoucherService::class)->label($v).($v->is_active ? ' diaktifkan.' : ' dinonaktifkan.'),
                     )),
 
                 // ---- Voucher saldo customer ----
@@ -312,28 +360,45 @@ class DaftarVoucher extends Page implements HasTable
     private function promoForm(?Voucher $record): array
     {
         $locked = $record && app(PromoVoucherService::class)->hasBeenUsed($record);
+        $isUnique = fn (Get $get) => $get('distribution') === Voucher::DISTRIBUTION_UNIQUE;
 
         return [
             Section::make('Promo')->schema([
-                Grid::make(2)->schema([
-                    TextInput::make('name')->label('Nama promo')->required()->maxLength(100)->placeholder('Promo Pembukaan November'),
-                    TextInput::make('code')->label('Kode')
-                        ->placeholder('Kosongkan = dibuat otomatis')
-                        ->helperText('Huruf, angka, tanda hubung (4–30). Customer mengetik kode ini di checkout / menyebutkannya ke kasir.')
-                        ->maxLength(30)
-                        ->disabled($locked)
-                        ->extraInputAttributes(['style' => 'text-transform: uppercase']),
-                ]),
                 Radio::make('distribution')->label('Cara sebar')
                     ->options([
-                        Voucher::DISTRIBUTION_CODE => 'A. Kode umum — satu kode untuk semua orang',
-                        'UNIQUE' => 'B. Kode unik massal (menyusul)',
-                        'CLAIM' => 'C. Klaim ke akun (menyusul)',
+                        Voucher::DISTRIBUTION_CODE => 'A. Kode umum — satu kode untuk semua orang (sosmed, WhatsApp, spanduk)',
+                        Voucher::DISTRIBUTION_UNIQUE => 'B. Kode unik massal — banyak kode berbeda, masing-masing sekali pakai (unduh CSV)',
+                        Voucher::DISTRIBUTION_CLAIM => 'C. Klaim ke akun — customer menekan Klaim lewat link, voucher masuk Voucher Saya',
                         'AUTO' => 'D. Otomatis (menyusul)',
                     ])
-                    ->disableOptionWhen(fn (string $value) => $value !== Voucher::DISTRIBUTION_CODE)
+                    ->disableOptionWhen(fn (string $value) => $value === 'AUTO')
                     ->default(Voucher::DISTRIBUTION_CODE)
-                    ->dehydrated(false),
+                    ->live()
+                    // Cara sebar tidak bisa diganti setelah promo dibuat.
+                    ->disabled((bool) $record)
+                    ->dehydrated(! $record),
+                Grid::make(2)->schema([
+                    TextInput::make('name')->label('Nama promo')->required()->maxLength(100)->placeholder('Promo Pembukaan November'),
+                    TextInput::make('code')
+                        ->label(fn (Get $get) => $get('distribution') === Voucher::DISTRIBUTION_CLAIM ? 'Kode / link klaim' : 'Kode')
+                        ->placeholder('Kosongkan = dibuat otomatis')
+                        ->helperText(fn (Get $get) => $get('distribution') === Voucher::DISTRIBUTION_CLAIM
+                            ? 'Dipakai di link klaim /promo/KODE. Huruf, angka, tanda hubung (4–30).'
+                            : 'Huruf, angka, tanda hubung (4–30). Customer mengetik kode ini di checkout / menyebutkannya ke kasir.')
+                        ->maxLength(30)
+                        ->hidden($isUnique)
+                        ->disabled($locked)
+                        ->extraInputAttributes(['style' => 'text-transform: uppercase']),
+                    TextInput::make('prefix')->label('Awalan kode')
+                        ->placeholder('TRN')->maxLength(8)
+                        ->helperText('Kode jadi AWALAN-XXXXXX, mis. TRN-7K2M9Q.')
+                        ->visible($isUnique)->required($isUnique)->disabled((bool) $record)->dehydrated(! $record)
+                        ->extraInputAttributes(['style' => 'text-transform: uppercase']),
+                    TextInput::make('code_count')->label('Jumlah kode')
+                        ->numeric()->minValue(1)->maxValue(Voucher::MAX_UNIQUE_CODES)
+                        ->helperText('Maks. '.Voucher::MAX_UNIQUE_CODES.' kode. Jumlah kode = kuota.')
+                        ->visible($isUnique)->required($isUnique)->disabled((bool) $record)->dehydrated(! $record),
+                ]),
             ]),
             Section::make('Potongan')->schema([
                 Grid::make(3)->schema([
@@ -359,8 +424,17 @@ class DaftarVoucher extends Page implements HasTable
                 Grid::make(3)->schema([
                     DatePicker::make('valid_from')->label('Mulai')->native(false)->displayFormat('d M Y')->placeholder('Langsung berlaku'),
                     DatePicker::make('valid_until')->label('Berakhir')->native(false)->displayFormat('d M Y')->required(),
-                    TextInput::make('quota')->label('Kuota pemakaian')->numeric()->minValue(1)->placeholder('Tanpa batas')
-                        ->helperText($record ? 'Total kuota, termasuk yang sudah dipakai ('.$record->used_count.').' : 'Jumlah order lunas yang boleh memakai promo ini.'),
+                    TextInput::make('quota')
+                        ->label(fn (Get $get) => $get('distribution') === Voucher::DISTRIBUTION_CLAIM ? 'Kuota klaim' : 'Kuota pemakaian')
+                        ->numeric()->minValue(1)->placeholder('Tanpa batas')
+                        ->hidden($isUnique)
+                        ->helperText(fn (Get $get) => match (true) {
+                            $get('distribution') === Voucher::DISTRIBUTION_CLAIM => $record
+                                ? 'Total klaim, termasuk yang sudah diklaim ('.$record->claims()->count().').'
+                                : 'Jumlah akun yang boleh klaim ("100 klaim pertama").',
+                            (bool) $record => 'Total kuota, termasuk yang sudah dipakai ('.$record->used_count.').',
+                            default => 'Jumlah order lunas yang boleh memakai promo ini.',
+                        }),
                 ]),
                 Grid::make(3)->schema([
                     Radio::make('channel')->label('Kanal')->options(Voucher::CHANNELS)->required(),
@@ -396,7 +470,11 @@ class DaftarVoucher extends Page implements HasTable
             'categories' => $record->promoCategories(),
             'channel' => $record->channel ?: Voucher::CHANNEL_ALL,
             'stack_with_membership' => (bool) $record->stack_with_membership,
-            'quota' => $record->totalQuota(),
+            'quota' => $record->isClaim()
+                ? ($record->quota === null ? null : (int) $record->quota + $record->claims()->count())
+                : $record->totalQuota(),
+            'prefix' => $record->isCampaign() ? explode('-', (string) Voucher::where('campaign_id', $record->id)->value('code'))[0] : null,
+            'code_count' => $record->isCampaign() ? Voucher::where('campaign_id', $record->id)->count() : null,
             'valid_from' => $record->valid_from?->timezone(LedgerReport::TIMEZONE)->toDateString(),
             'valid_until' => $record->valid_until?->timezone(LedgerReport::TIMEZONE)->toDateString(),
             'is_active' => (bool) $record->is_active,

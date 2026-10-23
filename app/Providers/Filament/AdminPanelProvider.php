@@ -68,6 +68,7 @@ class AdminPanelProvider extends PanelProvider
             ->spaUrlExceptions(fn (): array => [
                 url('/admin/buku-transaksi/export*'),
                 url('/admin/log-aktivitas/export*'),
+                url('/admin/daftar-voucher/kode/*'),
             ])
             ->resources([
                 \App\Filament\Resources\Users\UserResource::class,

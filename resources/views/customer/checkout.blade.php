@@ -266,6 +266,23 @@
                             </div>
                         </template>
 
+                        {{-- Promo yang sudah diklaim customer (cara sebar C) — aturan tetap dicek server saat "Use" --}}
+                        <template x-if="myPromos.length > 0 && !promoApplied">
+                            <div class="space-y-1.5 pt-1" data-claimed-promos>
+                                <div class="text-[10px] font-bold uppercase tracking-wider text-[#662721]">Your claimed promos</div>
+                                <template x-for="p in myPromos" :key="p.code">
+                                    <div class="flex items-center gap-2 px-3 py-2 rounded-xl bg-rose-50 border border-rose-200">
+                                        <div class="flex-1 min-w-0">
+                                            <div class="text-xs font-bold text-rose-900 truncate" x-text="p.name || p.code"></div>
+                                            <div class="text-[10px] text-rose-800 truncate" x-text="p.headline + (p.valid_until ? ' · until ' + p.valid_until : '')"></div>
+                                        </div>
+                                        <button type="button" @click="promoCode = p.code; applyPromo()" :disabled="isCheckingPromo"
+                                                class="bk-tap shrink-0 h-8 px-3 rounded-lg bg-[#B91C1C] text-white text-[11px] font-bold disabled:opacity-50">Use</button>
+                                    </div>
+                                </template>
+                            </div>
+                        </template>
+
                         {{-- Voucher saldo milik customer (refund yang dijadikan voucher) --}}
                         <template x-if="myVouchers.length > 0 && !promoApplied">
                             <div class="space-y-1.5 pt-1">
@@ -620,6 +637,8 @@
                 promoVoucher: null,
                 isCheckingPromo: false,
                 myVouchers: [],
+                // Promo hasil klaim (Modul 22 tahap 3) — dipakai tanpa mengetik kode.
+                myPromos: [],
                 selectedAddOns: [],
                 // Katalog alat hanya dari database (/equipments). Dulu ada daftar contoh bawaan dengan id palsu yang
                 // ikut terkirim ke server kalau API gagal dimuat.
@@ -720,8 +739,10 @@
                         const res = await fetch('/api/v1/padel/vouchers/mine', { headers: { 'Accept': 'application/json' } });
                         const json = await res.json();
                         this.myVouchers = (json.success && Array.isArray(json.data)) ? json.data : [];
+                        this.myPromos = (json.success && Array.isArray(json.claimed)) ? json.claimed : [];
                     } catch (e) {
                         this.myVouchers = [];
+                        this.myPromos = [];
                     }
                 },
 

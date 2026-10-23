@@ -1035,6 +1035,14 @@ class BookOfflineCourt extends Page
         return $customer ? app(\App\Services\Finance\VoucherService::class)->walletFor($customer) : collect();
     }
 
+    /** Promo hasil klaim (cara sebar C) milik customer terpilih yang bisa dipakai sekarang — aturan tetap dicek resolve(). */
+    public function getCustomerClaimedPromosProperty(): array
+    {
+        $customer = $this->selectedCustomerId ? User::find($this->selectedCustomerId) : null;
+
+        return $customer ? app(\App\Services\Finance\VoucherClaimService::class)->usableForApi($customer) : [];
+    }
+
     public function applyVoucher(?string $code = null): void
     {
         $code = strtoupper(trim((string) ($code ?? $this->voucherInput)));

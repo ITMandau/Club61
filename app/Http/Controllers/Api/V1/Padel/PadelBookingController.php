@@ -314,12 +314,35 @@ class PadelBookingController extends Controller
         ]);
     }
 
-    /** Voucher saldo milik customer (dari refund yang ditolak) yang masih bisa dipakai. */
+    /**
+     * Voucher saldo milik customer (dari refund yang ditolak) yang masih bisa dipakai (`data`, bentuk lama tidak berubah)
+     * + promo hasil klaim yang bisa dipakai sekarang (`claimed`, Modul 22 tahap 3).
+     */
     public function myVouchers(Request $request): JsonResponse
     {
         return response()->json([
             'success' => true,
             'data' => app(\App\Services\Finance\VoucherService::class)->walletFor($request->user())->values(),
+            'claimed' => app(\App\Services\Finance\VoucherClaimService::class)->usableForApi($request->user()),
+        ]);
+    }
+
+    /** Klaim promo cara sebar C dengan kodenya (kode dari link / banner promo). */
+    public function claimVoucher(Request $request): JsonResponse
+    {
+        $validated = $request->validate(['code' => ['required', 'string', 'max:30']]);
+        $claims = app(\App\Services\Finance\VoucherClaimService::class);
+        $voucher = $claims->findClaimable($validated['code']);
+        if (! $voucher) {
+            return response()->json(['success' => false, 'message' => 'Promo tidak ditemukan.'], 404);
+        }
+
+        $claims->claim($voucher, $request->user());
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Promo berhasil diklaim — sudah ada di Voucher Saya.',
+            'data' => collect($claims->usableForApi($request->user()))->firstWhere('code', $voucher->code),
         ]);
     }
 

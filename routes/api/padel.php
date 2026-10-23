@@ -39,6 +39,8 @@ Route::prefix('v1/padel')->group(function () {
         // Voucher promo & voucher saldo (refund yang ditolak) milik customer.
         Route::get('/vouchers/mine', [PadelBookingController::class, 'myVouchers']);
         Route::post('/vouchers/check', [PadelBookingController::class, 'checkVoucher'])->middleware('throttle:20,1');
+        // Klaim promo cara sebar C (Modul 22 tahap 3) — voucher masuk Voucher Saya & ikut di vouchers/mine (key claimed).
+        Route::post('/vouchers/claim', [PadelBookingController::class, 'claimVoucher'])->middleware('throttle:10,1');
 
         // 4. ENDPOINT STAF GATE & KASIR VENUE (Single-Use QR Scanner)
         Route::post('/check-in', [PadelBookingController::class, 'checkIn']);

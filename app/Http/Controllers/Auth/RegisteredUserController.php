@@ -47,6 +47,7 @@ class RegisteredUserController extends Controller
 
         Auth::login($user);
 
-        return redirect(route('dashboard', absolute: false));
+        // Daftar dari link promo / halaman portal lain → kembali ke sana (path relatif yang aman), selain itu Dashboard.
+        return redirect(AuthenticatedSessionController::customerIntended($request) ?? route('dashboard', absolute: false));
     }
 }

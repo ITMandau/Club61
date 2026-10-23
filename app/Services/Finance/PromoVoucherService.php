@@ -2,6 +2,7 @@
 
 namespace App\Services\Finance;
 
+use App\Filament\Pages\BukuTransaksi;
 use App\Models\Pos\Order;
 use App\Models\Pos\Voucher;
 use App\Models\User;
@@ -12,8 +13,9 @@ use Illuminate\Support\Str;
 use Symfony\Component\HttpKernel\Exception\HttpException;
 
 /**
- * Modul 22 tahap 2 — membuat & mengubah voucher promo dari halaman Daftar Voucher (cara sebar A: kode umum).
- * Aturan pemakaian (periode, kanal, kategori, 1x per akun, kuota) ada di VoucherService::resolve(); di sini hanya
+ * Modul 22 — membuat & mengubah voucher promo dari halaman Daftar Voucher. Cara sebar A (kode umum), B (kode unik massal:
+ * baris kampanye + satu baris per kode, kuota 1), dan C (klaim ke akun: kuota = jumlah klaim).
+ * Aturan pemakaian (periode, kanal, kategori, 1x per akun, kuota, klaim) ada di VoucherService::resolve(); di sini hanya
  * validasi isian, penyimpanan, dan Log Aktivitas. Tanggal diisi dalam WIB: mulai = awal hari, berakhir = akhir hari.
  */
 class PromoVoucherService
@@ -21,24 +23,49 @@ class PromoVoucherService
     /** Isian yang tidak boleh diubah setelah promo pernah dipakai (angka laporan & pesanan lama jadi tidak cocok). */
     private const LOCKED_AFTER_USE = ['code', 'discount_type', 'discount_value', 'max_discount_amount', 'categories'];
 
+    /** Huruf & angka kode acak — tanpa yang mirip satu sama lain (0/O, 1/I/L). */
+    private const CODE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
+
     public function create(array $data, User $actor): Voucher
     {
+        $distribution = $data['distribution'] ?? Voucher::DISTRIBUTION_CODE;
+        if (! array_key_exists($distribution, Voucher::DISTRIBUTIONS)) {
+            throw new HttpException(422, 'Pilih cara sebar promo.');
+        }
+        $data['distribution'] = $distribution;
+        $isCampaign = $distribution === Voucher::DISTRIBUTION_UNIQUE;
+        $codeCount = $isCampaign ? $this->validatedCodeCount($data) : 0;
+        $prefix = $isCampaign ? $this->validatedPrefix($data) : null;
         $attributes = $this->validated($data, null);
+        if ($isCampaign) {
+            $attributes['quota'] = null; // kuota kampanye = jumlah kode (masing-masing kuota 1)
+        }
 
-        return DB::transaction(function () use ($attributes, $actor) {
+        return DB::transaction(function () use ($attributes, $actor, $distribution, $codeCount, $prefix) {
             $voucher = Voucher::create($attributes + [
-                'distribution' => Voucher::DISTRIBUTION_CODE,
+                'distribution' => $distribution,
                 'used_count' => 0,
                 'created_by_id' => $actor->id,
                 'updated_by_id' => $actor->id,
             ]);
 
+            if ($codeCount > 0) {
+                $this->generateCampaignCodes($voucher, $prefix, $codeCount, $actor);
+            }
+
             ActivityLogger::record(
                 module: 'MARKETING',
                 event: 'promo.created',
-                description: "Membuat promo {$voucher->name} ({$voucher->code}) — ".$this->describe($voucher),
+                description: "Membuat promo {$voucher->name} (".$this->label($voucher).') — '.$this->describe($voucher),
                 subject: $voucher,
-                meta: ['kode' => $voucher->code, 'potongan' => $this->describe($voucher), 'kuota' => $voucher->quota ?? 'tanpa batas'],
+                meta: array_filter([
+                    'kode' => $codeCount > 0 ? null : $voucher->code,
+                    'cara_sebar' => Voucher::DISTRIBUTIONS[$distribution],
+                    'jumlah_kode' => $codeCount ?: null,
+                    'awalan' => $prefix,
+                    'potongan' => $this->describe($voucher),
+                    'kuota' => $codeCount > 0 ? $codeCount : ($voucher->quota ?? 'tanpa batas'),
+                ], fn ($v) => $v !== null),
             );
 
             return $voucher;
@@ -48,34 +75,46 @@ class PromoVoucherService
     public function update(Voucher $voucher, array $data, User $actor): Voucher
     {
         $this->assertPromo($voucher);
+        if ($voucher->isUniqueCode()) {
+            throw new HttpException(422, 'Kode unik diatur lewat kampanyenya.');
+        }
+        // Cara sebar tidak bisa diganti setelah dibuat.
+        $data['distribution'] = $voucher->distribution ?: Voucher::DISTRIBUTION_CODE;
         $attributes = $this->validated($data, $voucher);
 
         return DB::transaction(function () use ($voucher, $attributes, $actor) {
             $locked = Voucher::whereKey($voucher->id)->lockForUpdate()->firstOrFail();
 
+            // Kampanye kode unik (B): kodenya internal & kuota = jumlah kode — dua-duanya tidak diubah di sini.
+            if ($locked->isCampaign()) {
+                unset($attributes['quota'], $attributes['code']);
+            }
+
             if ($this->hasBeenUsed($locked)) {
                 foreach (self::LOCKED_AFTER_USE as $field) {
-                    if ($this->differs($locked, $field, $attributes[$field] ?? null)) {
-                        throw new HttpException(422, 'Promo ini sudah dipakai — kode, potongan, dan kategori tidak bisa diubah lagi. Nonaktifkan lalu buat promo baru kalau potongannya berubah.');
+                    if (array_key_exists($field, $attributes) && $this->differs($locked, $field, $attributes[$field])) {
+                        throw new HttpException(422, 'Promo ini sudah dipakai'.($locked->isClaim() ? ' / diklaim' : '').' — kode, potongan, dan kategori tidak bisa diubah lagi. Nonaktifkan lalu buat promo baru kalau potongannya berubah.');
                     }
                 }
             }
 
-            // Isian kuota = kuota TOTAL; yang disimpan sisa kuota (berkurang saat order lunas).
+            // Isian kuota = kuota TOTAL; yang disimpan sisa kuota (berkurang saat order lunas — untuk C saat diklaim).
             if (array_key_exists('quota', $attributes) && $attributes['quota'] !== null) {
-                if ($attributes['quota'] < (int) $locked->used_count) {
-                    throw new HttpException(422, "Kuota tidak boleh lebih kecil dari yang sudah dipakai ({$locked->used_count}).");
+                $taken = $locked->isClaim() ? $locked->claims()->count() : (int) $locked->used_count;
+                if ($attributes['quota'] < $taken) {
+                    throw new HttpException(422, 'Kuota tidak boleh lebih kecil dari yang sudah '.($locked->isClaim() ? 'diklaim' : 'dipakai')." ({$taken}).");
                 }
-                $attributes['quota'] -= (int) $locked->used_count;
+                $attributes['quota'] -= $taken;
             }
 
             $before = $locked->only(array_keys($attributes));
             $locked->fill($attributes + ['updated_by_id' => $actor->id])->save();
+            $this->syncCampaignCodes($locked);
 
             ActivityLogger::record(
                 module: 'MARKETING',
                 event: 'promo.updated',
-                description: "Mengubah promo {$locked->name} ({$locked->code})",
+                description: "Mengubah promo {$locked->name} (".$this->label($locked).')',
                 subject: $locked,
                 changes: ['before' => $before, 'after' => $locked->only(array_keys($attributes))],
             );
@@ -87,12 +126,18 @@ class PromoVoucherService
     public function setActive(Voucher $voucher, bool $active, User $actor): Voucher
     {
         $this->assertPromo($voucher);
-        $voucher->update(['is_active' => $active, 'updated_by_id' => $actor->id]);
+        if ($voucher->isUniqueCode()) {
+            throw new HttpException(422, 'Kode unik diatur lewat kampanyenya.');
+        }
+        DB::transaction(function () use ($voucher, $active, $actor) {
+            $voucher->update(['is_active' => $active, 'updated_by_id' => $actor->id]);
+            $this->syncCampaignCodes($voucher);
+        });
 
         ActivityLogger::record(
             module: 'MARKETING',
             event: $active ? 'promo.activated' : 'promo.deactivated',
-            description: ($active ? 'Mengaktifkan' : 'Menonaktifkan')." promo {$voucher->name} ({$voucher->code})",
+            description: ($active ? 'Mengaktifkan' : 'Menonaktifkan')." promo {$voucher->name} (".$this->label($voucher).')',
             subject: $voucher,
             severity: $active ? ActivityLogger::INFO : ActivityLogger::WARNING,
         );
@@ -100,14 +145,42 @@ class PromoVoucherService
         return $voucher;
     }
 
-    /** Kode acak yang belum dipakai voucher mana pun (huruf & angka yang tidak mirip satu sama lain). */
+    /** Kode acak yang belum dipakai voucher mana pun. */
     public function generateCode(string $prefix = 'C61'): string
     {
         do {
-            $code = strtoupper($prefix).'-'.substr(str_shuffle(str_repeat('ABCDEFGHJKLMNPQRSTUVWXYZ23456789', 3)), 0, 6);
+            $code = strtoupper($prefix).'-'.$this->randomSuffix();
         } while (Voucher::where('code', $code)->exists());
 
         return $code;
+    }
+
+    /** Kode yang tampil di log / notifikasi: kampanye B ditulis "50 kode TRN-…". */
+    public function label(Voucher $voucher): string
+    {
+        if (! $voucher->isCampaign()) {
+            return $voucher->code;
+        }
+        $sample = Voucher::where('campaign_id', $voucher->id)->value('code');
+
+        return Voucher::where('campaign_id', $voucher->id)->count().' kode '.($sample ? explode('-', $sample)[0].'-…' : '');
+    }
+
+    /**
+     * Ringkasan kode kampanye B: total, sudah dipakai (lunas), sedang dipesan (order belum lunas), masih bebas.
+     *
+     * @return array{total: int, used: int, held: int, free: int}
+     */
+    public function campaignStats(Voucher $campaign): array
+    {
+        $codes = Voucher::where('campaign_id', $campaign->id);
+        $total = (clone $codes)->count();
+        $used = (clone $codes)->where('used_count', '>', 0)->count();
+        $held = Order::whereIn('voucher_code', (clone $codes)->where('used_count', 0)->select('code'))
+            ->whereIn('payment_status', ['UNPAID', 'PENDING_PAYMENT', 'PARTIALLY_PAID'])
+            ->distinct()->count('voucher_code');
+
+        return ['total' => $total, 'used' => $used, 'held' => $held, 'free' => max(0, $total - $used - $held)];
     }
 
     /** Ringkas potongan untuk tabel & log, mis. "20% (maks. Rp50.000)" atau "Rp25.000". */
@@ -151,7 +224,11 @@ class PromoVoucherService
                     default => null,
                 },
                 $voucher->stack_with_membership ? 'Bisa digabung benefit member' : 'Tidak bisa digabung benefit member',
-                '1x per akun',
+                match (true) {
+                    $voucher->isUniqueCode() => '1 kode per akun',
+                    $voucher->isClaim() => 'Khusus akun yang sudah klaim · 1x per akun',
+                    default => '1x per akun',
+                },
             ])),
         ];
     }
@@ -168,9 +245,115 @@ class PromoVoucherService
         return ($terms['name'] ? $terms['name'].' · ' : '').$terms['headline'];
     }
 
+    /** Sudah dipakai (untuk C: atau sudah diklaim) → potongan & kategori dikunci. Kampanye B dihitung dari kode-kodenya. */
     public function hasBeenUsed(Voucher $voucher): bool
     {
-        return (int) $voucher->used_count > 0 || Order::where('voucher_code', $voucher->code)->exists();
+        if ($voucher->isCampaign()) {
+            $codes = Voucher::where('campaign_id', $voucher->id);
+
+            return (clone $codes)->where('used_count', '>', 0)->exists()
+                || Order::whereIn('voucher_code', (clone $codes)->select('code'))->exists();
+        }
+
+        return (int) $voucher->used_count > 0
+            || Order::where('voucher_code', $voucher->code)->exists()
+            || ($voucher->isClaim() && $voucher->claims()->exists());
+    }
+
+    /**
+     * Cara sebar B: buat $count kode acak "AWALAN-XXXXXX" (kuota 1 per kode) yang menyalin aturan kampanye. Disisipkan
+     * massal (tanpa event model) supaya Log Aktivitas tidak banjir satu baris per kode — dicatat sekali di create().
+     */
+    private function generateCampaignCodes(Voucher $campaign, string $prefix, int $count, User $actor): void
+    {
+        $codes = [];
+        while (count($codes) < $count) {
+            $need = $count - count($codes);
+            $batch = [];
+            for ($i = 0; $i < $need * 2; $i++) {
+                $batch[] = $prefix.'-'.$this->randomSuffix();
+            }
+            $batch = array_values(array_diff(array_unique($batch), $codes));
+            $taken = Voucher::whereIn('code', $batch)->pluck('code')->all();
+            $codes = array_merge($codes, array_slice(array_values(array_diff($batch, $taken)), 0, $need));
+        }
+
+        $now = now();
+        $rules = $this->rulesForCodes($campaign);
+        foreach (array_chunk($codes, 200) as $chunk) {
+            Voucher::insert(array_map(fn (string $code) => $rules + [
+                'id' => (string) Str::ulid(),
+                'code' => $code,
+                'distribution' => Voucher::DISTRIBUTION_UNIQUE,
+                'campaign_id' => $campaign->id,
+                'quota' => 1,
+                'used_count' => 0,
+                'created_by_id' => $actor->id,
+                'created_at' => $now,
+                'updated_at' => $now,
+            ], $chunk));
+        }
+    }
+
+    /** Aturan kampanye yang disalin ke tiap kode unik (kolom mentah untuk insert / update massal). */
+    private function rulesForCodes(Voucher $campaign): array
+    {
+        return [
+            'name' => $campaign->name,
+            'discount_type' => $campaign->discount_type,
+            'discount_value' => $campaign->discount_value,
+            'max_discount_amount' => $campaign->max_discount_amount,
+            'min_order_amount' => $campaign->min_order_amount,
+            'categories' => json_encode($campaign->promoCategories()),
+            'channel' => $campaign->channel,
+            'stack_with_membership' => (bool) $campaign->stack_with_membership,
+            'valid_from' => $campaign->valid_from,
+            'valid_until' => $campaign->valid_until,
+            'is_active' => (bool) $campaign->is_active,
+            'updated_by_id' => $campaign->updated_by_id,
+        ];
+    }
+
+    /** Perubahan aturan / status kampanye ikut ke semua kodenya (kuota & pemakaian tiap kode tidak disentuh). */
+    private function syncCampaignCodes(Voucher $campaign): void
+    {
+        if ($campaign->isCampaign()) {
+            Voucher::where('campaign_id', $campaign->id)->update($this->rulesForCodes($campaign) + ['updated_at' => now()]);
+        }
+    }
+
+    /** 6 karakter acak (random_int = kriptografis) — kode unik tidak bisa ditebak / diurutkan. */
+    private function randomSuffix(): string
+    {
+        $suffix = '';
+        for ($i = 0; $i < 6; $i++) {
+            $suffix .= self::CODE_ALPHABET[random_int(0, strlen(self::CODE_ALPHABET) - 1)];
+        }
+
+        return $suffix;
+    }
+
+    private function validatedCodeCount(array $data): int
+    {
+        $count = (int) ($data['code_count'] ?? 0);
+        if ($count < 1 || $count > Voucher::MAX_UNIQUE_CODES) {
+            throw new HttpException(422, 'Jumlah kode unik 1–'.Voucher::MAX_UNIQUE_CODES.'.');
+        }
+
+        return $count;
+    }
+
+    private function validatedPrefix(array $data): string
+    {
+        $prefix = strtoupper(trim((string) ($data['prefix'] ?? '')));
+        if (! preg_match('/^[A-Z0-9]{2,8}$/', $prefix)) {
+            throw new HttpException(422, 'Awalan kode 2–8 huruf / angka, mis. TRN.');
+        }
+        if (in_array($prefix, ['KR', 'CMP'], true)) {
+            throw new HttpException(422, "Awalan {$prefix} dipakai sistem. Pakai awalan lain.");
+        }
+
+        return $prefix;
     }
 
     private function validated(array $data, ?Voucher $existing): array
@@ -181,6 +364,10 @@ class PromoVoucherService
         }
 
         $code = strtoupper(trim((string) ($data['code'] ?? '')));
+        // Kampanye kode unik (B): kode baris kampanye internal (tidak bisa dipakai di checkout), selalu dibuat otomatis.
+        if (($data['distribution'] ?? null) === Voucher::DISTRIBUTION_UNIQUE) {
+            $code = $existing?->code ?? $this->generateCode('CMP');
+        }
         if ($code === '') {
             $code = $existing?->code ?? $this->generateCode();
         }
@@ -274,6 +461,6 @@ class PromoVoucherService
 
     private function rupiah(mixed $value): string
     {
-        return \App\Filament\Pages\BukuTransaksi::rupiah($value);
+        return BukuTransaksi::rupiah($value);
     }
 }

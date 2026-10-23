@@ -111,6 +111,10 @@ Route::middleware(['auth', 'verified', \App\Http\Middleware\CustomerPortalOnly::
         return view('customer.invoice');
     })->name('customer.invoice');
 
+    // Modul 22 tahap 3 — klaim promo (cara sebar C). Halaman promo publik (di bawah); tombol Klaim wajib login & dibatasi.
+    Route::post('/promo/{code}/klaim', [\App\Http\Controllers\PromoClaimController::class, 'claim'])
+        ->where('code', '[A-Za-z0-9-]{4,30}')->middleware('throttle:10,1')->name('promo.claim.store');
+
     // Modul 24 Opsi B Tahap 2 — profil coach (informasi saja; booking coaching lewat WhatsApp admin coaching).
     Route::get('/coaching', function (\App\Services\Coaching\CoachDirectory $directory) {
         return view('customer.coaching', [
@@ -131,6 +135,12 @@ Route::middleware(['auth', 'verified', \App\Http\Middleware\CustomerPortalOnly::
 
     Route::get('/corporate', [\App\Http\Controllers\CorporateDashboardController::class, 'show'])->name('customer.corporate');
 });
+
+// Halaman promo klaim (cara sebar C) — publik: tamu melihat promonya dulu, tombol "Masuk untuk klaim" lalu kembali ke sini.
+Route::get('/promo/{code}', [\App\Http\Controllers\PromoClaimController::class, 'show'])
+    ->where('code', '[A-Za-z0-9-]{4,30}')->middleware('throttle:60,1')->name('promo.claim');
+Route::get('/promo/{code}/{mode}', [\App\Http\Controllers\PromoClaimController::class, 'auth'])
+    ->where(['code' => '[A-Za-z0-9-]{4,30}', 'mode' => 'masuk|daftar'])->middleware('throttle:60,1')->name('promo.claim.auth');
 
 // Halaman link bio Instagram (publik, tanpa login) — tombol diatur dari admin Marketing & Event → Link Bio Instagram.
 Route::get('/links', function () {
@@ -153,6 +163,11 @@ Route::get('/corporate/preview/{organization}', [\App\Http\Controllers\Corporate
 Route::get('/admin/log-aktivitas/export', \App\Http\Controllers\Admin\ActivityLogExportController::class)
     ->middleware('auth')
     ->name('admin.log-aktivitas.export');
+
+// Unduh CSV kode unik promo (Modul 22 tahap 3, cara sebar B). Izin manage_vouchers dicek di controller.
+Route::get('/admin/daftar-voucher/kode/{voucher}', \App\Http\Controllers\Admin\VoucherCodesExportController::class)
+    ->middleware('auth')
+    ->name('admin.voucher-codes.export');
 
 // Signature (Modul 26) — layar TV venue. Link rahasia per layar, tanpa login, hanya baca.
 Route::middleware('throttle:120,1')->group(function () {

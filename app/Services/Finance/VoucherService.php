@@ -5,6 +5,7 @@ namespace App\Services\Finance;
 use App\Models\Pos\Order;
 use App\Models\Pos\Refund;
 use App\Models\Pos\Voucher;
+use App\Models\Pos\VoucherClaim;
 use App\Models\User;
 use App\Services\Audit\ActivityLogger;
 use Illuminate\Support\Collection;
@@ -54,7 +55,8 @@ class VoucherService
 
         $fail = fn (string $message) => ['voucher' => null, 'discount' => 0.0, 'error' => $message];
 
-        if (! $voucher || ! $voucher->is_active) {
+        // Baris kampanye kode unik (B) hanya wadah aturan — kodenya sendiri tidak bisa dipakai.
+        if (! $voucher || ! $voucher->is_active || $voucher->isCampaign()) {
             return $fail('Kode voucher tidak ditemukan atau sudah tidak aktif.');
         }
         if ($voucher->valid_until && $voucher->valid_until->lt(now())) {
@@ -77,6 +79,14 @@ class VoucherService
         }
 
         // ---- Promo ----
+        // Kode unik (B): kampanyenya ikut dikunci (aturan 1 kode per akun per kampanye berlaku lintas kode) & wajib aktif.
+        if ($voucher->isUniqueCode()) {
+            $campaign = $this->freshRead(Voucher::whereKey($voucher->campaign_id), $lock)->first();
+            if (! $campaign || ! $campaign->is_active) {
+                return $fail('Kode voucher tidak ditemukan atau sudah tidak aktif.');
+            }
+        }
+
         if ($voucher->valid_from && $voucher->valid_from->gt(now())) {
             return $fail('Promo ini baru berlaku mulai '.$voucher->valid_from->timezone(LedgerReport::TIMEZONE)->format('d M Y').'.');
         }
@@ -105,24 +115,24 @@ class VoucherService
         if (! $customer) {
             return $fail('Promo ini butuh akun customer.');
         }
-        $alreadyUsed = $this->freshRead(Order::where('voucher_code', $voucher->code)
-            ->where('user_id', $customer->id)
-            ->whereIn('payment_status', self::PROMO_HOLDING_STATUSES)
-            // Order lunas yang dibatalkan & promonya sudah dikembalikan (restoreCreditForCancelledOrder) tidak dihitung.
-            ->whereNull('voucher_restored_at'), $lock)
-            ->exists();
-        if ($alreadyUsed) {
-            return $fail('Promo ini sudah pernah kamu pakai — satu akun hanya bisa memakai promo yang sama sekali.');
+        // C — klaim ke akun: hanya akun yang sudah klaim (kuota dihitung saat klaim).
+        if ($voucher->isClaim() && ! VoucherClaim::where('voucher_id', $voucher->id)->where('user_id', $customer->id)->exists()) {
+            return $fail('Promo ini harus diklaim dulu di halaman promo sebelum dipakai.');
+        }
+        if ($this->promoUsedBy($voucher, $customer, $lock)) {
+            return $fail($voucher->isUniqueCode()
+                ? 'Kamu sudah memakai satu kode dari kampanye ini — satu akun hanya bisa memakai satu kode.'
+                : 'Promo ini sudah pernah kamu pakai — satu akun hanya bisa memakai promo yang sama sekali.');
         }
 
         // Kuota dipotong permanen saat lunas (consume), jadi order yang sudah mengklaim kode ini tapi belum
         // lunas ikut dihitung — kalau tidak, checkout paralel saat kuota tinggal 1 bisa sama-sama lolos.
-        if ($voucher->quota !== null) {
+        if ($voucher->quota !== null && ! $voucher->isClaim()) {
             $reservedInFlight = $this->freshRead(Order::where('voucher_code', $voucher->code)
                 ->whereIn('payment_status', ['UNPAID', 'PENDING_PAYMENT', 'PARTIALLY_PAID']), $lock)
                 ->count();
             if ($voucher->quota - $reservedInFlight <= 0) {
-                return $fail('Kuota voucher sudah habis.');
+                return $fail($voucher->isUniqueCode() ? 'Kode ini sudah dipakai.' : 'Kuota voucher sudah habis.');
             }
         }
 
@@ -139,6 +149,24 @@ class VoucherService
         }
 
         return ['voucher' => $voucher, 'discount' => round(min($discount, $base, $orderAmount), 2), 'error' => null];
+    }
+
+    /**
+     * T3 — akun ini sudah memakai promo ini (order lunas + yang masih menunggu bayar; order kedaluwarsa / batal / yang
+     * promonya dikembalikan tidak dihitung → jatahnya kembali, T2). Kode unik (B): dihitung lintas semua kode kampanye.
+     */
+    public function promoUsedBy(Voucher $voucher, User $customer, bool $lock = false): bool
+    {
+        $codes = $voucher->isUniqueCode()
+            ? Voucher::where('campaign_id', $voucher->campaign_id)->select('code')
+            : [$voucher->code];
+
+        return $this->freshRead(Order::whereIn('voucher_code', $codes)
+            ->where('user_id', $customer->id)
+            ->whereIn('payment_status', self::PROMO_HOLDING_STATUSES)
+            // Order lunas yang dibatalkan & promonya sudah dikembalikan (restoreCreditForCancelledOrder) tidak dihitung.
+            ->whereNull('voucher_restored_at'), $lock)
+            ->exists();
     }
 
     /** Sisa saldo voucher CREDIT dikurangi potongan yang sedang dipesan order belum bayar. */
@@ -189,7 +217,8 @@ class VoucherService
             return;
         }
 
-        if ($voucher->quota !== null && $voucher->quota > 0) {
+        // Promo klaim (C): kuotanya = jumlah klaim, sudah berkurang saat diklaim.
+        if ($voucher->quota !== null && $voucher->quota > 0 && ! $voucher->isClaim()) {
             $voucher->decrement('quota');
         }
         $voucher->increment('used_count');
@@ -219,7 +248,8 @@ class VoucherService
         // Promo (T2): kuota yang terpotong saat lunas dikembalikan. Jatah 1x per akun ikut kembali karena order dengan
         // voucher_restored_at tidak dihitung lagi di resolve().
         if (! $voucher->isCredit()) {
-            if ($voucher->quota !== null) {
+            // Promo klaim (C): klaimnya tetap ada (voucher kembali ke Voucher Saya), kuota klaim tidak berubah.
+            if ($voucher->quota !== null && ! $voucher->isClaim()) {
                 $voucher->quota = (int) $voucher->quota + 1;
             }
             $voucher->used_count = max(0, (int) $voucher->used_count - 1);

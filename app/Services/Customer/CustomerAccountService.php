@@ -8,6 +8,7 @@ use App\Models\Sponsor\SponsorMemberVoucher;
 use App\Models\Sponsor\SponsorOrganization;
 use App\Models\Sponsor\SponsorOrganizationMember;
 use App\Models\User;
+use App\Services\Finance\VoucherClaimService;
 use App\Services\Finance\VoucherService;
 use Carbon\CarbonInterface;
 use Illuminate\Support\Collection;
@@ -60,7 +61,7 @@ class CustomerAccountService
     public function vouchers(User $user): array
     {
         // toBase(): hasil map dari koleksi Eloquent yang kosong tetap koleksi Eloquent — merge-nya memanggil getKey() pada array.
-        $cards = $this->creditCards($user)->toBase()->merge($this->corporateCards($user)->toBase());
+        $cards = $this->creditCards($user)->toBase()->merge($this->corporateCards($user)->toBase())->merge($this->promoCards($user)->toBase());
 
         return [
             'available' => $cards->where('status', self::AVAILABLE)
@@ -108,6 +109,38 @@ class CustomerAccountService
                     issuedAt: $v->created_at,
                 );
             });
+    }
+
+    /** Promo hasil klaim (Modul 22 tahap 3, cara sebar C). Dipakai = order lunas / menunggu bayar dengan promo itu. */
+    private function promoCards(User $user): Collection
+    {
+        return app(VoucherClaimService::class)->claimedFor($user)->map(function (array $c) {
+            $voucher = $c['voucher'];
+            $status = match ($c['status']) {
+                'USED' => self::USED,
+                'EXPIRED' => self::EXPIRED,
+                'INACTIVE' => self::INACTIVE,
+                default => self::AVAILABLE, // termasuk yang belum mulai — syaratnya tertulis di kartu
+            };
+
+            return $this->card(
+                kind: 'PROMO',
+                id: (string) $voucher->id,
+                title: $voucher->name ?: 'Promo',
+                value: $voucher->discount_type === Voucher::TYPE_PERCENT
+                    ? rtrim(rtrim(number_format((float) $voucher->discount_value, 2, ',', '.'), '0'), ',').'%'
+                    : 'Rp'.$this->shortRupiah((float) $voucher->discount_value),
+                code: $voucher->code,
+                terms: array_values(array_filter([
+                    $c['headline'],
+                    $c['status'] === 'NOT_STARTED' ? 'Usable from '.$voucher->valid_from?->timezone(self::TIMEZONE)->format('d M Y') : null,
+                    'Shows up automatically at checkout',
+                ])),
+                status: $status,
+                expiresAt: $voucher->valid_until,
+                issuedAt: $c['claimed_at'],
+            );
+        });
     }
 
     /** Voucher jam main dari perusahaan (Modul 12). */

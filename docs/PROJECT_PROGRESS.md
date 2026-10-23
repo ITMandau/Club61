@@ -409,14 +409,15 @@ PRD: [`PRD_MODUL_21_REFUND_NO_SHOW_PEMBAYARAN_BERMASALAH.md`](PRD_MODUL_21_REFUN
 
 ## MODUL 22: VOUCHER SALDO & VOUCHER PROMO MARKETING
 
-### Status: 30% (fondasi jalan, rancangan final v0.2 menunggu konfirmasi PM)
+### Status: ±70% (tahap 2 & 3 dibangun; tahap 1 dilewati dulu, cara D menyusul)
 
 PRD: [`PRD_MODUL_22_VOUCHER_DAN_PROMO.md`](PRD_MODUL_22_VOUCHER_DAN_PROMO.md) v0.2 (18 Okt 2026) — skema dinamis, cara sebar A–D, aturan tetap T1–T6.
 
 - [x] Tabel & mesin voucher satu untuk online dan kasir (`VoucherService`), voucher saldo dari refund ditolak, Daftar Voucher.
 - [ ] Voucher saldo **sekali pakai, sisa hangus** (keputusan PM 5 Okt 2026 — yang berjalan sekarang masih menyimpan sisa).
-- [ ] Halaman Marketing: buat / kelola kode promo nyata (sekarang tampilan contoh) + batas per akun.
-- [ ] Skema sebar promo (kode umum sosmed / kode unik / klaim ke akun / otomatis) — menunggu arahan PM.
+- [x] Tahap 2 (19 Okt 2026): buat / ubah / nonaktifkan promo **kode umum (A)** di Daftar Voucher — kuota, periode, kanal, kategori sewa lapangan, 1x per akun, gabung benefit member.
+- [x] Tahap 3 (23 Okt 2026, belum di-commit): **kode unik massal (B)** — kampanye + N kode `AWALAN-XXXXXX` (kuota 1, 1 kode per akun per kampanye), Unduh CSV kode & status; **klaim ke akun (C)** — link `/promo/KODE`, kuota = klaim, voucher masuk Voucher Saya & muncul otomatis di checkout / POS, API `vouchers/claim` + `vouchers/mine.claimed`. Migrasi `2026_10_23_160001`.
+- [ ] Cara D (otomatis: akun baru, ulang tahun, referral) & saklar gabung voucher sponsor.
 
 ---
 

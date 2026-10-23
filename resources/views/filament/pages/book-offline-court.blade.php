@@ -730,6 +730,15 @@
                                 <button type="button" wire:click="applyVoucher" wire:loading.attr="disabled"
                                     style="padding:0.4rem 0.75rem; border-radius:8px; border:1.5px solid #E6DAC0; background:#FCF8EE; color:#662721; font-weight:800; font-size:0.75rem; cursor:pointer;">Pakai</button>
                             </div>
+                            @foreach ($this->customerClaimedPromos as $cp)
+                                <div data-pos-claimed-promo style="display:flex; justify-content:space-between; align-items:center; gap:0.5rem; margin-top:0.35rem; background:#FEF2F2; border:1px dashed #FCA5A5; border-radius:8px; padding:0.35rem 0.55rem;">
+                                    <div style="font-size:0.6875rem; color:#991B1B; min-width:0; overflow-wrap:anywhere;">
+                                        <strong>{{ $cp['name'] ?: $cp['code'] }}</strong> &middot; {{ $cp['headline'] }} <span style="opacity:0.75;">(promo diklaim)</span>
+                                    </div>
+                                    <button type="button" wire:click="applyVoucher('{{ $cp['code'] }}')"
+                                        style="font-size:0.6875rem; font-weight:800; color:#B91C1C; background:none; border:none; cursor:pointer; flex-shrink:0;">Pakai</button>
+                                </div>
+                            @endforeach
                             @foreach ($this->customerCreditVouchers as $cv)
                                 <div style="display:flex; justify-content:space-between; align-items:center; gap:0.5rem; margin-top:0.35rem; background:#F0FDF4; border:1px dashed #86EFAC; border-radius:8px; padding:0.35rem 0.55rem;">
                                     <div style="font-size:0.6875rem; color:#065F46;">

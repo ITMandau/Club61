@@ -42,17 +42,36 @@ class AuthenticatedSessionController extends Controller
         $configured = HomeRouteResolver::configured($user);
         $destination = HomeRouteResolver::resolve($user);
 
+        // Customer: kembali ke halaman portal yang tadi dibuka (mis. link klaim promo /promo/KODE). Dulu role customer
+        // punya home route /dashboard sehingga tujuan ini dibuang dan customer harus membuka link-nya lagi.
+        if ($destination === HomeRouteResolver::CUSTOMER) {
+            return redirect(self::customerIntended($request) ?? route('dashboard', absolute: false));
+        }
+
         if ($configured !== null || str_starts_with($destination, HomeRouteResolver::ADMIN)) {
             $request->session()->forget('url.intended');
 
             return redirect($destination);
         }
 
-        if ($destination === HomeRouteResolver::CUSTOMER) {
-            return redirect()->intended(route('dashboard', absolute: false));
+        return redirect()->intended($destination);
+    }
+
+    /**
+     * Tujuan setelah login / daftar untuk customer: url.intended yang dipotong jadi path relatif (tidak bisa diarahkan ke
+     * domain lain), dan bukan halaman staf / API. Null = tidak ada tujuan yang aman → Dashboard.
+     */
+    public static function customerIntended(Request $request): ?string
+    {
+        $intended = (string) $request->session()->pull('url.intended', '');
+        $path = '/'.ltrim((string) parse_url($intended, PHP_URL_PATH), '/');
+        $query = parse_url($intended, PHP_URL_QUERY);
+
+        if ($intended === '' || $path === '/' || preg_match('#^/(admin|pos|kitchen|api|login|register|logout|livewire)(/|$)#', $path)) {
+            return null;
         }
 
-        return redirect()->intended($destination);
+        return $path.($query ? '?'.$query : '');
     }
 
     /**
