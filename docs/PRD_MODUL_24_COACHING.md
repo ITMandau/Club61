@@ -8,7 +8,7 @@
 | :--- | :--- |
 | **Kode Dokumen** | `PRD-MODUL-24-COACHING` |
 | **Versi** | `v0.1.0-DRAFT` |
-| **Status** | **Draft — menunggu jawaban PM** (6 Okt 2026). Bagian bertanda **[ASUMSI]** dipakai sementara dan berubah kalau jawaban PM berbeda (§10). |
+| **Status** | **DITUNDA (23 Okt 2026)** — yang dipakai Opsi B (`PRD_MODUL_24_COACHING_OPSI_B_SEWA_LAPANGAN_ACADEMY.md`). Dokumen ini disimpan untuk referensi kalau suatu saat booking coach oleh customer + payout dibutuhkan. |
 | **Sumber Requirement** | Daftar harga coaching dari PM (Okt 2026): setoran lapangan Rp100.000/jam (06:00–17:00) dan Rp150.000/jam (17:00–00:00); harga ke customer maksimal Rp400.000/sesi; 1 coach untuk maksimal 2 member tanpa biaya tambahan; profit academy dipakai untuk pengembangan coach; logo Club 61 di jersey tanding coach. |
 | **Dependensi Teknis** | `PRD_MODUL_04` (booking lapangan padel), `PRD_MODUL_17` (Buku Transaksi), `PRD_MODUL_21_REFUND_NO_SHOW_PEMBAYARAN_BERMASALAH.md` (refund, no-show, reschedule), `PRD_MODUL_09_DYNAMIC_RBAC_FILAMENT_SHIELD.md` (role & izin), `PeakHourService` (jam reguler/peak). |
 | **Prinsip Utama** | **UANG MASUK SATU PINTU**: pembayaran coaching hanya lewat Midtrans (online) atau kasir POS (walk-in), sama seperti booking lapangan. Bagian coach dicatat sebagai utang Club dan dibayar lewat payout. |

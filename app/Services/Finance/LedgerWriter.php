@@ -206,7 +206,7 @@ class LedgerWriter
                 return [
                     'kind' => 'RESCHEDULE_DELTA',
                     'source' => $source,
-                    'lines' => ['SEWA_LAPANGAN' => max(0, self::cents($log['court_delta']))],
+                    'lines' => [($this->coachingBookingIds($order) !== [] ? 'COACHING' : 'SEWA_LAPANGAN') => max(0, self::cents($log['court_delta']))],
                     'discount' => 0,
                     'tax' => max(0, self::cents($log['tax_delta'] ?? 0)),
                     'service' => max(0, self::cents($log['admin_fee_delta'] ?? 0)),
@@ -240,8 +240,13 @@ class LedgerWriter
 
         $weights = [];
         $names = [];
+        $coachingBookingIds = $this->coachingBookingIds($order);
         foreach ($order->items as $item) {
             $category = self::ITEM_CATEGORIES[$item->item_type] ?? 'LAINNYA';
+            // Slot coaching tetap item PADEL (alur bayar/refund sama) tapi dibukukan sebagai sewa lapangan coaching.
+            if ($item->item_type === 'PADEL' && in_array((string) $item->reference_id, $coachingBookingIds, true)) {
+                $category = 'COACHING';
+            }
             $weights[$category] = ($weights[$category] ?? 0) + max(0, self::cents($item->subtotal));
             if (count($names[$category] ?? []) < 15) {
                 $names[$category][] = $item->item_name.' x'.$item->quantity;
@@ -348,6 +353,12 @@ class LedgerWriter
         $parts[$largest] += $total - array_sum($parts);
 
         return $parts;
+    }
+
+    /** @return array<int, string> id booking lapangan order ini yang merupakan sesi coaching (Modul 24 Opsi B). */
+    private function coachingBookingIds(Order $order): array
+    {
+        return PadelBooking::where('order_id', $order->id)->whereNotNull('coaching_booking_id')->pluck('id')->map(fn ($id) => (string) $id)->all();
     }
 
     /** Pembayaran di loket (shift kasir / gateway kasir), bukan online. */

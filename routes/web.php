@@ -111,6 +111,15 @@ Route::middleware(['auth', 'verified', \App\Http\Middleware\CustomerPortalOnly::
         return view('customer.invoice');
     })->name('customer.invoice');
 
+    // Modul 24 Opsi B Tahap 2 — profil coach (informasi saja; booking coaching lewat WhatsApp admin coaching).
+    Route::get('/coaching', function (\App\Services\Coaching\CoachDirectory $directory) {
+        return view('customer.coaching', [
+            'coaches' => $directory->coaches(),
+            'adminWhatsappUrl' => $directory->adminWhatsappUrl(),
+            'directory' => $directory,
+        ]);
+    })->name('customer.coaching');
+
     Route::get('/corporate/sample-csv', function () {
         $csv = "name,phone,hours\nBudi Santoso,081234567890,10\nSiti Rahma,081399887766,5\nAndi Wijaya,081700112233,8\n";
 
@@ -122,6 +131,16 @@ Route::middleware(['auth', 'verified', \App\Http\Middleware\CustomerPortalOnly::
 
     Route::get('/corporate', [\App\Http\Controllers\CorporateDashboardController::class, 'show'])->name('customer.corporate');
 });
+
+// Halaman link bio Instagram (publik, tanpa login) — tombol diatur dari admin Marketing & Event → Link Bio Instagram.
+Route::get('/links', function () {
+    $settings = rescue(fn () => \App\Models\Setting\CompanyProfileSetting::current(), null, false);
+
+    return view('link-bio', [
+        'links' => \App\Models\Marketing\LinkBioLink::visible(),
+        'socialLinks' => $settings?->safeSocialLinks() ?? [],
+    ]);
+})->middleware('throttle:120,1')->name('link-bio');
 
 // Pratinjau read-only dashboard PIC untuk STAF (di-iframe oleh halaman panel "Dashboard Sponsor").
 // Sengaja di luar grup portal customer supaya staf tidak ter-redirect.

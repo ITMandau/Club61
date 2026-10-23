@@ -33,6 +33,7 @@ class LedgerEntry extends Model
 
     public const CATEGORIES = [
         'SEWA_LAPANGAN' => 'Sewa Lapangan Padel',
+        'COACHING' => 'Sewa Lapangan Coaching',
         'ADDON_PADEL' => 'Add-on Padel',
         'MEMBERSHIP' => 'Membership',
         'FNB' => 'F&B',

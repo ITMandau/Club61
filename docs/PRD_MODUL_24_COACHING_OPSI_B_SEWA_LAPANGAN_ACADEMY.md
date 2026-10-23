@@ -1,5 +1,5 @@
 # Product Requirements Document (PRD)
-## Modul 24 — Opsi B: Coaching via Academy (SR Academy Sewa Lapangan)
+## Modul 24 — Opsi B: Coaching via Academy (Sewa Lapangan Harga Khusus)
 **Club 61 Sports & Social Club Central System**
 
 ---
@@ -7,10 +7,10 @@
 | Metadata Dokumen | Spesifikasi |
 | :--- | :--- |
 | **Kode Dokumen** | `PRD-MODUL-24-COACHING-OPSI-B` |
-| **Versi** | `v0.1.0-DISKUSI` |
-| **Status** | **Opsi diskusi — belum dipilih.** Tidak menggantikan `PRD_MODUL_24_COACHING.md` (Opsi A). Opsi yang dipakai diputuskan PM. |
-| **Sumber** | Diskusi WhatsApp PM, Head IT Mandau & pihak Club 61, 8 Okt 2026. |
-| **Dependensi** | POS Walk-In Booking (`BookOfflineCourt`), Buku Transaksi (Modul 17), Analytics, Role & Hak Akses (Modul 9). |
+| **Versi** | `v0.3.0` |
+| **Status** | **DIPILIH (23 Okt 2026).** Opsi A (`PRD_MODUL_24_COACHING.md`) tidak dikerjakan sekarang. Tahap 1 & 2 dibangun (belum di-commit). |
+| **Sumber** | Diskusi WhatsApp PM, Head IT Mandau & pihak Club 61 (8 Okt 2026); request resepsionis/manager & keputusan owner aplikasi (22–23 Okt 2026). |
+| **Dependensi** | POS Walk-In Booking (`BookOfflineCourt`), Buku Transaksi (Modul 17), Analytics, Reschedule/Refund (Modul 21), Role & Hak Akses (Modul 9). |
 
 ---
 
@@ -18,79 +18,88 @@
 
 | Aspek | Opsi A (`PRD_MODUL_24_COACHING.md`) | Opsi B (dokumen ini) |
 | :--- | :--- | :--- |
-| Uang dari customer | Masuk ke Club 61 (Midtrans / kasir), coach dibayar lewat payout | **Ke SR Academy, di luar sistem** |
-| Pemasukan Club 61 | Setoran lapangan dari harga sesi | **Sewa lapangan harga khusus yang disetor SR Academy** |
-| Booking coaching | Customer booking sendiri di app + kasir | **Customer lewat WhatsApp admin coaching; resepsionis yang input ke sistem** |
+| Uang coaching dari customer | Masuk ke Club 61, coach dibayar lewat payout | **Ke academy, di luar sistem** |
+| Pemasukan Club 61 | Setoran dari harga sesi | **Sewa lapangan harga khusus (tarif setoran)** |
+| Booking | Customer booking sendiri di app + kasir | **Resepsionis / manager yang input di POS Walk-In** |
 | Payout & utang ke coach | Ada | **Tidak ada** |
 | Portal / akun coach | Ada | **Tidak ada** |
-| Tampilan ke customer | Daftar coach + booking sesi | **Profil coach saja + tombol WhatsApp** |
 
 ---
 
-## 2. Alur Bisnis (sesuai diskusi)
+## 2. Alur Bisnis
 
-1. Customer menghubungi **admin coaching (SR Academy)** lewat WhatsApp dan membayar coaching ke SR Academy. Paket coaching sudah **all-in** (termasuk lapangan).
-2. SR Academy **menyewa lapangan** ke Club 61 dengan **harga khusus (setoran)**, lalu membayar fee ke coach-nya sendiri. Club 61 tidak ikut membagi uang coach.
-3. Resepsionis Club 61 membookingkan lapangan di **POS Walk-In**, lalu memasang **add-on coach** (pilih nama coach). Harga slot berubah dari harga normal ke **harga khusus coaching**.
-4. Nama coach tersimpan di booking supaya resepsionis bisa **mengingatkan coach** soal jadwalnya.
-5. Add-on coach **tidak tampil** di booking online customer.
-
----
-
-## 3. Fitur
-
-### 3.1 Data Coach (admin)
-Nama, academy (mis. SR Academy), nomor WhatsApp, foto, bio singkat, poin keunggulan (daftar bebas), olahraga, status aktif, urutan tampil. Plus satu pengaturan: **nomor WhatsApp admin coaching**.
-
-### 3.2 Tarif setoran coaching
-Disimpan sebagai pengaturan, bisa diubah admin. Angka dari daftar harga PM:
-
-| Jam mulai | Tarif setoran / jam |
-| :--- | ---: |
-| 06:00–16:59 | Rp100.000 |
-| 17:00–23:59 | Rp150.000 |
-
-### 3.3 Add-on coach di POS Walk-In
-- Pilihan **Coaching (pilih coach)** di panel checkout POS Walk-In.
-- Saat dipilih, harga tiap slot memakai tarif setoran, bukan harga normal.
-- Booking tampil di jadwal sebagai **"Coaching · nama coach"**; struk menulis **"Sewa lapangan coaching"**.
-- Pembayaran tetap lewat metode POS yang sudah ada (EDC / QRIS).
-- Hanya staf dengan izin khusus yang bisa memasang add-on, dan wajib memilih coach terdaftar — mencegah harga khusus dipakai untuk main biasa.
-
-### 3.4 Pengingat coach
-Daftar **Jadwal Coaching Hari Ini** (jam, lapangan, coach) dengan tombol WhatsApp ke coach berisi pesan siap kirim. Resepsionis yang menekan tombolnya.
-
-### 3.5 Halaman customer
-- Ikon **Coach** di dashboard customer → halaman profil coach (foto, nama, olahraga, poin keunggulan). **Hanya informasi, tidak ada booking.** Isi boleh kosong dulu.
-- Tombol WhatsApp melayang ke admin coaching.
-- Endpoint API daftar coach untuk aplikasi Flutter.
-
-### 3.6 Halaman link bio Instagram
-Halaman tautan bertema brand: **Book Court**, **Lokasi (Google Maps)**, **Admin Coaching (WhatsApp)**, **Pricelist**, **Admin Club 61 (WhatsApp)**, dan tautan media sosial.
-
-### 3.7 Laporan
-- Buku Transaksi: kategori **Sewa Lapangan Coaching**.
-- Analytics: baris "Pelatih & Coaching Session" diisi jumlah jam & pendapatan sewa coaching, dengan rekap per coach / academy.
-
-### 3.8 Keamanan
-API hold booking customer saat ini menerima `coach_id`. Pada opsi ini parameter itu **ditutup** — coach hanya bisa dipasang oleh staf di POS.
+1. Customer daftar & bayar paket coaching ke **academy** (mis. SR Academy) lewat WhatsApp admin academy — di luar sistem.
+2. Coach / admin academy meminta lapangan ke resepsionis Club 61.
+3. Resepsionis di **POS Walk-In** memilih tipe **Coaching**, lapangan & jam, **coach utama** (wajib) + **coach tambahan** (opsional), atas nama, nama murid (maks. 2), dan catatan (mis. ballboy).
+4. Harga tiap slot = **tarif setoran coaching** (bukan harga reguler), dihitung ulang di server.
+5. Pembayaran sama dengan walk-in: EDC / QRIS / transfer di kasir, atau **Bayar Otomatis** (QR / VA payment gateway di layar kasir). Uang tetap masuk lewat kasir.
+6. Booking tampil di **Jadwal Coaching** (jam, lapangan, atas nama, coach, catatan) dengan tombol **WhatsApp pengingat ke coach** (pesan siap kirim, resepsionis yang menekan).
+7. Batal / reschedule / refund mengikuti aturan booking biasa (Modul 21) — reschedule memakai tarif coaching di jadwal baru dan mengecek jadwal coach.
 
 ---
 
-## 4. Di Luar Lingkup Opsi Ini
-Payout & utang ke coach, akun/portal coach, booking coach oleh customer, pembagian uang coaching, pengingat WhatsApp otomatis (butuh WA gateway).
+## 3. Keputusan (23 Okt 2026)
 
----
-
-## 5. Pertanyaan Terbuka
-
-| # | Pertanyaan | Dampak ke desain |
+| # | Topik | Keputusan |
 | :--- | :--- | :--- |
-| 1 | Setoran SR dibayar **langsung per booking di kasir**, atau **dicatat dulu lalu ditagih rekap** (mingguan / bulanan)? | Rekap butuh status "belum dibayar" + tagihan per academy |
-| 2 | Weekend: tarif tetap ikut jam (100rb / 150rb), atau weekend selalu 150rb? | Aturan hitung tarif |
-| 3 | Tarif sama untuk semua lapangan (indoor / outdoor)? | Tarif per lapangan atau global |
-| 4 | Hanya SR Academy, atau nanti ada coach independen / academy lain? | Perlu data academy terpisah atau cukup teks |
-| 5 | Pengingat coach cukup tombol WhatsApp manual, atau otomatis? | Otomatis butuh WA gateway |
-| 6 | Nama murid perlu dicatat di booking? | Kolom tambahan di POS |
-| 7 | Booking coaching yang batal / tidak datang ikut aturan booking biasa? | Aturan refund & reschedule |
-| 8 | Pricelist di link bio: gambar / PDF upload admin, atau halaman harga otomatis? | Sumber konten |
+| 1 | Cara bayar setoran | Seperti customer: langsung di kasir (EDC / QRIS / transfer) **atau** Bayar Otomatis payment gateway. Tidak ada tagihan rekap. |
+| 2 | Tarif (termasuk weekend) | **Dinamis**: admin membuat aturan tarif per hari + rentang jam + harga/jam, bisa diubah kapan saja. |
+| 3 | Coach tambahan di sesi yang sama | Pengaturan **"Biaya coach tambahan / jam"**, default **Rp0** (setoran tetap per jam lapangan). Diisi kalau Club mau menarik tambahan. |
+| 4 | Ballboy | Hanya catatan (belum ada biaya). |
+| 5 | Olahraga | **Padel saja.** |
+| 6 | Academy | SR Academy dulu; admin bisa menambah academy / coach baru. |
+| 7 | Batal / tidak datang / reschedule | Ikut aturan booking biasa. |
+| — | Membership & voucher | Booking coaching **tidak** memakai kuota membership, voucher jam corporate, maupun kode promo (harga sudah khusus). |
+| — | Booking oleh customer | Customer **tidak** bisa memilih coach / tarif coaching dari app. Parameter `coach_id` di API hold ditutup. |
+
+---
+
+## 4. Tahap 1 (dibangun 23 Okt 2026)
+
+### 4.1 Menu admin "Coaching"
+- **Academy** — CRUD: nama, PIC, no. WhatsApp, aktif.
+- **Coach** — CRUD: nama, jabatan (Head Coach / Coach), academy, no. WhatsApp, email, catatan internal, aktif, urutan.
+- **Tarif Setoran** — CRUD aturan: nama, hari berlaku (Sen–Min, bisa pilih), jam mulai, jam selesai, harga/jam, aktif, prioritas. Slot dihitung per jam memakai aturan aktif pertama (prioritas terkecil) yang cocok dengan hari & jam mulai. Jam tanpa tarif = tidak bisa dibooking sebagai coaching (kasir diberi tahu).
+- **Pengaturan Coaching** — biaya coach tambahan / jam (default Rp0), no. WhatsApp admin coaching.
+- **Jadwal Coaching** — daftar booking coaching per tanggal + tombol WhatsApp pengingat ke coach.
+
+### 4.2 POS Walk-In
+- Pilihan tipe **Reguler / Coaching** (Coaching hanya untuk izin `book_coaching`).
+- Mode Coaching: pilih coach utama & coach tambahan (coach aktif saja), nama murid (maks. 2), catatan. Harga slot = tarif setoran + (biaya coach tambahan × jumlah coach tambahan) per jam. Membership / voucher / kode promo dimatikan.
+- Coach tidak boleh punya dua sesi di jam yang sama (dicek di server, dengan kunci baris coach).
+- Struk & jadwal: "Sewa Lapangan Coaching · nama lapangan".
+
+### 4.3 Data
+- `coaching_academies`, `coaches`, `coaching_rates`, `coaching_settings` (1 baris).
+- `coaching_bookings` (1 per order): coach utama, academy (snapshot), murid, catatan, biaya coach tambahan (snapshot), rincian harga per slot (snapshot), pembuat.
+- `coaching_booking_coaches` (coach utama + tambahan).
+- `padel_bookings.coaching_booking_id` (nullable). Kolom lama `coach_id` → `staff_profiles` tidak dipakai & tidak diubah.
+
+### 4.4 Laporan
+- Slot coaching tetap item `PADEL` (alur bayar, struk, refund, reschedule tidak berubah). Buku Transaksi mengelompokkannya ke kategori baru **COACHING — "Sewa Lapangan Coaching"**, termasuk selisih reschedule.
+- Analytics: baris "Pelatih & Coaching Session" terisi dari kategori itu.
+
+### 4.5 Izin (Modul 9)
+| Izin | Untuk |
+| :--- | :--- |
+| `View:JadwalCoaching` | Lihat Jadwal Coaching |
+| `book_coaching` | Booking Coaching di POS Walk-In |
+| `manage_coaching` | Kelola Academy & Coach |
+| `manage_coaching_rates` | Kelola Tarif Setoran & Pengaturan Coaching (izin "pintu belakang" seperti tarif lapangan — super admin, bisa diberikan manual) |
+
+Preset resepsionis: `View:JadwalCoaching`, `book_coaching`. Semua perubahan tercatat di Log Aktivitas.
+
+---
+
+## 5. Tahap 2 (dibangun 23 Okt 2026)
+- **Monitoring Lapangan** (Operasional Harian): sel timetable sesi coaching menampilkan baris coach ("Coach Nalda +1" = nama depan coach utama + jumlah coach tambahan); popup detail menampilkan bagian **Sesi Coaching** (coach utama / tambahan + tombol WA pengingat, academy, murid, catatan termasuk ballboy).
+- **Profil coach untuk customer** — portal customer `/coaching` (menu Coaching; di layar < 1280px & HP lewat dropdown akun): foto, nama, jabatan, olahraga, academy, poin keunggulan (maks. 6) + tombol **WhatsApp admin coaching** (umum & per coach). Informasi saja. Diisi admin di menu Coach → bagian "Profil untuk Customer"; tampil hanya kalau coach **aktif** dan **Tampilkan di profil** dinyalakan (default mati). No. WA, email, dan catatan internal coach tidak pernah ditampilkan. Foto diproses ulang `SecureImageUploader` (JPEG baru, EXIF dibuang).
+- **API aplikasi**: `GET /api/v1/coaching/coaches` (publik, read-only) — data sama dengan halaman web + `whatsapp_url` per coach & `admin_whatsapp_url`.
+- **Halaman link bio Instagram** `/links` (publik, tanpa login). Tombol diatur di **Marketing & Event → Link Bio Instagram** (izin `manage_link_bio`, preset admin): Book Court, Lokasi (alamat Konten Website atau link Google Maps), Admin Coaching (WA dari Pengaturan Coaching), Pricelist (gambar unggahan — nonaktif sampai diunggah), Admin Club 61 (WA dari Konten Website), Profil Coach, atau link lain (wajib http/https). Media sosial otomatis dari Konten Website. Tombol yang tujuannya belum diisi tidak tampil.
+- **Analytics**: Rekap Coaching per Academy (sesi, jam, nilai sewa = tarif setoran slot) dan per Coach (sesi sebagai coach utama / tambahan, jam). Ini rekap pemakaian; uang masuk tetap baris "Pelatih & Coaching Session".
+- Data: migrasi `2026_10_23_140001` — kolom `coaches.photo_path / sport / highlights / show_on_profile`, tabel `link_bio_links`; migrasi `2026_10_23_150001` — `coaches.motto` (opsional, tampil sebagai kutipan; kosong = tidak tampil). Foto profil selalu tampil utuh (tidak dipotong).
+
+---
+
+## 6. Di Luar Lingkup
+Payout & utang ke coach, akun/portal coach, booking coach oleh customer, pembagian uang coaching, pengingat WhatsApp otomatis (butuh WA gateway), biaya ballboy (belum ada kepastian).

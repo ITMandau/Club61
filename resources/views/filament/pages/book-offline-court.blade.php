@@ -484,20 +484,66 @@
                 <div class="pos-customer-box">
                     <div
                         style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.4rem; margin-bottom:0.6rem;">
-                        <span class="pos-section-label" style="margin-bottom:0;">Data Customer</span>
+                        <span class="pos-section-label" style="margin-bottom:0;">{{ $this->isCoaching ? 'Booking Coaching' : 'Data Customer' }}</span>
                         @if ($posStep === 'selection')
+                            {{-- Satu deret tab: Walk-In Baru | Cari Member | Coaching (Coaching hanya untuk izin book_coaching). --}}
                             <div class="pos-tab-group">
                                 <button type="button" wire:click="setCustomerMode('quick_create')"
-                                    class="pos-tab {{ $customerMode === 'quick_create' ? 'active' : '' }}">Walk-In
+                                    class="pos-tab {{ $customerMode === 'quick_create' && ! $this->isCoaching ? 'active' : '' }}">Walk-In
                                     Baru</button>
                                 <button type="button" wire:click="setCustomerMode('search')"
-                                    class="pos-tab {{ $customerMode === 'search' ? 'active' : '' }}">Cari
+                                    class="pos-tab {{ $customerMode === 'search' && ! $this->isCoaching ? 'active' : '' }}">Cari
                                     Member</button>
+                                @if ($this->canBookCoaching)
+                                    <button type="button" wire:click="setCustomerMode('coaching')" data-coaching-tab
+                                        class="pos-tab {{ $this->isCoaching ? 'active' : '' }}">Coaching</button>
+                                @endif
                             </div>
+                        @elseif ($this->isCoaching)
+                            <span style="font-size:0.75rem; font-weight:900; color:#662721;">Coaching</span>
                         @endif
                     </div>
 
-                    @if ($customerMode === 'quick_create')
+                    @if ($this->isCoaching)
+                        {{-- Coaching (Modul 24 Opsi B): pemesan + coach dalam satu kotak; harga = tarif setoran coaching. --}}
+                        <div data-coaching-box style="display:flex; flex-direction:column; gap:0.4rem;">
+                            <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(180px, 1fr)); gap:0.4rem;">
+                                <input type="text" wire:model="walkInName" placeholder="Atas nama *" class="pos-input" autocomplete="off" {{ $posStep !== 'selection' ? 'disabled' : '' }}>
+                                <input type="tel" wire:model="walkInPhone" placeholder="No. WhatsApp / Telp *" class="pos-input" autocomplete="off" {{ $posStep !== 'selection' ? 'disabled' : '' }}>
+                            </div>
+                            <select wire:model.live="coachingCoachId" class="pos-input" style="background:#FFFFFF;" {{ $posStep !== 'selection' ? 'disabled' : '' }}>
+                                <option value="">Pilih coach utama *</option>
+                                @foreach ($this->coachOptions as $coachId => $coachLabel)
+                                    <option value="{{ $coachId }}">{{ $coachLabel }}</option>
+                                @endforeach
+                            </select>
+                            @if (count($this->coachOptions) > 1)
+                                <details {{ count($coachingExtraCoachIds) ? 'open' : '' }} style="background:#FFFFFF; border:1.5px solid #E6DAC0; border-radius:8px; padding:0.45rem 0.65rem;">
+                                    <summary style="font-size:0.75rem; font-weight:800; color:#662721; cursor:pointer;">
+                                        Coach tambahan{{ count($coachingExtraCoachIds) ? ' ('.count($coachingExtraCoachIds).')' : ' (opsional)' }}
+                                    </summary>
+                                    <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(200px, 1fr)); gap:0.25rem 0.75rem; margin-top:0.4rem;">
+                                        @foreach ($this->coachOptions as $coachId => $coachLabel)
+                                            @continue($coachId === $coachingCoachId)
+                                            <label wire:key="extra-coach-{{ $coachId }}" style="display:flex; align-items:center; gap:0.4rem; font-size:0.75rem; color:#4F2F2A;">
+                                                <input type="checkbox" value="{{ $coachId }}" wire:model.live="coachingExtraCoachIds" style="accent-color:#662721;" {{ $posStep !== 'selection' ? 'disabled' : '' }}>
+                                                {{ $coachLabel }}
+                                            </label>
+                                        @endforeach
+                                    </div>
+                                </details>
+                            @endif
+                            <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(180px, 1fr)); gap:0.4rem;">
+                                <input type="text" wire:model="coachingStudents.0" maxlength="100" placeholder="Murid 1 (opsional)" class="pos-input" autocomplete="off" {{ $posStep !== 'selection' ? 'disabled' : '' }}>
+                                <input type="text" wire:model="coachingStudents.1" maxlength="100" placeholder="Murid 2 (opsional)" class="pos-input" autocomplete="off" {{ $posStep !== 'selection' ? 'disabled' : '' }}>
+                            </div>
+                            <textarea wire:model="coachingNotes" maxlength="1000" rows="2" placeholder="Catatan (mis. ballboy, kebutuhan lapangan)" class="pos-input" style="resize:vertical;" {{ $posStep !== 'selection' ? 'disabled' : '' }}></textarea>
+                            @if ($this->coachingQuote['error'])
+                                <div style="font-size:0.6875rem; color:#B91C1C; font-weight:700; line-height:1.4;">{{ $this->coachingQuote['error'] }}</div>
+                            @endif
+                            <div style="font-size:0.5625rem; color:#9CA3AF; line-height:1.4;">Harga lapangan memakai tarif setoran coaching. Membership, voucher jam corporate &amp; kode promo tidak dipakai. Nomor HP lama otomatis dikenali.</div>
+                        </div>
+                    @elseif ($customerMode === 'quick_create')
                         <div style="display:flex; flex-direction:column; gap:0.4rem;">
                             <input type="text" wire:model="walkInName" placeholder="Nama Lengkap *"
                                 class="pos-input" autocomplete="off"
@@ -597,7 +643,7 @@
                                     </div>
                                     <div style="display:flex; align-items:center; gap:0.4rem;">
                                         <span
-                                            style="font-weight:900; font-size:0.75rem; color:#662721;">Rp{{ number_format($s['price'], 0, ',', '.') }}</span>
+                                            style="font-weight:900; font-size:0.75rem; color:#662721;">Rp{{ number_format($this->slotDisplayPrice($s), 0, ',', '.') }}</span>
                                         @if ($posStep === 'selection')
                                             <button type="button" wire:click="removeSlot('{{ $sKey }}')"
                                                 style="background:#FEF2F2; border:1px solid #FECACA; color:#DC2626; border-radius:50%; width:18px; height:18px; font-weight:900; font-size:0.625rem; cursor:pointer; display:flex; align-items:center; justify-content:center; line-height:1;">&times;</button>
@@ -650,8 +696,8 @@
                     </div>
                 @endif
 
-                {{-- 3b. VOUCHER (promo / voucher saldo customer — Modul 21) --}}
-                @if (! $settleBill)
+                {{-- 3b. VOUCHER (promo / voucher saldo customer — Modul 21). Coaching: tarif khusus, tanpa voucher. --}}
+                @if (! $settleBill && ! $this->isCoaching)
                     <div style="margin-bottom:0.6rem;">
                         <div class="pos-section-label" style="margin-bottom:0.35rem;">Voucher</div>
                         @if ($appliedVoucherCode)
@@ -706,7 +752,7 @@
                 <div class="pos-total-box">
                     <div
                         style="display:flex; justify-content:space-between; font-size:0.6875rem; color:#7A5A52; margin-bottom:0.2rem;">
-                        <span>Lapangan:</span><span>Rp {{ number_format($this->courtTotal, 0, ',', '.') }}</span>
+                        <span>{{ $this->isCoaching ? 'Lapangan (tarif coaching):' : 'Lapangan:' }}</span><span>Rp {{ number_format($this->courtTotal, 0, ',', '.') }}</span>
                     </div>
                     <div
                         style="display:flex; justify-content:space-between; font-size:0.6875rem; color:#7A5A52; margin-bottom:0.2rem;">
@@ -894,6 +940,25 @@
                         @endif
                     </strong>
                 </div>
+                @if ($this->isCoaching)
+                    @php
+                        $confirmCoaches = collect([$coachingCoachId])->merge($coachingExtraCoachIds)->filter()->unique()
+                            ->map(fn ($id) => $this->coachOptions[$id] ?? null)->filter();
+                    @endphp
+                    <div class="pos-confirm-row"><span>Coaching</span>
+                        <strong>
+                            @foreach ($confirmCoaches as $coachLabel)
+                                <span class="pos-confirm-line">{{ $coachLabel }}</span>
+                            @endforeach
+                            @if (array_filter($coachingStudents))
+                                <span class="pos-confirm-line">Murid: {{ implode(', ', array_filter($coachingStudents)) }}</span>
+                            @endif
+                            @if (trim($coachingNotes) !== '')
+                                <span class="pos-confirm-line">Catatan: {{ $coachingNotes }}</span>
+                            @endif
+                        </strong>
+                    </div>
+                @endif
                 @unless ($settleBill)
                     <div class="pos-confirm-row"><span>Tambahan</span>
                         <strong>

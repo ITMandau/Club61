@@ -184,8 +184,9 @@ class AnalyticsLedgerTest extends TestCase
 
                 return $lines['SEWA_LAPANGAN']['money_net'] === 220000.0
                     && $lines['FNB']['money_net'] === 110000.0
-                    && $lines['WELLNESS']['soon'] && $lines['COACHING']['soon'] && ! $lines['FNB']['soon']
-                    && $lines['COACHING']['filter'] === []
+                    // Coaching (Modul 24 Opsi B) sudah punya kategori buku sendiri → tidak "Menyusul" & bisa difilter.
+                    && $lines['WELLNESS']['soon'] && ! $lines['COACHING']['soon'] && ! $lines['FNB']['soon']
+                    && $lines['COACHING']['filter'] === ['COACHING'] && $lines['COACHING']['money_net'] === 0.0
                     && $lines['LAINNYA']['money_net'] === 75000.0
                     && $lines['LAINNYA']['filter'] === ['MERCH']
                     && ! $lines->has('MEMBERSHIP');

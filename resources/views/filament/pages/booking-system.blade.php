@@ -37,6 +37,9 @@
         .cmd-slot-box .ft { display: flex; justify-content: space-between; align-items: center; font-size: 0.5625rem; }
         .cmd-slot-box .ft code { font-family: var(--font-mono); opacity: 0.8; }
         .cmd-slot-box .eq { padding: 0.05rem 0.35rem; border-radius: 4px; background: rgba(0, 0, 0, 0.06); font-weight: 700; }
+        /* Sesi coaching: baris coach (utama + jumlah tambahan), warna ikut status sel. */
+        .cmd-slot-box .co { font-size: 0.5625rem; font-weight: 700; padding: 0.1rem 0.35rem; border-radius: 4px; background: rgba(0, 0, 0, 0.07); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 0.15rem; }
+        .cmd-slot-paid .co { background: rgba(247, 240, 219, 0.18); }
         /* Sedang main: hijau (semantik "aktif"). */
         .cmd-slot-active { background: #ECFDF5; border: 1.5px solid #10B981; color: #065F46; }
         /* Terjadwal lunas: terakota brand. */
@@ -247,6 +250,10 @@
 
                                             <div class="nm" title="{{ $slot['player_name'] }}">{{ $slot['player_name'] }}</div>
 
+                                            @if ($slot['coaching_label'])
+                                                <div class="co" title="Coaching · {{ $slot['coaching_title'] }}">Coach {{ $slot['coaching_label'] }}</div>
+                                            @endif
+
                                             <div class="ft">
                                                 <code>{{ substr($slot['booking_code'], -6) }}</code>
                                                 @if ($slot['equipment_count'] > 0)
@@ -335,6 +342,40 @@
                                 </a>
                             @endif
                         </div>
+
+                        @if (!empty($inspectData['coaching']))
+                            @php $coaching = $inspectData['coaching']; @endphp
+                            <div class="c61-note" style="background: #FFFFFF;" data-inspector-coaching>
+                                <div style="font-size: 0.625rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--c-muted); margin-bottom: 0.5rem;">
+                                    Sesi Coaching{{ $coaching['academy'] ? ' · ' . $coaching['academy'] : '' }}
+                                </div>
+                                <div style="display: flex; flex-direction: column; gap: 0.45rem;">
+                                    @foreach ($coaching['coaches'] as $coach)
+                                        <div style="display: flex; justify-content: space-between; align-items: center; gap: 0.75rem;">
+                                            <div style="min-width: 0;">
+                                                <div style="font-weight: 800; font-size: 0.8125rem;">{{ $coach['name'] }}</div>
+                                                <div style="font-size: 0.6875rem; color: var(--c-muted);">{{ $coach['role'] }}</div>
+                                            </div>
+                                            @if ($coach['wa_url'])
+                                                <a href="{{ $coach['wa_url'] }}" target="_blank" rel="noopener noreferrer" class="c61-btn c61-btn-ghost c61-btn-sm" style="flex-shrink: 0;">
+                                                    <span>Ingatkan WA</span>
+                                                </a>
+                                            @else
+                                                <span style="flex-shrink: 0; font-size: 0.6875rem; color: #B42318;">No. WA belum diisi</span>
+                                            @endif
+                                        </div>
+                                    @endforeach
+                                    @if (!empty($coaching['students']))
+                                        <div style="font-size: 0.8125rem; padding-top: 0.45rem; border-top: 1px dashed var(--c-line);">
+                                            <span style="color: var(--c-muted);">Murid:</span> <b>{{ implode(', ', $coaching['students']) }}</b>
+                                        </div>
+                                    @endif
+                                    @if (filled($coaching['notes']))
+                                        <div style="font-size: 0.8125rem; white-space: pre-line;"><span style="color: var(--c-muted);">Catatan:</span> {{ $coaching['notes'] }}</div>
+                                    @endif
+                                </div>
+                            </div>
+                        @endif
 
                         @if (!empty($inspectData['equipments']))
                             <div class="c61-note" style="background: #FFFFFF;">

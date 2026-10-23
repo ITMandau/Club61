@@ -434,17 +434,23 @@ PRD: [`PRD_MODUL_23_STRUKTUR_PORTAL_CUSTOMER.md`](PRD_MODUL_23_STRUKTUR_PORTAL_C
 
 ---
 
-## MODUL 24: COACHING (BOOKING SESI COACH, SETORAN LAPANGAN & PAYOUT COACH)
+## MODUL 24: COACHING — OPSI B (ACADEMY SEWA LAPANGAN HARGA KHUSUS)
 
-### Status: 0% (PRD draft, menunggu jawaban PM)
+### Status: Tahap 1 & 2 dibangun 23 Okt 2026 (belum di-commit / belum dicoba di server)
 
-PRD: [`PRD_MODUL_24_COACHING.md`](PRD_MODUL_24_COACHING.md)
+PRD: [`PRD_MODUL_24_COACHING_OPSI_B_SEWA_LAPANGAN_ACADEMY.md`](PRD_MODUL_24_COACHING_OPSI_B_SEWA_LAPANGAN_ACADEMY.md) (dipilih). Opsi A [`PRD_MODUL_24_COACHING.md`](PRD_MODUL_24_COACHING.md) ditunda.
 
-- [ ] Data coach partner (profil, harga sesi, jadwal tersedia, rekening, akun login) + migrasi `padel_bookings.coach_id` ke tabel `coaches`.
-- [ ] Booking coaching customer & mode Coaching di POS Walk-In (lapangan + jadwal coach dikunci bersamaan, maks 2 murid).
-- [ ] Buku Transaksi: setoran lapangan = pendapatan Club, bagian coach = utang ke coach; baris Coaching di Analytics.
-- [ ] Payout coach per periode + export.
-- [ ] Portal coach (jadwal, check-in murid, pendapatan).
+- [x] Menu admin **Coaching**: Jadwal Coaching (+ tombol WhatsApp pengingat coach), Coach, Academy, Tarif Setoran (aturan hari + jam + harga/jam + prioritas) & Pengaturan (biaya coach tambahan / jam, default Rp0; WA admin). Migrasi `2026_10_23_100001` (tarif awal 06–17 Rp100rb, 17–24 Rp150rb, SR Academy).
+- [x] POS Walk-In tipe **Reguler / Coaching** (izin `book_coaching`): coach utama + tambahan, murid (maks 2), catatan; harga = `CoachingPricingService` (layar = server); membership / voucher / kode promo tidak dipakai; coach tidak bisa dobel jadwal (kunci baris coach); satu sesi tidak boleh dua lapangan di jam sama.
+- [x] Buku Transaksi kategori **COACHING — Sewa Lapangan Coaching** (slot tetap item PADEL; termasuk selisih reschedule); Analytics baris "Pelatih & Coaching Session" aktif.
+- [x] Reschedule: harga jadwal baru = tarif coaching, jam tanpa tarif tidak ditawarkan, jadwal coach dicek.
+- [x] API hold customer tidak menerima `coach_id` lagi. Izin baru: `View:JadwalCoaching`, `book_coaching` (preset resepsionis), `manage_coaching`, `manage_coaching_rates` (pintu belakang, seperti tarif lapangan).
+- [x] Tahap 2 (23 Okt 2026, belum di-commit): migrasi `2026_10_23_140001`.
+  - **Monitoring Lapangan**: sel timetable sesi coaching menampilkan "Coach Nalda +1"; popup detail berisi coach (+ tombol WA pengingat), academy, murid, catatan.
+  - **Profil coach** di portal customer `/coaching` (menu Coaching; di layar < 1280px lewat dropdown akun): foto (selalu utuh, tidak dipotong), olahraga, motto opsional (migrasi `2026_10_23_150001`), poin keunggulan, tombol WA admin coaching. Tampil hanya coach aktif + "Tampilkan di profil" (default mati). No. WA / email / catatan coach tidak ditampilkan. Foto lewat `SecureImageUploader`, path foto dikunci di model.
+  - **API** `GET /api/v1/coaching/coaches` (publik, read-only, sama dengan halaman web).
+  - **Link bio** `/links` (publik): tombol diatur di Marketing & Event → Link Bio Instagram (izin `manage_link_bio`, preset admin). Default: Book Court, Lokasi, Admin Coaching, Pricelist (gambar, nonaktif sampai diunggah), Admin Club 61; media sosial dari Konten Website. Tombol tanpa tujuan tidak tampil; link bebas wajib http/https.
+  - **Analytics**: Rekap Coaching per Academy (sesi, jam, nilai sewa) & per Coach (sesi utama / tambahan, jam).
 
 ---
 ## MODUL 20: HALAMAN ADMIN PENDUKUNG

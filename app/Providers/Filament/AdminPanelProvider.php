@@ -47,6 +47,7 @@ class AdminPanelProvider extends PanelProvider
             ->navigationGroups([
                 'Operasional Harian',
                 'Customer & Membership',
+                'Coaching',
                 'Sponsor',
                 'Keuangan',
                 'Marketing & Event',
@@ -75,6 +76,10 @@ class AdminPanelProvider extends PanelProvider
                 \App\Filament\Resources\Membership\Facilities\MembershipFacilityResource::class,
                 \App\Filament\Resources\Sponsor\SponsorOrganizationResource::class,
                 \App\Filament\Resources\Sponsor\SponsorAccessScheduleResource::class,
+                \App\Filament\Resources\Coaching\CoachResource::class,
+                \App\Filament\Resources\Coaching\CoachingAcademyResource::class,
+                \App\Filament\Resources\Coaching\CoachingRateResource::class,
+                \App\Filament\Resources\Marketing\LinkBioLinkResource::class,
             ])
             ->plugins([
                 \BezhanSalleh\FilamentShield\FilamentShieldPlugin::make(),
@@ -135,6 +140,7 @@ class AdminPanelProvider extends PanelProvider
                 \App\Filament\Pages\DaftarVoucher::class,
                 \App\Filament\Pages\ImportPenjualan::class,
                 \App\Filament\Pages\Signature::class,
+                \App\Filament\Pages\JadwalCoaching::class,
             ])
             ->widgets([])
             ->middleware([

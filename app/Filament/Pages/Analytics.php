@@ -40,14 +40,14 @@ class Analytics extends Page
     /** Hanya diubah lewat setPreset() — nilai kiriman browser yang diubah manual ditolak Livewire. */
     /**
      * Lini layanan di kartu "Rincian Pendapatan" (kode = kategori Buku Transaksi). `soon` = modulnya belum ada,
-     * ditandai "Menyusul" selama belum ada transaksi. Coaching belum punya kategori sendiri di buku.
+     * ditandai "Menyusul" selama belum ada transaksi. Coaching = kategori COACHING (sewa lapangan coaching, Modul 24 Opsi B).
      */
     public const SERVICE_LINES = [
         'SEWA_LAPANGAN' => ['label' => 'Sewa Lapangan Padel (Court Rental)', 'sub' => 'Sewa slot jam lapangan padel', 'soon' => false],
         'ADDON_PADEL' => ['label' => 'Sewa Alat & Add-on Bola (Equipment)', 'sub' => 'Sewa raket, bola & perlengkapan padel', 'soon' => false],
         'FNB' => ['label' => 'Food & Beverage (F&B)', 'sub' => 'Penjualan kafe / bar dari POS F&B', 'soon' => false],
         'WELLNESS' => ['label' => 'Wellness & Sauna', 'sub' => 'Akses sauna di luar paket membership', 'soon' => true],
-        'COACHING' => ['label' => 'Pelatih & Coaching Session', 'sub' => 'Sesi privat / kelas bersama pelatih', 'soon' => true],
+        'COACHING' => ['label' => 'Pelatih & Coaching Session', 'sub' => 'Sewa lapangan harga khusus untuk sesi coaching academy', 'soon' => false],
     ];
 
     /** Sumber uang yang dibayar online lewat payment gateway (DOKU / Midtrans); sumber lain = dibayar di kasir. */
@@ -126,6 +126,7 @@ class Analytics extends Page
             'membership' => ['sales' => $membership, 'others' => $summary['money_net'] - $membership],
             'occupancy' => CourtOccupancy::calculate($from, $until),
             'memberUsage' => $this->memberUsage($from, $until),
+            'coachingRecap' => $this->coachingRecap($from, $until),
             'latest' => $latest,
             'canSeeRefundQueue' => AntrianRefund::canAccess(),
         ];
@@ -230,6 +231,50 @@ class Analytics extends Page
         }
 
         return $lines;
+    }
+
+    /**
+     * Rekap coaching per academy & per coach (Modul 24 Opsi B Tahap 2) dari slot lapangan coaching yang terpakai di
+     * periode (tanggal main, status sama dengan okupansi). Nilai sewa = tarif setoran slot (court_fee) — informasi
+     * pemakaian, BUKAN uang masuk (uang masuk tetap baris "Pelatih & Coaching Session" dari Buku Transaksi).
+     *
+     * @return array{academies: list<array{name: string, sessions: int, hours: float, value: float}>, coaches: list<array{name: string, academy: ?string, head: int, extra: int, hours: float}>}
+     */
+    private function coachingRecap(?string $from, ?string $until): array
+    {
+        $bookings = PadelBooking::query()->whereNotNull('coaching_booking_id')
+            ->whereIn('status', CourtOccupancy::OCCUPYING_STATUSES)
+            ->when($from, fn ($q) => $q->whereDate('booking_date', '>=', $from))
+            ->when($until, fn ($q) => $q->whereDate('booking_date', '<=', $until))
+            ->with('coachingBooking.coaches.academy:id,name')
+            ->get(['id', 'coaching_booking_id', 'start_time', 'end_time', 'court_fee']);
+
+        $academies = [];
+        $coaches = [];
+        foreach ($bookings as $booking) {
+            $coaching = $booking->coachingBooking;
+            if (! $coaching) {
+                continue;
+            }
+            $hours = round(abs($booking->end_time->diffInMinutes($booking->start_time)) / 60, 2);
+
+            $academy = $coaching->academy_name ?: 'Coach independen';
+            $academies[$academy] ??= ['name' => $academy, 'sessions' => 0, 'hours' => 0.0, 'value' => 0.0];
+            $academies[$academy]['sessions']++;
+            $academies[$academy]['hours'] += $hours;
+            $academies[$academy]['value'] += (float) $booking->court_fee;
+
+            foreach ($coaching->coaches as $coach) {
+                $coaches[$coach->id] ??= ['name' => $coach->name, 'academy' => $coach->academy?->name, 'head' => 0, 'extra' => 0, 'hours' => 0.0];
+                $coaches[$coach->id][$coach->pivot->role === 'HEAD' ? 'head' : 'extra']++;
+                $coaches[$coach->id]['hours'] += $hours;
+            }
+        }
+
+        return [
+            'academies' => collect($academies)->sortByDesc('hours')->values()->all(),
+            'coaches' => collect($coaches)->sortByDesc('hours')->values()->all(),
+        ];
     }
 
     /** Pemakaian kuota membership di lapangan (informasi utilisasi — bukan uang masuk baru). */

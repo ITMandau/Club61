@@ -304,6 +304,55 @@
         </div>
     </div>
 
+    {{-- Rekap coaching (Modul 24 Opsi B Tahap 2): pemakaian lapangan per academy & coach — uangnya ada di lini "Pelatih & Coaching Session" --}}
+    <div class="an-grid" data-coaching-recap>
+        <div class="c61-card">
+            <div class="c61-card-head">
+                <div>
+                    <div class="c61-card-title">Rekap Coaching per Academy</div>
+                    <div class="c61-card-sub">Slot lapangan coaching terpakai di periode ini &middot; nilai sewa = tarif setoran slot (uang masuk ada di baris Coaching di atas)</div>
+                </div>
+                <span class="c61-pill c61-pill-cream">Coaching</span>
+            </div>
+            <div class="c61-card-body an-list">
+                @forelse ($coachingRecap['academies'] as $row)
+                    <div class="an-line">
+                        <div>
+                            <div class="an-line-title">{{ $row['name'] }}</div>
+                            <div class="an-line-sub">{{ $num($row['sessions']) }} sesi &middot; {{ number_format($row['hours'], 1, ',', '.') }} jam</div>
+                        </div>
+                        <div class="an-line-val">{{ $rp($row['value']) }}</div>
+                    </div>
+                @empty
+                    <div class="an-line muted"><div class="an-line-sub">Belum ada sesi coaching di periode ini.</div></div>
+                @endforelse
+            </div>
+        </div>
+
+        <div class="c61-card">
+            <div class="c61-card-head">
+                <div>
+                    <div class="c61-card-title">Rekap Coaching per Coach</div>
+                    <div class="c61-card-sub">Jumlah sesi sebagai coach utama / tambahan dan total jam di lapangan</div>
+                </div>
+                <span class="c61-pill c61-pill-gray">Jam Coach</span>
+            </div>
+            <div class="c61-card-body an-list">
+                @forelse ($coachingRecap['coaches'] as $row)
+                    <div class="an-line muted">
+                        <div>
+                            <div class="an-line-title">{{ $row['name'] }}</div>
+                            <div class="an-line-sub">{{ $row['academy'] ?: 'Coach independen' }} &middot; {{ $num($row['head']) }} sesi utama{{ $row['extra'] ? ' · '.$num($row['extra']).' sesi tambahan' : '' }}</div>
+                        </div>
+                        <div class="an-line-val">{{ number_format($row['hours'], 1, ',', '.') }} Jam</div>
+                    </div>
+                @empty
+                    <div class="an-line muted"><div class="an-line-sub">Belum ada sesi coaching di periode ini.</div></div>
+                @endforelse
+            </div>
+        </div>
+    </div>
+
     {{-- 10 mutasi terbaru --}}
     <div class="c61-card">
         <div class="c61-card-head">

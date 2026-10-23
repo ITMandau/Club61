@@ -91,17 +91,16 @@ class PadelBookingController extends Controller
             'slots.*.court_id' => ['required', 'string'],
             'slots.*.start_time' => ['required', 'date_format:H:i'],
             'slots.*.end_time' => ['required', 'date_format:H:i'],
-            'coach_id' => ['nullable', 'string'],
         ], [
             'booking_date.before_or_equal' => 'Booking paling jauh '.PadelBookingService::MAX_DAYS_AHEAD.' hari dari hari ini.',
         ]);
 
         // Batas jam per pemesanan & per akun (audit G17) — kasir walk-in memakai holdBatchSlots langsung, tidak dibatasi.
+        // coach_id dari customer tidak diterima lagi (Modul 24 Opsi B): coach & tarif coaching hanya dipasang staf di POS.
         $holdData = $this->bookingService->holdForCustomer(
             $validated['slots'],
             $validated['booking_date'],
             $request->user(),
-            $validated['coach_id'] ?? null
         );
 
         $slotCount = count($holdData['bookings']);

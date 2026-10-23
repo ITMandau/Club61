@@ -28,6 +28,8 @@ class Club61PermissionMatrix
         // Gateway untuk tagihan baru (Midtrans / DOKU): salah pilih = uang masuk ke akun gateway yang berbeda.
         'manage_payment_gateway',
         'manage_court_pricing',
+        // Tarif setoran coaching & biaya coach tambahan (Modul 24 Opsi B) — harga, sama seperti tarif lapangan.
+        'manage_coaching_rates',
         'View:RoleResource',
         'view_roles',
         'create_roles',
@@ -94,6 +96,8 @@ class Club61PermissionMatrix
                 'checkin_padel_ticket',
                 'print_padel_invoice',
                 'request_refund_padel',
+                'View:JadwalCoaching',
+                'book_coaching',
             ],
             'kitchen' => [
                 'view_kitchen_kds',
@@ -162,6 +166,26 @@ class Club61PermissionMatrix
                             'View:JualMembership' => 'Akses Halaman POS Jual Membership',
                             'sell_membership' => 'Jual & Aktivasi Membership Kasir',
                             'process_fnb_order' => 'Proses Transaksi & Pembayaran Menu F&B di Kasir',
+                        ],
+                    ],
+                ],
+            ],
+
+            'coaching' => [
+                'title' => '2b. Coaching (Academy & Coach)',
+                'submodules' => [
+                    'coaching_sessions' => [
+                        'label' => 'Booking & Jadwal Coaching',
+                        'actions' => [
+                            'View:JadwalCoaching' => 'Akses Halaman Jadwal Coaching',
+                            'book_coaching' => 'Buat Booking Coaching di POS Walk-In (Tarif Setoran)',
+                        ],
+                    ],
+                    'coaching_data' => [
+                        'label' => 'Data & Tarif Coaching',
+                        'actions' => [
+                            'manage_coaching' => 'Kelola Academy & Coach',
+                            'manage_coaching_rates' => 'Kelola Tarif Setoran & Pengaturan Coaching',
                         ],
                     ],
                 ],
@@ -422,6 +446,12 @@ class Club61PermissionMatrix
                         'actions' => [
                             'View:KelolaKontenWebsite' => 'Akses Halaman Konten Website',
                             'manage_company_profile_content' => 'Ubah & Simpan Konten Landing Page',
+                        ],
+                    ],
+                    'link_bio' => [
+                        'label' => 'Halaman Link Bio Instagram',
+                        'actions' => [
+                            'manage_link_bio' => 'Kelola Tombol Halaman Link Bio',
                         ],
                     ],
                 ],
