@@ -74,6 +74,9 @@ class DokuSnapTest extends TestCase
     /** false = DOKU menolak delete-va. */
     protected bool $vaDeleteWorks = true;
 
+    /** Kanal SNAP yang create-va-nya ditolak DOKU (403 "BIN not configured"). */
+    protected ?string $vaCreateRejectedChannel = null;
+
     /** Folder kunci buatan test (dihapus di tearDown). */
     protected string $keyDir;
 
@@ -162,6 +165,10 @@ class DokuSnapTest extends TestCase
                     return Http::response(['responseCode' => '2005300', 'responseMessage' => 'Successful']);
                 })(),
                 DokuSnapService::VA_CREATE_PATH => (function () use ($data) {
+                    if ($this->vaCreateRejectedChannel !== null && ($data['additionalInfo']['channel'] ?? null) === $this->vaCreateRejectedChannel) {
+                        // Jawaban asli DOKU production 22 Okt 2026 untuk BIN yang belum dikonfigurasi.
+                        return Http::response(['responseCode' => '4032701', 'responseMessage' => "Feature Not Allowed [Identifier for BIN = '98829172' is not configured properly.]"], 403);
+                    }
                     // DGPC: DOKU melengkapi BIN + prefix sub-BIN jadi nomor VA 16 digit.
                     $customerNo = $data['customerNo'].str_pad((string) random_int(0, 9999999999), 10, '0', STR_PAD_LEFT);
                     $vaNumber = $data['partnerServiceId'].$customerNo;
@@ -770,6 +777,33 @@ class DokuSnapTest extends TestCase
         $session = DokuSessionGuard::session($bill, $bill->transaction_id);
         $this->assertTrue(app(DokuSnapService::class)->cancel($bill->transaction_id, $session));
         $this->assertSame('VIRTUAL_ACCOUNT_BSI', $this->sentTo(DokuSnapService::VA_DELETE_PATH)[0]->data()['additionalInfo']['channel']);
+    }
+
+    public function test_va_deleted_before_a_failed_switch_stays_closed_and_is_never_shown_or_reused(): void
+    {
+        // Kasus production 22 Okt 2026: VA Mandiri sudah dibuat, customer ganti ke BNI, VA Mandiri dihapus di DOKU,
+        // lalu VA BNI ditolak DOKU (BIN belum dikonfigurasi) → transaksi di-rollback.
+        $this->setSnapVa([
+            'VIRTUAL_ACCOUNT_BANK_MANDIRI' => ['partner_service_id' => '70002', 'customer_no' => '0'],
+            'VIRTUAL_ACCOUNT_BNI' => ['partner_service_id' => '98829172', 'customer_no' => ''],
+        ]);
+        $this->vaCreateRejectedChannel = 'VIRTUAL_ACCOUNT_BNI';
+        $checkout = $this->padelCheckout('MANDIRI_VA')->assertOk()->assertJsonPath('data.checkout_mode', 'SNAP');
+        $bookingId = $checkout->json('data.booking_id');
+        $mandiri = $this->bill($checkout->json('data.order_id'))->transaction_id;
+
+        $this->postJson("/api/v1/padel/bookings/{$bookingId}/retry-payment", ['payment_method' => 'BNI_VA'])->assertStatus(422);
+        $this->assertCount(1, $this->sentTo(DokuSnapService::VA_DELETE_PATH), 'VA Mandiri benar-benar dihapus di DOKU');
+
+        // Sesi Mandiri tetap tercatat CLOSED walau transaksinya di-rollback → nomor VA mati tidak tampil.
+        $bill = $this->bill($checkout->json('data.order_id'));
+        $this->assertSame('CLOSED', DokuSessionGuard::session($bill, $mandiri)['status']);
+        $this->assertNull($this->getJson("/api/v1/padel/bookings/{$bookingId}/ticket")->assertOk()->json('data.pay_display'));
+
+        // Pilih Mandiri lagi → VA BARU dibuat (yang terhapus tidak dipakai ulang).
+        $again = $this->postJson("/api/v1/padel/bookings/{$bookingId}/retry-payment", ['payment_method' => 'MANDIRI_VA'])->assertOk()->assertJsonPath('checkout_mode', 'SNAP');
+        $this->assertNotSame($mandiri, $again->json('suffixed_order_id'));
+        $this->assertSame('MANDIRI_VA', $this->getJson("/api/v1/padel/bookings/{$bookingId}/ticket")->json('data.pay_display.method'));
     }
 
     public function test_cashier_va_uses_snap_and_shows_the_number_on_the_cashier_card(): void

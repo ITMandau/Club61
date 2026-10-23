@@ -13,6 +13,7 @@ use Carbon\CarbonInterface;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Symfony\Component\HttpKernel\Exception\HttpException;
 
@@ -220,7 +221,21 @@ class DokuSnapService
             ], self::CHANNEL_ID);
         }
 
-        return $response !== null && $response['status'] >= 200 && $response['status'] < 300 && self::isSuccessCode($response['json']['responseCode'] ?? null);
+        $accepted = $response !== null && $response['status'] >= 200 && $response['status'] < 300 && self::isSuccessCode($response['json']['responseCode'] ?? null);
+
+        // Pembatalan di DOKU tidak ikut batal kalau transaksi pemanggil di-rollback (mis. VA baru gagal dibuat setelah VA
+        // lama dihapus) → catat ulang sesi ini CLOSED setelah rollback. Tidak ada transaksi / transaksi commit = tidak dipanggil.
+        if ($accepted && DB::transactionLevel() > 0) {
+            DB::afterRollBack(function () use ($invoice) {
+                try {
+                    DokuSessionGuard::markClosed($invoice);
+                } catch (\Throwable $e) {
+                    report($e);
+                }
+            });
+        }
+
+        return $accepted;
     }
 
     /**
@@ -551,7 +566,11 @@ class DokuSnapService
         ]);
 
         $status = (int) ($response['status'] ?? 0);
-        if ($status >= 400 && $status < 500 && ! DokuClient::isCredentialError($status, $response['error'] ?? null)) {
+        // SNAP 403xxYY (mis. 4032701 "Feature Not Allowed — BIN not configured") = kanal ini ditolak untuk akun kita,
+        // bukan kunci yang salah (kunci salah = 401) → customer diminta pilih metode lain.
+        $code = $response['json']['responseCode'] ?? null;
+        $channelRefused = $status === 403 && is_string($code) && preg_match('/^403\d{4}$/', $code) === 1;
+        if ($channelRefused || ($status >= 400 && $status < 500 && ! DokuClient::isCredentialError($status, $response['error'] ?? null))) {
             throw new HttpException(422, 'Metode pembayaran ini sedang tidak bisa dipakai. Belum ada tagihan yang dibuat — silakan pilih metode pembayaran lain.');
         }
 

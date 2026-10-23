@@ -45,7 +45,7 @@ class MembershipFacilityTest extends TestCase
 
     private function plan(array $benefits, array $attrs = []): MembershipPlan
     {
-        $plan = MembershipPlan::create(array_merge(['code' => 'MBR-T'.random_int(100, 999), 'name' => 'Paket Uji', 'ownership_type' => 'INDIVIDUAL', 'duration_days' => 30, 'price' => 1000000, 'is_active' => true], $attrs));
+        $plan = MembershipPlan::create(array_merge(['code' => 'MBR-T'.\Illuminate\Support\Str::upper(\Illuminate\Support\Str::random(8)), 'name' => 'Paket Uji', 'ownership_type' => 'INDIVIDUAL', 'duration_days' => 30, 'price' => 1000000, 'is_active' => true], $attrs));
         foreach ($benefits as $b) {
             MembershipPlanBenefit::create(array_merge(['plan_id' => $plan->id, 'quota_value' => null, 'discount_percent' => 0], $b));
         }
