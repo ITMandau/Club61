@@ -4,6 +4,7 @@ namespace Tests\Feature\Coaching;
 
 use App\Filament\Pages\Analytics;
 use App\Filament\Pages\BookingSystem;
+use App\Filament\Pages\JadwalCoaching;
 use App\Filament\Resources\Coaching\CoachResource;
 use App\Filament\Resources\Coaching\Pages\ManageCoaches;
 use App\Filament\Resources\Marketing\LinkBioLinkResource;
@@ -110,7 +111,23 @@ class CoachingTahap2Test extends TestCase
         $this->assertNull($page->get('inspectData')['coaching']);
     }
 
-    // ── Profil coach (web & API) ───────────────────────────────────────────────────────────────────────────────
+    public function test_schedule_shows_todays_sessions_when_first_opened_without_touching_the_filter(): void
+    {
+        $result = $this->coachingCheckout('15', ['head_coach_id' => $this->maimun->id]);
+        $booking = PadelBooking::where('order_id', $result['order']->id)->sole();
+        $this->travelTo(Carbon::parse($this->date.' 14:50:25', 'Asia/Jakarta'));
+
+        // Default DatePicker membawa jam ("… 14:50:25") — dulu DATE(booking_date) = '… 14:50:25' tidak pernah cocok.
+        Livewire::test(JadwalCoaching::class)
+            ->assertCanSeeTableRecords([$booking])
+            ->assertSee('Norfita');
+
+        $this->assertSame('2026-10-23', JadwalCoaching::filterDate('2026-10-23 14:50:25'));
+        $this->assertSame($this->date, JadwalCoaching::filterDate('bukan-tanggal'), 'nilai aneh → hari ini');
+        $this->assertSame($this->date, JadwalCoaching::filterDate('2026-02-31'));
+    }
+
+    // ── Profil coach (web & API)───────────────────────────────────────────────────────────────────────────────
 
     public function test_customer_sees_only_published_coaches_without_private_contact(): void
     {

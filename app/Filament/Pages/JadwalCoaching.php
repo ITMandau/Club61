@@ -49,6 +49,20 @@ class JadwalCoaching extends Page implements HasTable
         'EXPIRED' => 'Tidak check-in',
     ];
 
+    /**
+     * Tanggal filter sebagai "Y-m-d". Nilai default DatePicker ikut membawa jam ("2026-10-23 14:50:25") dan di MySQL
+     * DATE(booking_date) = '… 14:50:25' tidak pernah cocok — dulu tabel kosong saat halaman baru dibuka. Nilai yang
+     * bukan tanggal valid (kiriman browser) → hari ini.
+     */
+    public static function filterDate(?string $value): string
+    {
+        if (is_string($value) && preg_match('/^(\d{4})-(\d{2})-(\d{2})/', trim($value), $m) && checkdate((int) $m[2], (int) $m[3], (int) $m[1])) {
+            return "{$m[1]}-{$m[2]}-{$m[3]}";
+        }
+
+        return now(LedgerReport::TIMEZONE)->toDateString();
+    }
+
     public function table(Table $table): Table
     {
         return $table
@@ -89,8 +103,8 @@ class JadwalCoaching extends Page implements HasTable
             ->filters([
                 Filter::make('tanggal')
                     ->schema([DatePicker::make('date')->label('Tanggal')->default(now(LedgerReport::TIMEZONE)->toDateString())->native(false)])
-                    ->query(fn (Builder $query, array $data) => $query->whereDate('booking_date', $data['date'] ?: now(LedgerReport::TIMEZONE)->toDateString()))
-                    ->indicateUsing(fn (array $data) => 'Tanggal: '.Carbon::parse($data['date'] ?: now(LedgerReport::TIMEZONE))->translatedFormat('d M Y')),
+                    ->query(fn (Builder $query, array $data) => $query->whereDate('booking_date', self::filterDate($data['date'] ?? null)))
+                    ->indicateUsing(fn (array $data) => 'Tanggal: '.Carbon::parse(self::filterDate($data['date'] ?? null))->translatedFormat('d M Y')),
             ])
             ->recordActions([
                 Action::make('remind')
