@@ -19,8 +19,13 @@ return Application::configure(basePath: dirname(__DIR__))
     // /broadcasting/auth untuk channel privat (notifikasi Filament). Layar jadwal memakai channel publik.
     ->withBroadcasting(__DIR__.'/../routes/channels.php')
     ->withMiddleware(function (Middleware $middleware) {
-        $middleware->trustProxies(at: '*');
+        // Audit SEC-008: hanya proxy lokal (nginx di VPS yang sama) yang dipercaya. Dulu '*': header X-Forwarded-For
+        // dari pengunjung ikut dipercaya → IP bisa dipalsukan untuk menghindari batas per-IP & mengotori Log Aktivitas.
+        // nginx → PHP-FPM: IP diambil dari koneksi; nginx → proxy lokal: IP dari header yang ditulis nginx sendiri.
+        $middleware->trustProxies(at: ['127.0.0.1', '::1']);
         $middleware->statefulApi();
+        // Batas umum semua route api/* (limiter 'api' di AppServiceProvider); webhook gateway dikecualikan per route.
+        $middleware->throttleApi('api');
         $middleware->append(\App\Http\Middleware\SecurityHeaders::class);
         // AuthenticateSession: sesi web di perangkat lain otomatis keluar setelah password diganti / direset lewat email
         // (dulu hanya panel admin yang begini — HP customer yang hilang tetap login walau password sudah direset).

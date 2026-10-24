@@ -15,8 +15,8 @@ Route::prefix('v1/padel')->group(function () {
 
     // 2. ENDPOINT WEBHOOK PAYMENT GATEWAY (Publik, Multi-Driver)
     // Throttle longgar (sama dengan notifikasi DOKU): notifikasi asli tidak pernah sebanyak ini, banjir sampah dibatasi.
-    Route::post('/webhook/midtrans', fn(\Illuminate\Http\Request $request) => app(PaymentWebhookController::class)->handle('midtrans', $request))->middleware('throttle:300,1')->name('api.payment.webhook.midtrans');
-    Route::post('/webhook/{driver}', [PaymentWebhookController::class, 'handle'])->middleware('throttle:300,1')->name('api.payment.webhook');
+    Route::post('/webhook/midtrans', fn(\Illuminate\Http\Request $request) => app(PaymentWebhookController::class)->handle('midtrans', $request))->middleware('throttle:300,1')->withoutMiddleware('throttle:api')->name('api.payment.webhook.midtrans');
+    Route::post('/webhook/{driver}', [PaymentWebhookController::class, 'handle'])->middleware('throttle:300,1')->withoutMiddleware('throttle:api')->name('api.payment.webhook');
 
     // 3. ENDPOINT PRIVATE (Wajib Auth: Sanctum Token untuk Flutter, Session Cookie untuk Web Portal)
     Route::middleware(['auth:sanctum,web'])->group(function () {
