@@ -367,9 +367,9 @@ trait ManagesRescheduleAndCashier
             }
 
             // Modul 21: dikunci — jadwal yang tinggal < 2 jam lagi / sudah dimulai tidak bisa dipindah (dulu bisa,
-            // selama status masih PAID, termasuk jam main yang sedang berjalan).
+            // selama status masih PAID, termasuk jam main yang sedang berjalan). Batasnya diatur admin (tombol Batas Reschedule di Jadwal Tetap Mingguan).
             if (now()->gte(\App\Services\Padel\PadelBookingService::rescheduleDeadline($booking))) {
-                throw new HttpException(422, 'Reschedule paling lambat '.\App\Services\Padel\PadelBookingService::RESCHEDULE_CUTOFF_HOURS.' jam sebelum jam main. Jadwal booking ini sudah tidak bisa dipindah.');
+                throw new HttpException(422, 'Reschedule paling lambat '.\App\Services\Padel\PadelBookingService::rescheduleCutoffLabel($booking).' sebelum jam main. Jadwal booking ini sudah tidak bisa dipindah.');
             }
 
             $durationHours = (int) $booking->start_time->diffInHours($booking->end_time);

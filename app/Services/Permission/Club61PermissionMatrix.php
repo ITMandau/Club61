@@ -145,6 +145,12 @@ class Club61PermissionMatrix
                             'print_padel_invoice' => 'Cetak Invoice & Bukti Pembayaran',
                         ],
                     ],
+                    'recurring_bookings' => [
+                        'label' => 'Jadwal Tetap Mingguan (Corporate / Member)',
+                        'actions' => [
+                            'manage_recurring_bookings' => 'Kelola Jadwal Tetap Mingguan (buat booking rutin dari kuota jam, atur batas reschedule)',
+                        ],
+                    ],
                 ],
             ],
 

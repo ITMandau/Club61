@@ -4,6 +4,7 @@ namespace App\Services\Padel;
 
 use App\Services\Padel\Concerns\ManagesCheckInAndTurnstile;
 use App\Services\Padel\Concerns\ManagesCheckoutAndPayments;
+use App\Services\Padel\Concerns\ManagesRecurringBookings;
 use App\Services\Padel\Concerns\ManagesRescheduleAndCashier;
 use App\Services\Padel\Concerns\ManagesScheduleAndSlots;
 use App\Services\Padel\Concerns\ManagesTicketsAndRefunds;
@@ -15,6 +16,7 @@ class PadelBookingService
     use ManagesCheckInAndTurnstile;
     use ManagesTicketsAndRefunds;
     use ManagesRescheduleAndCashier;
+    use ManagesRecurringBookings;
 
     /**
      * @deprecated Durasi tahan slot sekarang diatur admin — pakai BookingTimeService::holdSeconds().
@@ -27,7 +29,10 @@ class PadelBookingService
      */
     public const IDEMPOTENCY_TTL_SECONDS = 86400;
 
-    /** Modul 21: reschedule biasa paling lambat sekian jam sebelum jam main (keputusan PM). */
+    /**
+     * Modul 21: batas reschedule bawaan (keputusan PM). Sekarang diatur admin lewat tombol Batas Reschedule di Jadwal Tetap Mingguan
+     * (BookingTimeService::rescheduleCutoffHours) — konstanta ini hanya nilai awal.
+     */
     public const RESCHEDULE_CUTOFF_HOURS = 2;
 
     /** Audit G17 — batas tahan slot lewat aplikasi / website customer (kasir walk-in tidak dibatasi). */
@@ -42,6 +47,18 @@ class PadelBookingService
     /** Batas akhir reschedule booking ini; lewat dari ini jadwal tidak bisa dipindah lagi. */
     public static function rescheduleDeadline(\App\Models\Padel\PadelBooking $booking): \Carbon\Carbon
     {
-        return $booking->start_time->copy()->subHours(self::RESCHEDULE_CUTOFF_HOURS);
+        return $booking->start_time->copy()->subHours(self::rescheduleCutoffHours($booking));
+    }
+
+    /** Batas reschedule dalam jam — satu pengaturan global untuk SEMUA booking (diatur admin lewat tombol Batas Reschedule di Jadwal Tetap Mingguan). */
+    public static function rescheduleCutoffHours(\App\Models\Padel\PadelBooking $booking): int
+    {
+        return app(BookingTimeService::class)->rescheduleCutoffHours();
+    }
+
+    /** Teks batas reschedule untuk pesan ke staf: "2 jam" / "3 hari". */
+    public static function rescheduleCutoffLabel(\App\Models\Padel\PadelBooking $booking): string
+    {
+        return BookingTimeService::formatCutoff(self::rescheduleCutoffHours($booking));
     }
 }

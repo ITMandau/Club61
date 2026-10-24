@@ -131,6 +131,10 @@
                                     <div class="sub" style="color: #B45309; font-family: var(--font-sans); font-weight: 600;">Reschedule
                                         ({{ $b->reschedule_count }}x)</div>
                                 @endif
+                                @if ($b->recurringSchedule)
+                                    <div class="sub c61-truncate" style="color: var(--c-terra); font-family: var(--font-sans); font-weight: 600;"
+                                        title="Jadwal Tetap: {{ $b->recurringSchedule->name }}">Jadwal Tetap · {{ $b->recurringSchedule->name }}</div>
+                                @endif
                             </td>
                             <td>
                                 <div class="c61-truncate strong"
@@ -304,7 +308,17 @@
                                         </button>
                                     @endif
 
-                                    @if ($this->canReschedule && in_array($b->status, ['PAID', 'LOCKED']))
+                                    @if ($this->canReschedule && in_array($b->status, ['PAID', 'LOCKED']) && now()->gte(\App\Services\Padel\PadelBookingService::rescheduleDeadline($b)))
+                                        {{-- Lewat batas reschedule (diatur admin lewat tombol Batas Reschedule di Jadwal Tetap Mingguan) → tombol nonaktif. --}}
+                                        <button type="button" disabled
+                                            title="Lewat batas reschedule ({{ \App\Services\Padel\PadelBookingService::rescheduleCutoffLabel($b) }} sebelum main)"
+                                            class="c61-icon-btn" style="opacity: 0.35; cursor: not-allowed;">
+                                            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                                    d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                            </svg>
+                                        </button>
+                                    @elseif ($this->canReschedule && in_array($b->status, ['PAID', 'LOCKED']))
                                         <button type="button"
                                             wire:click="openRescheduleModal('{{ $b->id }}')"
                                             wire:loading.attr="disabled" title="Pindah Jadwal (Reschedule)"

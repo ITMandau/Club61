@@ -8,17 +8,19 @@ use Illuminate\Support\Facades\DB;
 
 /**
  * Satu baris pengaturan: berapa lama slot ditahan sebelum checkout, dan berapa lama customer boleh membayar
- * online setelah klik bayar. Dibaca lewat BookingTimeService (tervalidasi & ter-cache).
+ * online setelah klik bayar, dan batas reschedule (jam sebelum main, semua booking). Dibaca lewat BookingTimeService
+ * (tervalidasi & ter-cache).
  */
 class BookingTimeSetting extends Model
 {
-    protected $fillable = ['slot_hold_minutes', 'payment_window_minutes'];
+    protected $fillable = ['slot_hold_minutes', 'payment_window_minutes', 'reschedule_cutoff_hours'];
 
     protected function casts(): array
     {
         return [
             'slot_hold_minutes' => 'integer',
             'payment_window_minutes' => 'integer',
+            'reschedule_cutoff_hours' => 'integer',
         ];
     }
 

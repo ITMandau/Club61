@@ -283,6 +283,14 @@ Dokumen pelacak progres (Single Source of Truth). Status di bawah ini hasil audi
 - [x] Dashboard PIC corporate (`/corporate`): kelola anggota, import CSV, rilis / cabut voucher.
 - [x] Halaman admin **Sponsor Team** (pratinjau dashboard PIC, dikunci izin sendiri).
 - [~] Sebagian keputusan PM masih menunggu (lihat PRD Modul 12 §8).
+- [x] **Jadwal Tetap Mingguan** (25 Okt 2026, permintaan klien untuk IOH: tiap Kamis 19:00–22:00, 3 lapangan): menu
+  Operasional Harian → Jadwal Tetap Mingguan (izin `manage_recurring_bookings`). Booking rutin dibuat otomatis
+  (tombol + `padel:generate-recurring` tiap 00:20) sampai N minggu ke depan atas nama pemilik membership (corporate /
+  individu), lunas 100% dari kuota jam PADEL (order Rp0, tanpa shift kasir). Kuota kurang / slot bentrok = minggu itu
+  GAGAL dan dicoba lagi, tidak pernah jadi tagihan. Lewati tanggal (booking dibatalkan, jam kembali) & batal lewati.
+  Batas reschedule sekarang SATU pengaturan global untuk semua booking (tombol Batas Reschedule di Jadwal Tetap Mingguan,
+  jam / hari, bawaan 2 jam, izin `manage_booking_time_limits`); lewat batas, tombol Reschedule di Kelola Pemesanan
+  nonaktif & server menolak. Belum: kuota off-peak IM3 Premium (menunggu klien), blokir tanggal Grand Opening.
 
 ---
 

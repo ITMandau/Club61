@@ -84,6 +84,12 @@ class PadelBooking extends Model
         return $this->belongsTo(\App\Models\Coaching\CoachingBooking::class, 'coaching_booking_id');
     }
 
+    /** Booking hasil Jadwal Tetap Mingguan (batas reschedule mengikuti jadwalnya). */
+    public function recurringSchedule()
+    {
+        return $this->belongsTo(PadelRecurringSchedule::class, 'recurring_schedule_id');
+    }
+
     public function equipments()
     {
         return $this->hasMany(PadelBookingEquipment::class, 'booking_id');

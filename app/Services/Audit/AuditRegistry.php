@@ -179,7 +179,7 @@ class AuditRegistry
             CompanyProfileFacility::class => ['module' => 'CONTENT', 'label' => 'Fasilitas Website'],
             CompanyProfileValueProp::class => ['module' => 'CONTENT', 'label' => 'Keunggulan Website'],
             \App\Models\Marketing\LinkBioLink::class => ['module' => 'CONTENT', 'label' => 'Tombol Link Bio', 'title' => ['label']],
-            AppModelsMarketinginkbiolink::class => ['module' => 'content', 'label' => 'tombol link bio', 'title' => ['label']],
+            \App\Models\Padel\PadelRecurringSchedule::class => ['module' => 'PADEL', 'label' => 'Jadwal Tetap Mingguan', 'title' => ['name'], 'severity' => ['deleted' => ActivityLogger::WARNING]],
         ];
     }
 
