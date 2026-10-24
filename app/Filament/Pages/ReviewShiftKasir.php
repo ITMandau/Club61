@@ -26,13 +26,13 @@ class ReviewShiftKasir extends Page implements HasTable
 
     protected static string|BackedEnum|null $navigationIcon = 'heroicon-o-clipboard-document-check';
 
-    protected static ?string $navigationLabel = 'Review Shift Kasir';
+    protected static ?string $navigationLabel = 'Rekap Shift Kasir';
 
     protected static string|UnitEnum|null $navigationGroup = 'Keuangan';
 
     protected static ?int $navigationSort = 4;
 
-    protected static ?string $title = 'Review Shift Kasir';
+    protected static ?string $title = 'Rekap Shift Kasir';
 
     protected string $view = 'filament.pages.review-shift-kasir';
 

@@ -42,11 +42,11 @@ class PadelRecurringScheduleResource extends Resource
 
     protected static string|BackedEnum|null $navigationIcon = 'heroicon-o-arrow-path';
 
-    protected static ?string $navigationLabel = 'Jadwal Tetap Mingguan';
+    protected static ?string $navigationLabel = 'Booking Mingguan';
 
     protected static ?string $modelLabel = 'Jadwal Tetap';
 
-    protected static ?string $pluralModelLabel = 'Jadwal Tetap Mingguan';
+    protected static ?string $pluralModelLabel = 'Booking Mingguan';
 
     protected static string|UnitEnum|null $navigationGroup = 'Operasional Harian';
 

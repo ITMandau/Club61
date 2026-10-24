@@ -44,13 +44,13 @@ class DaftarVoucher extends Page implements HasTable
 
     protected static string|BackedEnum|null $navigationIcon = 'heroicon-o-ticket';
 
-    protected static ?string $navigationLabel = 'Daftar Voucher';
+    protected static ?string $navigationLabel = 'Voucher & Promo';
 
     protected static string|UnitEnum|null $navigationGroup = 'Keuangan';
 
     protected static ?int $navigationSort = 4;
 
-    protected static ?string $title = 'Daftar Voucher';
+    protected static ?string $title = 'Voucher & Promo';
 
     protected string $view = 'filament.pages.daftar-voucher';
 

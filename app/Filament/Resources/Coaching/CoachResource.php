@@ -44,11 +44,11 @@ class CoachResource extends Resource
 
     protected static string|BackedEnum|null $navigationIcon = 'heroicon-o-user-group';
 
-    protected static ?string $navigationLabel = 'Coach';
+    protected static ?string $navigationLabel = 'Daftar Coach';
 
     protected static ?string $modelLabel = 'Coach';
 
-    protected static ?string $pluralModelLabel = 'Coach';
+    protected static ?string $pluralModelLabel = 'Daftar Coach';
 
     protected static string|UnitEnum|null $navigationGroup = 'Coaching';
 

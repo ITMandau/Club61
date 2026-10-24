@@ -33,13 +33,13 @@ class AntrianRefund extends Page implements HasTable
 
     protected static string|BackedEnum|null $navigationIcon = 'heroicon-o-arrow-uturn-left';
 
-    protected static ?string $navigationLabel = 'Antrian Refund';
+    protected static ?string $navigationLabel = 'Pengembalian Dana';
 
     protected static string|UnitEnum|null $navigationGroup = 'Keuangan';
 
     protected static ?int $navigationSort = 3;
 
-    protected static ?string $title = 'Antrian Refund';
+    protected static ?string $title = 'Pengembalian Dana';
 
     protected string $view = 'filament.pages.antrian-refund';
 

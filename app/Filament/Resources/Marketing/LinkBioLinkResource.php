@@ -40,7 +40,7 @@ class LinkBioLinkResource extends Resource
 
     protected static string|BackedEnum|null $navigationIcon = 'heroicon-o-link';
 
-    protected static ?string $navigationLabel = 'Link Bio Instagram';
+    protected static ?string $navigationLabel = 'Link Bio';
 
     protected static ?string $modelLabel = 'Tombol Link Bio';
 

@@ -22,7 +22,7 @@ class Kustomer extends Page
 
     protected static string|BackedEnum|null $navigationIcon = 'heroicon-o-users';
 
-    protected static ?string $navigationLabel = 'Customer & Member VIP';
+    protected static ?string $navigationLabel = 'Data Pelanggan';
 
     protected static string|UnitEnum|null $navigationGroup = 'Customer & Membership';
 
