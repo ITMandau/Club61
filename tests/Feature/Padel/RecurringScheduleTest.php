@@ -362,6 +362,171 @@ class RecurringScheduleTest extends TestCase
             ->assertActionHidden('rescheduleCutoff');
     }
 
+    // ---- Edit jadwal → booking yang sudah dibuat ikut dipindah (aturan reschedule global) ----
+
+    /** Isian edit = isian sekarang + perubahan, lewat normalize (sama dengan form). */
+    private function edit(PadelRecurringSchedule $schedule, array $changes): array
+    {
+        $data = app(RecurringScheduleService::class)->normalize($changes + RecurringScheduleService::formState($schedule), $schedule);
+
+        return $this->service()->updateSchedule($schedule, $data, $this->admin);
+    }
+
+    private function codes(PadelRecurringSchedule $schedule): array
+    {
+        return PadelBooking::where('recurring_schedule_id', $schedule->id)->where('status', 'PAID')->orderBy('start_time')->get()
+            ->map(fn ($b) => $b->booking_date->format('D Y-m-d').' '.$b->start_time->format('H:i').'-'.$b->end_time->format('H:i').' '.$b->court->name)->all();
+    }
+
+    public function test_changing_the_day_moves_existing_bookings_without_cancelling_them(): void
+    {
+        $schedule = $this->schedule(['court_ids' => [$this->courts[0]->id], 'end_time' => '21:00']);
+        $this->service()->generate($schedule, $this->admin);
+        $before = PadelBooking::where('recurring_schedule_id', $schedule->id)->orderBy('start_time')->pluck('booking_code')->all();
+        $this->assertSame(['Thu 2026-11-05 19:00-21:00 Court A', 'Thu 2026-11-12 19:00-21:00 Court A'], $this->codes($schedule));
+
+        $summary = $this->edit($schedule, ['day_of_week' => 7]);
+
+        $this->assertSame(2, $summary['moved']);
+        $this->assertSame(0, $summary['cancelled']);
+        $this->assertSame(0, $summary['generated']['booked']);
+        $this->assertSame(['Sun 2026-11-08 19:00-21:00 Court A', 'Sun 2026-11-15 19:00-21:00 Court A'], $this->codes($schedule));
+        // Booking yang sama (kode sama), tidak ada yang dibatalkan, kuota tidak berubah.
+        $this->assertSame($before, PadelBooking::where('recurring_schedule_id', $schedule->id)->orderBy('start_time')->pluck('booking_code')->all());
+        $this->assertSame(0, PadelBooking::where('status', 'CANCELLED')->count());
+        $this->assertEquals(96, (float) $this->balance->fresh()->remaining_quota);
+        $this->assertSame(1, (int) PadelBooking::where('booking_code', $before[0])->value('reschedule_count'));
+    }
+
+    public function test_booking_inside_the_reschedule_cutoff_stays_and_that_week_is_not_doubled(): void
+    {
+        $schedule = $this->schedule(['court_ids' => [$this->courts[0]->id], 'end_time' => '21:00']);
+        $this->service()->generate($schedule, $this->admin);
+        // H-4: Kamis 5 Nov 19:00 batasnya Minggu 1 Nov 19:00 (sudah lewat); Kamis 12 Nov masih bisa.
+        $this->setRescheduleCutoff(96);
+
+        $summary = $this->edit($schedule, ['day_of_week' => 7]);
+
+        $this->assertSame(1, $summary['moved']);
+        $this->assertCount(1, $summary['kept']);
+        $this->assertStringContainsString('Lewat batas reschedule', $summary['kept'][0]);
+        $this->assertSame(['Thu 2026-11-05 19:00-21:00 Court A', 'Sun 2026-11-15 19:00-21:00 Court A'], $this->codes($schedule));
+        // Minggu 8 Nov tidak dibuatkan booking kedua (minggu itu tetap main Kamis).
+        $this->assertSame('SKIPPED', PadelRecurringOccurrence::whereDate('occurrence_date', '2026-11-08')->value('status'));
+        $this->assertEquals(96, (float) $this->balance->fresh()->remaining_quota);
+    }
+
+    public function test_longer_duration_is_applied_when_the_extra_hour_is_free_and_quota_allows(): void
+    {
+        $schedule = $this->schedule(['court_ids' => [$this->courts[0]->id], 'end_time' => '21:00', 'weeks_ahead' => 1]);
+        $this->service()->generate($schedule, $this->admin);
+        $this->assertEquals(98, (float) $this->balance->fresh()->remaining_quota);
+
+        $this->edit($schedule, ['end_time' => '22:00']);
+
+        $this->assertSame(['Thu 2026-11-05 19:00-22:00 Court A'], $this->codes($schedule));
+        $this->assertEquals(97, (float) $this->balance->fresh()->remaining_quota);
+        $this->assertEquals(3, (float) PadelBooking::where('recurring_schedule_id', $schedule->id)->value('member_hours_consumed'));
+
+        // Dipersingkat lagi → jamnya kembali.
+        $this->edit($schedule->fresh(), ['end_time' => '20:00']);
+        $this->assertSame(['Thu 2026-11-05 19:00-20:00 Court A'], $this->codes($schedule));
+        $this->assertEquals(99, (float) $this->balance->fresh()->remaining_quota);
+    }
+
+    public function test_longer_duration_keeps_the_old_booking_when_the_extra_hour_is_taken_or_quota_is_short(): void
+    {
+        $schedule = $this->schedule(['court_ids' => [$this->courts[0]->id], 'end_time' => '21:00', 'weeks_ahead' => 2]);
+        $this->service()->generate($schedule, $this->admin);
+        $customer = User::factory()->customer()->create();
+        PadelBooking::create([
+            'booking_code' => 'BK-LAIN', 'user_id' => $customer->id, 'court_id' => $this->courts[0]->id,
+            'booking_date' => '2026-11-05', 'start_time' => Carbon::parse('2026-11-05 21:00'), 'end_time' => Carbon::parse('2026-11-05 22:00'),
+            'court_fee' => 300000, 'coach_fee' => 0, 'equipment_fee' => 0, 'total_amount' => 300000, 'status' => 'PAID',
+        ]);
+
+        $summary = $this->edit($schedule, ['end_time' => '22:00']);
+
+        // 5 Nov: jam 21-22 sudah diisi orang → tetap 19-21. 12 Nov: kosong → 19-22.
+        $this->assertSame(['Thu 2026-11-05 19:00-21:00 Court A', 'Thu 2026-11-12 19:00-22:00 Court A'], $this->codes($schedule));
+        $this->assertStringContainsString('sudah terisi (BK-LAIN)', implode(' ', $summary['kept']));
+        $this->assertEquals(95, (float) $this->balance->fresh()->remaining_quota);
+
+        // Kuota habis → jam mulai tetap ikut pindah, durasi lama dipertahankan.
+        $this->balance->fresh()->update(['remaining_quota' => 0]);
+        $summary = $this->edit($schedule->fresh(), ['start_time' => '18:00', 'end_time' => '22:00']);
+        $this->assertSame(['Thu 2026-11-05 18:00-20:00 Court A', 'Thu 2026-11-12 18:00-21:00 Court A'], $this->codes($schedule));
+        $this->assertStringContainsString('durasi lama dipertahankan', implode(' ', $summary['kept']));
+        $this->assertEquals(0, (float) $this->balance->fresh()->remaining_quota);
+    }
+
+    public function test_court_changes_move_cancel_or_add_bookings(): void
+    {
+        $courtD = PadelCourt::create(['name' => 'Court D', 'type' => 'INDOOR', 'hourly_rate_regular' => 300000, 'hourly_rate_prime' => 400000, 'is_active' => true]);
+        [$a, $b, $c] = $this->courts;
+        $schedule = $this->schedule(['weeks_ahead' => 1]); // Kamis 5 Nov, A B C, 3 jam
+        $this->service()->generate($schedule, $this->admin);
+        $this->assertEquals(91, (float) $this->balance->fresh()->remaining_quota);
+
+        // Ganti C → D: booking C pindah ke D (bukan batal + baru).
+        $codeC = PadelBooking::where('court_id', $c->id)->value('booking_code');
+        $summary = $this->edit($schedule, ['court_ids' => [$a->id, $b->id, $courtD->id]]);
+        $this->assertSame(1, $summary['moved']);
+        $this->assertSame($courtD->id, PadelBooking::where('booking_code', $codeC)->value('court_id'));
+        $this->assertEquals(91, (float) $this->balance->fresh()->remaining_quota);
+
+        // Kurangi jadi A B → booking D dibatalkan, jamnya kembali, slot bisa dijual lagi.
+        $summary = $this->edit($schedule->fresh(), ['court_ids' => [$a->id, $b->id]]);
+        $this->assertSame(1, $summary['cancelled']);
+        $this->assertSame('CANCELLED', PadelBooking::where('booking_code', $codeC)->value('status'));
+        $this->assertEquals(94, (float) $this->balance->fresh()->remaining_quota);
+        $this->assertSame(2, PadelBooking::where('recurring_schedule_id', $schedule->id)->where('status', 'PAID')->count());
+
+        // Tambah C lagi → langsung dibuatkan booking baru.
+        $summary = $this->edit($schedule->fresh(), ['court_ids' => [$a->id, $b->id, $c->id]]);
+        $this->assertSame(1, $summary['generated']['booked']);
+        $this->assertSame(3, PadelBooking::where('recurring_schedule_id', $schedule->id)->where('status', 'PAID')->count());
+        $this->assertEquals(91, (float) $this->balance->fresh()->remaining_quota);
+    }
+
+    public function test_dates_outside_the_period_keep_the_old_booking(): void
+    {
+        $schedule = $this->schedule(['court_ids' => [$this->courts[0]->id], 'end_time' => '21:00']);
+        $this->service()->generate($schedule, $this->admin);
+
+        // Periode sampai Sabtu 14 Nov: Minggu 8 Nov masih masuk, Minggu 15 Nov tidak.
+        $summary = $this->edit($schedule, ['day_of_week' => 7, 'ends_on' => '2026-11-14']);
+
+        $this->assertSame(1, $summary['moved']);
+        $this->assertStringContainsString('di luar periode', implode(' ', $summary['kept']));
+        $this->assertSame(['Sun 2026-11-08 19:00-21:00 Court A', 'Thu 2026-11-12 19:00-21:00 Court A'], $this->codes($schedule));
+    }
+
+    public function test_period_follows_the_membership_end_date(): void
+    {
+        $base = [
+            'name' => 'IOH', 'user_membership_id' => $this->balance->user_membership_id, 'day_of_week' => 4,
+            'start_time' => '19:00', 'end_time' => '22:00', 'court_ids' => [$this->courts[0]->id], 'starts_on' => '2026-11-05', 'weeks_ahead' => 5,
+        ];
+        $this->assertSame('2027-10-31', $this->service()->normalize($base)['ends_on']);
+
+        $this->expectException(HttpException::class);
+        $this->service()->normalize(['ends_on' => '2027-12-31'] + $base);
+    }
+
+    public function test_editing_from_the_panel_moves_bookings(): void
+    {
+        $schedule = $this->schedule(['court_ids' => [$this->courts[0]->id], 'end_time' => '21:00', 'weeks_ahead' => 1]);
+        $this->service()->generate($schedule, $this->admin);
+
+        Livewire::actingAs($this->admin)->test(ManagePadelRecurringSchedules::class)
+            ->callTableAction('edit', $schedule, ['day_of_week' => 7])
+            ->assertHasNoTableActionErrors();
+
+        $this->assertSame(7, $schedule->fresh()->day_of_week);
+        $this->assertSame(['Sun 2026-11-08 19:00-21:00 Court A'], $this->codes($schedule));
+    }
+
     public function test_staff_without_permission_cannot_open_the_page(): void
     {
         $receptionist = User::factory()->receptionist()->create();

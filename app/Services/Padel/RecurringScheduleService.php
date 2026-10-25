@@ -105,6 +105,13 @@ class RecurringScheduleService
         } catch (\Throwable) {
             $fail('Tanggal tidak valid.');
         }
+        // Periode ikut masa membership: kosong → sampai tanggal habis membership; tidak boleh melewatinya.
+        $membershipEnd = UserMembership::whereKey($membershipId)->value('end_date');
+        $membershipEnd = $membershipEnd ? Carbon::parse($membershipEnd)->toDateString() : null;
+        $endsOn ??= $membershipEnd;
+        if ($membershipEnd !== null && $endsOn > $membershipEnd) {
+            $fail('"Sampai tanggal" tidak boleh lewat masa aktif membership ('.Carbon::parse($membershipEnd)->translatedFormat('d M Y').').');
+        }
         if ($endsOn !== null && $endsOn < $startsOn) {
             $fail('Tanggal berakhir harus sama atau setelah tanggal mulai.');
         }
@@ -211,6 +218,177 @@ class RecurringScheduleService
         }
 
         return $result;
+    }
+
+    /**
+     * Simpan perubahan jadwal lalu sesuaikan booking yang sudah dibuat (aturan reschedule global):
+     *   - hari / jam / durasi berubah → booking ke depan dipindah (urut: booking ke-1 → tanggal jadwal baru ke-1, dst);
+     *   - lapangan diganti → booking lapangan lama pindah ke lapangan baru (berpasangan sesuai urutan);
+     *   - lapangan dikurangi → booking lapangan yang dihapus dibatalkan, jamnya kembali;
+     *   - lewat batas reschedule / slot tujuan terisi / tanggal di luar periode → tetap di jadwal lama, dan tanggal
+     *     pasangannya dilewati supaya minggu itu tidak dobel.
+     * Setelah itu minggu yang belum punya booking langsung dibuat (generate).
+     *
+     * @return array{moved: int, kept: array<int, string>, cancelled: int, generated: array}
+     */
+    public function updateSchedule(PadelRecurringSchedule $schedule, array $data, User $actor): array
+    {
+        $old = ['day' => $schedule->day_of_week, 'start' => $schedule->start_time, 'end' => $schedule->end_time, 'courts' => array_values((array) $schedule->court_ids)];
+        $schedule->update($data);
+        $schedule->refresh();
+
+        $summary = ['moved' => 0, 'kept' => [], 'cancelled' => 0, 'generated' => ['booked' => 0, 'failed' => [], 'busy' => false]];
+        $patternChanged = $old['day'] !== $schedule->day_of_week || $old['start'] !== $schedule->start_time
+            || $old['end'] !== $schedule->end_time || $old['courts'] !== array_values((array) $schedule->court_ids);
+
+        if ($patternChanged) {
+            $lock = Cache::lock('padel-recurring:'.$schedule->id, 300);
+            $lock->block(15);
+            try {
+                $this->rebookFutureWeeks($schedule, $old, $actor, $summary);
+            } finally {
+                $lock->release();
+            }
+        }
+
+        $summary['generated'] = $this->generate($schedule, $actor);
+
+        if ($patternChanged) {
+            ActivityLogger::record(
+                module: 'PADEL',
+                event: 'recurring.rescheduled',
+                description: "Jadwal Tetap \"{$schedule->name}\" diubah: {$summary['moved']} booking dipindah, ".count($summary['kept']).' tetap, '.$summary['cancelled'].' dibatalkan',
+                subject: $schedule,
+                meta: array_filter([
+                    'jadwal_baru' => $schedule->scheduleLabel(),
+                    'tetap' => $summary['kept'] !== [] ? implode(' | ', array_slice($summary['kept'], 0, 10)) : null,
+                ], fn ($v) => $v !== null),
+                causer: $actor,
+            );
+        }
+
+        return $summary;
+    }
+
+    /** Bagian dari updateSchedule: pindahkan / batalkan booking ke depan sesuai pola baru. */
+    private function rebookFutureWeeks(PadelRecurringSchedule $schedule, array $old, User $actor, array &$summary): void
+    {
+        $newCourts = array_values((array) $schedule->court_ids);
+        $kept = array_values(array_intersect($old['courts'], $newCourts));
+        $removed = array_values(array_diff($old['courts'], $newCourts));
+        $added = array_values(array_diff($newCourts, $old['courts']));
+        // Lapangan yang diganti: lapangan lama ke-i → lapangan baru ke-i. Sisa lapangan lama = dikurangi.
+        $courtMap = array_combine($kept, $kept);
+        foreach ($removed as $i => $courtId) {
+            $courtMap[$courtId] = $added[$i] ?? null;
+        }
+
+        $occurrences = PadelRecurringOccurrence::with(['booking.court', 'court'])
+            ->where('recurring_schedule_id', $schedule->id)
+            ->where('status', PadelRecurringOccurrence::STATUS_BOOKED)
+            ->get()
+            ->filter(fn (PadelRecurringOccurrence $o) => $o->booking && $o->booking->status === 'PAID' && $o->booking->start_time->gt(now()))
+            ->sortBy(fn (PadelRecurringOccurrence $o) => $o->booking->start_time->timestamp);
+
+        foreach ($occurrences->groupBy(fn (PadelRecurringOccurrence $o) => $o->booking->court_id) as $oldCourtId => $items) {
+            $targetCourt = array_key_exists($oldCourtId, $courtMap) ? $courtMap[$oldCourtId] : ($newCourts[0] ?? null);
+            $targetDates = $this->upcomingPatternDates($schedule, $items->count());
+
+            foreach ($items->values() as $i => $occurrence) {
+                $booking = $occurrence->booking;
+                $label = $booking->booking_code.' ('.$booking->booking_date->translatedFormat('D d M').' · '.($booking->court?->name ?? '-').')';
+
+                // Lapangan dikurangi → dibatalkan (masih sebelum batas reschedule), slotnya bisa dijual lagi.
+                if ($targetCourt === null) {
+                    if (now()->gte(PadelBookingService::rescheduleDeadline($booking))) {
+                        $summary['kept'][] = $label.': lapangan dihapus tapi sudah lewat batas reschedule — tetap main';
+
+                        continue;
+                    }
+                    $this->bookings->requestCancelAndRefund($booking->id, 'JADWAL_TETAP_DIUBAH', 'Lapangan dihapus dari jadwal tetap', $actor);
+                    $occurrence->update(['status' => PadelRecurringOccurrence::STATUS_SKIPPED, 'note' => 'Lapangan dihapus dari jadwal — booking dibatalkan, jam kuota kembali']);
+                    $summary['cancelled']++;
+
+                    continue;
+                }
+
+                $targetDate = $targetDates[$i] ?? null;
+                if ($targetDate === null) {
+                    $summary['kept'][] = $label.': tanggal jadwal baru di luar periode — tetap di jadwal lama';
+
+                    continue;
+                }
+
+                $sameSlot = $booking->court_id === $targetCourt && $booking->booking_date->toDateString() === $targetDate->toDateString()
+                    && $booking->start_time->format('H:i') === $schedule->start_time && $booking->end_time->format('H:i') === ($schedule->end_time === '24:00' ? '00:00' : $schedule->end_time);
+                if ($sameSlot) {
+                    $this->rekeyOccurrence($occurrence, $targetCourt, $targetDate, null);
+
+                    continue;
+                }
+
+                $target = PadelRecurringOccurrence::where('recurring_schedule_id', $schedule->id)->where('court_id', $targetCourt)
+                    ->whereDate('occurrence_date', $targetDate->toDateString())->first();
+                if ($target && $target->id !== $occurrence->id && in_array($target->status, [PadelRecurringOccurrence::STATUS_SKIPPED, PadelRecurringOccurrence::STATUS_BOOKED], true)) {
+                    $summary['kept'][] = $label.': tanggal '.$targetDate->translatedFormat('d M').' sudah '.($target->status === PadelRecurringOccurrence::STATUS_SKIPPED ? 'dilewati' : 'terisi').' — tetap di jadwal lama';
+
+                    continue;
+                }
+
+                try {
+                    $moved = $this->bookings->moveRecurringBooking($booking, $targetCourt, $targetDate->toDateString(), $schedule->start_time, $schedule->end_time, $actor);
+                    $from = $booking->booking_date->translatedFormat('D d M');
+                    $this->rekeyOccurrence($occurrence, $targetCourt, $targetDate, 'Dipindah dari '.$from.' (jadwal diubah)'.($moved['kept_duration'] ? ' — durasi lama dipertahankan, kuota kurang' : ''));
+                    $summary['moved']++;
+                    if ($moved['kept_duration']) {
+                        $summary['kept'][] = $label.': dipindah, tapi durasi lama dipertahankan (sisa kuota kurang)';
+                    }
+                } catch (HttpException $e) {
+                    $summary['kept'][] = $label.': '.$e->getMessage();
+                    // Minggu ini tetap main di jadwal lama → tanggal pasangannya dilewati supaya tidak dobel.
+                    $pair = $this->occurrenceFor($schedule, $targetCourt, $targetDate);
+                    if (in_array($pair->status, [PadelRecurringOccurrence::STATUS_PENDING, PadelRecurringOccurrence::STATUS_FAILED], true)) {
+                        $pair->update(['status' => PadelRecurringOccurrence::STATUS_SKIPPED, 'note' => mb_substr('Minggu ini tetap main di jadwal lama: '.$label, 0, 255)]);
+                    }
+                }
+            }
+        }
+    }
+
+    /** Catatan minggu ikut pindah ke (lapangan, tanggal) baru supaya generator tidak membuat booking kedua. */
+    private function rekeyOccurrence(PadelRecurringOccurrence $occurrence, string $courtId, Carbon $date, ?string $note): void
+    {
+        if ($occurrence->court_id === $courtId && $occurrence->occurrence_date->toDateString() === $date->toDateString()) {
+            return;
+        }
+        // Catatan kosong / gagal di tanggal tujuan digantikan oleh booking yang dipindah.
+        PadelRecurringOccurrence::where('recurring_schedule_id', $occurrence->recurring_schedule_id)->where('court_id', $courtId)
+            ->whereDate('occurrence_date', $date->toDateString())->where('id', '!=', $occurrence->id)
+            ->whereIn('status', [PadelRecurringOccurrence::STATUS_PENDING, PadelRecurringOccurrence::STATUS_FAILED])
+            ->delete();
+        $occurrence->update(['court_id' => $courtId, 'occurrence_date' => $date->toDateString(), 'note' => $note]);
+    }
+
+    /**
+     * Tanggal pola jadwal (baru) yang belum lewat, mulai hari ini / starts_on, sampai ends_on — sebanyak $count.
+     *
+     * @return array<int, Carbon>
+     */
+    private function upcomingPatternDates(PadelRecurringSchedule $schedule, int $count): array
+    {
+        $today = now()->startOfDay();
+        $from = $schedule->starts_on->copy()->startOfDay();
+        $dates = [];
+        for ($date = $schedule->firstDateOnOrAfter($from->lt($today) ? $today : $from); count($dates) < $count; $date = $date->copy()->addWeek()) {
+            if ($schedule->ends_on && $date->gt($schedule->ends_on->copy()->startOfDay())) {
+                break;
+            }
+            if (Carbon::parse($date->toDateString().' '.$schedule->start_time)->gt(now())) {
+                $dates[] = $date->copy();
+            }
+        }
+
+        return $dates;
     }
 
     /** Semua jadwal aktif — perintah terjadwal harian. */

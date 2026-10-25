@@ -90,7 +90,8 @@ class PadelRecurringScheduleResource extends Resource
                         ->placeholder('Contoh: IOH — Kamis malam'),
                     Select::make('user_membership_id')->label('Kuota jam dari membership')
                         ->options(fn (?PadelRecurringSchedule $record) => app(RecurringScheduleService::class)->membershipOptions($record?->user_membership_id))
-                        ->searchable()->required()->native(false)
+                        ->searchable()->required()->native(false)->live()
+                        ->afterStateUpdated(fn (?string $state, \Filament\Schemas\Components\Utilities\Set $set) => $set('ends_on', $state ? \App\Models\Membership\UserMembership::find($state)?->end_date?->toDateString() : null))
                         ->disabled(fn (?PadelRecurringSchedule $record) => $record?->occurrences()->exists() ?? false)
                         ->helperText('Corporate atau member individu yang punya kuota jam Padel. Booking dibuat atas nama pemilik membership.'),
                     Select::make('day_of_week')->label('Hari')->options(PadelRecurringSchedule::DAYS)->required()->native(false),
@@ -100,7 +101,7 @@ class PadelRecurringScheduleResource extends Resource
                     Select::make('end_time')->label('Jam selesai')->options($hours(7, 24))->required()->native(false),
                     DatePicker::make('starts_on')->label('Mulai tanggal')->required()->native(false)->displayFormat('d M Y'),
                     DatePicker::make('ends_on')->label('Sampai tanggal (opsional)')->native(false)->displayFormat('d M Y')
-                        ->helperText('Kosongkan = berjalan terus sampai kuota / masa membership habis.'),
+                        ->helperText('Otomatis terisi tanggal habis membership dan tidak boleh lewat dari itu. Kosongkan = sampai membership habis.'),
                 ]),
             ]),
             Section::make('Aturan')->columnSpanFull()->schema([
@@ -109,7 +110,7 @@ class PadelRecurringScheduleResource extends Resource
                         ->maxValue(PadelRecurringSchedule::MAX_WEEKS_AHEAD)->required()->default(5)->suffix('minggu ke depan'),
                 ]),
                 Textarea::make('notes')->label('Catatan (opsional)')->rows(2)->maxLength(1000)->columnSpanFull(),
-            ])->description('Customer bisa booking sampai 30 hari ke depan, jadi 5 minggu = slot jadwal tetap sudah terkunci duluan. Mengubah hari / jam / lapangan hanya berlaku untuk booking yang belum dibuat. Batas reschedule mengikuti pengaturan global (tombol Batas Reschedule di kanan atas halaman ini).'),
+            ])->description('Customer bisa booking sampai 30 hari ke depan, jadi 5 minggu = slot jadwal tetap sudah terkunci duluan. Mengubah hari / jam / durasi / lapangan ikut memindahkan booking yang sudah dibuat (aturan reschedule: yang sudah mepet tetap main di jadwal lama; lapangan yang dihapus dibatalkan & jamnya kembali). Batas reschedule mengikuti pengaturan global (tombol Batas Reschedule di kanan atas halaman ini).'),
         ]);
     }
 
@@ -198,7 +199,13 @@ class PadelRecurringScheduleResource extends Resource
                         }),
                     EditAction::make()->modalWidth('3xl')
                         ->mutateRecordDataUsing(fn (array $data, PadelRecurringSchedule $record) => RecurringScheduleService::formState($record))
-                        ->mutateDataUsing(fn (array $data, PadelRecurringSchedule $record, EditAction $action) => self::normalizeOrHalt($data, $action, $record)),
+                        ->mutateDataUsing(fn (array $data, PadelRecurringSchedule $record, EditAction $action) => self::normalizeOrHalt($data, $action, $record))
+                        ->using(function (PadelRecurringSchedule $record, array $data) {
+                            self::notifyUpdated(app(RecurringScheduleService::class)->updateSchedule($record, $data, auth()->user()));
+
+                            return $record;
+                        })
+                        ->successNotification(null),
                     DeleteAction::make(),
                 ]),
             ]);
@@ -218,6 +225,22 @@ class PadelRecurringScheduleResource extends Resource
             Notification::make()->title('Belum bisa disimpan')->body($e->getMessage())->danger()->send();
             $action->halt();
         }
+    }
+
+    /** Ringkasan setelah jadwal diedit: booking dipindah / tetap / dibatalkan + minggu baru yang dibuat. */
+    public static function notifyUpdated(array $summary): void
+    {
+        $gen = $summary['generated'];
+        $lines = array_filter([
+            $summary['moved'] ? $summary['moved'].' booking dipindah ke jadwal baru' : null,
+            $summary['cancelled'] ? $summary['cancelled'].' booking dibatalkan (lapangan dihapus), jam kuota kembali' : null,
+            $gen['booked'] ? $gen['booked'].' booking baru dibuat' : null,
+            $summary['kept'] ? 'Tetap di jadwal lama: '.implode(' · ', array_slice($summary['kept'], 0, 4)).(count($summary['kept']) > 4 ? ' …' : '') : null,
+            $gen['failed'] ? 'Gagal dibuat: '.implode(' · ', array_slice($gen['failed'], 0, 3)) : null,
+        ]);
+        $notification = Notification::make()->title('Jadwal disimpan')->body($lines ? implode('. ', $lines).'.' : 'Tidak ada booking yang perlu disesuaikan.');
+        ($summary['kept'] || $gen['failed']) ? $notification->warning()->persistent() : $notification->success();
+        $notification->send();
     }
 
     public static function notifyGenerated(array $result): void
