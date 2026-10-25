@@ -46,7 +46,7 @@
             <div class="c61-eyebrow"><span class="dot"></span>Financial Business Intelligence &bull; Club 61 Padel &amp; Wellness</div>
             <div class="c61-hero-title">Laporan Uang Masuk &amp; Analisis Finansial</div>
             <div class="c61-hero-sub">
-                Rekapitulasi uang masuk dari kasir &amp; Midtrans, refund, dan pendapatan bersih semua lini (padel, add-on, F&amp;B, membership). Angkanya sama dengan Buku Transaksi.
+                Rekapitulasi uang masuk dari kasir &amp; payment gateway online, refund, dan pendapatan bersih semua lini (padel, add-on, F&amp;B, membership). Angkanya sama dengan Buku Transaksi.
             </div>
         </div>
     </div>
@@ -156,15 +156,36 @@
             <div class="c61-card-body an-list">
                 <div class="an-line is-lead">
                     <div>
-                        <div class="an-line-title">Kasir Frontdesk (POS)</div>
-                        <div class="an-line-sub">Tunai, EDC, QRIS &amp; transfer di POS Walk-In, F&amp;B, membership</div>
+                        <div class="an-line-title">POS Frontdesk Padel</div>
+                        <div class="an-line-sub">Walk-in lapangan, pelunasan selisih reschedule &amp; jual membership di kasir (EDC, QRIS, transfer)</div>
                     </div>
-                    <div class="an-line-val">{{ $rp($channels['cashier']['money_net']) }}<small>{{ $num($channels['cashier']['transactions']) }} transaksi</small></div>
+                    <div class="an-line-val">{{ $rp($channels['padel']['money_net']) }}<small>{{ $num($channels['padel']['transactions']) }} transaksi</small></div>
                 </div>
                 <div class="an-line">
                     <div>
-                        <div class="an-line-title">Midtrans Gateway (QRIS, GoPay, VA)</div>
-                        <div class="an-line-sub">Pembayaran online booking &amp; membership dari aplikasi</div>
+                        <div class="an-line-title">POS Kasir F&amp;B</div>
+                        <div class="an-line-sub">Penjualan kafe / bar di kasir F&amp;B (EDC, QRIS, transfer)</div>
+                    </div>
+                    <div class="an-line-val">{{ $rp($channels['fnb']['money_net']) }}<small>{{ $num($channels['fnb']['transactions']) }} transaksi</small></div>
+                </div>
+                @if ($channels['other']['transactions'] > 0 || abs($channels['other']['money_net']) >= 0.005)
+                    <div class="an-line">
+                        <div>
+                            <div class="an-line-title">Kasir Lainnya</div>
+                            <div class="an-line-sub">Penjualan di luar dua loket di atas (mis. impor penjualan)</div>
+                        </div>
+                        <div class="an-line-val">{{ $rp($channels['other']['money_net']) }}<small>{{ $num($channels['other']['transactions']) }} transaksi</small></div>
+                    </div>
+                @endif
+                <div class="an-line">
+                    <div>
+                        <div class="an-line-title">Payment Gateway Online</div>
+                        <div class="an-line-sub">
+                            Booking &amp; membership yang dibayar customer dari website / aplikasi (QRIS &amp; Virtual Account)
+                            @if (count($gateways) > 0)
+                                <br>{{ collect($gateways)->map(fn ($g) => $g['label'].' '.$rp($g['money_net']).' ('.$num($g['transactions']).' trx)')->implode(' · ') }}
+                            @endif
+                        </div>
                     </div>
                     <div class="an-line-val">{{ $rp($channels['online']['money_net']) }}<small>{{ $num($channels['online']['transactions']) }} transaksi</small></div>
                 </div>
@@ -279,6 +300,55 @@
                         <div class="an-line-val">{{ $rp($s['forfeited']) }}</div>
                     </div>
                 @endif
+            </div>
+        </div>
+    </div>
+
+    {{-- Rekap coaching (Modul 24 Opsi B Tahap 2): pemakaian lapangan per academy & coach — uangnya ada di lini "Pelatih & Coaching Session" --}}
+    <div class="an-grid" data-coaching-recap>
+        <div class="c61-card">
+            <div class="c61-card-head">
+                <div>
+                    <div class="c61-card-title">Rekap Coaching per Academy</div>
+                    <div class="c61-card-sub">Slot lapangan coaching terpakai di periode ini &middot; nilai sewa = tarif setoran slot (uang masuk ada di baris Coaching di atas)</div>
+                </div>
+                <span class="c61-pill c61-pill-cream">Coaching</span>
+            </div>
+            <div class="c61-card-body an-list">
+                @forelse ($coachingRecap['academies'] as $row)
+                    <div class="an-line">
+                        <div>
+                            <div class="an-line-title">{{ $row['name'] }}</div>
+                            <div class="an-line-sub">{{ $num($row['sessions']) }} sesi &middot; {{ number_format($row['hours'], 1, ',', '.') }} jam</div>
+                        </div>
+                        <div class="an-line-val">{{ $rp($row['value']) }}</div>
+                    </div>
+                @empty
+                    <div class="an-line muted"><div class="an-line-sub">Belum ada sesi coaching di periode ini.</div></div>
+                @endforelse
+            </div>
+        </div>
+
+        <div class="c61-card">
+            <div class="c61-card-head">
+                <div>
+                    <div class="c61-card-title">Rekap Coaching per Coach</div>
+                    <div class="c61-card-sub">Jumlah sesi sebagai coach utama / tambahan dan total jam di lapangan</div>
+                </div>
+                <span class="c61-pill c61-pill-gray">Jam Coach</span>
+            </div>
+            <div class="c61-card-body an-list">
+                @forelse ($coachingRecap['coaches'] as $row)
+                    <div class="an-line muted">
+                        <div>
+                            <div class="an-line-title">{{ $row['name'] }}</div>
+                            <div class="an-line-sub">{{ $row['academy'] ?: 'Coach independen' }} &middot; {{ $num($row['head']) }} sesi utama{{ $row['extra'] ? ' · '.$num($row['extra']).' sesi tambahan' : '' }}</div>
+                        </div>
+                        <div class="an-line-val">{{ number_format($row['hours'], 1, ',', '.') }} Jam</div>
+                    </div>
+                @empty
+                    <div class="an-line muted"><div class="an-line-sub">Belum ada sesi coaching di periode ini.</div></div>
+                @endforelse
             </div>
         </div>
     </div>

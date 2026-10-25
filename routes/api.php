@@ -37,3 +37,4 @@ require __DIR__ . '/api/sponsor.php';
 require __DIR__ . '/api/fnb.php';
 require __DIR__ . '/api/merch.php';
 require __DIR__ . '/api/pos.php';
+require __DIR__ . '/api/coaching.php';

@@ -17,7 +17,7 @@ class KelolaKaryawan extends Page
 
     protected static string | BackedEnum | null $navigationIcon = 'heroicon-o-user-group';
 
-    protected static ?string $navigationLabel = 'Kelola Karyawan';
+    protected static ?string $navigationLabel = 'Data Karyawan';
 
     protected static string | UnitEnum | null $navigationGroup = 'Karyawan & Akses';
 

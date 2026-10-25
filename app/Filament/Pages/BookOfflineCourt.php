@@ -21,6 +21,7 @@ use UnitEnum;
 class BookOfflineCourt extends Page
 {
     use \App\Livewire\Concerns\AutoPrintsReceipts;
+    use \App\Livewire\Concerns\ClosesPosShift;
     use HasPageShield;
 
     protected static string | BackedEnum | null $navigationIcon = 'heroicon-o-building-storefront';
@@ -39,12 +40,7 @@ class BookOfflineCourt extends Page
     public bool $showOpenShiftModal = false;
     public string $openingNotes = '';
 
-    public bool $showCloseShiftModal = false;
-    public string $closingNotes = '';
-    public ?array $closingShiftSummary = null;
 
-    public bool $showShiftReportModal = false;
-    public ?array $reportShiftData = null;
 
     // Tanggal Booking Aktif
     public string $bookingDate;
@@ -145,6 +141,22 @@ class BookOfflineCourt extends Page
 
     // Opsi Software Auto Check-In
     public bool $isAutoCheckIn = false;
+
+    /**
+     * Tipe booking: REGULAR atau COACHING (Modul 24 Opsi B, izin book_coaching). Coaching = harga slot tarif setoran
+     * coaching (CoachingPricingService), tanpa membership / voucher. Semua isian divalidasi ulang di server saat checkout.
+     */
+    public string $bookingType = 'REGULAR';
+
+    public ?string $coachingCoachId = null;
+
+    /** @var array<int, string> */
+    public array $coachingExtraCoachIds = [];
+
+    /** @var array<int, string> nama murid (maks. 2) */
+    public array $coachingStudents = ['', ''];
+
+    public string $coachingNotes = '';
 
     // Modal Sukses & Struk POS
     public bool $showSuccessModal = false;
@@ -529,7 +541,25 @@ class BookOfflineCourt extends Page
 
     public function setCustomerMode(string $mode): void
     {
-        $this->customerMode = $mode;
+        // Tab ketiga "Coaching" (sederet dengan Walk-In Baru / Cari Member): pemesan diisi seperti Walk-In Baru
+        // (nomor HP lama tetap dikenali), harga memakai tarif coaching.
+        if ($mode === 'coaching') {
+            if (! $this->canBookCoaching) {
+                Notification::make()->title('Akses Ditolak')->body('Anda tidak memiliki izin membuat booking coaching.')->danger()->send();
+
+                return;
+            }
+            $this->customerMode = 'quick_create';
+            $this->setBookingType('COACHING');
+
+            return;
+        }
+
+        if ($this->bookingType === 'COACHING') {
+            $this->bookingType = 'REGULAR';
+            $this->resetPriceCaches();
+        }
+        $this->customerMode = $mode === 'search' ? 'search' : 'quick_create';
         $this->loadBenefitInfo($this->benefitCustomer());
         $this->saveDraft();
     }
@@ -708,7 +738,173 @@ class BookOfflineCourt extends Page
 
     public function getCourtTotalProperty(): float
     {
+        if ($this->isCoaching) {
+            return $this->courtTotalCache ??= (float) $this->coachingQuote['total'];
+        }
+
         return $this->courtTotalCache ??= (float) array_sum(array_column($this->selectedSlots, 'price'));
+    }
+
+    // ===================== COACHING (Modul 24 Opsi B) =====================
+
+    protected ?array $coachingQuoteCache = null;
+
+    public function getCanBookCoachingProperty(): bool
+    {
+        return (bool) auth()->user()?->can('book_coaching');
+    }
+
+    /** Mode coaching aktif — selalu dicek ulang izinnya (properti bisa diubah dari browser). */
+    public function getIsCoachingProperty(): bool
+    {
+        return $this->bookingType === 'COACHING' && ! $this->settleBill && $this->canBookCoaching;
+    }
+
+    /** @return array<string, string> coach aktif: id => "Nama (Head Coach · Academy)" */
+    public function getCoachOptionsProperty(): array
+    {
+        if (! $this->canBookCoaching) {
+            return [];
+        }
+
+        return $this->coachOptionsCache ??= \App\Models\Coaching\Coach::with('academy:id,name')->where('is_active', true)
+            ->orderBy('sort_order')->orderBy('name')->get()
+            ->mapWithKeys(fn (\App\Models\Coaching\Coach $c) => [$c->id => $c->optionLabel()])->all();
+    }
+
+    protected ?array $coachOptionsCache = null;
+
+    /** Coach tambahan yang sah (aktif, bukan coach utama). Server memvalidasi ulang saat checkout. */
+    protected function coachingExtraIds(): array
+    {
+        $valid = array_keys($this->coachOptions);
+
+        return array_values(array_unique(array_filter(
+            array_map('strval', $this->coachingExtraCoachIds),
+            fn ($id) => $id !== '' && $id !== $this->coachingCoachId && in_array($id, $valid, true)
+        )));
+    }
+
+    /**
+     * Harga coaching slot terpilih — fungsi yang SAMA dengan checkout server (CoachingPricingService).
+     *
+     * @return array{total: float, error: ?string, slots: array<string, float>} slots: "court_id|H:i" => harga
+     */
+    public function getCoachingQuoteProperty(): array
+    {
+        if ($this->coachingQuoteCache !== null) {
+            return $this->coachingQuoteCache;
+        }
+        if (empty($this->selectedSlots)) {
+            return $this->coachingQuoteCache = ['total' => 0.0, 'error' => null, 'slots' => []];
+        }
+
+        try {
+            $quote = app(\App\Services\Coaching\CoachingPricingService::class)
+                ->quoteSlots($this->slotsPayload(), $this->bookingDate, count($this->coachingExtraIds()));
+        } catch (\Symfony\Component\HttpKernel\Exception\HttpException $e) {
+            return $this->coachingQuoteCache = ['total' => 0.0, 'error' => $e->getMessage(), 'slots' => []];
+        }
+
+        $slots = [];
+        foreach ($quote['slots'] as $slot) {
+            $slots[$slot['court_id'].'|'.substr($slot['start_time'], 0, 5)] = $slot['fee'];
+        }
+
+        return $this->coachingQuoteCache = ['total' => $quote['total'], 'error' => null, 'slots' => $slots];
+    }
+
+    /** Harga slot yang tampil di daftar slot: tarif coaching (mode coaching) atau harga reguler. */
+    public function slotDisplayPrice(array $slot): float
+    {
+        if (! $this->isCoaching) {
+            return (float) $slot['price'];
+        }
+
+        return (float) ($this->coachingQuote['slots'][$slot['court_id'].'|'.substr($slot['start_time'], 0, 5)] ?? 0);
+    }
+
+    public function setBookingType(string $type): void
+    {
+        $type = strtoupper($type) === 'COACHING' ? 'COACHING' : 'REGULAR';
+        if ($type === 'COACHING' && ! $this->canBookCoaching) {
+            Notification::make()->title('Akses Ditolak')->body('Anda tidak memiliki izin membuat booking coaching.')->danger()->send();
+
+            return;
+        }
+
+        $this->bookingType = $type;
+        // Coaching memakai tarif khusus: voucher promo dilepas; membership / voucher corporate otomatis tidak dipakai.
+        if ($type === 'COACHING') {
+            $this->removeVoucher();
+        }
+        $this->resetPriceCaches();
+        $this->saveDraft();
+    }
+
+    public function updatedCoachingCoachId(): void
+    {
+        $this->resetPriceCaches();
+        $this->saveDraft();
+    }
+
+    public function updatedCoachingExtraCoachIds(): void
+    {
+        $this->resetPriceCaches();
+        $this->saveDraft();
+    }
+
+    protected function resetPriceCaches(): void
+    {
+        $this->courtTotalCache = null;
+        $this->coachingQuoteCache = null;
+        $this->benefitQuoteCache = null;
+        $this->voucherResultCache = null;
+        $this->financeCalculationCache = null;
+        $this->subtotalCache = null;
+        $this->membershipDiscountAmountCache = null;
+    }
+
+    /** Data coaching untuk checkout server (null = booking reguler). */
+    protected function coachingPayload(): ?array
+    {
+        if (! $this->isCoaching) {
+            return null;
+        }
+
+        return [
+            'head_coach_id' => (string) $this->coachingCoachId,
+            'extra_coach_ids' => $this->coachingExtraIds(),
+            'students' => array_slice(array_values((array) $this->coachingStudents), 0, \App\Models\Coaching\CoachingBooking::MAX_STUDENTS),
+            'notes' => $this->coachingNotes,
+        ];
+    }
+
+    /** Isian coaching lengkap & tarifnya ada; kalau tidak → pemberitahuan ke kasir. */
+    protected function assertCoachingReady(): bool
+    {
+        if (! $this->coachingCoachId || ! array_key_exists($this->coachingCoachId, $this->coachOptions)) {
+            Notification::make()->title('Coach Belum Dipilih')->body('Pilih coach utama untuk booking coaching.')->warning()->send();
+
+            return false;
+        }
+        if ($error = $this->coachingQuote['error']) {
+            Notification::make()->title('Tarif Coaching Belum Ada')->body($error)->warning()->send();
+
+            return false;
+        }
+
+        return true;
+    }
+
+    protected function resetCoaching(): void
+    {
+        $this->bookingType = 'REGULAR';
+        $this->coachingCoachId = null;
+        $this->coachingExtraCoachIds = [];
+        $this->coachingStudents = ['', ''];
+        $this->coachingNotes = '';
+        $this->coachingQuoteCache = null;
     }
 
     public function getEquipmentTotalProperty(): float
@@ -766,7 +962,8 @@ class BookOfflineCourt extends Page
             'membership' => ['applies' => false, 'balance_id' => null, 'rejected_reason' => null, 'hours' => 0.0, 'plan_name' => null],
             'sponsor' => ['applies' => false, 'organization_name' => null, 'hours' => 0.0, 'hours_left' => 0.0, 'hours_available' => 0.0]];
 
-        $customer = $this->settleBill || empty($this->selectedSlots) ? null : $this->benefitCustomer();
+        // Coaching: tarif khusus, kuota membership & voucher jam corporate tidak dipakai (sama dengan server).
+        $customer = $this->settleBill || $this->isCoaching || empty($this->selectedSlots) ? null : $this->benefitCustomer();
         if (! $customer) {
             return $this->benefitQuoteCache = $empty;
         }
@@ -803,7 +1000,7 @@ class BookOfflineCourt extends Page
         if ($this->voucherResultCache !== null) {
             return $this->voucherResultCache;
         }
-        if (! $this->appliedVoucherCode || $this->settleBill) {
+        if (! $this->appliedVoucherCode || $this->settleBill || $this->isCoaching) {
             return $this->voucherResultCache = ['voucher' => null, 'discount' => 0.0, 'error' => null];
         }
 
@@ -838,10 +1035,23 @@ class BookOfflineCourt extends Page
         return $customer ? app(\App\Services\Finance\VoucherService::class)->walletFor($customer) : collect();
     }
 
+    /** Promo hasil klaim (cara sebar C) milik customer terpilih yang bisa dipakai sekarang — aturan tetap dicek resolve(). */
+    public function getCustomerClaimedPromosProperty(): array
+    {
+        $customer = $this->selectedCustomerId ? User::find($this->selectedCustomerId) : null;
+
+        return $customer ? app(\App\Services\Finance\VoucherClaimService::class)->usableForApi($customer) : [];
+    }
+
     public function applyVoucher(?string $code = null): void
     {
         $code = strtoupper(trim((string) ($code ?? $this->voucherInput)));
         if ($code === '') {
+            return;
+        }
+        if ($this->isCoaching) {
+            Notification::make()->title('Voucher Tidak Berlaku')->body('Booking coaching sudah memakai tarif khusus — voucher tidak bisa dipakai.')->warning()->send();
+
             return;
         }
 
@@ -950,7 +1160,7 @@ class BookOfflineCourt extends Page
             $shiftNumber = PosCashierShift::generateShiftNumber('PADEL_FRONTDESK');
 
             // 100% Cashless: tidak ada modal kas fisik, jadi starting_cash/expected_cash selalu 0.
-            PosCashierShift::create([
+            $shift = PosCashierShift::create([
                 'shift_number' => $shiftNumber,
                 'counter' => 'PADEL_FRONTDESK',
                 'status' => 'OPEN',
@@ -960,6 +1170,7 @@ class BookOfflineCourt extends Page
                 'expected_cash' => 0.00,
                 'opening_notes' => trim($this->openingNotes) ?: null,
             ]);
+            $this->recordOpeningSettlements($shift);
 
             Notification::make()
                 ->title('Shift Kasir Berhasil Dibuka')
@@ -973,110 +1184,20 @@ class BookOfflineCourt extends Page
         }
     }
 
-    public function prepareCloseShift(): void
+    protected function shiftCounter(): string
     {
-        $shift = $this->activeShift;
-        if (! $shift) {
-            Notification::make()
-                ->title('Tidak Ada Shift Aktif')
-                ->body('Belum ada shift kasir yang terbuka saat ini.')
-                ->warning()
-                ->send();
-            return;
-        }
-
-        if ($shift->pendingAutoPaymentCount() > 0) {
-            Notification::make()->title('Shift Belum Bisa Ditutup')->body(PosCashierShift::PENDING_AUTO_PAYMENT_MESSAGE)->warning()->send();
-
-            return;
-        }
-
-        $summary = $shift->calculateSummary();
-        $this->closingShiftSummary = $summary;
-        $this->closingNotes = '';
-        $this->showCloseShiftModal = true;
+        return 'PADEL_FRONTDESK';
     }
 
-    public function executeCloseShift(): void
+    protected function shiftNotice(string $level, string $title, string $body): void
     {
-        $user = auth()->user();
-        abort_unless(
-            $user && $user->can('close_pos_shift'),
-            403,
-            'Akses ditolak: Anda tidak memiliki izin [close_pos_shift] untuk menutup sesi shift kasir.'
-        );
-
-        $shift = $this->activeShift;
-
-        if (! $shift) {
-            $this->showCloseShiftModal = false;
-            return;
-        }
-
-        if ($shift->pendingAutoPaymentCount() > 0) {
-            $this->showCloseShiftModal = false;
-            Notification::make()->title('Shift Belum Bisa Ditutup')->body(PosCashierShift::PENDING_AUTO_PAYMENT_MESSAGE)->warning()->send();
-
-            return;
-        }
-
-        // 100% Cashless: tidak ada blind cash count fisik, jadi actual_cash & cash_difference selalu 0.
-        $summary = $shift->calculateSummary();
-        $actualCash = 0.00;
-        $cashDifference = 0.00;
-
-        $shift->update([
-            'status' => 'CLOSED',
-            'closed_by_id' => $user?->id,
-            'closed_at' => Carbon::now('Asia/Jakarta'),
-            'expected_cash' => $summary['expected_cash'],
-            'actual_cash' => $actualCash,
-            'cash_difference' => $cashDifference,
-            'total_cash_sales' => $summary['total_cash_sales'],
-            'total_edc_bca_sales' => $summary['total_edc_bca_sales'],
-            'total_edc_mandiri_sales' => $summary['total_edc_mandiri_sales'],
-            'total_qris_sales' => $summary['total_qris_sales'],
-            'total_other_sales' => $summary['total_other_sales'],
-            'total_sales' => $summary['total_sales'],
-            'total_transactions' => $summary['total_transactions'],
-            'closing_notes' => trim($this->closingNotes) ?: null,
-        ]);
-
-        $this->reportShiftData = [
-            'shift_number' => $shift->shift_number,
-            'counter' => $shift->counter,
-            'opened_by' => $shift->openedBy?->name ?? 'Kasir',
-            'closed_by' => $user?->name ?? 'Kasir',
-            'opened_at' => $shift->opened_at->setTimezone('Asia/Jakarta')->format('d/m/Y H:i'),
-            'closed_at' => Carbon::now('Asia/Jakarta')->format('d/m/Y H:i'),
-            'starting_cash' => (float) $shift->starting_cash,
-            'total_cash_sales' => $summary['total_cash_sales'],
-            'total_edc_bca_sales' => $summary['total_edc_bca_sales'],
-            'total_edc_mandiri_sales' => $summary['total_edc_mandiri_sales'],
-            'total_qris_sales' => $summary['total_qris_sales'],
-            'total_other_sales' => $summary['total_other_sales'],
-            'total_sales' => $summary['total_sales'],
-            'total_transactions' => $summary['total_transactions'],
-            'expected_cash' => $summary['expected_cash'],
-            'actual_cash' => $actualCash,
-            'cash_difference' => $cashDifference,
-            'closing_notes' => $shift->closing_notes,
-        ];
-
-        $this->showCloseShiftModal = false;
-        $this->showShiftReportModal = true;
-
-        Notification::make()
-            ->title('Shift Kasir Berhasil Ditutup')
-            ->body("Sesi {$shift->shift_number} resmi ditutup. Rekapitulasi kas selesai.")
-            ->success()
-            ->send();
-    }
-
-    public function closeShiftReportModal(): void
-    {
-        $this->showShiftReportModal = false;
-        $this->reportShiftData = null;
+        $notification = Notification::make()->title($title)->body($body);
+        match ($level) {
+            'success' => $notification->success(),
+            'danger' => $notification->danger(),
+            default => $notification->warning(),
+        };
+        $notification->send();
     }
 
     protected function getDraftCacheKey(): string
@@ -1137,6 +1258,11 @@ class BookOfflineCourt extends Page
             'isAutoCheckIn' => $this->isAutoCheckIn,
             'useMembershipBenefit' => $this->useMembershipBenefit,
             'useSponsorVoucherBenefit' => $this->useSponsorVoucherBenefit,
+            'bookingType' => $this->bookingType,
+            'coachingCoachId' => $this->coachingCoachId,
+            'coachingExtraCoachIds' => $this->coachingExtraCoachIds,
+            'coachingStudents' => $this->coachingStudents,
+            'coachingNotes' => $this->coachingNotes,
             'grandTotal' => $this->grandTotal,
             'heldBookingIds' => $this->heldBookingIds,
             'heldSignature' => $this->heldSignature,
@@ -1179,6 +1305,12 @@ class BookOfflineCourt extends Page
         $this->loadBenefitInfo($this->benefitCustomer());
         $this->useMembershipBenefit = $draft['useMembershipBenefit'] ?? true;
         $this->useSponsorVoucherBenefit = $draft['useSponsorVoucherBenefit'] ?? true;
+        // Coaching hanya dipulihkan kalau kasir ini memang boleh membuatnya.
+        $this->bookingType = ($draft['bookingType'] ?? 'REGULAR') === 'COACHING' && $this->canBookCoaching ? 'COACHING' : 'REGULAR';
+        $this->coachingCoachId = $draft['coachingCoachId'] ?? null;
+        $this->coachingExtraCoachIds = array_values(array_map('strval', (array) ($draft['coachingExtraCoachIds'] ?? [])));
+        $this->coachingStudents = array_pad(array_slice(array_values((array) ($draft['coachingStudents'] ?? [])), 0, 2), 2, '');
+        $this->coachingNotes = (string) ($draft['coachingNotes'] ?? '');
         // Slot yang tadi ditahan kasir ini (bukan bentrok) — dipakai lagi kalau waktu tahannya belum habis.
         $this->heldBookingIds = array_values(array_filter((array) ($draft['heldBookingIds'] ?? [])));
         $this->heldSignature = $draft['heldSignature'] ?? null;
@@ -1250,6 +1382,7 @@ class BookOfflineCourt extends Page
         $this->walkInEmail = '';
         $this->clearSelectedCustomer();
         $this->initializeEquipmentQuantities();
+        $this->resetCoaching();
         $this->posStep = 'selection';
 
         Notification::make()
@@ -1337,6 +1470,11 @@ class BookOfflineCourt extends Page
                     ->send();
                 return;
             }
+        }
+
+        // 2b. Coaching: coach utama wajib & semua jam harus punya tarif coaching (server memeriksa ulang).
+        if ($this->isCoaching && ! $this->assertCoachingReady()) {
+            return;
         }
 
         // 3. Tahan slotnya sekarang — sebelum customer membayar. Keduluan customer online → kasir langsung tahu.
@@ -1494,6 +1632,7 @@ class BookOfflineCourt extends Page
         $this->edcTraceNumber = '';
         $this->qrisRrn = '';
         $this->qrisSenderName = '';
+        $this->resetCoaching();
         $this->showSuccessModal = false;
         $this->completedOrderData = null;
         $this->posStep = 'selection';
@@ -1614,6 +1753,11 @@ class BookOfflineCourt extends Page
                 phone: $phone,
                 email: ! empty($this->walkInEmail) ? trim($this->walkInEmail) : null
             );
+        }
+
+        // 2.0 Coaching: isian & tarif dicek lagi (bisa berubah sejak "Lanjut ke Pembayaran").
+        if ($this->isCoaching && ! $this->assertCoachingReady()) {
+            return;
         }
 
         // 2.1 Validasi Ketat Metode Pembayaran
@@ -1753,6 +1897,8 @@ class BookOfflineCourt extends Page
                 // Slot yang ditahan saat "Lanjut ke Pembayaran" (habis / berubah → server menahan ulang).
                 heldBookingIds: $this->heldBookingIds ?: null,
                 holder: auth()->user(),
+                // Booking coaching: tarif setoran coaching (server menghitung ulang & mengecek jadwal coach).
+                coaching: $this->coachingPayload(),
             );
             // Tahanan sudah menjadi booking customer.
             $this->forgetHeldSlots();
@@ -1855,7 +2001,7 @@ class BookOfflineCourt extends Page
 
             return [
                 'booking_code' => $b->booking_code,
-                'court_name' => $b->court?->name ?? 'Lapangan Padel',
+                'court_name' => ($b->court?->name ?? 'Lapangan Padel').($b->coaching_booking_id ? ' (Coaching)' : ''),
                 'time_label' => $b->start_time->format('H:i').' - '.$b->end_time->format('H:i'),
                 'court_fee' => $courtFee,
                 'normal_fee' => $courtFee + $memberDiscount + $sponsorDiscount,
@@ -1912,6 +2058,7 @@ class BookOfflineCourt extends Page
         $this->loadBenefitInfo(null);
         $this->qrisRrn = '';
         $this->qrisSenderName = '';
+        $this->resetCoaching();
     }
 
     // ===================== QRIS MIDTRANS (QR DI LAYAR KASIR) =====================

@@ -76,6 +76,15 @@ class AuditRegistry
         'image_url' => 'foto',
         'photo_path' => 'foto',
         'sort_order' => 'urutan',
+        'price_per_hour' => 'tarif / jam',
+        'extra_coach_fee_per_hour' => 'biaya coach tambahan / jam',
+        'admin_whatsapp' => 'WhatsApp admin coaching',
+        'priority' => 'prioritas',
+        'show_on_profile' => 'tampil di profil customer',
+        'highlights' => 'poin keunggulan',
+        'sport' => 'olahraga',
+        'motto' => 'motto',
+        'image_path' => 'gambar',
     ];
 
     /**
@@ -108,6 +117,21 @@ class AuditRegistry
                 'label' => 'Metode Pembayaran Online',
                 'title' => ['label'],
                 'severity' => ['created' => ActivityLogger::WARNING, 'updated' => ActivityLogger::WARNING],
+            ],
+            // Modul 24 Opsi B — tarif & pengaturan coaching = harga (KRITIS), data academy / coach = perubahan biasa.
+            \App\Models\Coaching\CoachingAcademy::class => ['module' => 'COACHING', 'label' => 'Academy Coaching', 'title' => ['name']],
+            \App\Models\Coaching\Coach::class => ['module' => 'COACHING', 'label' => 'Coach', 'title' => ['name']],
+            \App\Models\Coaching\CoachingRate::class => [
+                'module' => 'COACHING',
+                'label' => 'Tarif Setoran Coaching',
+                'title' => ['name'],
+                'severity' => ['created' => ActivityLogger::CRITICAL, 'updated' => ActivityLogger::CRITICAL, 'deleted' => ActivityLogger::CRITICAL],
+            ],
+            \App\Models\Coaching\CoachingSetting::class => [
+                'module' => 'COACHING',
+                'label' => 'Pengaturan Coaching',
+                'title' => fn () => 'Biaya Coach Tambahan & WhatsApp Admin',
+                'severity' => ['created' => ActivityLogger::CRITICAL, 'updated' => ActivityLogger::CRITICAL],
             ],
             PaymentGatewaySetting::class => [
                 'module' => 'FINANCE',
@@ -154,6 +178,8 @@ class AuditRegistry
             CompanyProfileSetting::class => ['module' => 'CONTENT', 'label' => 'Konten Website', 'title' => fn () => 'Landing Page'],
             CompanyProfileFacility::class => ['module' => 'CONTENT', 'label' => 'Fasilitas Website'],
             CompanyProfileValueProp::class => ['module' => 'CONTENT', 'label' => 'Keunggulan Website'],
+            \App\Models\Marketing\LinkBioLink::class => ['module' => 'CONTENT', 'label' => 'Tombol Link Bio', 'title' => ['label']],
+            \App\Models\Padel\PadelRecurringSchedule::class => ['module' => 'PADEL', 'label' => 'Jadwal Tetap Mingguan', 'title' => ['name'], 'severity' => ['deleted' => ActivityLogger::WARNING]],
         ];
     }
 

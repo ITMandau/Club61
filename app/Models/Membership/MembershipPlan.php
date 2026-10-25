@@ -67,4 +67,21 @@ class MembershipPlan extends Model
     {
         return $this->benefits->firstWhere('facility', strtoupper($facility));
     }
+
+    /**
+     * Deskripsi admin per baris = poin detail paket (halaman membership menampilkan daftar ✓). Poin yang ditulis dalam
+     * satu baris dengan pemisah " * " / " • " juga dipecah. Tanda poin di awal baris (-, •, *, ✓, angka) dibuang supaya
+     * tidak dobel.
+     *
+     * @return list<string>
+     */
+    public function descriptionLines(): array
+    {
+        $lines = preg_split('/\R|\s+[*•]\s+/u', (string) $this->description) ?: [];
+
+        return array_values(array_filter(
+            array_map(fn (string $line) => trim((string) preg_replace('/^\s*(?:[-•*✓✔]|\d+[.)])\s*/u', '', $line)), $lines),
+            fn (string $line) => $line !== '',
+        ));
+    }
 }

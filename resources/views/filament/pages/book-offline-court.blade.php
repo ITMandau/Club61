@@ -80,6 +80,9 @@
         </div>
     </div>
 
+    {{-- Pengingat: shift lupa ditutup / EDC belum di-settle menjelang 22.00. --}}
+    @include('pos.partials.shift-warnings')
+
     {{-- Realtime: slot yang baru dibooking / di-hold kasir lain / online langsung tampil terisi (hanya di langkah pilih
          jadwal); tanpa Reverb → tiap 30 dtk. --}}
     <div hidden x-data="club61LiveRefresh({ dateProp: 'bookingDate', fallback: 30, when: () => $wire.posStep === 'selection' })"></div>
@@ -481,20 +484,66 @@
                 <div class="pos-customer-box">
                     <div
                         style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.4rem; margin-bottom:0.6rem;">
-                        <span class="pos-section-label" style="margin-bottom:0;">Data Customer</span>
+                        <span class="pos-section-label" style="margin-bottom:0;">{{ $this->isCoaching ? 'Booking Coaching' : 'Data Customer' }}</span>
                         @if ($posStep === 'selection')
+                            {{-- Satu deret tab: Walk-In Baru | Cari Member | Coaching (Coaching hanya untuk izin book_coaching). --}}
                             <div class="pos-tab-group">
                                 <button type="button" wire:click="setCustomerMode('quick_create')"
-                                    class="pos-tab {{ $customerMode === 'quick_create' ? 'active' : '' }}">Walk-In
+                                    class="pos-tab {{ $customerMode === 'quick_create' && ! $this->isCoaching ? 'active' : '' }}">Walk-In
                                     Baru</button>
                                 <button type="button" wire:click="setCustomerMode('search')"
-                                    class="pos-tab {{ $customerMode === 'search' ? 'active' : '' }}">Cari
+                                    class="pos-tab {{ $customerMode === 'search' && ! $this->isCoaching ? 'active' : '' }}">Cari
                                     Member</button>
+                                @if ($this->canBookCoaching)
+                                    <button type="button" wire:click="setCustomerMode('coaching')" data-coaching-tab
+                                        class="pos-tab {{ $this->isCoaching ? 'active' : '' }}">Coaching</button>
+                                @endif
                             </div>
+                        @elseif ($this->isCoaching)
+                            <span style="font-size:0.75rem; font-weight:900; color:#662721;">Coaching</span>
                         @endif
                     </div>
 
-                    @if ($customerMode === 'quick_create')
+                    @if ($this->isCoaching)
+                        {{-- Coaching (Modul 24 Opsi B): pemesan + coach dalam satu kotak; harga = tarif setoran coaching. --}}
+                        <div data-coaching-box style="display:flex; flex-direction:column; gap:0.4rem;">
+                            <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(180px, 1fr)); gap:0.4rem;">
+                                <input type="text" wire:model="walkInName" placeholder="Atas nama *" class="pos-input" autocomplete="off" {{ $posStep !== 'selection' ? 'disabled' : '' }}>
+                                <input type="tel" wire:model="walkInPhone" placeholder="No. WhatsApp / Telp *" class="pos-input" autocomplete="off" {{ $posStep !== 'selection' ? 'disabled' : '' }}>
+                            </div>
+                            <select wire:model.live="coachingCoachId" class="pos-input" style="background:#FFFFFF;" {{ $posStep !== 'selection' ? 'disabled' : '' }}>
+                                <option value="">Pilih coach utama *</option>
+                                @foreach ($this->coachOptions as $coachId => $coachLabel)
+                                    <option value="{{ $coachId }}">{{ $coachLabel }}</option>
+                                @endforeach
+                            </select>
+                            @if (count($this->coachOptions) > 1)
+                                <details {{ count($coachingExtraCoachIds) ? 'open' : '' }} style="background:#FFFFFF; border:1.5px solid #E6DAC0; border-radius:8px; padding:0.45rem 0.65rem;">
+                                    <summary style="font-size:0.75rem; font-weight:800; color:#662721; cursor:pointer;">
+                                        Coach tambahan{{ count($coachingExtraCoachIds) ? ' ('.count($coachingExtraCoachIds).')' : ' (opsional)' }}
+                                    </summary>
+                                    <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(200px, 1fr)); gap:0.25rem 0.75rem; margin-top:0.4rem;">
+                                        @foreach ($this->coachOptions as $coachId => $coachLabel)
+                                            @continue($coachId === $coachingCoachId)
+                                            <label wire:key="extra-coach-{{ $coachId }}" style="display:flex; align-items:center; gap:0.4rem; font-size:0.75rem; color:#4F2F2A;">
+                                                <input type="checkbox" value="{{ $coachId }}" wire:model.live="coachingExtraCoachIds" style="accent-color:#662721;" {{ $posStep !== 'selection' ? 'disabled' : '' }}>
+                                                {{ $coachLabel }}
+                                            </label>
+                                        @endforeach
+                                    </div>
+                                </details>
+                            @endif
+                            <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(180px, 1fr)); gap:0.4rem;">
+                                <input type="text" wire:model="coachingStudents.0" maxlength="100" placeholder="Murid 1 (opsional)" class="pos-input" autocomplete="off" {{ $posStep !== 'selection' ? 'disabled' : '' }}>
+                                <input type="text" wire:model="coachingStudents.1" maxlength="100" placeholder="Murid 2 (opsional)" class="pos-input" autocomplete="off" {{ $posStep !== 'selection' ? 'disabled' : '' }}>
+                            </div>
+                            <textarea wire:model="coachingNotes" maxlength="1000" rows="2" placeholder="Catatan (mis. ballboy, kebutuhan lapangan)" class="pos-input" style="resize:vertical;" {{ $posStep !== 'selection' ? 'disabled' : '' }}></textarea>
+                            @if ($this->coachingQuote['error'])
+                                <div style="font-size:0.6875rem; color:#B91C1C; font-weight:700; line-height:1.4;">{{ $this->coachingQuote['error'] }}</div>
+                            @endif
+                            <div style="font-size:0.5625rem; color:#9CA3AF; line-height:1.4;">Harga lapangan memakai tarif setoran coaching. Membership, voucher jam corporate &amp; kode promo tidak dipakai. Nomor HP lama otomatis dikenali.</div>
+                        </div>
+                    @elseif ($customerMode === 'quick_create')
                         <div style="display:flex; flex-direction:column; gap:0.4rem;">
                             <input type="text" wire:model="walkInName" placeholder="Nama Lengkap *"
                                 class="pos-input" autocomplete="off"
@@ -594,7 +643,7 @@
                                     </div>
                                     <div style="display:flex; align-items:center; gap:0.4rem;">
                                         <span
-                                            style="font-weight:900; font-size:0.75rem; color:#662721;">Rp{{ number_format($s['price'], 0, ',', '.') }}</span>
+                                            style="font-weight:900; font-size:0.75rem; color:#662721;">Rp{{ number_format($this->slotDisplayPrice($s), 0, ',', '.') }}</span>
                                         @if ($posStep === 'selection')
                                             <button type="button" wire:click="removeSlot('{{ $sKey }}')"
                                                 style="background:#FEF2F2; border:1px solid #FECACA; color:#DC2626; border-radius:50%; width:18px; height:18px; font-weight:900; font-size:0.625rem; cursor:pointer; display:flex; align-items:center; justify-content:center; line-height:1;">&times;</button>
@@ -647,8 +696,8 @@
                     </div>
                 @endif
 
-                {{-- 3b. VOUCHER (promo / voucher saldo customer — Modul 21) --}}
-                @if (! $settleBill)
+                {{-- 3b. VOUCHER (promo / voucher saldo customer — Modul 21). Coaching: tarif khusus, tanpa voucher. --}}
+                @if (! $settleBill && ! $this->isCoaching)
                     <div style="margin-bottom:0.6rem;">
                         <div class="pos-section-label" style="margin-bottom:0.35rem;">Voucher</div>
                         @if ($appliedVoucherCode)
@@ -681,6 +730,15 @@
                                 <button type="button" wire:click="applyVoucher" wire:loading.attr="disabled"
                                     style="padding:0.4rem 0.75rem; border-radius:8px; border:1.5px solid #E6DAC0; background:#FCF8EE; color:#662721; font-weight:800; font-size:0.75rem; cursor:pointer;">Pakai</button>
                             </div>
+                            @foreach ($this->customerClaimedPromos as $cp)
+                                <div data-pos-claimed-promo style="display:flex; justify-content:space-between; align-items:center; gap:0.5rem; margin-top:0.35rem; background:#FEF2F2; border:1px dashed #FCA5A5; border-radius:8px; padding:0.35rem 0.55rem;">
+                                    <div style="font-size:0.6875rem; color:#991B1B; min-width:0; overflow-wrap:anywhere;">
+                                        <strong>{{ $cp['name'] ?: $cp['code'] }}</strong> &middot; {{ $cp['headline'] }} <span style="opacity:0.75;">(promo diklaim)</span>
+                                    </div>
+                                    <button type="button" wire:click="applyVoucher('{{ $cp['code'] }}')"
+                                        style="font-size:0.6875rem; font-weight:800; color:#B91C1C; background:none; border:none; cursor:pointer; flex-shrink:0;">Pakai</button>
+                                </div>
+                            @endforeach
                             @foreach ($this->customerCreditVouchers as $cv)
                                 <div style="display:flex; justify-content:space-between; align-items:center; gap:0.5rem; margin-top:0.35rem; background:#F0FDF4; border:1px dashed #86EFAC; border-radius:8px; padding:0.35rem 0.55rem;">
                                     <div style="font-size:0.6875rem; color:#065F46;">
@@ -703,7 +761,7 @@
                 <div class="pos-total-box">
                     <div
                         style="display:flex; justify-content:space-between; font-size:0.6875rem; color:#7A5A52; margin-bottom:0.2rem;">
-                        <span>Lapangan:</span><span>Rp {{ number_format($this->courtTotal, 0, ',', '.') }}</span>
+                        <span>{{ $this->isCoaching ? 'Lapangan (tarif coaching):' : 'Lapangan:' }}</span><span>Rp {{ number_format($this->courtTotal, 0, ',', '.') }}</span>
                     </div>
                     <div
                         style="display:flex; justify-content:space-between; font-size:0.6875rem; color:#7A5A52; margin-bottom:0.2rem;">
@@ -891,6 +949,25 @@
                         @endif
                     </strong>
                 </div>
+                @if ($this->isCoaching)
+                    @php
+                        $confirmCoaches = collect([$coachingCoachId])->merge($coachingExtraCoachIds)->filter()->unique()
+                            ->map(fn ($id) => $this->coachOptions[$id] ?? null)->filter();
+                    @endphp
+                    <div class="pos-confirm-row"><span>Coaching</span>
+                        <strong>
+                            @foreach ($confirmCoaches as $coachLabel)
+                                <span class="pos-confirm-line">{{ $coachLabel }}</span>
+                            @endforeach
+                            @if (array_filter($coachingStudents))
+                                <span class="pos-confirm-line">Murid: {{ implode(', ', array_filter($coachingStudents)) }}</span>
+                            @endif
+                            @if (trim($coachingNotes) !== '')
+                                <span class="pos-confirm-line">Catatan: {{ $coachingNotes }}</span>
+                            @endif
+                        </strong>
+                    </div>
+                @endif
                 @unless ($settleBill)
                     <div class="pos-confirm-row"><span>Tambahan</span>
                         <strong>
@@ -1033,6 +1110,7 @@
                         Loket beroperasi 100% Cashless. Sesi shift tidak memerlukan uang modal awal kas.
                     </div>
 
+                    @include('pos.partials.shift-open-edc')
                     <div>
                         <label
                             style="display:block; font-size:0.75rem; font-weight:800; color:#4F2F2A; margin-bottom:0.3rem;">
@@ -1059,210 +1137,9 @@
         </div>
     @endif
 
-    {{-- ============================
-     MODAL TUTUP SHIFT KASIR (100% CASHLESS)
-     ============================ --}}
-    @if ($showCloseShiftModal && $activeShift)
-        <div
-            style="position:fixed; inset:0; z-index:9999; background:rgba(15,23,42,0.65); backdrop-filter:blur(6px); display:flex; align-items:center; justify-content:center; padding:1rem;">
-            <div
-                style="background:#FFFFFF; border:1.5px solid #E6DAC0; border-radius:18px; box-shadow:0 25px 50px -12px rgba(102,39,33,0.4); width:100%; max-width:480px; overflow:hidden; animation:fadeInUp 0.2s ease;">
-                <div
-                    style="background:#FCF8EE; border-bottom:1.5px solid #E6DAC0; padding:0.85rem 1.1rem; display:flex; justify-content:space-between; align-items:center;">
-                    <div>
-                        <div
-                            style="font-size:0.625rem; font-weight:900; color:#BE123C; text-transform:uppercase; letter-spacing:0.06em; background:#FFF1F2; border:1px solid #FECDD3; border-radius:4px; padding:0.08rem 0.4rem; display:inline-block;">
-                            CLOSING REGISTER</div>
-                        <div style="font-size:1rem; font-weight:900; color:#4F2F2A; margin-top:0.2rem;">Tutup Shift
-                            &amp; Rekonsiliasi Kas</div>
-                    </div>
-                    <button type="button" wire:click="$set('showCloseShiftModal', false)"
-                        style="background:none; border:none; font-size:1.25rem; color:#78350F; cursor:pointer; line-height:1;">&times;</button>
-                </div>
-
-                <div style="padding:1.1rem; display:flex; flex-direction:column; gap:0.85rem;">
-                    <div
-                        style="background:#FCF8EE; border:1px solid #E6DAC0; border-radius:8px; padding:0.65rem 0.8rem; font-size:0.75rem;">
-                        <div style="display:flex; justify-content:space-between; margin-bottom:0.25rem;">
-                            <span style="color:#6B7280; font-weight:600;">No. Shift:</span>
-                            <strong style="color:#4F2F2A;">{{ $activeShift->shift_number }}</strong>
-                        </div>
-                        <div style="display:flex; justify-content:space-between; margin-bottom:0.25rem;">
-                            <span style="color:#6B7280; font-weight:600;">Dibuka Oleh:</span>
-                            <strong style="color:#4F2F2A;">{{ $activeShift->openedBy?->name ?? 'Kasir' }}
-                                ({{ $activeShift->opened_at->setTimezone('Asia/Jakarta')->format('d/m/Y H:i') }}
-                                WIB)</strong>
-                        </div>
-                        <div style="display:flex; justify-content:space-between; margin-bottom:0.25rem;">
-                            <span style="color:#6B7280; font-weight:600;">Petugas Closing:</span>
-                            <strong style="color:#4F2F2A;">{{ auth()->user()?->name ?? 'Kasir' }}</strong>
-                        </div>
-                    </div>
-
-                    <div
-                        style="background:#ECFDF5; border:1.5px solid #6EE7B7; border-radius:8px; padding:0.65rem 0.8rem; font-size:0.75rem; color:#065F46; font-weight:700; display:flex; align-items:center; gap:0.5rem;">
-                        <span
-                            style="width:8px; height:8px; border-radius:50%; background:#10B981; flex-shrink:0;"></span>
-                        Rekonsiliasi 100% Cashless &mdash; berbasis audit digital QRIS &amp; EDC, tanpa hitung fisik
-                        kas.
-                    </div>
-
-                    <div>
-                        <label
-                            style="display:block; font-size:0.75rem; font-weight:800; color:#4F2F2A; margin-bottom:0.3rem;">
-                            Catatan Penutupan Kasir (Opsional)
-                        </label>
-                        <textarea wire:model="closingNotes" rows="2"
-                            style="width:100%; border:1.5px solid #E6DAC0; border-radius:8px; padding:0.5rem 0.75rem; font-size:0.75rem; color:#4F2F2A; background:#FCF8EE; outline:none;"
-                            placeholder="Catatan serah terima kas, selisih uang, atau catatan operasional..."></textarea>
-                    </div>
-                </div>
-
-                <div
-                    style="background:#FCF8EE; border-top:1px solid #E6DAC0; padding:0.75rem 1.1rem; display:flex; justify-content:flex-end; gap:0.5rem;">
-                    <button type="button" wire:click="$set('showCloseShiftModal', false)"
-                        style="padding:0.45rem 0.9rem; font-size:0.8125rem; font-weight:700; border:1.5px solid #E6DAC0; background:#FFFFFF; border-radius:8px; cursor:pointer; color:#4F2F2A;">
-                        Batal
-                    </button>
-                    <button type="button" wire:click="executeCloseShift"
-                        style="padding:0.45rem 1.1rem; font-size:0.8125rem; font-weight:900; background:#BE123C; color:#FFFFFF; border:none; border-radius:8px; cursor:pointer; box-shadow:0 2px 8px rgba(190,18,60,0.25);">
-                        Tutup Shift &amp; Rekonsiliasi Kas
-                    </button>
-                </div>
-            </div>
-        </div>
-    @endif
-
-    {{-- ============================
-     MODAL LAPORAN SHIFT / STRUK Z-REPORT
-     ============================ --}}
-    @if ($showShiftReportModal && $reportShiftData)
-        <div
-            style="position:fixed; inset:0; z-index:9999; background:rgba(15,23,42,0.65); backdrop-filter:blur(6px); display:flex; align-items:center; justify-content:center; padding:1rem;">
-            <div
-                style="background:#FFFFFF; border:1.5px solid #E6DAC0; border-radius:18px; box-shadow:0 25px 50px -12px rgba(102,39,33,0.4); width:100%; max-width:460px; max-height:90vh; display:flex; flex-direction:column; overflow:hidden; animation:fadeInUp 0.2s ease;">
-                <div
-                    style="background:#FCF8EE; border-bottom:1.5px solid #E6DAC0; padding:0.85rem 1.1rem; display:flex; justify-content:space-between; align-items:center; flex-shrink:0;">
-                    <div>
-                        <div
-                            style="font-size:0.625rem; font-weight:900; color:#662721; text-transform:uppercase; letter-spacing:0.06em; background:#FCF8EE; border:1px solid #E6DAC0; border-radius:4px; padding:0.08rem 0.4rem; display:inline-block;">
-                            REKONSILIASI KAS</div>
-                        <div style="font-size:1rem; font-weight:900; color:#4F2F2A; margin-top:0.2rem;">Laporan
-                            Penutupan Kasir (Z-Report)</div>
-                    </div>
-                    <button type="button" wire:click="closeShiftReportModal"
-                        style="background:none; border:none; font-size:1.25rem; color:#78350F; cursor:pointer; line-height:1;">&times;</button>
-                </div>
-
-                <div style="flex:1; overflow-y:auto; padding:1rem 1.1rem; background:#FFFFFF;">
-                    <div id="printable-z-report"
-                        style="font-family:monospace; font-size:0.75rem; color:#111827; background:#FFFFFF; padding:0.5rem 0;">
-                        <div
-                            style="text-align:center; border-bottom:1px dashed #000; padding-bottom:0.6rem; margin-bottom:0.6rem;">
-                            <div style="font-weight:900; font-size:0.9375rem;">CLUB 61 PADEL ARENA</div>
-                            <div style="font-size:0.6rem;">{{ \App\Models\Setting\CompanyProfileSetting::receiptAddress() }}</div>
-                            <div style="font-size:0.65rem; font-weight:800; margin-top:0.25rem;">LAPORAN PENUTUPAN
-                                KASIR (Z-REPORT)</div>
-                            <div style="font-size:0.6rem;">Loket: {{ $reportShiftData['counter'] }}</div>
-                        </div>
-
-                        <div style="border-bottom:1px dashed #000; padding-bottom:0.45rem; margin-bottom:0.45rem;">
-                            <div>No. Shift: <strong>{{ $reportShiftData['shift_number'] }}</strong></div>
-                            <div>Buka : {{ $reportShiftData['opened_at'] }} ({{ $reportShiftData['opened_by'] }})
-                            </div>
-                            <div>Tutup: {{ $reportShiftData['closed_at'] }} ({{ $reportShiftData['closed_by'] }})
-                            </div>
-                            <div>Total Transaksi: {{ $reportShiftData['total_transactions'] }} transaksi</div>
-                        </div>
-
-                        <div style="border-bottom:1px dashed #000; padding-bottom:0.45rem; margin-bottom:0.45rem;">
-                            <div style="font-weight:900; margin-bottom:0.25rem;">RINGKASAN PENJUALAN POS (100%
-                                CASHLESS):</div>
-                            @if (($reportShiftData['total_debit_sales'] ?? 0) > 0)
-                                <div style="display:flex; justify-content:space-between; margin-bottom:0.15rem;">
-                                    <span>Kartu Debit (EDC):</span>
-                                    <span>Rp
-                                        {{ number_format($reportShiftData['total_debit_sales'], 0, ',', '.') }}</span>
-                                </div>
-                            @endif
-                            @if (($reportShiftData['total_credit_sales'] ?? 0) > 0)
-                                <div style="display:flex; justify-content:space-between; margin-bottom:0.15rem;">
-                                    <span>Kartu Kredit (EDC):</span>
-                                    <span>Rp
-                                        {{ number_format($reportShiftData['total_credit_sales'], 0, ',', '.') }}</span>
-                                </div>
-                            @endif
-                            @if (($reportShiftData['total_edc_bca_sales'] ?? 0) > 0)
-                                <div style="display:flex; justify-content:space-between; margin-bottom:0.15rem;">
-                                    <span>EDC BCA:</span>
-                                    <span>Rp
-                                        {{ number_format($reportShiftData['total_edc_bca_sales'], 0, ',', '.') }}</span>
-                                </div>
-                            @endif
-                            @if (($reportShiftData['total_edc_mandiri_sales'] ?? 0) > 0)
-                                <div style="display:flex; justify-content:space-between; margin-bottom:0.15rem;">
-                                    <span>EDC Mandiri:</span>
-                                    <span>Rp
-                                        {{ number_format($reportShiftData['total_edc_mandiri_sales'], 0, ',', '.') }}</span>
-                                </div>
-                            @endif
-                            <div style="display:flex; justify-content:space-between; margin-bottom:0.15rem;">
-                                <span>QRIS:</span>
-                                <span>Rp {{ number_format($reportShiftData['total_qris_sales'], 0, ',', '.') }}</span>
-                            </div>
-                            @if ($reportShiftData['total_other_sales'] > 0)
-                                <div style="display:flex; justify-content:space-between; margin-bottom:0.15rem;">
-                                    <span>Lainnya:</span>
-                                    <span>Rp
-                                        {{ number_format($reportShiftData['total_other_sales'], 0, ',', '.') }}</span>
-                                </div>
-                            @endif
-                            <div
-                                style="display:flex; justify-content:space-between; font-weight:900; border-top:1px dashed #000; padding-top:0.25rem; margin-top:0.25rem;">
-                                <span>TOTAL OMSET POS:</span>
-                                <span>Rp {{ number_format($reportShiftData['total_sales'], 0, ',', '.') }}</span>
-                            </div>
-                        </div>
-
-                        @if (!empty($reportShiftData['closing_notes']))
-                            <div
-                                style="border-bottom:1px dashed #000; padding-bottom:0.45rem; margin-bottom:0.45rem; font-size:0.6875rem;">
-                                <strong>Catatan:</strong> {{ $reportShiftData['closing_notes'] }}
-                            </div>
-                        @endif
-
-                        <div
-                            style="display:flex; justify-content:space-between; text-align:center; padding-top:1.2rem; font-size:0.625rem;">
-                            <div style="width:45%;">
-                                <div>Kasir Bertugas,</div>
-                                <div style="height:2.2rem;"></div>
-                                <div style="border-top:1px solid #000; padding-top:0.15rem;">(
-                                    {{ $reportShiftData['closed_by'] }} )</div>
-                            </div>
-                            <div style="width:45%;">
-                                <div>Supervisor / Manager,</div>
-                                <div style="height:2.2rem;"></div>
-                                <div style="border-top:1px solid #000; padding-top:0.15rem;">( .................... )
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <div
-                    style="background:#FCF8EE; border-top:1px solid #E6DAC0; padding:0.65rem 1.1rem; display:flex; justify-content:flex-end; gap:0.5rem; flex-shrink:0;">
-                    <button type="button" onclick="club61PrintReceipt('#printable-z-report')"
-                        style="padding:0.4rem 0.85rem; font-size:0.8125rem; font-weight:800; border:1.5px solid #E6DAC0; background:#FFFFFF; border-radius:7px; cursor:pointer; color:#4F2F2A;">
-                        Cetak Z-Report
-                    </button>
-                    <button type="button" wire:click="closeShiftReportModal"
-                        style="padding:0.4rem 0.85rem; font-size:0.8125rem; font-weight:800; background:#662721; color:#F7F0DB; border:1px solid #662721; border-radius:7px; cursor:pointer;">
-                        Selesai
-                    </button>
-                </div>
-            </div>
-        </div>
-    @endif
+    {{-- Tutup shift blind + laporan Z (sama dengan POS F&B) — App\Livewire\Concerns\ClosesPosShift. --}}
+    @include('pos.partials.shift-close-modal')
+    @include('pos.partials.shift-report-modal')
 
     {{-- Struk & Z-Report dicetak di printer thermal 58mm (App\Support\ReceiptPaper). --}}
     @include('pos.partials.receipt-print-style', ['selectors' => ['#printable-pos-receipt', '#printable-z-report']])

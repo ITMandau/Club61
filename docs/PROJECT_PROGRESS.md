@@ -216,7 +216,18 @@ Dokumen pelacak progres (Single Source of Truth). Status di bawah ini hasil audi
 - [x] POS Walk-In Padel (`/admin/book-offline-court`) dan POS Kasir F&B (`/pos`).
 - [x] Shift kasir (`pos_cashier_shifts`) dengan rekonsiliasi setoran per metode bayar.
 - [x] Role **Resepsionis** (POS walk-in + scan / input kode booking).
-- [ ] **Riwayat shift kasir:** ringkasan shift cuma muncul sekali di modal saat tutup shift, belum ada halaman daftar shift lama & laporan selisih (over / short).
+- [~] **Tutup shift Fase 1 (22 Okt 2026, POS Padel & F&B sama — `ShiftClosingService` + trait `ClosesPosShift`):**
+  - Blind: kasir mengetik angka struk settlement / Audit Report EDC & aplikasi QRIS tanpa melihat angka sistem. Kalau selisih, angkanya dibekukan.
+  - EDC per mesin per loket: dihitung sejak settlement terakhir (`pos_edc_settlements`), jadi "Settle sekarang" & "Belum settle (ganti shift)" sama-sama bisa dicocokkan.
+  - Toleransi Rp0. Selisih → catatan wajib → status Perlu Review → diputuskan pemegang izin `approve_shift_closing` (default admin; penutup shift tidak mereview sendiri, kecuali super_admin).
+  - Koreksi metode bayar salah klik oleh admin (`PaymentMethodCorrection`): nominal tetap, Buku Transaksi tetap satu baris dengan tanda "Dikoreksi siapa / kapan (asal: …)".
+  - Baris form tutup shift = hanya metode yang ada transaksinya di shift itu (+ batch EDC sejak settlement terakhir; tiap mesin debit & kredit). Salah klik dikoreksi admin saat itu juga — Review Shift Kasir menampilkan shift "Sedang buka". Kalau baru ketahuan saat tutup: baris pindahan tampil "tidak diketik" di detail, admin putuskan; baris yang sudah diketik kasir tetap dihitung walau transaksinya dipindah.
+  - Cetak ulang Z-Report dari Detail Shift Kasir (isi = `pos.partials.z-report-body` yang sama dengan POS, bertanda CETAK ULANG + reviewer, log `shift.z_report_reprinted`).
+  - Analytics: kanal dipisah POS Frontdesk Padel / POS Kasir F&B / kasir lainnya / Payment Gateway Online (rincian per gateway DOKU / Midtrans dari pembayaran asal); teks "Midtrans" di Analytics diganti.
+- **DOKU SNAP VA Mandiri / BRI / BNI / BSI (22 Okt 2026, belum diuji sandbox):** Partner Service ID (BIN) + prefix customer no. per bank diisi admin di form Edit metode VA-nya, bagian "DOKU SNAP" (tampil hanya saat DOKU dipakai di Gateway Pembayaran; ubah butuh izin `manage_payment_gateway`, log KRITIS), disimpan di `payment_gateway_settings.doku_snap_va` (migrasi 2026_10_22_120001). Bank yang kosong tetap DOKU Checkout; kolom "Jalur DOKU" (saat DOKU dipakai) menunjukkan SNAP / Checkout. BSI: metode bawaan baru `BSI_SYARIAH_VA` (DOKU saja, nonaktif; kanal SNAP `VIRTUAL_ACCOUNT_BSI`), "VA Bank Lain" di DOKU jadi Permata saja. Invoice: langkah bayar umum untuk VA selain BCA. POS: SNAP otomatis kalau "QR otomatis di kasir" = DOKU.
+  - Pengingat di POS: shift dibuka sejak kemarin / > 12 jam, EDC belum di-settle menjelang 22.00, EDC kemarin belum di-settle saat buka shift.
+  - Halaman Keuangan → **Review Shift Kasir** + detail shift. Z-Report bisa dicetak di kedua loket.
+- [ ] **Riwayat shift kasir Fase 2:** filter lengkap, Excel per shift, cetak ulang Z dari panel, kasir melihat shift miliknya. **Fase 3:** Tutup Harian per tanggal (dana masuk rekening H+1, MDR) + Excel per hari + kolom Shift di Excel Buku Transaksi.
 - [ ] **Split bill** EQUAL & BY_ITEM (SKEMA SAJA).
 - [ ] Keranjang terpadu (padel + kafe + raket + merch dalam 1 struk).
 - [ ] POS Wellness, Gym, Merchandise (lihat modul masing-masing).
@@ -272,6 +283,14 @@ Dokumen pelacak progres (Single Source of Truth). Status di bawah ini hasil audi
 - [x] Dashboard PIC corporate (`/corporate`): kelola anggota, import CSV, rilis / cabut voucher.
 - [x] Halaman admin **Sponsor Team** (pratinjau dashboard PIC, dikunci izin sendiri).
 - [~] Sebagian keputusan PM masih menunggu (lihat PRD Modul 12 §8).
+- [x] **Jadwal Tetap Mingguan** (25 Okt 2026, permintaan klien untuk IOH: tiap Kamis 19:00–22:00, 3 lapangan): menu
+  Operasional Harian → Jadwal Tetap Mingguan (izin `manage_recurring_bookings`). Booking rutin dibuat otomatis
+  (tombol + `padel:generate-recurring` tiap 00:20) sampai N minggu ke depan atas nama pemilik membership (corporate /
+  individu), lunas 100% dari kuota jam PADEL (order Rp0, tanpa shift kasir). Kuota kurang / slot bentrok = minggu itu
+  GAGAL dan dicoba lagi, tidak pernah jadi tagihan. Lewati tanggal (booking dibatalkan, jam kembali) & batal lewati.
+  Batas reschedule sekarang SATU pengaturan global untuk semua booking (tombol Batas Reschedule di Jadwal Tetap Mingguan,
+  jam / hari, bawaan 2 jam, izin `manage_booking_time_limits`); lewat batas, tombol Reschedule di Kelola Pemesanan
+  nonaktif & server menolak. Belum: kuota off-peak IM3 Premium (menunggu klien), blokir tanggal Grand Opening.
 
 ---
 
@@ -398,14 +417,15 @@ PRD: [`PRD_MODUL_21_REFUND_NO_SHOW_PEMBAYARAN_BERMASALAH.md`](PRD_MODUL_21_REFUN
 
 ## MODUL 22: VOUCHER SALDO & VOUCHER PROMO MARKETING
 
-### Status: 30% (fondasi jalan, rancangan final v0.2 menunggu konfirmasi PM)
+### Status: ±70% (tahap 2 & 3 dibangun; tahap 1 dilewati dulu, cara D menyusul)
 
 PRD: [`PRD_MODUL_22_VOUCHER_DAN_PROMO.md`](PRD_MODUL_22_VOUCHER_DAN_PROMO.md) v0.2 (18 Okt 2026) — skema dinamis, cara sebar A–D, aturan tetap T1–T6.
 
 - [x] Tabel & mesin voucher satu untuk online dan kasir (`VoucherService`), voucher saldo dari refund ditolak, Daftar Voucher.
 - [ ] Voucher saldo **sekali pakai, sisa hangus** (keputusan PM 5 Okt 2026 — yang berjalan sekarang masih menyimpan sisa).
-- [ ] Halaman Marketing: buat / kelola kode promo nyata (sekarang tampilan contoh) + batas per akun.
-- [ ] Skema sebar promo (kode umum sosmed / kode unik / klaim ke akun / otomatis) — menunggu arahan PM.
+- [x] Tahap 2 (19 Okt 2026): buat / ubah / nonaktifkan promo **kode umum (A)** di Daftar Voucher — kuota, periode, kanal, kategori sewa lapangan, 1x per akun, gabung benefit member.
+- [x] Tahap 3 (23 Okt 2026, belum di-commit): **kode unik massal (B)** — kampanye + N kode `AWALAN-XXXXXX` (kuota 1, 1 kode per akun per kampanye), Unduh CSV kode & status; **klaim ke akun (C)** — link `/promo/KODE`, kuota = klaim, voucher masuk Voucher Saya & muncul otomatis di checkout / POS, API `vouchers/claim` + `vouchers/mine.claimed`. Migrasi `2026_10_23_160001`.
+- [ ] Cara D (otomatis: akun baru, ulang tahun, referral) & saklar gabung voucher sponsor.
 
 ---
 
@@ -423,17 +443,23 @@ PRD: [`PRD_MODUL_23_STRUKTUR_PORTAL_CUSTOMER.md`](PRD_MODUL_23_STRUKTUR_PORTAL_C
 
 ---
 
-## MODUL 24: COACHING (BOOKING SESI COACH, SETORAN LAPANGAN & PAYOUT COACH)
+## MODUL 24: COACHING — OPSI B (ACADEMY SEWA LAPANGAN HARGA KHUSUS)
 
-### Status: 0% (PRD draft, menunggu jawaban PM)
+### Status: Tahap 1 & 2 dibangun 23 Okt 2026 (belum di-commit / belum dicoba di server)
 
-PRD: [`PRD_MODUL_24_COACHING.md`](PRD_MODUL_24_COACHING.md)
+PRD: [`PRD_MODUL_24_COACHING_OPSI_B_SEWA_LAPANGAN_ACADEMY.md`](PRD_MODUL_24_COACHING_OPSI_B_SEWA_LAPANGAN_ACADEMY.md) (dipilih). Opsi A [`PRD_MODUL_24_COACHING.md`](PRD_MODUL_24_COACHING.md) ditunda.
 
-- [ ] Data coach partner (profil, harga sesi, jadwal tersedia, rekening, akun login) + migrasi `padel_bookings.coach_id` ke tabel `coaches`.
-- [ ] Booking coaching customer & mode Coaching di POS Walk-In (lapangan + jadwal coach dikunci bersamaan, maks 2 murid).
-- [ ] Buku Transaksi: setoran lapangan = pendapatan Club, bagian coach = utang ke coach; baris Coaching di Analytics.
-- [ ] Payout coach per periode + export.
-- [ ] Portal coach (jadwal, check-in murid, pendapatan).
+- [x] Menu admin **Coaching**: Jadwal Coaching (+ tombol WhatsApp pengingat coach), Coach, Academy, Tarif Setoran (aturan hari + jam + harga/jam + prioritas) & Pengaturan (biaya coach tambahan / jam, default Rp0; WA admin). Migrasi `2026_10_23_100001` (tarif awal 06–17 Rp100rb, 17–24 Rp150rb, SR Academy).
+- [x] POS Walk-In tipe **Reguler / Coaching** (izin `book_coaching`): coach utama + tambahan, murid (maks 2), catatan; harga = `CoachingPricingService` (layar = server); membership / voucher / kode promo tidak dipakai; coach tidak bisa dobel jadwal (kunci baris coach); satu sesi tidak boleh dua lapangan di jam sama.
+- [x] Buku Transaksi kategori **COACHING — Sewa Lapangan Coaching** (slot tetap item PADEL; termasuk selisih reschedule); Analytics baris "Pelatih & Coaching Session" aktif.
+- [x] Reschedule: harga jadwal baru = tarif coaching, jam tanpa tarif tidak ditawarkan, jadwal coach dicek.
+- [x] API hold customer tidak menerima `coach_id` lagi. Izin baru: `View:JadwalCoaching`, `book_coaching` (preset resepsionis), `manage_coaching`, `manage_coaching_rates` (pintu belakang, seperti tarif lapangan).
+- [x] Tahap 2 (23 Okt 2026, belum di-commit): migrasi `2026_10_23_140001`.
+  - **Monitoring Lapangan**: sel timetable sesi coaching menampilkan "Coach Nalda +1"; popup detail berisi coach (+ tombol WA pengingat), academy, murid, catatan.
+  - **Profil coach** di portal customer `/coaching` (menu Coaching; di layar < 1280px lewat dropdown akun): foto (selalu utuh, tidak dipotong), olahraga, motto opsional (migrasi `2026_10_23_150001`), poin keunggulan, tombol WA admin coaching. Tampil hanya coach aktif + "Tampilkan di profil" (default mati). No. WA / email / catatan coach tidak ditampilkan. Foto lewat `SecureImageUploader`, path foto dikunci di model.
+  - **API** `GET /api/v1/coaching/coaches` (publik, read-only, sama dengan halaman web).
+  - **Link bio** `/links` (publik): tombol diatur di Marketing & Event → Link Bio Instagram (izin `manage_link_bio`, preset admin). Default: Book Court, Lokasi, Admin Coaching, Pricelist (gambar, nonaktif sampai diunggah), Admin Club 61; media sosial dari Konten Website. Tombol tanpa tujuan tidak tampil; link bebas wajib http/https.
+  - **Analytics**: Rekap Coaching per Academy (sesi, jam, nilai sewa) & per Coach (sesi utama / tambahan, jam).
 
 ---
 ## MODUL 20: HALAMAN ADMIN PENDUKUNG

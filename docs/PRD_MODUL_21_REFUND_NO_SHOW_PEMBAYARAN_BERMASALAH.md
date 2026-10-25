@@ -25,7 +25,7 @@
 | 4 | Disetujui → uang dikembalikan. | `RefundQueueService::process` → booking `REFUNDED`, baris refund negatif di Buku Transaksi. |
 | 5 | **Ditolak → uangnya jadi voucher** dan dikirim ke akun customer. | `RefundQueueService::reject` → booking `CANCELLED`, voucher saldo `KR-XXXXXXXX` (tipe `CREDIT`, milik customer itu, berlaku 6 bulan, bisa dipakai sebagian berkali-kali) + email ke customer. Toggle "Jadikan voucher" bisa dimatikan untuk data ganda / uang yang sudah dikembalikan di luar sistem. |
 | 6 | Customer **tidak bisa** mengajukan refund sendiri. | Endpoint `POST /api/v1/padel/bookings/{id}/refund` dihapus. |
-| 7 | Booking hangus tidak bisa di-reschedule apa pun alasannya (Opsi 1). Reschedule biasa paling lambat **2 jam** sebelum main. | `PadelBookingService::RESCHEDULE_CUTOFF_HOURS = 2`. Refund juga dikunci begitu jam main dimulai. |
+| 7 | Booking hangus tidak bisa di-reschedule apa pun alasannya (Opsi 1). Reschedule biasa paling lambat **2 jam** sebelum main. | Bawaan 2 jam; sejak 25 Okt 2026 diatur admin lewat tombol Batas Reschedule di Jadwal Tetap Mingguan (`BookingTimeService::rescheduleCutoffHours`, berlaku semua booking). Refund juga dikunci begitu jam main dimulai. |
 | 8 | Pembayaran bermasalah (§6) — nanti. | Belum dikerjakan. |
 
 **Voucher saldo** (`App\Services\Finance\VoucherService`):

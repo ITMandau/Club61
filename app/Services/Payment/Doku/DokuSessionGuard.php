@@ -99,7 +99,9 @@ class DokuSessionGuard
         $latest = $log['doku_invoice_id'] ?? (end($sessions) ?: null);
         $meta = $latest ? ($log['doku_sessions'][$latest] ?? null) : null;
 
-        if ($latest && is_array($meta) && $this->matches($meta, $method, $amount)) {
+        // Sesi yang sudah tercatat mati (dibatalkan & diterima DOKU) tidak pernah dipakai lagi — cek status VA SNAP yang
+        // sudah dihapus tetap menjawab "pending".
+        if ($latest && is_array($meta) && ! in_array($meta['status'] ?? null, self::DEAD, true) && $this->matches($meta, $method, $amount)) {
             $remote = $this->checkout->state($latest, self::expiresAt($meta));
             if ($remote['state'] === DokuCheckoutService::PAID) {
                 return ['action' => self::PAID, 'session_id' => $latest, 'status' => $remote['data']];
@@ -192,6 +194,29 @@ class DokuSessionGuard
         ]);
 
         return $log;
+    }
+
+    /**
+     * Tandai satu sesi CLOSED di tagihan yang masih PENDING (transaksi sendiri, dikunci). Dipakai setelah DOKU SNAP
+     * MENERIMA pembatalan (VA dihapus / QR di-expire) tapi transaksi pemanggilnya di-rollback — mis. ganti metode:
+     * VA lama sudah dihapus di DOKU lalu VA baru gagal dibuat. Tanpa ini sesi yang sudah mati tercatat ACTIVE lagi,
+     * nomor VA mati tampil di invoice & dipakai ulang (cek status VA DOKU tetap menjawab "pending" untuk VA terhapus).
+     */
+    public static function markClosed(string $invoice): void
+    {
+        DB::transaction(function () use ($invoice) {
+            $found = self::findBill($invoice);
+            $bill = $found ? Payment::whereKey($found->id)->lockForUpdate()->first() : null;
+            if (! $bill || $bill->status !== 'PENDING') {
+                return;
+            }
+            $log = self::log($bill);
+            $status = $log['doku_sessions'][$invoice]['status'] ?? null;
+            if (! isset($log['doku_sessions'][$invoice]) || in_array($status, self::DEAD, true)) {
+                return;
+            }
+            $bill->update(['payload_log' => self::withStatus($log, $invoice, self::CLOSED)]);
+        });
     }
 
     /** Respons "pakai lagi sesi ini" — bentuknya sama dengan hasil pembuatan sesi (OnlineGatewayRouter::createSession). */

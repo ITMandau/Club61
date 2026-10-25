@@ -27,3 +27,5 @@ Artisan::command('inspire', function () {
 
 // Modul 17: cocokkan Buku Transaksi dengan pembayaran & refund kemarin (selisih → Log Aktivitas KRITIS).
 \Illuminate\Support\Facades\Schedule::command('ledger:verify')->dailyAt('01:15')->withoutOverlapping();
+// Jadwal Tetap Mingguan: booking rutin (corporate / member) dibuat otomatis sampai N minggu ke depan, dipotong kuota jam.
+\Illuminate\Support\Facades\Schedule::command('padel:generate-recurring')->dailyAt('00:20')->withoutOverlapping(30);

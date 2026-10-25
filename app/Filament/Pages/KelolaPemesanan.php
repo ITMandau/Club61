@@ -185,7 +185,7 @@ class KelolaPemesanan extends Page
         if (now()->gte(PadelBookingService::rescheduleDeadline($booking))) {
             Notification::make()
                 ->title('Tidak Bisa Dipindah')
-                ->body('Reschedule paling lambat '.PadelBookingService::RESCHEDULE_CUTOFF_HOURS.' jam sebelum jam main ('.PadelBookingService::rescheduleDeadline($booking)->format('d M Y H:i').' WIB).')
+                ->body('Reschedule paling lambat '.PadelBookingService::rescheduleCutoffLabel($booking).' sebelum jam main ('.PadelBookingService::rescheduleDeadline($booking)->format('d M Y H:i').' WIB).')
                 ->warning()
                 ->send();
 
@@ -584,7 +584,7 @@ class KelolaPemesanan extends Page
         // REAKTIF FAIL-SAFE: Otomatis sinkronkan tiket kedaluwarsa & selesai setiap halaman dibuka
         app(PadelBookingService::class)->syncExpiredAndCompletedBookings();
 
-        $query = PadelBooking::with(['user', 'court', 'order.payments', 'order.refunds', 'equipments.equipment'])
+        $query = PadelBooking::with(['user', 'court', 'order.payments', 'order.refunds', 'equipments.equipment', 'recurringSchedule'])
             ->latest('start_time');
 
         if ($this->activeTab === 'CONFIRMED') {

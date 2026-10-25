@@ -52,6 +52,7 @@ class LogAktivitas extends Page implements HasTable
         'FNB' => 'F&B',
         'MEMBERSHIP' => 'Membership',
         'SPONSOR' => 'Sponsor',
+        'COACHING' => 'Coaching',
         'MARKETING' => 'Marketing & Promo',
         'MASTER_DATA' => 'Master Data',
         'USER_ROLE' => 'User & Hak Akses',

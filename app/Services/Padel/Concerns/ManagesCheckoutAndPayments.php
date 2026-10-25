@@ -1049,11 +1049,28 @@ trait ManagesCheckoutAndPayments
         // Slot yang sudah ditahan kasir saat "Lanjut ke Pembayaran" (atas nama $holder). Masih sah → dipakai & dipindah
         // ke customer; habis / tidak cocok → slot ditahan ulang seperti biasa (bisa bentrok kalau sudah diambil orang).
         ?array $heldBookingIds = null,
-        ?User $holder = null
+        ?User $holder = null,
+        // Booking coaching (Modul 24 Opsi B): ['head_coach_id', 'extra_coach_ids', 'students', 'notes'] — harga slot =
+        // tarif setoran coaching, tanpa membership / voucher. null = booking reguler (alur lama, tidak berubah).
+        ?array $coaching = null
     ): array {
         // 100% Cashless: pembayaran tunai tidak diperbolehkan sama sekali di loket walk-in.
         if (in_array(strtoupper($paymentMethod), ['CASH', 'TUNAI'])) {
             throw new HttpException(422, 'Pembayaran tunai (CASH) tidak diperbolehkan. Venue Club 61 beroperasi 100% Cashless.');
+        }
+
+        if ($coaching !== null) {
+            if (! $cashier->can('book_coaching')) {
+                throw new HttpException(403, 'Akses ditolak: Anda tidak memiliki izin [book_coaching] untuk membuat booking coaching.');
+            }
+            if (trim((string) $voucherCode) !== '' || strtoupper($paymentMethod) === 'VOUCHER') {
+                throw new HttpException(422, 'Booking coaching sudah memakai tarif khusus — voucher / kode promo tidak bisa dipakai.');
+            }
+            $coaching = app(\App\Services\Coaching\CoachingBookingService::class)->normalize($coaching);
+            // Kuota membership & voucher jam corporate tidak berlaku untuk tarif coaching.
+            $membershipBalanceId = 'NONE';
+            $sponsorVoucherId = 'NONE';
+            $voucherCode = null;
         }
 
         // 1. Pakai slot yang sudah ditahan kasir, atau hold batch slots untuk customer (SlotConflictException jika tabrakan)
@@ -1070,7 +1087,7 @@ trait ManagesCheckoutAndPayments
         // "slot sedang di-hold pemain lain". Slot yang ditahan kasir sebelumnya TIDAK dilepas: kasir membetulkan isian
         // lalu menekan Bayar lagi tanpa kehilangan slotnya.
         try {
-            return DB::transaction(function () use ($customer, $bookingIds, $equipments, $paymentMethod, $cashier, $autoCheckIn, $paymentMeta, $membershipBalanceId, $voucherCode, $expectedGrandTotal, $sponsorVoucherId, $useHeld, $holder) {
+            return DB::transaction(function () use ($customer, $bookingIds, $equipments, $paymentMethod, $cashier, $autoCheckIn, $paymentMeta, $membershipBalanceId, $voucherCode, $expectedGrandTotal, $sponsorVoucherId, $useHeld, $holder, $coaching) {
                 if ($useHeld) {
                     $this->claimWalkInHold($bookingIds, $holder, $customer);
                 }
@@ -1084,6 +1101,11 @@ trait ManagesCheckoutAndPayments
                 if ($bookings->count() !== count($bookingIds)) {
                     throw new HttpException(422, 'Satu atau lebih slot booking tidak valid atau masa kuncian telah kedaluwarsa.');
                 }
+
+                // Coaching: tarif setoran menggantikan harga reguler slot (dihitung ulang di server) + cek jadwal coach.
+                $coachingRecord = $coaching !== null
+                    ? app(\App\Services\Coaching\CoachingBookingService::class)->attach($bookings, $coaching, $cashier)
+                    : null;
 
                 // Terapkan kuota atau diskon membership jika ada
                 $membershipBenefitResult = $this->applyMembershipBenefitToCourtBookings($bookings, $customer, $membershipBalanceId);
@@ -1202,6 +1224,10 @@ trait ManagesCheckoutAndPayments
                     'payment_status' => 'UNPAID',
                 ]);
 
+                if ($coachingRecord) {
+                    app(\App\Services\Coaching\CoachingBookingService::class)->linkOrder($coachingRecord, $order);
+                }
+
                 // Catat data sewa peralatan
                 if (! empty($equipmentItems)) {
                     $primaryBooking = $bookings->first();
@@ -1223,7 +1249,7 @@ trait ManagesCheckoutAndPayments
                     $order->items()->create([
                         'item_type' => 'PADEL',
                         'reference_id' => $b->id,
-                        'item_name' => 'Sewa ' . ($b->court ? $b->court->name : 'Court Padel'),
+                        'item_name' => ($b->coaching_booking_id ? 'Sewa Lapangan Coaching · ' : 'Sewa ') . ($b->court ? $b->court->name : 'Court Padel'),
                         'quantity' => 1,
                         'unit_price' => $b->court_fee,
                         'subtotal' => $b->court_fee,
@@ -1255,7 +1281,7 @@ trait ManagesCheckoutAndPayments
                     'cashier_name' => $cashier->name,
                     'source' => 'WALK_IN_OFFLINE',
                     'payment_method' => strtoupper($paymentMethod),
-                ];
+                ] + ($coachingRecord ? ['coaching_booking_id' => $coachingRecord->id] : []);
 
                 if (in_array(strtoupper($paymentMethod), ['DEBIT_CARD', 'CREDIT_CARD', 'EDC_BCA', 'EDC_MANDIRI', 'DEBIT', 'CREDIT'])) {
                     $cardType = $paymentMeta['card_type'] ?? (str_contains(strtoupper($paymentMethod), 'CREDIT') ? 'CREDIT' : 'DEBIT');

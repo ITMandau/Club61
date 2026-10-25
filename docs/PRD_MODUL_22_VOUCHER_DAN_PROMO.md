@@ -218,6 +218,30 @@ Voucher masuk Voucher Saya; masa berlaku dihitung sejak terbit (mis. 30 hari).
 - **Belum:** saklar "boleh digabung voucher sponsor" — sementara tetap aturan 1 transaksi = 1 voucher (promo tidak bisa
   digabung voucher jam corporate). Tahap 1 (voucher saldo sekali pakai + hangus), tahap 3–4.
 
+**Status 23 Okt 2026 — Tahap 3 selesai (belum di-commit). Tahap 1 sengaja dilewati dulu (keputusan user 23 Okt).**
+- **B. Kode unik massal:** di Daftar Voucher pilih cara sebar B → isi awalan (mis. `TRN`) + jumlah kode (maks. 1.000).
+  Sistem membuat kode acak `TRN-7K2M9Q` (huruf/angka tanpa yang mirip, acak kriptografis). Disimpan sebagai satu baris
+  **kampanye** + satu baris per kode (`vouchers.campaign_id`, kuota 1) — jadi checkout, pemotongan kuota saat lunas,
+  pengembalian saat batal (T2), struk, dan refund memakai jalur yang sama dengan cara A. Kode kampanye sendiri tidak bisa
+  dipakai. Satu akun hanya bisa memakai satu kode dari kampanye yang sama (T3, dihitung lintas kode; baris kampanye ikut
+  dikunci saat checkout). Kode yang sedang dipesan order belum lunas tidak bisa dipakai orang lain.
+  Tabel Daftar Voucher hanya menampilkan baris kampanye ("50 kode unik"); mencari salah satu kode menemukan kampanyenya.
+  Ubah / nonaktifkan kampanye → berlaku untuk semua kodenya. **Unduh CSV kode** (izin `manage_vouchers`, tercatat di Log
+  Aktivitas): kode, status (belum dipakai / sedang dipesan / sudah dipakai / nonaktif), pemakai, no. order, waktu.
+  Popup Pemakaian: jumlah kode, sudah dipakai, sedang dipesan, belum dipakai + order per kode.
+- **C. Klaim ke akun:** pilih cara sebar C → kode jadi link klaim `/promo/KODE` (tombol **Link klaim** untuk disalin).
+  Halaman promo **publik**: tamu melihat promonya (banner + kupon, sisa kuota, sisa hari) → **Log in to claim** / **Create
+  an account** → setelah login / daftar langsung **kembali ke halaman promo** (dulu dilempar ke Dashboard karena home route
+  customer; sekarang url.intended diikuti untuk customer, dipotong jadi path relatif & bukan halaman staf) → **Klaim** →
+  voucher masuk **Voucher Saya** (kartu PROMO) dan muncul otomatis di checkout online
+  ("Your claimed promos") & POS Walk-In (di bawah kolom voucher). Kuota = jumlah klaim (dipotong saat klaim, baris dikunci;
+  1 akun 1 klaim, tabel `voucher_claims`). Promo C hanya bisa dipakai akun yang sudah klaim; dipakai 1x (T3). Booking
+  batal → voucher kembali ke Voucher Saya, kuota klaim tidak berubah. Klaim yang tidak dipakai hangus saat periode
+  berakhir. Setelah ada yang klaim, potongan & kategori dikunci. API aplikasi: `POST /api/v1/padel/vouchers/claim`
+  (`code`), `GET /api/v1/padel/vouchers/mine` menambah key `claimed` (key `data` tidak berubah).
+- Migrasi `2026_10_23_160001_add_voucher_campaign_codes_and_claims` — jalankan `php artisan migrate`.
+- **Belum:** tahap 1, cara D (otomatis), saklar "boleh digabung voucher sponsor".
+
 | Tahap | Isi | Perkiraan |
 | :--- | :--- | :--- |
 | 1 | Voucher saldo: sekali pakai + hangus (kolom nilai hangus) + peringatan sisa hangus, kembali utuh saat kedaluwarsa / batal, masa berlaku di pengaturan, kolom hangus di Daftar Voucher | ½–1 hari |

@@ -109,7 +109,15 @@ trait ManagesRescheduleAndCashier
             }
 
             if ($isAvailable) {
-                $quote = $this->quoteReschedule($booking, $court, $slotStart, $slotEnd, $benefitContext);
+                try {
+                    $quote = $this->quoteReschedule($booking, $court, $slotStart, $slotEnd, $benefitContext);
+                } catch (HttpException $e) {
+                    // Booking coaching: jam tanpa tarif coaching tidak ditawarkan.
+                    if ($booking->coaching_booking_id) {
+                        continue;
+                    }
+                    throw $e;
+                }
 
                 $startStr = sprintf('%02d:00', $startHour);
                 $endStr = sprintf('%02d:00', $startHour + $durationHours);
@@ -166,7 +174,10 @@ trait ManagesRescheduleAndCashier
         $benefitContext ??= $this->rescheduleBenefitContext($booking);
 
         // Tarif normal jadwal baru — jam peak/reguler dari pengaturan Master Data (sama dengan grid & checkout).
-        $grossNew = app(\App\Services\Padel\PeakHourService::class)->courtFee($court, $start, $end)['fee'];
+        // Booking coaching (Modul 24 Opsi B): tarif setoran coaching jadwal baru (+ coach tambahan), bukan harga reguler.
+        $grossNew = $booking->coaching_booking_id
+            ? $this->coachingFeeFor($booking, $start, $end)
+            : app(\App\Services\Padel\PeakHourService::class)->courtFee($court, $start, $end)['fee'];
 
         $paidCourt = (float) $booking->court_fee;
         $memberDiscount = (float) ($booking->member_discount_court ?? 0);
@@ -225,6 +236,14 @@ trait ManagesRescheduleAndCashier
             'sponsor_benefit_dropped' => $sponsorDiscount > 0 && $sponsorShare <= 0,
             'benefit_dropped_reason' => $dropReasons ? implode(' ', $dropReasons) : null,
         ];
+    }
+
+    /** Tarif coaching jadwal baru dengan jumlah coach tambahan sesi ini. Jam tanpa tarif → 422. */
+    protected function coachingFeeFor(PadelBooking $booking, Carbon $start, Carbon $end): float
+    {
+        $coaching = \App\Models\Coaching\CoachingBooking::with('coaches')->find($booking->coaching_booking_id);
+
+        return app(\App\Services\Coaching\CoachingPricingService::class)->feeFor($start, $end, $coaching?->extraCoachCount() ?? 0)['fee'];
     }
 
     /** Biaya selisih mengikuti kanal transaksi aslinya (booking online vs walk-in kasir). */
@@ -348,9 +367,9 @@ trait ManagesRescheduleAndCashier
             }
 
             // Modul 21: dikunci — jadwal yang tinggal < 2 jam lagi / sudah dimulai tidak bisa dipindah (dulu bisa,
-            // selama status masih PAID, termasuk jam main yang sedang berjalan).
+            // selama status masih PAID, termasuk jam main yang sedang berjalan). Batasnya diatur admin (tombol Batas Reschedule di Jadwal Tetap Mingguan).
             if (now()->gte(\App\Services\Padel\PadelBookingService::rescheduleDeadline($booking))) {
-                throw new HttpException(422, 'Reschedule paling lambat '.\App\Services\Padel\PadelBookingService::RESCHEDULE_CUTOFF_HOURS.' jam sebelum jam main. Jadwal booking ini sudah tidak bisa dipindah.');
+                throw new HttpException(422, 'Reschedule paling lambat '.\App\Services\Padel\PadelBookingService::rescheduleCutoffLabel($booking).' sebelum jam main. Jadwal booking ini sudah tidak bisa dipindah.');
             }
 
             $durationHours = (int) $booking->start_time->diffInHours($booking->end_time);
@@ -420,6 +439,12 @@ trait ManagesRescheduleAndCashier
                     $newCourt->name,
                     "{$newStartDt->format('H:i')} - {$newEndDt->format('H:i')}"
                 );
+            }
+
+            // Booking coaching: semua coach sesi ini harus kosong di jadwal baru (slot ini sendiri tidak dihitung).
+            if ($booking->coaching_booking_id) {
+                $coachIds = DB::table('coaching_booking_coaches')->where('coaching_booking_id', $booking->coaching_booking_id)->pluck('coach_id')->all();
+                app(\App\Services\Coaching\CoachingBookingService::class)->assertCoachesFree($coachIds, [[$newStartDt, $newEndDt]], [$booking->id]);
             }
 
             // Hitung selisih dengan rumus yang SAMA dengan preview di modal (benefit member/sponsor ikut pindah).

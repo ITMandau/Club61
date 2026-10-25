@@ -47,6 +47,7 @@ class AdminPanelProvider extends PanelProvider
             ->navigationGroups([
                 'Operasional Harian',
                 'Customer & Membership',
+                'Coaching',
                 'Sponsor',
                 'Keuangan',
                 'Marketing & Event',
@@ -67,6 +68,7 @@ class AdminPanelProvider extends PanelProvider
             ->spaUrlExceptions(fn (): array => [
                 url('/admin/buku-transaksi/export*'),
                 url('/admin/log-aktivitas/export*'),
+                url('/admin/daftar-voucher/kode/*'),
             ])
             ->resources([
                 \App\Filament\Resources\Users\UserResource::class,
@@ -75,6 +77,11 @@ class AdminPanelProvider extends PanelProvider
                 \App\Filament\Resources\Membership\Facilities\MembershipFacilityResource::class,
                 \App\Filament\Resources\Sponsor\SponsorOrganizationResource::class,
                 \App\Filament\Resources\Sponsor\SponsorAccessScheduleResource::class,
+                \App\Filament\Resources\Coaching\CoachResource::class,
+                \App\Filament\Resources\Coaching\CoachingAcademyResource::class,
+                \App\Filament\Resources\Coaching\CoachingRateResource::class,
+                \App\Filament\Resources\Marketing\LinkBioLinkResource::class,
+                \App\Filament\Resources\Padel\PadelRecurringScheduleResource::class,
             ])
             ->plugins([
                 \BezhanSalleh\FilamentShield\FilamentShieldPlugin::make(),
@@ -130,9 +137,12 @@ class AdminPanelProvider extends PanelProvider
                 \App\Filament\Pages\LogAktivitas::class,
                 \App\Filament\Pages\BukuTransaksi::class,
                 \App\Filament\Pages\AntrianRefund::class,
+                \App\Filament\Pages\ReviewShiftKasir::class,
+                \App\Filament\Pages\DetailShiftKasir::class,
                 \App\Filament\Pages\DaftarVoucher::class,
                 \App\Filament\Pages\ImportPenjualan::class,
                 \App\Filament\Pages\Signature::class,
+                \App\Filament\Pages\JadwalCoaching::class,
             ])
             ->widgets([])
             ->middleware([

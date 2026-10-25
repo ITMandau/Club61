@@ -6,6 +6,8 @@ use App\Models\Padel\BookingTimeSetting;
 use App\Models\Pos\OnlinePaymentMethod;
 use App\Models\Pos\PaymentGatewaySetting;
 use App\Services\Padel\BookingTimeService;
+use App\Services\Payment\Doku\Snap\DokuSnapService;
+use App\Services\Payment\Doku\Snap\DokuSnapVaAccounts;
 use App\Services\Payment\OnlineGatewayRouter;
 use App\Services\Payment\OnlinePaymentCatalog;
 use App\Services\Payment\OnlinePaymentMethodService;
@@ -19,6 +21,7 @@ use Filament\Forms\Components\Toggle;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
 use Filament\Schemas\Components\Grid;
+use Filament\Schemas\Components\Section;
 use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Components\Utilities\Set;
 use Filament\Tables\Columns\TextColumn;
@@ -173,6 +176,115 @@ class MetodePembayaranOnline extends Page implements HasTable
         ];
     }
 
+    /** DOKU dipilih (tersimpan) untuk online customer ATAU QR kasir → bagian DOKU di form & tabel ditampilkan. */
+    public function dokuInUse(): bool
+    {
+        $saved = app(OnlineGatewayRouter::class)->savedSettings();
+
+        return in_array(OnlineGatewayRouter::DOKU, [strtoupper((string) ($saved['online_gateway'] ?? '')), strtoupper((string) ($saved['pos_qris_gateway'] ?? ''))], true);
+    }
+
+    /** Kanal VA DOKU yang bisa lewat SNAP (tepat satu kanal yang didukung), null = tidak bisa SNAP. */
+    private static function snapVaChannel(array $dokuChannels): ?string
+    {
+        $dokuChannels = array_values($dokuChannels);
+
+        return count($dokuChannels) === 1 && DokuSnapVaAccounts::supports((string) $dokuChannels[0]) ? $dokuChannels[0] : null;
+    }
+
+    /**
+     * Bagian "DOKU SNAP" di form Edit — hanya saat DOKU dipakai. VA bank yang didukung: Partner Service ID (BIN) +
+     * prefix customer no. (izin manage_payment_gateway; tanpa izin terlihat tapi terkunci & tidak ikut dikirim).
+     */
+    private function dokuSnapSection(OnlinePaymentMethod $record): ?Section
+    {
+        if (! $this->dokuInUse()) {
+            return null;
+        }
+
+        $channels = app(OnlinePaymentMethodService::class)->channels($record->code, OnlineGatewayRouter::DOKU) ?? [];
+        $route = $channels === [] ? null : app(DokuSnapService::class)->routeFor($channels);
+        $routeText = $route === null ? '' : 'Jalur sekarang: '.($route === DokuSnapService::API ? 'SNAP (QR / nomor VA di halaman kita sendiri).' : 'DOKU Checkout (halaman DOKU).');
+        $section = Section::make('DOKU SNAP')->compact();
+
+        if ($channels === []) {
+            return $section->description('Metode ini tidak punya kanal DOKU — disembunyikan dari customer saat DOKU dipakai.');
+        }
+        if ($channels === ['QRIS']) {
+            return $section->description('SNAP QRIS diatur di server (kunci & data QRIS di .env). '.$routeText);
+        }
+
+        $channel = self::snapVaChannel($channels);
+        if ($channel === null) {
+            return $section->description('Bank ini belum bisa lewat SNAP di aplikasi — dibayar lewat DOKU Checkout.');
+        }
+
+        $canEdit = $this->canManageGateway();
+        $bank = DokuSnapVaAccounts::bank($channel);
+
+        return $section
+            ->description(trim("Isi dari dashboard DOKU (Configure di bank {$bank}). Kosongkan = lewat DOKU Checkout. Uji bayar di sandbox dulu & pastikan URL notifikasi SNAP VA sudah diisi di dashboard DOKU. {$routeText}"))
+            ->schema([
+                Grid::make(2)->schema([
+                    TextInput::make('doku_snap_partner_service_id')->label('Partner Service ID (BIN)')
+                        ->regex(DokuSnapVaAccounts::PARTNER_SERVICE_ID_PATTERN)->maxLength(8)->placeholder('Kosong = DOKU Checkout')
+                        ->disabled(! $canEdit)->dehydrated($canEdit)
+                        ->helperText(match (true) {
+                            ! $canEdit => 'Hanya bisa diubah pemegang izin Gateway Pembayaran.',
+                            $channel === 'VIRTUAL_ACCOUNT_BCA' => 'Kosong = pakai .env lama (DOKU_SNAP_BCA_*) kalau ada.',
+                            default => null,
+                        }),
+                    TextInput::make('doku_snap_customer_no')->label('Prefix customer no.')
+                        ->regex(DokuSnapVaAccounts::CUSTOMER_NO_PATTERN)->maxLength(20)->placeholder('Mis. 0 (boleh kosong)')
+                        ->disabled(! $canEdit)->dehydrated($canEdit),
+                ]),
+            ]);
+    }
+
+    /**
+     * Isian DOKU SNAP dari form Edit → [kanal, data akun | null (dikosongkan)] atau [null, null] kalau tidak dikirim.
+     * Ditolak kalau dikirim tanpa izin gateway, untuk metode yang tidak bisa SNAP, atau formatnya salah. Kanal = kanal
+     * DOKU metode SETELAH disimpan (metode tambahan admin bisa mengganti kanalnya di form yang sama).
+     *
+     * @param  array<int, string>  $dokuChannels
+     * @return array{0: ?string, 1: ?array, 2: ?array{0: string, 1: string}} [kanal, akun, [judul, pesan] kalau ditolak]
+     */
+    private function snapVaFromForm(array $dokuChannels, array $data): array
+    {
+        if (! array_key_exists('doku_snap_partner_service_id', $data) && ! array_key_exists('doku_snap_customer_no', $data)) {
+            return [null, null, null];
+        }
+        if (! $this->canManageGateway()) {
+            \App\Services\Audit\ActivityLogger::accessDenied('mengubah data SNAP VA DOKU tanpa izin [manage_payment_gateway]');
+            abort(403, 'Akses ditolak: Anda tidak memiliki izin [manage_payment_gateway].');
+        }
+
+        $channel = self::snapVaChannel($dokuChannels);
+        if ($channel === null) {
+            // Isian kosong untuk metode yang (kini) tidak bisa SNAP = tidak ada yang diubah.
+            if (trim((string) ($data['doku_snap_partner_service_id'] ?? '')) === '' && trim((string) ($data['doku_snap_customer_no'] ?? '')) === '') {
+                return [null, null, null];
+            }
+
+            return [null, null, ['SNAP Tidak Didukung', 'Kanal DOKU metode ini tidak bisa lewat SNAP — kosongkan isian DOKU SNAP.']];
+        }
+
+        $psid = trim((string) ($data['doku_snap_partner_service_id'] ?? ''));
+        $customerNo = trim((string) ($data['doku_snap_customer_no'] ?? ''));
+        if ($psid === '') {
+            return $customerNo === ''
+                ? [$channel, null, null]
+                : [null, null, ['Data SNAP VA Tidak Lengkap', 'Isi Partner Service ID, atau kosongkan prefix customer no. juga.']];
+        }
+
+        $account = ['partner_service_id' => $psid, 'customer_no' => $customerNo];
+        if ($reason = DokuSnapVaAccounts::invalidReason($account)) {
+            return [null, null, ['Data SNAP VA Tidak Valid', $reason.'.']];
+        }
+
+        return [$channel, $account, null];
+    }
+
     public function saveBookingTimes(array $data): void
     {
         $this->authorizeManageBookingTimes();
@@ -237,6 +349,21 @@ class MetodePembayaranOnline extends Page implements HasTable
                     ->size('xs')
                     ->color('gray')
                     ->wrap(),
+                // DOKU: SNAP (QR / nomor VA di halaman kita sendiri) atau Checkout (halaman DOKU).
+                TextColumn::make('doku_route')
+                    ->label('Jalur DOKU')
+                    ->visible(fn () => $this->dokuInUse())
+                    ->badge()
+                    ->state(function (OnlinePaymentMethod $r) {
+                        $channels = app(OnlinePaymentMethodService::class)->channels($r->code, OnlineGatewayRouter::DOKU) ?? [];
+
+                        return $channels === [] ? '—' : (app(DokuSnapService::class)->routeFor($channels) === DokuSnapService::API ? 'SNAP' : 'Checkout');
+                    })
+                    ->color(fn (string $state) => match ($state) {
+                        'SNAP' => 'success',
+                        'Checkout' => 'warning',
+                        default => 'gray',
+                    }),
                 TextColumn::make('limits')
                     ->label('Batas Nominal')
                     ->state(function (OnlinePaymentMethod $r) use ($rupiah) {
@@ -315,7 +442,7 @@ class MetodePembayaranOnline extends Page implements HasTable
                         'doku_channels' => (array) ($r->doku_channels ?? []),
                         'min_amount' => $r->min_amount,
                         'max_amount' => $r->max_amount,
-                    ])
+                    ] + $this->snapVaFormState($r))
                     ->schema(fn (OnlinePaymentMethod $record) => $this->methodSchema($record))
                     ->action(fn (OnlinePaymentMethod $record, array $data) => $this->saveSettings($record, $data)),
             ]);
@@ -367,7 +494,23 @@ class MetodePembayaranOnline extends Page implements HasTable
             $fields[] = Toggle::make('show_at_pos')->label('Tampil di kasir ("Bayar Otomatis")');
         }
 
+        if (! $isNew && ($section = $this->dokuSnapSection($record))) {
+            $fields[] = $section;
+        }
+
         return $fields;
+    }
+
+    /** Isian awal DOKU SNAP di form Edit: data yang disimpan admin untuk kanal VA metode ini (bukan dari .env). */
+    private function snapVaFormState(OnlinePaymentMethod $record): array
+    {
+        $channel = self::snapVaChannel(app(OnlinePaymentMethodService::class)->channels($record->code, OnlineGatewayRouter::DOKU) ?? []);
+        $saved = $channel ? (app(DokuSnapVaAccounts::class)->saved()[$channel] ?? null) : null;
+
+        return $channel === null ? [] : [
+            'doku_snap_partner_service_id' => $saved['partner_service_id'] ?? null,
+            'doku_snap_customer_no' => $saved['customer_no'] ?? null,
+        ];
     }
 
     /** Jenis metode: bawaan dari katalog, tambahan dari kolom `kind`. */
@@ -604,7 +747,34 @@ class MetodePembayaranOnline extends Page implements HasTable
             return;
         }
 
-        $record->update($clean);
+        // DOKU SNAP divalidasi SEBELUM apa pun disimpan (metode & data SNAP tersimpan bersama atau tidak sama sekali).
+        $dokuChannels = $record->is_custom
+            ? ($clean['doku_channels'] ?? (array) ($record->doku_channels ?? []))
+            : (OnlinePaymentCatalog::dokuChannels($record->code) ?? []);
+        [$snapChannel, $snapAccount, $snapError] = $this->snapVaFromForm($dokuChannels, $data);
+        if ($snapError) {
+            Notification::make()->title($snapError[0])->body($snapError[1])->danger()->persistent()->send();
+
+            return;
+        }
+
+        DB::transaction(function () use ($record, $clean, $snapChannel, $snapAccount) {
+            $record->update($clean);
+
+            if ($snapChannel !== null) {
+                // Disimpan per bank di payment_gateway_settings (perubahan tercatat KRITIS di Log Aktivitas).
+                $setting = PaymentGatewaySetting::query()->lockForUpdate()->first() ?? new PaymentGatewaySetting();
+                $accounts = DokuSnapVaAccounts::clean((array) ($setting->doku_snap_va ?? []));
+                if ($snapAccount === null) {
+                    unset($accounts[$snapChannel]);
+                } else {
+                    $accounts[$snapChannel] = $snapAccount;
+                }
+                if ($accounts !== DokuSnapVaAccounts::clean((array) ($setting->doku_snap_va ?? []))) {
+                    $setting->fill(['doku_snap_va' => $accounts ?: null])->save();
+                }
+            }
+        });
 
         Notification::make()->title('Pengaturan Tersimpan')->body("{$record->label} diperbarui.")->success()->send();
     }

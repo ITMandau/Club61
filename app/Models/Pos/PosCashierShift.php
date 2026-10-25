@@ -36,7 +36,22 @@ class PosCashierShift extends Model
         'closing_notes',
         'settlement_reconciliation',
         'settlement_difference',
+        'closing_inputs',
+        'review_status',
+        'reviewed_by_id',
+        'reviewed_at',
+        'review_notes',
     ];
+
+    /** Hasil tutup shift (null = shift lama sebelum rekonsiliasi blind / masih OPEN). */
+    public const REVIEW_MATCHED = 'MATCHED';
+
+    /** Ada selisih (toleransi Rp0) → menunggu keputusan pemegang izin approve_shift_closing. */
+    public const REVIEW_NEEDS_REVIEW = 'NEEDS_REVIEW';
+
+    public const REVIEW_APPROVED = 'APPROVED';
+
+    public const REVIEW_REJECTED = 'REJECTED';
 
     protected function casts(): array
     {
@@ -56,6 +71,8 @@ class PosCashierShift extends Model
             'total_transactions' => 'integer',
             'settlement_reconciliation' => 'array',
             'settlement_difference' => 'decimal:2',
+            'closing_inputs' => 'array',
+            'reviewed_at' => 'datetime',
         ];
     }
 
@@ -95,34 +112,7 @@ class PosCashierShift extends Model
         $rows = [];
 
         foreach ($this->payments()->where('status', 'SUCCESS')->get() as $payment) {
-            $log = $payment->payload_log ?? [];
-            $method = strtoupper((string) $payment->payment_method);
-
-            $posOnline = isset($log['pos_qris']) ? strtoupper((string) ($log['pos_qris']['method'] ?? 'QRIS')) : null;
-
-            if ($posOnline !== null && $posOnline !== 'QRIS') {
-                // Bayar Otomatis non-QRIS dari kasir (mis. VA): dicek di dashboard pembayaran online, bukan mutasi bank.
-                $key = 'AUTO_'.preg_replace('/[^A-Z0-9_]/', '_', $posOnline);
-                $label = \App\Services\Pos\PosMidtransQrisService::labelFor($log);
-                $source = 'Dashboard pembayaran online';
-            } elseif (in_array($method, ['QRIS', 'QRIS_STATIS'], true)) {
-                $provider = strtoupper((string) ($log['qris_details']['provider'] ?? $log['qris_provider'] ?? 'LAINNYA'));
-                $key = 'QRIS_'.$provider;
-                $label = 'QRIS — '.(self::QRIS_PROVIDER_LABELS[$provider] ?? $provider);
-                $source = in_array($provider, ['MIDTRANS_QRIS', 'DOKU_QRIS'], true) ? 'Dashboard pembayaran online' : 'Mutasi / dashboard QRIS';
-            } elseif (in_array($method, ['DEBIT_CARD', 'CREDIT_CARD', 'DEBIT', 'CREDIT', 'EDC_BCA', 'EDC_MANDIRI'], true)) {
-                $edc = $log['edc_details'] ?? $log;
-                $terminal = strtoupper((string) ($edc['terminal'] ?? (in_array($method, ['EDC_BCA', 'EDC_MANDIRI'], true) ? $method : 'EDC_LAINNYA')));
-                $cardType = strtoupper((string) ($edc['card_type'] ?? (str_contains($method, 'CREDIT') ? 'CREDIT' : 'DEBIT')));
-                $key = $terminal.'_'.$cardType;
-                $label = ($cardType === 'CREDIT' ? 'Kartu Kredit' : 'Kartu Debit').' — '.(self::EDC_TERMINAL_LABELS[$terminal] ?? $terminal);
-                $source = 'Struk settlement '.(self::EDC_TERMINAL_LABELS[$terminal] ?? $terminal);
-            } else {
-                $key = 'OTHER_'.preg_replace('/[^A-Z0-9_]/', '_', $method);
-                $label = 'Lainnya — '.$method;
-                $source = 'Bukti transaksi';
-            }
-
+            ['key' => $key, 'label' => $label, 'source' => $source] = self::categorize($payment);
             $rows[$key] ??= ['key' => $key, 'label' => $label, 'source' => $source, 'count' => 0, 'system_amount' => 0.0];
             $rows[$key]['count']++;
             $rows[$key]['system_amount'] += (float) $payment->amount;
@@ -133,6 +123,45 @@ class PosCashierShift extends Model
         return array_values($rows);
     }
 
+    /**
+     * Kategori settlement satu pembayaran (dipakai settlementBreakdown & tutup shift blind) — EDC per mesin + debit/kredit,
+     * QRIS per penyedia, Bayar Otomatis non-QRIS per metode, sisanya OTHER_<metode>.
+     *
+     * @return array{key: string, label: string, source: string}
+     */
+    public static function categorize(Payment $payment): array
+    {
+        $log = $payment->payload_log ?? [];
+        $method = strtoupper((string) $payment->payment_method);
+
+        $posOnline = isset($log['pos_qris']) ? strtoupper((string) ($log['pos_qris']['method'] ?? 'QRIS')) : null;
+
+        if ($posOnline !== null && $posOnline !== 'QRIS') {
+            // Bayar Otomatis non-QRIS dari kasir (mis. VA): dicek di dashboard pembayaran online, bukan mutasi bank.
+            $key = 'AUTO_'.preg_replace('/[^A-Z0-9_]/', '_', $posOnline);
+            $label = \App\Services\Pos\PosMidtransQrisService::labelFor($log);
+            $source = 'Dashboard pembayaran online';
+        } elseif (in_array($method, ['QRIS', 'QRIS_STATIS'], true)) {
+            $provider = strtoupper((string) ($log['qris_details']['provider'] ?? $log['qris_provider'] ?? 'LAINNYA'));
+            $key = 'QRIS_'.$provider;
+            $label = 'QRIS — '.(self::QRIS_PROVIDER_LABELS[$provider] ?? $provider);
+            $source = in_array($provider, ['MIDTRANS_QRIS', 'DOKU_QRIS'], true) ? 'Dashboard pembayaran online' : 'Mutasi / dashboard QRIS';
+        } elseif (in_array($method, ['DEBIT_CARD', 'CREDIT_CARD', 'DEBIT', 'CREDIT', 'EDC_BCA', 'EDC_MANDIRI'], true)) {
+            $edc = $log['edc_details'] ?? $log;
+            $terminal = strtoupper((string) ($edc['terminal'] ?? (in_array($method, ['EDC_BCA', 'EDC_MANDIRI'], true) ? $method : 'EDC_LAINNYA')));
+            $cardType = strtoupper((string) ($edc['card_type'] ?? (str_contains($method, 'CREDIT') ? 'CREDIT' : 'DEBIT')));
+            $key = $terminal.'_'.$cardType;
+            $label = ($cardType === 'CREDIT' ? 'Kartu Kredit' : 'Kartu Debit').' — '.(self::EDC_TERMINAL_LABELS[$terminal] ?? $terminal);
+            $source = 'Struk settlement '.(self::EDC_TERMINAL_LABELS[$terminal] ?? $terminal);
+        } else {
+            $key = 'OTHER_'.preg_replace('/[^A-Z0-9_]/', '_', $method);
+            $label = 'Lainnya — '.$method;
+            $source = 'Bukti transaksi';
+        }
+
+        return ['key' => $key, 'label' => $label, 'source' => $source];
+    }
+
     public function openedBy()
     {
         return $this->belongsTo(User::class, 'opened_by_id');
@@ -141,6 +170,11 @@ class PosCashierShift extends Model
     public function closedBy()
     {
         return $this->belongsTo(User::class, 'closed_by_id');
+    }
+
+    public function reviewedBy()
+    {
+        return $this->belongsTo(User::class, 'reviewed_by_id');
     }
 
     public function payments()

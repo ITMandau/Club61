@@ -146,14 +146,27 @@ final class OnlinePaymentCatalog
             // Kode lama "BSI_VA" dipertahankan supaya pembayaran lama tetap terbaca. Snap memetakannya ke
             // Permata VA / VA bank lain (jaringan antarbank) — BSI & bank lain membayar lewat jalur ini,
             // jadi labelnya jujur menyebut itu (dulu tertulis "BSI Virtual Account" padahal yang muncul Permata).
+            // DOKU: hanya Permata — VA BSI DOKU punya metode sendiri (BSI_SYARIAH_VA) supaya bisa lewat SNAP.
             'BSI_VA' => [
                 'label' => 'VA Bank Lain (Permata, BSI, dll.)',
                 'description' => 'Transfer antarbank ke Virtual Account Permata — bisa dari BSI dan bank lain.',
                 'badge' => 'VA',
                 'group' => 'VA',
                 'midtrans' => ['permata_va', 'other_va'],
-                'doku' => ['VIRTUAL_ACCOUNT_BANK_PERMATA', 'VIRTUAL_ACCOUNT_BANK_SYARIAH_MANDIRI'],
+                'doku' => ['VIRTUAL_ACCOUNT_BANK_PERMATA'],
                 'default_active' => true,
+                'default_min' => null,
+                'default_max' => null,
+            ],
+            // VA BSI langsung lewat DOKU (SNAP bila Partner Service ID-nya diisi). Tidak dipetakan ke Midtrans.
+            'BSI_SYARIAH_VA' => [
+                'label' => 'BSI Virtual Account',
+                'description' => 'Transfer ke nomor Virtual Account BSI (BSI Mobile / ATM BSI). Konfirmasi otomatis.',
+                'badge' => 'BSI',
+                'group' => 'VA',
+                'midtrans' => [],
+                'doku' => ['VIRTUAL_ACCOUNT_BANK_SYARIAH_MANDIRI'],
+                'default_active' => false,
                 'default_min' => null,
                 'default_max' => null,
             ],

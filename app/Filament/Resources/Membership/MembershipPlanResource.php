@@ -137,9 +137,11 @@ class MembershipPlanResource extends Resource
                         ]),
 
                         Textarea::make('description')
-                            ->label('Deskripsi Paket untuk Customer')
-                            ->placeholder('Contoh: Paket untuk pemain rutin 2–3x seminggu, sudah termasuk akses gym.')
-                            ->rows(2)
+                            ->label('Detail Paket untuk Customer')
+                            ->placeholder("Contoh:\nBerlaku weekday pukul 06:00–18:00\nTermasuk weekend\nBisa dipakai di semua lapangan")
+                            ->helperText('Satu baris = satu poin (tekan Enter untuk poin baru). Tampil sebagai daftar ✓ di halaman membership.')
+                            ->rows(5)
+                            ->autosize()
                             ->maxLength(500)
                             ->columnSpanFull(),
 

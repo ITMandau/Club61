@@ -91,17 +91,16 @@ class PadelBookingController extends Controller
             'slots.*.court_id' => ['required', 'string'],
             'slots.*.start_time' => ['required', 'date_format:H:i'],
             'slots.*.end_time' => ['required', 'date_format:H:i'],
-            'coach_id' => ['nullable', 'string'],
         ], [
             'booking_date.before_or_equal' => 'Booking paling jauh '.PadelBookingService::MAX_DAYS_AHEAD.' hari dari hari ini.',
         ]);
 
         // Batas jam per pemesanan & per akun (audit G17) — kasir walk-in memakai holdBatchSlots langsung, tidak dibatasi.
+        // coach_id dari customer tidak diterima lagi (Modul 24 Opsi B): coach & tarif coaching hanya dipasang staf di POS.
         $holdData = $this->bookingService->holdForCustomer(
             $validated['slots'],
             $validated['booking_date'],
             $request->user(),
-            $validated['coach_id'] ?? null
         );
 
         $slotCount = count($holdData['bookings']);
@@ -315,12 +314,35 @@ class PadelBookingController extends Controller
         ]);
     }
 
-    /** Voucher saldo milik customer (dari refund yang ditolak) yang masih bisa dipakai. */
+    /**
+     * Voucher saldo milik customer (dari refund yang ditolak) yang masih bisa dipakai (`data`, bentuk lama tidak berubah)
+     * + promo hasil klaim yang bisa dipakai sekarang (`claimed`, Modul 22 tahap 3).
+     */
     public function myVouchers(Request $request): JsonResponse
     {
         return response()->json([
             'success' => true,
             'data' => app(\App\Services\Finance\VoucherService::class)->walletFor($request->user())->values(),
+            'claimed' => app(\App\Services\Finance\VoucherClaimService::class)->usableForApi($request->user()),
+        ]);
+    }
+
+    /** Klaim promo cara sebar C dengan kodenya (kode dari link / banner promo). */
+    public function claimVoucher(Request $request): JsonResponse
+    {
+        $validated = $request->validate(['code' => ['required', 'string', 'max:30']]);
+        $claims = app(\App\Services\Finance\VoucherClaimService::class);
+        $voucher = $claims->findClaimable($validated['code']);
+        if (! $voucher) {
+            return response()->json(['success' => false, 'message' => 'Promo tidak ditemukan.'], 404);
+        }
+
+        $claims->claim($voucher, $request->user());
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Promo berhasil diklaim — sudah ada di Voucher Saya.',
+            'data' => collect($claims->usableForApi($request->user()))->firstWhere('code', $voucher->code),
         ]);
     }
 

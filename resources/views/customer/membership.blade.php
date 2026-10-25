@@ -8,7 +8,6 @@
                 'id' => $p->id,
                 'code' => $p->code,
                 'name' => $p->name,
-                'description' => (string) ($p->description ?? ''),
                 'ownership_type' => $p->ownership_type,
                 'duration_days' => $p->duration_days,
                 'price' => (float) $p->price,
@@ -79,8 +78,13 @@
                     <span class="text-xs font-bold text-[#662721]">{{ $allPlans->count() }} Pilihan Paket</span>
                 </div>
 
-                <!-- Plan Switcher Grid (Responsive: 1 col on mobile, 2 col on tablet, 4 col on desktop) -->
-                <div class="flex flex-wrap justify-center gap-3.5 [&>*]:w-full sm:[&>*]:w-[calc(50%-7px)] lg:[&>*]:w-[calc(25%-10.5px)]">
+                @if ($allPlans->count() > 1)
+                    <p class="sm:hidden px-1 text-[11px] font-bold text-[#7A5A52]">Geser ke samping untuk melihat paket lain &rarr;</p>
+                @endif
+                {{-- HP: kartu digeser ke samping (snap) supaya detail paket tetap dekat walau paketnya banyak.
+                     Tablet & laptop: grid yang jumlah kolomnya mengikuti lebar layar (min. 220px per kartu). --}}
+                <div class="flex overflow-x-auto snap-x snap-mandatory scroll-px-4 gap-3 -mx-4 px-4 pb-2 [&>*]:shrink-0 [&>*]:w-[78%] [&>*]:snap-start
+                            sm:grid sm:grid-cols-[repeat(auto-fill,minmax(220px,1fr))] sm:gap-3.5 sm:overflow-visible sm:mx-0 sm:px-0 sm:pb-0 sm:[&>*]:w-auto">
                     @foreach($allPlans as $p)
                         @php
                             $isInitial = ($initialPlan['id'] ?? null) === $p->id;
@@ -142,7 +146,27 @@
                                     <span>&bull;</span>
                                     <span class="text-[#1E7E34]">Aktivasi Instan Otomatis</span>
                                 </div>
-                                <p id="detailPlanDesc" class="text-xs text-[#7A5A52] mt-2 leading-relaxed max-w-xl {{ ($initialPlan['description'] ?? '') === '' ? 'hidden' : '' }}">{{ $initialPlan['description'] ?? '' }}</p>
+                                {{-- Ringkasan kuota & masa aktif per paket (yang tidak dipilih disembunyikan). Detail paket dari
+                                     admin tampil di kartu benefit utama di bawah. --}}
+                                @foreach ($allPlans as $p)
+                                    @php
+                                        $headline = $facilityService->presentPlan($p)[0]['title'] ?? null;
+                                    @endphp
+                                    <div data-plan-detail="{{ $p->id }}" class="mt-3 space-y-3 max-w-xl {{ ($initialPlan['id'] ?? null) === $p->id ? '' : 'hidden' }}">
+                                        <div class="flex flex-wrap items-center gap-x-5 gap-y-2 text-sm">
+                                            @if ($headline)
+                                                <span class="inline-flex items-center gap-1.5 font-extrabold text-[#4F2F2A]">
+                                                    <svg class="w-4 h-4 text-[#662721] shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" /></svg>
+                                                    {{ $headline }}
+                                                </span>
+                                            @endif
+                                            <span class="inline-flex items-center gap-1.5 font-extrabold text-[#4F2F2A]">
+                                                <svg class="w-4 h-4 text-[#662721] shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+                                                {{ $p->duration_days }} <span class="font-semibold text-[#7A5A52]">Hari</span>
+                                            </span>
+                                        </div>
+                                    </div>
+                                @endforeach
                             </div>
 
                             <div class="text-left sm:text-right">
@@ -167,20 +191,37 @@
                                 @php
                                     $cards = $facilityService->presentPlan($p);
                                     $perks = array_values(array_filter((array) ($p->perks ?? []), fn ($perk) => is_string($perk) && trim($perk) !== ''));
+                                    // Detail paket dari admin (satu baris = satu poin) tampil di kartu benefit utama, di bawah
+                                    // deskripsinya — dulu satu paragraf, Enter dari admin hilang jadi satu kalimat panjang.
+                                    $detailLines = $p->descriptionLines();
                                 @endphp
                                 <div data-plan-benefits="{{ $p->id }}" class="grid grid-cols-1 sm:grid-cols-2 gap-3.5 {{ ($initialPlan['id'] ?? null) === $p->id ? '' : 'hidden' }}">
                                     @foreach ($cards as $card)
-                                        <div class="p-4 rounded-lg bg-white border border-[#E6DAC0] shadow-sm flex items-start gap-3.5 hover:border-[#662721] transition-all">
+                                        @php $withDetail = $loop->first && $detailLines; @endphp
+                                        <div class="p-4 rounded-lg bg-white border border-[#E6DAC0] shadow-sm flex items-start gap-3.5 hover:border-[#662721] transition-all {{ $withDetail ? 'sm:col-span-2' : '' }}">
                                             <div class="w-10 h-10 rounded-xl bg-[#F7F0DB] border border-[#E6DAC0] flex items-center justify-center shrink-0 text-[10px] font-black text-[#662721]">
                                                 {{ $card['badge'] }}
                                             </div>
-                                            <div class="text-xs">
+                                            <div class="text-xs min-w-0">
                                                 <strong class="text-[#4F2F2A] block font-extrabold text-sm">{{ $card['title'] }}</strong>
                                                 @if ($card['description'])
                                                     <span class="text-[#7A5A52] block mt-1 leading-relaxed">{{ $card['description'] }}</span>
                                                 @endif
                                                 @if ($card['details'])
                                                     <span class="text-[#662721] block mt-1 font-bold leading-relaxed">{{ implode(' • ', $card['details']) }}</span>
+                                                @endif
+                                                @if ($withDetail)
+                                                    <div class="mt-3 pt-3 border-t border-[#E6DAC0]/60">
+                                                        <div class="text-xs font-extrabold text-[#4F2F2A] mb-1.5">Detail Paket:</div>
+                                                        <ul class="space-y-1.5">
+                                                            @foreach ($detailLines as $detailLine)
+                                                                <li class="flex items-start gap-2 text-xs sm:text-sm text-[#7A5A52] leading-relaxed">
+                                                                    <svg class="w-4 h-4 sm:w-[18px] sm:h-[18px] mt-0.5 shrink-0 text-[#1E5E3A]" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" /></svg>
+                                                                    <span class="min-w-0 break-words">{{ $detailLine }}</span>
+                                                                </li>
+                                                            @endforeach
+                                                        </ul>
+                                                    </div>
                                                 @endif
                                             </div>
                                         </div>
@@ -202,7 +243,21 @@
                                         </div>
                                     @endif
 
-                                    @if (! $cards && ! $perks)
+                                    @if (! $cards && $detailLines)
+                                        <div class="sm:col-span-2 p-4 rounded-lg bg-white border border-[#E6DAC0] shadow-sm text-xs">
+                                            <div class="font-extrabold text-[#4F2F2A] mb-1.5">Detail Paket:</div>
+                                            <ul class="space-y-1.5">
+                                                @foreach ($detailLines as $detailLine)
+                                                    <li class="flex items-start gap-2 text-xs sm:text-sm text-[#7A5A52] leading-relaxed">
+                                                        <svg class="w-4 h-4 sm:w-[18px] sm:h-[18px] mt-0.5 shrink-0 text-[#1E5E3A]" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" /></svg>
+                                                        <span class="min-w-0 break-words">{{ $detailLine }}</span>
+                                                    </li>
+                                                @endforeach
+                                            </ul>
+                                        </div>
+                                    @endif
+
+                                    @if (! $cards && ! $perks && ! $detailLines)
                                         <div class="sm:col-span-2 p-4 rounded-lg border border-dashed border-[#E6DAC0] text-xs text-[#7A5A52]">
                                             Rincian benefit paket ini belum diisi. Silakan hubungi frontdesk Club 61.
                                         </div>
@@ -443,11 +498,9 @@
             document.querySelectorAll('[data-plan-benefits]').forEach(grid => {
                 grid.classList.toggle('hidden', grid.dataset.planBenefits !== planId);
             });
-            const desc = document.getElementById('detailPlanDesc');
-            if (desc) {
-                desc.innerText = plan.description || '';
-                desc.classList.toggle('hidden', !plan.description);
-            }
+            document.querySelectorAll('[data-plan-detail]').forEach(block => {
+                block.classList.toggle('hidden', block.dataset.planDetail !== planId);
+            });
 
             // 7. Update Bill Breakdown (pajak & biaya layanan sesungguhnya)
             const rupiah = (v) => 'Rp ' + Math.round(v).toLocaleString('id-ID');

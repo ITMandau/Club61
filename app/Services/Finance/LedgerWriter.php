@@ -206,7 +206,7 @@ class LedgerWriter
                 return [
                     'kind' => 'RESCHEDULE_DELTA',
                     'source' => $source,
-                    'lines' => ['SEWA_LAPANGAN' => max(0, self::cents($log['court_delta']))],
+                    'lines' => [($this->coachingBookingIds($order) !== [] ? 'COACHING' : 'SEWA_LAPANGAN') => max(0, self::cents($log['court_delta']))],
                     'discount' => 0,
                     'tax' => max(0, self::cents($log['tax_delta'] ?? 0)),
                     'service' => max(0, self::cents($log['admin_fee_delta'] ?? 0)),
@@ -240,8 +240,13 @@ class LedgerWriter
 
         $weights = [];
         $names = [];
+        $coachingBookingIds = $this->coachingBookingIds($order);
         foreach ($order->items as $item) {
             $category = self::ITEM_CATEGORIES[$item->item_type] ?? 'LAINNYA';
+            // Slot coaching tetap item PADEL (alur bayar/refund sama) tapi dibukukan sebagai sewa lapangan coaching.
+            if ($item->item_type === 'PADEL' && in_array((string) $item->reference_id, $coachingBookingIds, true)) {
+                $category = 'COACHING';
+            }
             $weights[$category] = ($weights[$category] ?? 0) + max(0, self::cents($item->subtotal));
             if (count($names[$category] ?? []) < 15) {
                 $names[$category][] = $item->item_name.' x'.$item->quantity;
@@ -350,6 +355,12 @@ class LedgerWriter
         return $parts;
     }
 
+    /** @return array<int, string> id booking lapangan order ini yang merupakan sesi coaching (Modul 24 Opsi B). */
+    private function coachingBookingIds(Order $order): array
+    {
+        return PadelBooking::where('order_id', $order->id)->whereNotNull('coaching_booking_id')->pluck('id')->map(fn ($id) => (string) $id)->all();
+    }
+
     /** Pembayaran di loket (shift kasir / gateway kasir), bukan online. */
     private function isCounterPayment(Order $order, Payment $payment): bool
     {
@@ -419,17 +430,31 @@ class LedgerWriter
         $cashierId = $atCounter ? ($log['settled_by'] ?? $log['cashier_id'] ?? $order->cashier_id) : null;
         $cashierName = $atCounter ? ($log['settled_by_name'] ?? $log['cashier_name'] ?? ($cashierId ? User::whereKey($cashierId)->value('name') : null)) : null;
 
+        return $this->orderSnapshot($order) + [
+            'cashier_id' => is_string($cashierId) ? $cashierId : null,
+            'cashier_name' => $cashierName ? mb_substr((string) $cashierName, 0, 150) : null,
+            'pos_shift_id' => $payment->pos_shift_id,
+            'payment_gateway' => $payment->payment_gateway,
+        ] + $this->methodSnapshot($payment);
+    }
+
+    /**
+     * Metode, label & bukti bayar seperti yang ditulis ke buku — dipakai juga koreksi metode bayar oleh admin
+     * (PaymentMethodCorrection) supaya hasil koreksi berformat sama dengan baris normal.
+     *
+     * @return array{payment_method: ?string, payment_method_label: string, payment_reference: ?string}
+     */
+    public function methodSnapshot(Payment $payment): array
+    {
+        $log = is_array($payment->payload_log) ? $payment->payload_log : [];
+
         try {
             $label = app(PadelBookingService::class)->formatPaymentMethodLabel($payment->payment_method, $log);
         } catch (\Throwable) {
             $label = $payment->payment_method;
         }
 
-        return $this->orderSnapshot($order) + [
-            'cashier_id' => is_string($cashierId) ? $cashierId : null,
-            'cashier_name' => $cashierName ? mb_substr((string) $cashierName, 0, 150) : null,
-            'pos_shift_id' => $payment->pos_shift_id,
-            'payment_gateway' => $payment->payment_gateway,
+        return [
             'payment_method' => $payment->payment_method,
             'payment_method_label' => mb_substr((string) $label, 0, 120),
             'payment_reference' => mb_substr((string) $this->paymentReference($payment, $log), 0, 120) ?: null,

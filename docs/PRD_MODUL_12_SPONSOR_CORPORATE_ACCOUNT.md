@@ -293,3 +293,23 @@ DB::transaction(function () use ($member, $organization, $hours, $bookingId, $ac
 - Kalau resepsionis yang input → titik integrasinya di POS Walk-In Booking (`BookOfflineCourt.php`), bukan API customer — perlu tambahan UI di layar kasir untuk pilih "bayar pakai voucher sponsor" + pilih member/voucher mana yang dipakai.
 
 **Belum boleh dilanjutkan sampai poin ini dikonfirmasi PM.** Begitu jelas, sisa pekerjaan (integrasi checkout + UI portal PIC di §8.2) baru lanjut dikerjakan.
+
+### 8.4 Jadwal Tetap Mingguan (dibangun 25 Okt 2026)
+
+Permintaan klien (Luli / Pak Sadrakh): IOH booking Club 61 tiap Kamis 19:00–22:00 di 3 lapangan, dipotong dari 100 jam
+"anytime"; reschedule hanya boleh sampai H-3, lewat dari itu tombol reschedule nonaktif. Dibuat umum untuk corporate
+maupun member individu yang punya kuota jam PADEL.
+
+| Aturan | Implementasi |
+|---|---|
+| Pemilik kuota | Pilih membership aktif yang punya kuota jam PADEL (corporate → nama perusahaan; individu → nama member). Booking atas nama pemilik membership (PIC untuk corporate). |
+| Pembuatan booking | Otomatis sampai N minggu ke depan (default 5 — customer bisa booking 30 hari ke depan, jadi slot jadwal tetap terkunci lebih dulu). Tombol "Buat booking sekarang" + perintah `padel:generate-recurring` tiap 00:20. Jalur sama dengan checkout yang ditanggung kuota: cek bentrok, jam operasional, masa & jam akses paket; order Rp0 `MEMBERSHIP_QUOTA`, tanpa shift kasir. |
+| Pemotongan kuota | Saat booking dibuat (seperti booking member biasa): 3 jam × 3 lapangan = 9 jam / minggu. Tercatat di riwayat pemakaian kuota per booking. |
+| Gagal | Kuota kurang / slot sudah terisi / membership berakhir → minggu × lapangan itu GAGAL (alasan tampil di Riwayat), dicoba lagi tiap putaran. Tidak pernah jadi tagihan. |
+| Lewati tanggal | Admin pilih tanggal + alasan (mis. Grand Opening). Booking tanggal itu dibatalkan lewat jalur pembatalan biasa (kuota jam kembali). "Batal lewati" membuatnya lagi. |
+| Batas reschedule | SATU pengaturan global untuk SEMUA booking (bukan per jadwal — keputusan user 25 Okt): tombol Batas Reschedule di Jadwal Tetap Mingguan (izin `manage_booking_time_limits`), angka + satuan (jam / hari), disimpan dalam jam (`booking_time_settings.reschedule_cutoff_hours`, bawaan 2 jam, maks. 30 hari). Langsung berlaku. Lewat batas: tombol Reschedule di Kelola Pemesanan nonaktif, server juga menolak. |
+| Edit jadwal | Booking yang sudah dibuat ikut disesuaikan memakai batas reschedule global: hari / jam / durasi berubah → booking ke depan **dipindah** (kode sama, tanpa batal; urut booking ke-1 → tanggal baru ke-1); durasi bertambah hanya kalau jam tambahan kosong & kuota cukup (kurang → durasi lama, jam mulai tetap pindah), berkurang → jam kembali; lapangan diganti → pindah ke lapangan baru; lapangan dikurangi → dibatalkan & jam kembali; lapangan ditambah → dibuatkan. Lewat batas reschedule / slot terisi / di luar periode → tetap di jadwal lama dan tanggal pasangannya dilewati (tidak dobel). Setelah simpan, minggu yang belum ada langsung dibuat. Pemilik kuota terkunci setelah ada booking; jadwal yang sudah membuat booking tidak bisa dihapus — dijeda. "Sampai tanggal" otomatis = habis membership dan tidak boleh melewatinya. |
+
+Belum / menunggu klien: kuota 100 jam off-peak untuk customer IM3 Premium; blokir tanggal Grand Opening 26 Nov
+(fitur tutup lapangan per tanggal belum ada); apakah pembatalan oleh staf setelah H-3 juga harus menghanguskan jam
+(sekarang pembatalan mengikuti aturan Modul 21: jam kembali selama jam main belum mulai).

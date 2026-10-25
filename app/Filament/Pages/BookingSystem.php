@@ -4,6 +4,7 @@ namespace App\Filament\Pages;
 
 use App\Models\Padel\PadelBooking;
 use App\Models\Padel\PadelCourt;
+use App\Services\Coaching\CoachingReminder;
 use App\Services\Padel\PadelBookingService;
 use BackedEnum;
 use BezhanSalleh\FilamentShield\Traits\HasPageShield;
@@ -130,7 +131,7 @@ class BookingSystem extends Page
 
     public function inspectBooking(string $bookingId): void
     {
-        $booking = PadelBooking::with(['court', 'user', 'order.payments', 'equipments.equipment'])
+        $booking = PadelBooking::with(['court', 'user', 'order.payments', 'equipments.equipment', 'coachingBooking.coaches.academy'])
             ->find($bookingId);
 
         if (! $booking) {
@@ -175,9 +176,30 @@ class BookingSystem extends Page
             'equipments' => $equipmentsList,
             'is_checked_in' => $booking->status === 'CHECKED_IN',
             'checked_in_at' => $booking->checked_in_at ? Carbon::parse($booking->checked_in_at)->format('H:i WIB') : null,
+            'coaching' => $this->coachingInspectData($booking),
         ];
 
         $this->showInspectorDrawer = true;
+    }
+
+    /** Rincian sesi coaching untuk popup detail (null = booking reguler). Tautan WA = pengingat yang sama dengan Jadwal Coaching. */
+    private function coachingInspectData(PadelBooking $booking): ?array
+    {
+        $coaching = $booking->coachingBooking;
+        if (! $coaching) {
+            return null;
+        }
+
+        return [
+            'academy' => $coaching->academy_name,
+            'students' => array_values(array_filter((array) ($coaching->students ?? []))),
+            'notes' => $coaching->notes,
+            'coaches' => $coaching->sortedCoaches()->map(fn ($coach) => [
+                'name' => $coach->name,
+                'role' => $coach->pivot->role === 'HEAD' ? 'Coach utama' : 'Coach tambahan',
+                'wa_url' => CoachingReminder::url($coach, $booking),
+            ])->all(),
+        ];
     }
 
     public function inspectEmptySlot(string $courtId, string $hour): void
@@ -340,7 +362,7 @@ class BookingSystem extends Page
         }
 
         // Ambil Seluruh Booking pada Tanggal Terpilih
-        $bookings = PadelBooking::with(['court', 'user', 'equipments.equipment'])
+        $bookings = PadelBooking::with(['court', 'user', 'equipments.equipment', 'coachingBooking.coaches'])
             ->whereDate('booking_date', $this->selectedDate)
             ->whereIn('status', ['LOCKED', 'PENDING_PAYMENT', 'PENDING', 'PAID', 'CHECKED_IN', 'COMPLETED'])
             ->get();
@@ -398,6 +420,9 @@ class BookingSystem extends Page
                         'player_name' => $matchedBooking->user?->name ?? 'Guest',
                         'booking_code' => $matchedBooking->booking_code,
                         'equipment_count' => $matchedBooking->equipments ? $matchedBooking->equipments->sum('quantity') : 0,
+                        // Sesi coaching (Modul 24 Opsi B): "Nalda +1" + nama lengkap semua coach untuk tooltip.
+                        'coaching_label' => $matchedBooking->coachingBooking?->coachSummary(),
+                        'coaching_title' => $matchedBooking->coachingBooking?->sortedCoaches()->pluck('name')->implode(', '),
                     ];
                 } elseif (! $isOpenForCourt) {
                     $courtRow['slots'][$h] = [

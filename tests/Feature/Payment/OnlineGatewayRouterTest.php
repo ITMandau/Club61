@@ -178,7 +178,9 @@ class OnlineGatewayRouterTest extends TestCase
         $this->assertSame(['VIRTUAL_ACCOUNT_BCA'], $bca->doku_channels);
         $this->assertFalse($bca->is_custom);
 
-        $this->assertSame(['VIRTUAL_ACCOUNT_BANK_PERMATA', 'VIRTUAL_ACCOUNT_BANK_SYARIAH_MANDIRI'], $this->methods()->channels('BSI_VA', 'DOKU'));
+        // BSI DOKU dipisah ke metode sendiri (bisa lewat SNAP — satu bank per tagihan); "VA Bank Lain" di DOKU = Permata.
+        $this->assertSame(['VIRTUAL_ACCOUNT_BANK_PERMATA'], $this->methods()->channels('BSI_VA', 'DOKU'));
+        $this->assertSame(['VIRTUAL_ACCOUNT_BANK_SYARIAH_MANDIRI'], $this->methods()->channels('BSI_SYARIAH_VA', 'DOKU'));
         $this->assertSame([], $this->methods()->channels('CREDIT_CARD', 'DOKU'), 'kartu tidak dipakai lewat DOKU');
 
         $this->expectException(\LogicException::class);

@@ -15,8 +15,8 @@ Route::prefix('v1/padel')->group(function () {
 
     // 2. ENDPOINT WEBHOOK PAYMENT GATEWAY (Publik, Multi-Driver)
     // Throttle longgar (sama dengan notifikasi DOKU): notifikasi asli tidak pernah sebanyak ini, banjir sampah dibatasi.
-    Route::post('/webhook/midtrans', fn(\Illuminate\Http\Request $request) => app(PaymentWebhookController::class)->handle('midtrans', $request))->middleware('throttle:300,1')->name('api.payment.webhook.midtrans');
-    Route::post('/webhook/{driver}', [PaymentWebhookController::class, 'handle'])->middleware('throttle:300,1')->name('api.payment.webhook');
+    Route::post('/webhook/midtrans', fn(\Illuminate\Http\Request $request) => app(PaymentWebhookController::class)->handle('midtrans', $request))->middleware('throttle:300,1')->withoutMiddleware('throttle:api')->name('api.payment.webhook.midtrans');
+    Route::post('/webhook/{driver}', [PaymentWebhookController::class, 'handle'])->middleware('throttle:300,1')->withoutMiddleware('throttle:api')->name('api.payment.webhook');
 
     // 3. ENDPOINT PRIVATE (Wajib Auth: Sanctum Token untuk Flutter, Session Cookie untuk Web Portal)
     Route::middleware(['auth:sanctum,web'])->group(function () {
@@ -39,6 +39,8 @@ Route::prefix('v1/padel')->group(function () {
         // Voucher promo & voucher saldo (refund yang ditolak) milik customer.
         Route::get('/vouchers/mine', [PadelBookingController::class, 'myVouchers']);
         Route::post('/vouchers/check', [PadelBookingController::class, 'checkVoucher'])->middleware('throttle:20,1');
+        // Klaim promo cara sebar C (Modul 22 tahap 3) — voucher masuk Voucher Saya & ikut di vouchers/mine (key claimed).
+        Route::post('/vouchers/claim', [PadelBookingController::class, 'claimVoucher'])->middleware('throttle:10,1');
 
         // 4. ENDPOINT STAF GATE & KASIR VENUE (Single-Use QR Scanner)
         Route::post('/check-in', [PadelBookingController::class, 'checkIn']);

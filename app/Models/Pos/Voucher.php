@@ -8,7 +8,8 @@ use Illuminate\Database\Eloquent\Model;
 /**
  * Dua jenis voucher:
  *  - promo (PERCENT / FIXED): dibuat tim marketing di halaman Daftar Voucher (Modul 22). `quota` = SISA kuota (berkurang
- *    saat order lunas), `used_count` = sudah dipakai; kuota awal = quota + used_count.
+ *    saat order lunas), `used_count` = sudah dipakai; kuota awal = quota + used_count. Cara sebar B: baris kampanye +
+ *    satu baris per kode (campaign_id, kuota 1). Cara sebar C: `quota` = sisa KLAIM (berkurang saat diklaim).
  *  - saldo (CREDIT): milik satu customer (user_id), terbit saat refund ditolak (refund_id). `balance` = sisa saldo
  *    rupiah yang bisa dipakai sebagian berkali-kali sampai habis / kedaluwarsa.
  */
@@ -22,8 +23,21 @@ class Voucher extends Model
 
     public const TYPE_FIXED = 'FIXED';
 
-    /** Cara sebar promo (PRD §4.1). Tahap 2 baru A (kode umum); B–D menyusul. */
+    /** Cara sebar promo (PRD §4.1): A kode umum, B kode unik massal, C klaim ke akun. D (otomatis) menyusul. */
     public const DISTRIBUTION_CODE = 'CODE';
+
+    public const DISTRIBUTION_UNIQUE = 'UNIQUE';
+
+    public const DISTRIBUTION_CLAIM = 'CLAIM';
+
+    public const DISTRIBUTIONS = [
+        self::DISTRIBUTION_CODE => 'A. Kode umum',
+        self::DISTRIBUTION_UNIQUE => 'B. Kode unik massal',
+        self::DISTRIBUTION_CLAIM => 'C. Klaim ke akun',
+    ];
+
+    /** Batas jumlah kode unik per kampanye (B) — satu kali buat. */
+    public const MAX_UNIQUE_CODES = 1000;
 
     public const CHANNEL_ALL = 'ALL';
 
@@ -53,6 +67,7 @@ class Voucher extends Model
         'code',
         'name',
         'distribution',
+        'campaign_id',
         'discount_type',
         'discount_value',
         'min_order_amount',
@@ -98,10 +113,44 @@ class Voucher extends Model
         return array_values(array_intersect($this->categories ?: ['PADEL'], array_keys(self::PROMO_CATEGORIES)));
     }
 
+    /** Baris kampanye kode unik (B) — wadah aturan; kodenya sendiri TIDAK bisa dipakai di checkout. */
+    public function isCampaign(): bool
+    {
+        return $this->distribution === self::DISTRIBUTION_UNIQUE && $this->campaign_id === null;
+    }
+
+    /** Satu kode dari kampanye kode unik (B), kuota 1. */
+    public function isUniqueCode(): bool
+    {
+        return $this->campaign_id !== null;
+    }
+
+    /** Promo klaim ke akun (C): hanya bisa dipakai akun yang sudah klaim; kuota = jumlah klaim. */
+    public function isClaim(): bool
+    {
+        return $this->distribution === self::DISTRIBUTION_CLAIM;
+    }
+
     /** Kuota awal promo (null = tanpa batas). */
     public function totalQuota(): ?int
     {
         return $this->quota === null ? null : (int) $this->quota + (int) $this->used_count;
+    }
+
+    public function campaign()
+    {
+        return $this->belongsTo(self::class, 'campaign_id');
+    }
+
+    /** Kode-kode milik kampanye kode unik (B). */
+    public function codes()
+    {
+        return $this->hasMany(self::class, 'campaign_id');
+    }
+
+    public function claims()
+    {
+        return $this->hasMany(VoucherClaim::class, 'voucher_id');
     }
 
     public function user()

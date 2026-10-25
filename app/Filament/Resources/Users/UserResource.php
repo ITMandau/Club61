@@ -27,11 +27,11 @@ class UserResource extends Resource
 
     protected static string|BackedEnum|null $navigationIcon = 'heroicon-o-users';
 
-    protected static ?string $navigationLabel = 'Kelola Pengguna';
+    protected static ?string $navigationLabel = 'Akun Login';
 
     protected static ?string $modelLabel = 'Pengguna';
 
-    protected static ?string $pluralModelLabel = 'Kelola Pengguna';
+    protected static ?string $pluralModelLabel = 'Akun Login';
 
     protected static string|\UnitEnum|null $navigationGroup = 'Karyawan & Akses';
 

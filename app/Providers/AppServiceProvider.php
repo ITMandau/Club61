@@ -140,6 +140,30 @@ class AppServiceProvider extends ServiceProvider
             });
         });
 
+        // 1c. Batas umum semua route api/* (audit SEC-013, PRD RL-01/RL-02): 120/menit per akun (sesi web atau token
+        //     aplikasi), per IP untuk tamu. Pemakaian normal tertinggi ±20/menit (polling status bayar tiap 3 detik).
+        //     Webhook gateway dikecualikan (routes/api/padel.php & pos.php) — tetap throttle:300,1 sendiri.
+        RateLimiter::for('api', function (Request $request) {
+            $userId = ($request->user() ?? auth('sanctum')->user())?->getAuthIdentifier();
+
+            return Limit::perMinute(120)->by($userId ? 'api:user:'.$userId : 'api:ip:'.$request->ip())->response(function () {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Terlalu banyak permintaan. Tunggu sebentar lalu coba lagi.',
+                    'errors' => null,
+                ], 429);
+            });
+        });
+
+        // 1d. Daftar akun lewat web (audit SEC-006): 5/menit per IP — bot tidak bisa membuat akun massal / mengecek
+        //     daftar email terdaftar tanpa batas. Form kembali dengan pesan, bukan halaman 429 kosong.
+        RateLimiter::for('register', function (Request $request) {
+            return Limit::perMinute(5)->by('register:'.$request->ip())->response(function () {
+                return back()->withInput(request()->except('password', 'password_confirmation'))
+                    ->withErrors(['email' => 'Terlalu banyak percobaan daftar dari jaringan ini. Coba lagi dalam 1 menit.']);
+            });
+        });
+
         // 2. Rate Limiting Booking Padel (5 hit/menit/User) - Anti Calo & Bot
         RateLimiter::for('booking-throttle', function (Request $request) {
             return Limit::perMinute(5)->by($request->user()?->id ?: $request->ip())->response(function () {

@@ -35,6 +35,10 @@
                        class="inline-flex items-center px-1 pt-1 border-b-2 {{ request()->routeIs('customer.membership') ? 'border-[#F7F0DB] text-[#F7F0DB]' : 'border-transparent text-[#F7F0DB]/70 hover:text-[#F7F0DB] hover:border-[#F7F0DB]/40' }} text-xs font-bold uppercase tracking-wider whitespace-nowrap transition-colors">
                         Membership
                     </a>
+                    <a href="{{ route('customer.coaching') }}"
+                       class="hidden xl:inline-flex items-center px-1 pt-1 border-b-2 {{ request()->routeIs('customer.coaching') ? 'border-[#F7F0DB] text-[#F7F0DB]' : 'border-transparent text-[#F7F0DB]/70 hover:text-[#F7F0DB] hover:border-[#F7F0DB]/40' }} text-xs font-bold uppercase tracking-wider whitespace-nowrap transition-colors">
+                        Coaching
+                    </a>
                     <a href="{{ route('customer.invoice') }}"
                        class="inline-flex items-center px-1 pt-1 border-b-2 {{ request()->routeIs('customer.invoice') ? 'border-[#F7F0DB] text-[#F7F0DB]' : 'border-transparent text-[#F7F0DB]/70 hover:text-[#F7F0DB] hover:border-[#F7F0DB]/40' }} text-xs font-bold uppercase tracking-wider whitespace-nowrap transition-colors">
                         Invoice
@@ -272,6 +276,11 @@
                                 @if($navVoucherCount > 0)
                                     <span class="min-w-[22px] h-[22px] px-1.5 rounded-full bg-[#662721] text-[#F7F0DB] text-[11px] font-black flex items-center justify-center">{{ $navVoucherCount }}</span>
                                 @endif
+                            </a>
+                            {{-- Bottom nav HP penuh (5 menu) & navbar tab (768–1279px) tidak muat → Coaching lewat dropdown akun di bawah 1280px. --}}
+                            <a href="{{ route('customer.coaching') }}" role="menuitem" class="xl:hidden flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-bold hover:bg-[#F7F0DB] transition-colors">
+                                <svg class="w-4 h-4 text-[#662721]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+                                Coaching
                             </a>
                             @if(Auth::user()->canAccessPanel(\Filament\Facades\Filament::getPanel('admin')))
                                 <a href="/admin" role="menuitem" class="sm:hidden flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-bold hover:bg-[#F7F0DB] transition-colors">

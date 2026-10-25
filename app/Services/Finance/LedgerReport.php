@@ -142,7 +142,9 @@ class LedgerReport
     {
         $sums = collect(self::MONEY_COLUMNS)->map(fn ($c) => "SUM({$c}) as {$c}")->implode(', ');
         $snapshot = collect(['occurred_at', 'order_id', 'order_number', 'source', 'customer_id', 'customer_name', 'cashier_id', 'cashier_name',
-            'pos_shift_id', 'payment_gateway', 'payment_method', 'payment_method_label', 'payment_reference'])
+            'pos_shift_id', 'payment_gateway', 'payment_method', 'payment_method_label', 'payment_reference',
+            // Tanda koreksi metode bayar oleh admin (semua baris satu pembayaran dikoreksi bersamaan).
+            'method_corrected_at', 'method_corrected_by_name', 'original_payment_method_label'])
             ->map(fn ($c) => "MAX({$c}) as {$c}")->implode(', ');
 
         return $query

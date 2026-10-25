@@ -661,7 +661,13 @@ class FnbPosCheckoutTest extends TestCase
         $component->call('submitFnbCheckout')->assertSet('showReceiptModal', true);
     }
 
-    public function test_closing_breaks_down_sales_per_payment_category_and_saves_matching_reconciliation(): void
+    /** Nominal pembayaran sukses shift ini per metode (dari database, bukan dari layar — layar tutup shift blind). */
+    private function paidAmount(PosCashierShift $shift, string $method): int
+    {
+        return (int) Payment::where('pos_shift_id', $shift->id)->where('status', 'SUCCESS')->where('payment_method', $method)->sum('amount');
+    }
+
+    public function test_closing_is_blind_and_a_full_match_closes_the_shift_and_records_edc_settlement(): void
     {
         $shift = $this->openFnbShift();
         $this->actingAs($this->cashier);
@@ -671,37 +677,53 @@ class FnbPosCheckoutTest extends TestCase
         $this->checkoutLatte('CREDIT_CARD', ['edcTerminal' => 'EDC_MANDIRI', 'edcLast4' => '5678', 'edcApprovalCode' => 'APR002', 'edcTraceNumber' => 'TRC002']);
 
         $component = Livewire::test(FnbCashierTerminal::class)->call('prepareCloseShift');
-        $breakdown = collect($component->get('closingBreakdown'))->keyBy('key');
+        $rows = collect($component->get('closingRows'))->keyBy('key');
 
-        $this->assertEqualsCanonicalizing(['QRIS_BCA_QRIS', 'EDC_BCA_DEBIT', 'EDC_MANDIRI_CREDIT'], $breakdown->keys()->all());
-        $this->assertSame(1, $breakdown['EDC_BCA_DEBIT']['count']);
+        // Tiap mesin EDC: baris debit & kredit; tidak ada jumlah transaksi / nominal sistem di browser.
+        $this->assertEqualsCanonicalizing(['QRIS_BCA_QRIS', 'EDC_BCA_DEBIT', 'EDC_BCA_CREDIT', 'EDC_MANDIRI_DEBIT', 'EDC_MANDIRI_CREDIT'], $rows->keys()->all());
+        $rows->each(fn (array $row) => $this->assertArrayNotHasKey('system_amount', $row));
+        $rows->each(fn (array $row) => $this->assertArrayNotHasKey('count', $row));
+        $this->assertSame(['EDC_BCA' => '', 'EDC_MANDIRI' => ''], $component->get('edcModes'));
 
-        foreach ($breakdown as $key => $row) {
-            $component->set("settlementInputs.{$key}", number_format($row['system_amount'], 0, ',', '.'));
-        }
-
-        $component->call('executeCloseShift')->assertSet('showShiftReportModal', true);
+        $component->set('settlementInputs.QRIS_BCA_QRIS', number_format($this->paidAmount($shift, 'QRIS'), 0, ',', '.'))
+            ->set('settlementInputs.EDC_BCA_DEBIT', (string) $this->paidAmount($shift, 'DEBIT_CARD'))
+            ->set('settlementInputs.EDC_BCA_CREDIT', '0')
+            ->set('settlementInputs.EDC_MANDIRI_DEBIT', '0')
+            ->set('settlementInputs.EDC_MANDIRI_CREDIT', (string) $this->paidAmount($shift, 'CREDIT_CARD'))
+            ->set('edcModes.EDC_BCA', 'SETTLE')
+            ->set('edcModes.EDC_MANDIRI', 'SETTLE')
+            ->call('executeCloseShift')
+            ->assertSet('showShiftReportModal', true)
+            ->assertSee("club61PrintReceipt('#printable-z-report')", false);
 
         $shift->refresh();
         $this->assertSame('CLOSED', $shift->status);
+        $this->assertSame(PosCashierShift::REVIEW_MATCHED, $shift->review_status);
         $this->assertEquals(0, (float) $shift->settlement_difference);
-        $this->assertCount(3, $shift->settlement_reconciliation);
+        $this->assertCount(5, $shift->settlement_reconciliation);
+        $this->assertSame(2, \App\Models\Pos\PosEdcSettlement::where('pos_shift_id', $shift->id)->where('source', 'CLOSING')->count());
     }
 
-    public function test_closing_with_settlement_difference_requires_notes(): void
+    public function test_a_difference_freezes_the_typed_numbers_requires_notes_and_needs_review(): void
     {
         $shift = $this->openFnbShift();
         $this->actingAs($this->cashier);
 
         $this->checkoutLatte('QRIS', ['qrisRrn' => '123456789012']);
+        $paid = $this->paidAmount($shift, 'QRIS');
 
         $component = Livewire::test(FnbCashierTerminal::class)->call('prepareCloseShift');
-        $key = $component->get('closingBreakdown')[0]['key'];
-        $systemAmount = $component->get('closingBreakdown')[0]['system_amount'];
-
-        $component->set("settlementInputs.{$key}", (string) ($systemAmount - 5000))
+        $component->set('settlementInputs.QRIS_BCA_QRIS', (string) ($paid - 5000))
             ->call('executeCloseShift')
-            ->assertSet('errorMessage', fn ($m) => str_contains($m, 'Wajib isi catatan'));
+            ->assertSet('errorMessage', fn ($m) => str_contains($m, 'tidak bisa diubah'));
+        $this->assertSame('OPEN', $shift->fresh()->status, 'baru dicek, belum ditutup');
+        $this->assertEquals($paid - 5000, $shift->fresh()->closing_inputs['first_attempt']['inputs']['QRIS_BCA_QRIS']);
+        $this->assertEquals(-5000, $component->get('closingMismatch')['difference'], 'angka sistem baru terlihat setelah disimpan');
+
+        // Setelah angka sistem terlihat, mengetik ulang tidak berpengaruh — tanpa penjelasan tetap tidak bisa tutup.
+        $component->set('settlementInputs.QRIS_BCA_QRIS', (string) $paid)
+            ->call('executeCloseShift')
+            ->assertSet('errorMessage', fn ($m) => str_contains($m, 'Wajib isi penjelasan'));
         $this->assertSame('OPEN', $shift->fresh()->status);
 
         $component->set('closingNotes', 'Settlement QRIS kurang 5rb, menunggu konfirmasi bank.')
@@ -710,7 +732,8 @@ class FnbPosCheckoutTest extends TestCase
 
         $shift->refresh();
         $this->assertSame('CLOSED', $shift->status);
-        $this->assertEquals(-5000, (float) $shift->settlement_difference);
+        $this->assertSame(PosCashierShift::REVIEW_NEEDS_REVIEW, $shift->review_status);
+        $this->assertEquals(-5000, (float) $shift->settlement_difference, 'yang dipakai angka pertama, bukan ketikan ulang');
     }
 
     public function test_closing_rejects_empty_settlement_input(): void
@@ -723,9 +746,10 @@ class FnbPosCheckoutTest extends TestCase
         Livewire::test(FnbCashierTerminal::class)
             ->call('prepareCloseShift')
             ->call('executeCloseShift')
-            ->assertSet('errorMessage', fn ($m) => str_contains($m, 'Isi nominal settlement'));
+            ->assertSet('errorMessage', fn ($m) => str_contains($m, 'Isi nominal'));
 
         $this->assertSame('OPEN', $shift->fresh()->status);
+        $this->assertNull($shift->fresh()->closing_inputs, 'input tidak lengkap tidak membekukan apa pun');
     }
 
     public function test_new_transaction_during_closing_forces_recheck(): void
@@ -736,8 +760,7 @@ class FnbPosCheckoutTest extends TestCase
         $this->checkoutLatte('QRIS', ['qrisRrn' => '123456789012']);
 
         $component = Livewire::test(FnbCashierTerminal::class)->call('prepareCloseShift');
-        $row = $component->get('closingBreakdown')[0];
-        $component->set("settlementInputs.{$row['key']}", (string) $row['system_amount']);
+        $component->set('settlementInputs.QRIS_BCA_QRIS', (string) $this->paidAmount($shift, 'QRIS'));
 
         // Kasir lain menyelesaikan transaksi saat modal closing masih terbuka
         $this->checkoutLatte('QRIS', ['qrisRrn' => '999999999999']);
@@ -746,7 +769,7 @@ class FnbPosCheckoutTest extends TestCase
             ->assertSet('errorMessage', fn ($m) => str_contains($m, 'transaksi baru'));
 
         $this->assertSame('OPEN', $shift->fresh()->status);
-        $this->assertSame(2, $component->get('closingBreakdown')[0]['count']);
+        $this->assertNull($shift->fresh()->closing_inputs, 'transaksi baru → cek ulang, bukan dibekukan');
     }
 
     public function test_tax_amount_matches_fnb_module_override_from_club_finance_setting(): void

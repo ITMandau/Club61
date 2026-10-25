@@ -39,6 +39,7 @@ class PadelBooking extends Model
         'sponsor_member_voucher_id',
         'sponsor_discount_court',
         'sponsor_hours_consumed',
+        'coaching_booking_id',
     ];
 
     protected function casts(): array
@@ -75,6 +76,18 @@ class PadelBooking extends Model
     public function coach()
     {
         return $this->belongsTo(StaffProfile::class, 'coach_id');
+    }
+
+    /** Booking coaching (Modul 24 Opsi B) — slot lapangan dengan tarif setoran coaching. */
+    public function coachingBooking()
+    {
+        return $this->belongsTo(\App\Models\Coaching\CoachingBooking::class, 'coaching_booking_id');
+    }
+
+    /** Booking hasil Jadwal Tetap Mingguan (batas reschedule mengikuti jadwalnya). */
+    public function recurringSchedule()
+    {
+        return $this->belongsTo(PadelRecurringSchedule::class, 'recurring_schedule_id');
     }
 
     public function equipments()

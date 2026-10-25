@@ -7,6 +7,8 @@ use App\Filament\Pages\BukuTransaksi;
 use App\Models\Finance\LedgerEntry;
 use App\Models\Padel\PadelBooking;
 use App\Models\Padel\PadelCourt;
+use App\Models\Pos\Order;
+use App\Models\Pos\Payment;
 use App\Models\User;
 use App\Services\Finance\LedgerAnalytics;
 use App\Services\Finance\LedgerReport;
@@ -14,6 +16,7 @@ use App\Services\Permission\Club61PermissionMatrix;
 use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Str;
+use Livewire\Features\SupportLockedProperties\CannotUpdateLockedPropertyException;
 use Livewire\Livewire;
 use Tests\TestCase;
 
@@ -149,12 +152,12 @@ class AnalyticsLedgerTest extends TestCase
             ->call('setPreset', 'semua')
             ->assertSet('preset', 'semua')
             ->assertSee('Rp 2.829.000')
-            ->call("setPreset", "tidak-ada")
-            ->assertSet("preset", LedgerReport::DEFAULT_PRESET)
+            ->call('setPreset', 'tidak-ada')
+            ->assertSet('preset', LedgerReport::DEFAULT_PRESET)
             // Tanggal kustom ngawur dari browser diabaikan, bukan error 500.
-            ->call("setPreset", "kustom")
-            ->set("dari", "bukan-tanggal")
-            ->set("sampai", "2026-10-31")
+            ->call('setPreset', 'kustom')
+            ->set('dari', 'bukan-tanggal')
+            ->set('sampai', '2026-10-31')
             ->assertOk();
     }
 
@@ -165,15 +168,25 @@ class AnalyticsLedgerTest extends TestCase
         $this->actingAs($this->owner);
 
         Livewire::test(Analytics::class)
-            ->assertViewHas('channels', fn ($c) => $c['cashier']['money_net'] === 405000.0   // lapangan 220rb + F&B 110rb + merch 75rb
+            // Per loket: frontdesk padel 220rb, F&B 110rb, kasir lain (merch) 75rb; online 1,5jt.
+            ->assertViewHas('channels', fn ($c) => $c['padel']['money_net'] === 220000.0
+                && $c['fnb']['money_net'] === 110000.0
+                && $c['other']['money_net'] === 75000.0
                 && $c['online']['money_net'] === 1500000.0)
+            // Baris online tanpa pembayaran yang dikenali → gateway "Lainnya", totalnya tetap utuh.
+            ->assertViewHas('gateways', fn ($g) => $g === [['label' => 'Lainnya', 'money_net' => 1500000.0, 'transactions' => 1]])
+            ->assertSee('POS Frontdesk Padel')
+            ->assertSee('POS Kasir F&amp;B', false)
+            ->assertSee('Payment Gateway Online')
+            ->assertDontSee('Midtrans Gateway')
             ->assertViewHas('serviceLines', function (array $lines) {
                 $lines = collect($lines)->keyBy('code');
 
                 return $lines['SEWA_LAPANGAN']['money_net'] === 220000.0
                     && $lines['FNB']['money_net'] === 110000.0
-                    && $lines['WELLNESS']['soon'] && $lines['COACHING']['soon'] && ! $lines['FNB']['soon']
-                    && $lines['COACHING']['filter'] === []
+                    // Coaching (Modul 24 Opsi B) sudah punya kategori buku sendiri → tidak "Menyusul" & bisa difilter.
+                    && $lines['WELLNESS']['soon'] && ! $lines['COACHING']['soon'] && ! $lines['FNB']['soon']
+                    && $lines['COACHING']['filter'] === ['COACHING'] && $lines['COACHING']['money_net'] === 0.0
                     && $lines['LAINNYA']['money_net'] === 75000.0
                     && $lines['LAINNYA']['filter'] === ['MERCH']
                     && ! $lines->has('MEMBERSHIP');
@@ -191,12 +204,33 @@ class AnalyticsLedgerTest extends TestCase
             ->assertDontSee('Tren Uang Masuk');
     }
 
+    public function test_online_money_is_split_per_payment_gateway(): void
+    {
+        foreach ([['DOKU', 400000], ['DOKU', 350000], ['MIDTRANS', 600000]] as $i => [$gateway, $amount]) {
+            $order = Order::create(['order_number' => 'ORD-GW-'.$i, 'order_type' => 'ONLINE_BOOKING', 'subtotal' => $amount, 'grand_total' => $amount, 'payment_status' => 'PAID']);
+            $payment = Payment::create([
+                'order_id' => $order->id, 'payment_gateway' => $gateway, 'transaction_id' => 'GW-'.$i,
+                'amount' => $amount, 'payment_method' => 'BCA_VA', 'status' => 'SUCCESS',
+            ]);
+            $this->row('2026-10-1'.$i.' 10:00', 'SEWA_LAPANGAN', 'ONLINE_PADEL', $amount, ['payment_id' => $payment->id, 'method' => 'BCA_VA']);
+        }
+        $this->actingAs($this->owner);
+
+        Livewire::test(Analytics::class)
+            ->assertViewHas('gateways', fn ($g) => $g === [
+                ['label' => 'DOKU', 'money_net' => 750000.0, 'transactions' => 2],
+                ['label' => 'Midtrans', 'money_net' => 600000.0, 'transactions' => 1],
+            ])
+            ->assertViewHas('channels', fn ($c) => $c['online']['money_net'] === 1350000.0)
+            ->assertSee('DOKU Rp 750.000 (2 trx)');
+    }
+
     public function test_preset_cannot_be_changed_directly_from_the_browser(): void
     {
         $this->actingAs($this->owner);
-        $this->expectException(\Livewire\Features\SupportLockedProperties\CannotUpdateLockedPropertyException::class);
+        $this->expectException(CannotUpdateLockedPropertyException::class);
 
-        Livewire::test(Analytics::class)->set("preset", "bulan_ini");
+        Livewire::test(Analytics::class)->set('preset', 'bulan_ini');
     }
 
     public function test_breakdown_rows_link_to_a_filtered_buku_transaksi(): void

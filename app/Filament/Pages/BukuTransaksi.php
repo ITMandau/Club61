@@ -117,7 +117,11 @@ class BukuTransaksi extends Page implements HasTable
                     ->label('Metode Bayar')
                     ->placeholder('-')
                     ->limit(30)
-                    ->description(fn (LedgerEntry $row) => $row->payment_reference ? \Illuminate\Support\Str::limit($row->payment_reference, 34) : null),
+                    ->description(fn (LedgerEntry $row) => $row->method_corrected_at
+                        // Koreksi metode bayar oleh admin: baris tetap satu, ditandai siapa / kapan & metode asalnya.
+                        ? 'Dikoreksi '.($row->method_corrected_by_name ?? '-').' '.\Illuminate\Support\Carbon::parse($row->method_corrected_at)->setTimezone(LedgerReport::TIMEZONE)->format('d M H:i')
+                            .' (asal: '.\Illuminate\Support\Str::limit((string) $row->original_payment_method_label, 24).')'
+                        : ($row->payment_reference ? \Illuminate\Support\Str::limit($row->payment_reference, 34) : null)),
                 TextColumn::make('net_amount')
                     ->label('Penjualan Bersih')
                     ->alignEnd()
