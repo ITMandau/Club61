@@ -22,6 +22,7 @@ class BookOfflineCourt extends Page
 {
     use \App\Livewire\Concerns\AutoPrintsReceipts;
     use \App\Livewire\Concerns\ClosesPosShift;
+    use \App\Livewire\Concerns\PrintsDailySalesRecap;
     use HasPageShield;
 
     protected static string | BackedEnum | null $navigationIcon = 'heroicon-o-building-storefront';
@@ -2258,6 +2259,22 @@ class BookOfflineCourt extends Page
                     'amount' => (float) $payment->amount,
                 ];
             });
+    }
+
+    // Rekap Penjualan Harian (X-Report) — tanggal = filter tanggal di tab Riwayat.
+    protected function salesRecapCounter(): string
+    {
+        return 'PADEL_FRONTDESK';
+    }
+
+    protected function salesRecapDate(): string
+    {
+        return $this->resolvedHistoryDate();
+    }
+
+    protected function salesRecapNotice(string $level, string $title, string $body): void
+    {
+        $this->shiftNotice($level, $title, $body);
     }
 
     /** Tanggal riwayat yang aman dipakai (input dari browser bisa berupa teks sembarang → Carbon::parse error). */

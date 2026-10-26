@@ -1,7 +1,7 @@
 {{-- POS Jual Membership – frontdesk (tablet first), gaya sama dengan POS Walk-In Booking. --}}
 <div class="walkin-pos-root">
     @include('filament.partials.pos-theme-style')
-    @include('pos.partials.receipt-print-style', ['selectors' => ['#printable-membership-receipt']])
+    @include('pos.partials.receipt-print-style', ['selectors' => ['#printable-membership-receipt', '#printable-sales-recap']])
 
     {{-- ============================
          BARIS ATAS: tab POS + Kasir/Riwayat + status shift
@@ -509,4 +509,7 @@
             @include('pos.receipts.membership', ['receipt' => $completedMembershipData, 'withActions' => true, 'receiptFromHistory' => $receiptFromHistory])
         </div>
     @endif
+
+    {{-- Rekap Penjualan Harian loket padel (X-Report) — App\Livewire\Concerns\PrintsDailySalesRecap. --}}
+    @include('pos.partials.sales-recap-modal')
 </div>

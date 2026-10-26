@@ -61,7 +61,7 @@
         .fnbpos-history-table td { padding: 0.6rem 0.75rem; font-size: 0.75rem; border-top: 1px solid #EFE6D2; vertical-align: middle; white-space: nowrap; }
         .fnbpos-history-table td.fnbpos-cell-clip { max-width: 9rem; overflow: hidden; text-overflow: ellipsis; }
     </style>
-    @include('pos.partials.receipt-print-style', ['selectors' => ['#fnbpos-receipt', '#printable-z-report']])
+    @include('pos.partials.receipt-print-style', ['selectors' => ['#fnbpos-receipt', '#printable-z-report', '#printable-sales-recap']])
 
     @if($errorMessage)
         <div class="fixed top-4 right-4 z-[10000] max-w-sm p-4 rounded-xl shadow-2xl" style="background: #FEE2E2; border: 1.5px solid #FCA5A5; color: #991B1B;">
@@ -283,9 +283,13 @@
     @if($posStep === 'history')
         {{-- ================= TAB: RIWAYAT TRANSAKSI ================= --}}
         <section class="flex-1 flex flex-col overflow-hidden" style="background: rgba(255,255,255,0.72);">
-            <div class="p-4 border-b border-[#E6DAC0]/60 bg-white/80">
-                <div class="font-display font-black text-base text-[#4F2F2A]">Riwayat Transaksi F&amp;B</div>
-                <div class="text-[11px] text-[#7A5A52]">{{ $this->activeShift ? 'Selama shift '.$this->activeShift->shift_number.' berjalan' : '50 transaksi terakhir (belum ada shift aktif)' }}</div>
+            <div class="p-4 border-b border-[#E6DAC0]/60 bg-white/80 flex flex-wrap items-center justify-between gap-3">
+                <div>
+                    <div class="font-display font-black text-base text-[#4F2F2A]">Riwayat Transaksi F&amp;B</div>
+                    <div class="text-[11px] text-[#7A5A52]">{{ $this->activeShift ? 'Selama shift '.$this->activeShift->shift_number.' berjalan' : '50 transaksi terakhir (belum ada shift aktif)' }}</div>
+                </div>
+                {{-- Rekap Penjualan Harian (X-Report) loket F&B hari ini. --}}
+                @include('pos.partials.sales-recap-button')
             </div>
 
             <div class="flex-1 overflow-auto p-4">
@@ -452,4 +456,6 @@
     {{-- Tutup shift blind + laporan Z (sama dengan POS Padel) — App\Livewire\Concerns\ClosesPosShift. --}}
     @include('pos.partials.shift-close-modal')
     @include('pos.partials.shift-report-modal')
+    {{-- Rekap Penjualan Harian loket F&B (X-Report) — App\Livewire\Concerns\PrintsDailySalesRecap. --}}
+    @include('pos.partials.sales-recap-modal')
 </div>

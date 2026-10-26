@@ -155,6 +155,7 @@ trait ClosesPosShift
             'total_difference' => $result['result']['difference'],
             'review_status' => $result['review_status'],
             'closing_notes' => $closed->closing_notes,
+            'sales_recap_views' => \App\Services\Pos\DailySalesRecapService::viewsDuringShift($closed),
         ];
 
         $this->closingRows = [];
