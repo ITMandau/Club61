@@ -5,9 +5,11 @@ namespace App\Http\Controllers\Auth;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Auth\LoginRequest;
 use App\Services\Permission\HomeRouteResolver;
+use App\Support\ComingSoon;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
 
 class AuthenticatedSessionController extends Controller
@@ -17,6 +19,11 @@ class AuthenticatedSessionController extends Controller
      */
     public function create(): View
     {
+        // Sebelum grand opening: halaman hitung mundur; form login biasa ada di balik tombol "Login Staf".
+        if (ComingSoon::active()) {
+            return view('auth.coming-soon');
+        }
+
         return view('auth.login');
     }
 
@@ -31,6 +38,15 @@ class AuthenticatedSessionController extends Controller
     public function store(LoginRequest $request): RedirectResponse
     {
         $request->authenticate();
+
+        // Mode Coming Soon: hanya staf (tujuan login bukan Dashboard member) yang boleh mendapat sesi.
+        if (ComingSoon::active() && HomeRouteResolver::resolve($request->user()) === HomeRouteResolver::CUSTOMER) {
+            Auth::guard('web')->logout();
+
+            throw ValidationException::withMessages([
+                'email' => ComingSoon::memberMessage(),
+            ]);
+        }
 
         $request->session()->regenerate();
 

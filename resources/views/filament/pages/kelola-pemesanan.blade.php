@@ -590,7 +590,7 @@
                     <div class="c61-field" style="margin-bottom: 0;">
                         <label class="c61-label">Alasan Perubahan Jadwal</label>
                         <input type="text" wire:model="rescheduleReason"
-                            placeholder="Misal: Customer salah booking via WhatsApp, hujan di lapangan outdoor..." class="c61-input">
+                            placeholder="Masukkan alasan perubahan jadwal..." class="c61-input">
                     </div>
                 </div>
 
