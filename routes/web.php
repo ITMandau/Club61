@@ -68,6 +68,13 @@ Route::middleware(['auth'])->group(function () {
         }
         return view('kitchen.kds');
     })->name('kitchen.kds');
+
+    // Sidik jari hak akses akun (bukan daftar izinnya) — dipantau partials.access-watch supaya menu & halaman ikut
+    // menyesuaikan saat admin mengubah role tanpa user harus logout.
+    Route::get('/akses/versi', fn () => response()
+        ->json(['v' => \App\Support\StaffAccess::version(auth()->user())])
+        ->header('Cache-Control', 'no-store'))
+        ->name('staff.access-version');
 });
 
 // 4. Dashboard Member / Customer

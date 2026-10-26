@@ -171,8 +171,8 @@ class DemoRoleAccessTest extends TestCase
 
         $this->assertSame('CHECKED_IN', $booking->fresh()->status);
 
-        $this->get('/pos')->assertForbidden();
-        $this->get('/kitchen')->assertForbidden();
+        $this->get('/pos')->assertDenied();
+        $this->get('/kitchen')->assertDenied();
     }
 
     public function test_emptied_role_permissions_do_not_grow_back_when_new_user_is_created(): void

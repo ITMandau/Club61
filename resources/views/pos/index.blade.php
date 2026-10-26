@@ -210,5 +210,6 @@
 
     @livewireScripts
     @include('partials.livewire-session-expired')
+    @include('partials.access-watch')
 </body>
 </html>

@@ -381,7 +381,7 @@ class ShiftClosingTest extends TestCase
         $this->get(ReviewShiftKasir::getUrl())->assertOk();
 
         $this->actingAs($this->cashier);
-        $this->get(ReviewShiftKasir::getUrl())->assertForbidden();
+        $this->get(ReviewShiftKasir::getUrl())->assertDenied();
         $this->assertContains('approve_shift_closing', Club61PermissionMatrix::defaultRolePermissions('admin'));
         $this->assertNotContains('approve_shift_closing', Club61PermissionMatrix::defaultRolePermissions('cashier'));
         $this->assertNotContains('approve_shift_closing', Club61PermissionMatrix::BACKDOOR_PERMISSIONS);

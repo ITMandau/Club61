@@ -270,7 +270,7 @@ baris 3', $coach->motto);
         }
 
         $this->actingAs(User::factory()->cashier()->create(['is_active' => true]));
-        $this->get(LinkBioLinkResource::getUrl())->assertForbidden();
+        $this->get(LinkBioLinkResource::getUrl())->assertDenied();
     }
 
     // ── Analytics ──────────────────────────────────────────────────────────────────────────────────────────────

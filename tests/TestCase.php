@@ -44,6 +44,20 @@ abstract class TestCase extends BaseTestCase
 
         // Test tidak boleh menembak API luar (Midtrans dsb.) — yang butuh wajib Http::fake().
         \Illuminate\Support\Facades\Http::preventStrayRequests();
+
+        // Halaman staf yang ditolak: 403, ATAU (staf panel) dialihkan ke halaman yang masih boleh dengan notifikasi
+        // "Akses ditolak" (App\Support\StaffAccess) — keduanya berarti halamannya tidak terbuka.
+        \Illuminate\Testing\TestResponse::macro('assertDenied', function () {
+            /** @var \Illuminate\Testing\TestResponse $this */
+            if (! $this->isRedirect()) {
+                return $this->assertForbidden();
+            }
+
+            \PHPUnit\Framework\Assert::assertStringNotContainsString('/login', (string) $this->headers->get('Location'), 'Ditolak harus 403 / dialihkan, bukan diminta login.');
+            \PHPUnit\Framework\Assert::assertTrue(session()->has('filament.notifications'), 'Pengalihan karena akses ditolak wajib disertai notifikasi.');
+
+            return $this;
+        });
     }
 
     /**

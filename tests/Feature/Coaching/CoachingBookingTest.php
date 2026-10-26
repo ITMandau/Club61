@@ -335,7 +335,7 @@ class CoachingBookingTest extends TestCase
 
         // Kasir biasa (tanpa izin) tidak bisa membuka Jadwal Coaching.
         $this->actingAs(User::factory()->cashier()->create(['is_active' => true]));
-        $this->get(JadwalCoaching::getUrl())->assertForbidden();
+        $this->get(JadwalCoaching::getUrl())->assertDenied();
     }
 
     public function test_rates_and_settings_need_the_rates_permission(): void
@@ -391,7 +391,7 @@ class CoachingBookingTest extends TestCase
 
         // Staf tanpa izin tidak bisa membuka menu Coach.
         $this->actingAs(User::factory()->cashier()->create(['is_active' => true]));
-        $this->get(CoachResource::getUrl())->assertForbidden();
+        $this->get(CoachResource::getUrl())->assertDenied();
     }
 
     public function test_customer_hold_api_no_longer_accepts_a_coach(): void

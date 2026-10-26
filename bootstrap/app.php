@@ -107,6 +107,12 @@ return Application::configure(basePath: dirname(__DIR__))
                 ->with('session_expired', 'Halaman ini terlalu lama terbuka sehingga sesinya habis. Data Anda belum terkirim — silakan periksa lalu kirim ulang.');
         });
 
+        // 4c. Staf membuka halaman yang tidak (lagi) diizinkan — mis. izinnya baru dicabut admin saat halaman terbuka:
+        // dipindah ke halaman pendaratannya + notifikasi, bukan halaman 403. Tamu / customer tetap 403 (App\Support\StaffAccess).
+        $exceptions->render(function (HttpException $e, Request $request) {
+            return $e->getStatusCode() === 403 ? \App\Support\StaffAccess::redirectForDenied($request, $e) : null;
+        });
+
         // 5. Log Aktivitas: setiap percobaan membuka halaman / menjalankan aksi tanpa izin (403).
         // Dicatat di sini — SETELAH transaksi aksi yang ditolak di-rollback — supaya jejaknya tetap ada.
         $exceptions->respond(function (\Symfony\Component\HttpFoundation\Response $response, Throwable $e, Request $request) {

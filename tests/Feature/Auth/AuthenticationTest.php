@@ -185,7 +185,7 @@ class AuthenticationTest extends TestCase
         $this->assertFalse(\App\Filament\Pages\BookingSystem::canAccess());
 
         $this->get('/admin')->assertStatus(200);
-        $this->get('/admin/booking-system')->assertStatus(403);
+        $this->get('/admin/booking-system')->assertDenied();
 
         // Setelah View:BookingSystem dicentang/diberikan
         $role->givePermissionTo('View:BookingSystem');

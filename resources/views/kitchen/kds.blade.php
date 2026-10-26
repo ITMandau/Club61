@@ -66,5 +66,7 @@
             </div>
         </div>
     </main>
+    {{-- Hak akses diubah admin saat layar terbuka → dipindah ke halaman yang masih boleh. --}}
+    @include('partials.access-watch')
 </body>
 </html>

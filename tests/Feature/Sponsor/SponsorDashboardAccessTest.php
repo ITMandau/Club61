@@ -89,7 +89,7 @@ class SponsorDashboardAccessTest extends TestCase
             ->assertDontSee('Kelola Pemesanan')
             ->assertDontSee('Monitoring Lapangan');
 
-        $this->actingAs($viewer)->get('/admin/kelola-pemesanan')->assertForbidden();
+        $this->actingAs($viewer)->get('/admin/kelola-pemesanan')->assertDenied();
     }
 
     public function test_embedded_pic_dashboard_has_no_customer_navigation_and_allows_same_origin_frame(): void

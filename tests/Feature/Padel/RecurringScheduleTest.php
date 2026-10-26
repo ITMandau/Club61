@@ -532,7 +532,7 @@ class RecurringScheduleTest extends TestCase
         $receptionist = User::factory()->receptionist()->create();
         $this->assertFalse($receptionist->can('manage_recurring_bookings'));
 
-        $this->actingAs($receptionist)->get('/admin/jadwal-tetap')->assertForbidden();
+        $this->actingAs($receptionist)->get('/admin/jadwal-tetap')->assertDenied();
         $this->actingAs($this->admin)->get('/admin/jadwal-tetap')->assertOk();
     }
 
