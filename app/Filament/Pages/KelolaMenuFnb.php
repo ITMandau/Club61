@@ -14,6 +14,7 @@ use Filament\Notifications\Notification;
 use Filament\Pages\Page;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 use Livewire\WithFileUploads;
 use UnitEnum;
 
@@ -378,8 +379,9 @@ class KelolaMenuFnb extends Page
         // Foto lama diambil dari DATABASE, bukan $existingMenuPhotoPath (properti publik — bisa diubah dari browser,
         // lalu path itu ikut dihapus oleh FnbMenu::booted(), mis. video signage).
         $photoPath = $menu?->image_url;
+        $newPhotoPath = null;
         if ($this->menuPhotoUpload) {
-            $photoPath = SecureImageUploader::store($this->menuPhotoUpload, 'fnb/menu');
+            $photoPath = $newPhotoPath = SecureImageUploader::store($this->menuPhotoUpload, 'fnb/menu');
         } elseif ($this->removeMenuPhoto) {
             $photoPath = null;
         }
@@ -394,15 +396,23 @@ class KelolaMenuFnb extends Page
             'is_available' => $this->menuIsAvailable,
         ];
 
-        if ($menu) {
-            // Event model FnbMenu::booted() otomatis membuang foto lama dari disk kalau
-            // image_url berubah — tidak perlu diulang manual di sini.
-            $menu->update($data);
-            Notification::make()->title('Menu Diperbarui')->success()->send();
-        } else {
-            $menu = FnbMenu::create($data);
-            Notification::make()->title('Menu Ditambahkan')->success()->send();
+        // Event model FnbMenu::booted() otomatis membuang foto lama dari disk setelah image_url berubah tersimpan —
+        // tidak perlu diulang manual di sini. Simpan gagal → foto baru yang sudah di-upload dibuang (tidak jadi file yatim).
+        try {
+            if ($menu) {
+                $menu->update($data);
+            } else {
+                $menu = FnbMenu::create($data);
+            }
+        } catch (\Throwable $e) {
+            if ($newPhotoPath) {
+                Storage::disk('public')->delete($newPhotoPath);
+            }
+
+            throw $e;
         }
+
+        Notification::make()->title($menu->wasRecentlyCreated ? 'Menu Ditambahkan' : 'Menu Diperbarui')->success()->send();
 
         $menu->modifierGroups()->sync($this->menuModifierGroupIds);
 
