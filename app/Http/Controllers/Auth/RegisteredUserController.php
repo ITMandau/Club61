@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
 use App\Models\User;
+use App\Support\ComingSoon;
 use App\Support\PersonName;
 use Illuminate\Auth\Events\Registered;
 use Illuminate\Http\RedirectResponse;
@@ -19,8 +20,13 @@ class RegisteredUserController extends Controller
     /**
      * Display the registration view.
      */
-    public function create(): View
+    public function create(): View|RedirectResponse
     {
+        // Mode Coming Soon: pendaftaran ditutup sampai grand opening.
+        if (ComingSoon::active()) {
+            return redirect()->route('login');
+        }
+
         return view('auth.register');
     }
 
@@ -31,6 +37,10 @@ class RegisteredUserController extends Controller
      */
     public function store(Request $request): RedirectResponse
     {
+        if (ComingSoon::active()) {
+            return redirect()->route('login');
+        }
+
         $request->validate([
             'name' => PersonName::rules(),
             'email' => ['required', 'string', 'lowercase', 'email', 'max:255', 'unique:'.User::class],
