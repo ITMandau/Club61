@@ -77,6 +77,9 @@ return [
             // BIN BCA DOKU (contoh resmi "   19008") + prefix sub-BIN merchant (contoh resmi "0"); sisa nomor VA dibuat DOKU (DGPC).
             'bca_partner_service_id' => env('DOKU_SNAP_BCA_PARTNER_SERVICE_ID'),
             'bca_customer_no' => env('DOKU_SNAP_BCA_CUSTOMER_NO', '0'),
+            // Diagnosa SEMENTARA: bentuk permintaan DOKU ke kita (nama header, panjang, cocok/tidak — tanpa token/tanda
+            // tangan/data customer) ditulis ke storage/logs/doku-*.log. Matikan lagi setelah selesai melacak.
+            'debug_inbound' => (bool) env('DOKU_SNAP_DEBUG_INBOUND', false),
         ],
     ],
 

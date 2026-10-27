@@ -596,6 +596,49 @@ class DokuSnapTest extends TestCase
         $this->dokuTokenRequest(timestamp: now()->subMinutes(20)->timezone('Asia/Jakarta')->format('c'))->assertStatus(401);
     }
 
+    public function test_inbound_debug_log_shows_the_request_shape_without_secrets_and_does_not_change_verification(): void
+    {
+        $log = $this->captureDokuLog();
+        $diagnoses = fn () => collect($log->getRecords())->filter(fn ($r) => str_contains($r->message, '(diagnosa)'))->values();
+
+        // Bawaan mati: tidak ada yang dicatat.
+        $token = $this->dokuTokenRequest()->assertOk()->json('accessToken');
+        $this->assertCount(0, $diagnoses());
+
+        config(['services.doku.snap.debug_inbound' => true]);
+        $tokenResponse = $this->dokuTokenRequest()->assertOk();
+        $this->flushHeaders();
+        $body = ['originalPartnerReferenceNo' => 'INV-TIDAK-ADA', 'latestTransactionStatus' => '00', 'customerName' => 'Budi Rahasia',
+            'amount' => ['value' => '10000.00', 'currency' => 'IDR'], 'additionalInfo' => ['channel' => 'QRIS']];
+        $this->withHeaders(['Authorization' => 'Bearer '.$token, 'X-PARTNER-ID' => self::CLIENT_ID, 'X-EXTERNAL-ID' => '901', 'CHANNEL-ID' => '95221', 'X-SIGNATURE' => base64_encode(random_bytes(64))])
+            ->postJson('/api/v1/payments/doku-snap/v1.0/qr/qr-mpm-notify', $body)->assertOk();
+        $this->flushHeaders();
+        // Diagnosa tidak melonggarkan apa pun: token palsu tetap ditolak; token tanpa skema tidak ikut tertulis.
+        $this->withHeader('Authorization', 'tokenpalsu.tanpa.skema')->postJson('/api/v1/payments/doku-snap/v1.1/transfer-va/payment', [])->assertStatus(401);
+
+        [$tokenLog, $qrisLog, $vaLog] = $diagnoses()->all();
+        $this->assertStringContainsString('[token]', $tokenLog->message);
+        $this->assertTrue($tokenLog->context['x_client_key_matches']);
+        $this->assertSame(['decoded_bytes' => 256, 'kind' => 'asimetris (RSA)'], \Illuminate\Support\Arr::only($tokenLog->context['x_signature'], ['decoded_bytes', 'kind']));
+
+        $this->assertStringContainsString('[qris]', $qrisLog->message);
+        $this->assertSame(['scheme' => 'Bearer', 'length' => strlen($token), 'jwt_alg' => 'RS256'], $qrisLog->context['authorization']);
+        $this->assertSame('simetris (HMAC-SHA512)', $qrisLog->context['x_signature']['kind']);
+        $this->assertTrue($qrisLog->context['x_partner_id_matches']);
+        $this->assertSame(['901', '95221'], [$qrisLog->context['x_external_id'], $qrisLog->context['channel_id']]);
+        $this->assertSame(['originalPartnerReferenceNo', 'latestTransactionStatus', 'customerName', 'amount', 'additionalInfo'], $qrisLog->context['body_fields']);
+        $this->assertSame(['channel'], $qrisLog->context['additional_info_fields']);
+        $this->assertContains('authorization', $qrisLog->context['headers']);
+
+        $this->assertStringContainsString('[va]', $vaLog->message);
+        $this->assertNull($vaLog->context['authorization']['scheme']);
+
+        $written = json_encode($diagnoses()->map(fn ($r) => [$r->message, $r->context])->all());
+        foreach ([$token, $tokenResponse->json('accessToken'), self::CLIENT_ID, 'Budi Rahasia', 'INV-TIDAK-ADA', 'tokenpalsu'] as $secret) {
+            $this->assertStringNotContainsString($secret, $written);
+        }
+    }
+
     public function test_va_notification_with_our_token_is_confirmed_by_the_status_api_before_paying(): void
     {
         $checkout = $this->padelCheckout('BCA_VA')->assertOk();
