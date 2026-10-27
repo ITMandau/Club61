@@ -125,6 +125,8 @@ class OrderInvoiceMailer
             'tax_name' => $finance->tax_name ?: 'Pajak',
             'grand_total' => (float) $order->grand_total,
             'method' => $payment ? app(LedgerTransactionPresenter::class)->methodLabel($payment) : '-',
+            // Nomor referensi pembayaran (invoice gateway / id transaksi kasir) — dicetak di PDF invoice.
+            'reference' => $payment?->transaction_id,
             'va_number' => $log['va_numbers'][0]['va_number'] ?? $log['permata_va_number'] ?? null,
             'company_address' => CompanyProfileSetting::receiptAddress(),
             'invoice_url' => rtrim((string) config('app.url'), '/').'/invoice',

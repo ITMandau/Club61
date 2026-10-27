@@ -360,6 +360,13 @@ class Club61PermissionMatrix
                             'import_sales_data' => 'Import Data Penjualan Booking Padel & F&B dari Excel',
                         ],
                     ],
+                    'invoice_template' => [
+                        'label' => 'Template Invoice (PDF Email Invoice Lunas)',
+                        'actions' => [
+                            'View:TemplateInvoice' => 'Akses Halaman Template Invoice & Unduh Contoh PDF',
+                            'manage_invoice_template' => 'Ubah Logo, Identitas Usaha & Kalimat Template Invoice',
+                        ],
+                    ],
                 ],
             ],
 

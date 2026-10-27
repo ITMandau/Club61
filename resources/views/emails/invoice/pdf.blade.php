@@ -1,118 +1,251 @@
-{{-- PDF invoice lunas (lampiran OrderInvoiceMail). dompdf: tabel + CSS sederhana saja (tanpa flex / grid). --}}
-@php($rp = fn ($v) => 'Rp '.number_format((float) $v, 0, ',', '.'))
+{{--
+    PDF invoice lunas, A4 (lampiran OrderInvoiceMail) — App\Services\Mail\InvoicePdf. Logo, identitas usaha, judul,
+    kalimat & warna aksen dari Keuangan → Template Invoice (App\Models\Setting\InvoiceTemplateSetting).
+    dompdf: tabel + CSS sederhana saja (tanpa flex / grid), ukuran dalam pt.
+--}}
+@php
+    $setting = \App\Models\Setting\InvoiceTemplateSetting::current();
+    $t = $template ?? $setting->resolved();
+    $logo = isset($logo) ? $logo : $setting->logoDataUri();
+    $accent = $t['accent_hex'];
+    $rp = fn ($v) => 'Rp '.number_format((float) $v, 0, ',', '.');
+    $reach = implode('  ·  ', array_filter([$t['phone'], $t['email']]));
+    $hasAdjustments = ($invoice['discount'] ?? 0) > 0 || ($invoice['service_charge'] ?? 0) > 0 || ($invoice['tax'] ?? 0) > 0;
+@endphp
 <!DOCTYPE html>
 <html lang="id">
 <head>
     <meta charset="utf-8">
-    <title>Invoice {{ $invoice['number'] }}</title>
+    <title>{{ $t['document_title'] }} {{ $invoice['number'] }}</title>
     <style>
-        @page { margin: 14mm 12mm; }
-        body { font-family: Helvetica, Arial, sans-serif; font-size: 10px; color: #1F170D; }
-        .head { width: 100%; border-bottom: 2px solid #1F170D; padding-bottom: 8px; margin-bottom: 12px; }
-        .brand { font-size: 18px; font-weight: bold; letter-spacing: 3px; }
-        .muted { color: #6B5738; }
-        .title { font-size: 14px; font-weight: bold; text-align: right; }
-        .paid { display: inline-block; margin-top: 4px; padding: 2px 8px; border: 1.5px solid #15803D; color: #15803D; font-weight: bold; font-size: 10px; border-radius: 4px; }
-        table.info { width: 100%; margin-bottom: 12px; }
-        table.info td { vertical-align: top; padding: 2px 0; }
-        .label { font-size: 8px; font-weight: bold; letter-spacing: 1px; text-transform: uppercase; color: #8C6418; }
-        table.items { width: 100%; border-collapse: collapse; margin-bottom: 10px; }
-        table.items th { background: #FAF5E8; text-align: left; font-size: 8px; text-transform: uppercase; letter-spacing: 0.5px; padding: 6px; border-bottom: 1px solid #DFC387; }
-        table.items td { padding: 6px; border-bottom: 1px solid #F3E8CE; }
-        .num { text-align: right; white-space: nowrap; }
-        table.totals { width: 55%; margin-left: 45%; border-collapse: collapse; }
-        table.totals td { padding: 3px 6px; }
-        table.totals tr.grand td { border-top: 2px solid #1F170D; font-size: 12px; font-weight: bold; padding-top: 6px; }
-        .section { margin-bottom: 10px; }
-        .foot { margin-top: 18px; padding-top: 8px; border-top: 1px solid #EFE3C6; font-size: 8px; color: #9E8A68; text-align: center; }
+        @page { margin: 0; }
+        body { margin: 0; font-family: Helvetica, Arial, sans-serif; font-size: 9pt; line-height: 1.45; color: #2A1A17; }
+        .bar { height: 5pt; background: {{ $accent }}; }
+        .page { padding: 28pt 42pt 70pt; }
+        table { border-collapse: collapse; }
+        .w100 { width: 100%; }
+        .top { vertical-align: top; }
+        .right { text-align: right; }
+        .muted { color: #7A6A62; }
+        .label { font-size: 6.5pt; font-weight: bold; letter-spacing: 1.2pt; text-transform: uppercase; color: #8E7B70; }
+
+        .head td { vertical-align: top; }
+        .logo { max-height: 50pt; max-width: 180pt; }
+        .brand { font-size: 15pt; font-weight: bold; letter-spacing: 1pt; color: {{ $accent }}; }
+        .doc-title { font-size: 24pt; font-weight: bold; letter-spacing: 3pt; text-transform: uppercase; color: {{ $accent }}; line-height: 1; }
+        .doc-no { margin-top: 6pt; font-size: 9.5pt; color: #2A1A17; }
+        .status { display: inline-block; margin-top: 8pt; padding: 3pt 10pt; border: 0.8pt solid #2F7D4F; border-radius: 10pt; background: #EEF7F1; color: #2F7D4F; font-size: 7pt; font-weight: bold; letter-spacing: 1.2pt; text-transform: uppercase; }
+
+        .rule { border-top: 0.8pt solid #E8DFD4; margin: 16pt 0 14pt; }
+
+        .party td { width: 50%; vertical-align: top; }
+        .party .name { margin-top: 5pt; font-size: 10.5pt; font-weight: bold; }
+        .party .line { color: #4A3A33; }
+
+        .meta { width: 100%; margin-top: 16pt; background: #F8F4EE; border-radius: 6pt; }
+        .meta td { padding: 10pt 12pt; vertical-align: top; border-left: 0.8pt solid #EDE4D8; }
+        .meta td.first { border-left: none; }
+        .meta .value { margin-top: 3pt; font-size: 9pt; font-weight: bold; color: #2A1A17; }
+
+        .intro { margin-top: 16pt; color: #4A3A33; }
+
+        .items { width: 100%; margin-top: 18pt; }
+        .items th { padding: 0 0 7pt; border-bottom: 1.2pt solid #2A1A17; font-size: 6.5pt; font-weight: bold; letter-spacing: 1.2pt; text-transform: uppercase; color: #8E7B70; text-align: left; }
+        .items td { padding: 9pt 0; border-bottom: 0.6pt solid #EADFD2; vertical-align: top; }
+        .items .num { text-align: right; white-space: nowrap; }
+        .items .qty { text-align: center; }
+        .items .item-name { font-weight: bold; }
+
+        .detail { width: 100%; margin-top: 14pt; }
+        .detail td { padding: 3pt 0; vertical-align: top; }
+        .detail .code { color: #7A6A62; }
+
+        .summary { width: 100%; margin-top: 16pt; }
+        .summary > tbody > tr > td { vertical-align: top; }
+        .paid-note { padding: 11pt 12pt; border: 0.8pt solid #E8DFD4; border-radius: 6pt; color: #4A3A33; }
+        .paid-note .title { font-weight: bold; color: #2A1A17; margin-bottom: 3pt; }
+        .totals { width: 100%; }
+        .totals td { padding: 4pt 0; }
+        .totals .num { text-align: right; white-space: nowrap; }
+        .totals .minus { color: #2F7D4F; }
+        .grand { margin-top: 8pt; width: 100%; background: {{ $accent }}; border-radius: 6pt; }
+        .grand td { padding: 10pt 12pt; color: #FFFFFF; }
+        .grand .k { font-size: 7pt; font-weight: bold; letter-spacing: 1.2pt; text-transform: uppercase; }
+        .grand .v { font-size: 14pt; font-weight: bold; text-align: right; white-space: nowrap; }
+
+        .notes { margin-top: 18pt; padding-top: 12pt; border-top: 0.8pt solid #E8DFD4; color: #4A3A33; }
+        .notes .label { margin-bottom: 5pt; }
+
+        .foot { position: fixed; left: 42pt; right: 42pt; bottom: 24pt; padding-top: 9pt; border-top: 0.8pt solid #E8DFD4; font-size: 7.5pt; color: #8E7B70; }
+        .foot td { vertical-align: top; }
     </style>
 </head>
 <body>
-    <table class="head">
-        <tr>
-            <td>
-                @if($logo = \App\Services\Mail\OrderInvoiceMailer::logoPath())
-                    <img src="data:image/png;base64,{{ base64_encode(file_get_contents($logo)) }}" alt="Club 61" style="max-height:44px; max-width:150px; margin-bottom:4px;"><br>
-                @else
-                    <div class="brand">CLUB 61</div>
-                @endif
-                <div class="muted">{{ $invoice['company_address'] }}</div>
-            </td>
-            <td class="title">
-                INVOICE<br>
-                <span class="muted" style="font-size:10px; font-weight:normal;">{{ $invoice['number'] }}</span><br>
-                <span class="paid">LUNAS</span>
-            </td>
-        </tr>
-    </table>
-
-    <table class="info">
-        <tr>
-            <td style="width:50%;">
-                <div class="label">Ditagihkan kepada</div>
-                <strong>{{ $invoice['customer']['name'] }}</strong><br>
-                @if($invoice['customer']['email']){{ $invoice['customer']['email'] }}<br>@endif
-                @if($invoice['customer']['phone']){{ $invoice['customer']['phone'] }}@endif
-            </td>
-            <td style="width:50%; text-align:right;">
-                <div class="label">Pembayaran</div>
-                {{ $invoice['type'] }}<br>
-                Dibayar {{ $invoice['paid_at'] }}<br>
-                {{ $invoice['method'] }}
-                @if($invoice['va_number'])<br>VA {{ $invoice['va_number'] }}@endif
-            </td>
-        </tr>
-    </table>
-
-    <table class="items">
-        <thead>
-            <tr><th>Item</th><th class="num">Qty</th><th class="num">Harga</th><th class="num">Subtotal</th></tr>
-        </thead>
-        <tbody>
-            @foreach($invoice['lines'] as $line)
-                <tr>
-                    <td>{{ $line['name'] }}</td>
-                    <td class="num">{{ $line['quantity'] }}</td>
-                    <td class="num">{{ $rp($line['unit_price']) }}</td>
-                    <td class="num">{{ $rp($line['subtotal']) }}</td>
-                </tr>
-            @endforeach
-        </tbody>
-    </table>
-
-    @if($invoice['bookings'])
-        <div class="section">
-            <div class="label">Jadwal Main</div>
-            @foreach($invoice['bookings'] as $booking)
-                <div>{{ $booking['court'] }} &mdash; {{ $booking['date'] }}, {{ $booking['time'] }}@if($booking['code']) <span class="muted">({{ $booking['code'] }})</span>@endif</div>
-            @endforeach
-        </div>
-    @endif
-
-    @if($invoice['membership'])
-        <div class="section">
-            <div class="label">Membership</div>
-            <div>{{ $invoice['membership']['plan'] }}@if($invoice['membership']['code']) <span class="muted">({{ $invoice['membership']['code'] }})</span>@endif</div>
-            @if($invoice['membership']['period'])<div class="muted">Masa aktif: {{ $invoice['membership']['period'] }}</div>@endif
-        </div>
-    @endif
-
-    <table class="totals">
-        <tr><td>Subtotal</td><td class="num">{{ $rp($invoice['subtotal']) }}</td></tr>
-        @if($invoice['discount'] > 0)
-            <tr><td>Diskon{{ $invoice['voucher_code'] ? ' ('.$invoice['voucher_code'].')' : '' }}</td><td class="num">-{{ $rp($invoice['discount']) }}</td></tr>
-        @endif
-        @if($invoice['service_charge'] > 0)
-            <tr><td>{{ $invoice['service_charge_name'] }}</td><td class="num">{{ $rp($invoice['service_charge']) }}</td></tr>
-        @endif
-        @if($invoice['tax'] > 0)
-            <tr><td>{{ $invoice['tax_name'] }}</td><td class="num">{{ $rp($invoice['tax']) }}</td></tr>
-        @endif
-        <tr class="grand"><td>Total Dibayar</td><td class="num">{{ $rp($invoice['grand_total']) }}</td></tr>
-    </table>
+    <div class="bar"></div>
 
     <div class="foot">
-        Invoice ini dibuat otomatis oleh sistem Club 61 dan sah tanpa tanda tangan.
+        <table class="w100">
+            <tr>
+                <td style="width:68%; padding-right:14pt;">{{ $t['footer_text'] }}</td>
+                <td class="right"><strong style="color:#4A3A33;">{{ $t['website'] ?: $t['business_name'] }}</strong></td>
+            </tr>
+        </table>
+    </div>
+
+    <div class="page">
+        {{-- HEADER --}}
+        <table class="w100 head">
+            <tr>
+                <td style="width:55%;">
+                    @if ($logo)
+                        <img class="logo" src="{{ $logo }}" alt="{{ $t['business_name'] }}">
+                    @else
+                        <div class="brand">{{ $t['business_name'] }}</div>
+                    @endif
+                </td>
+                <td class="right">
+                    <div class="doc-title">{{ $t['document_title'] }}</div>
+                    <div class="doc-no">No. {{ $invoice['number'] }}</div>
+                    <span class="status">{{ $t['status_label'] }}</span>
+                </td>
+            </tr>
+        </table>
+
+        <div class="rule"></div>
+
+        {{-- PIHAK --}}
+        <table class="w100 party">
+            <tr>
+                <td style="padding-right:18pt;">
+                    <div class="label">Ditagihkan kepada</div>
+                    <div class="name">{{ $invoice['customer']['name'] }}</div>
+                    @if ($invoice['customer']['email'])<div class="line">{{ $invoice['customer']['email'] }}</div>@endif
+                    @if ($invoice['customer']['phone'])<div class="line">{{ $invoice['customer']['phone'] }}</div>@endif
+                </td>
+                <td class="right">
+                    <div class="label">Diterbitkan oleh</div>
+                    <div class="name">{{ $t['business_name'] }}</div>
+                    @if ($t['address'])<div class="line">{{ $t['address'] }}</div>@endif
+                    @if ($reach)<div class="line">{{ $reach }}</div>@endif
+                    @if ($t['tax_id'])<div class="line">NPWP {{ $t['tax_id'] }}</div>@endif
+                </td>
+            </tr>
+        </table>
+
+        {{-- RINGKASAN PEMBAYARAN --}}
+        <table class="meta">
+            <tr>
+                <td class="first" style="width:32%;">
+                    <div class="label">Tanggal bayar</div>
+                    <div class="value">{{ $invoice['paid_at'] }}</div>
+                </td>
+                <td style="width:18%;">
+                    <div class="label">Metode</div>
+                    <div class="value">{{ $invoice['method'] }}@if (! empty($invoice['va_number']))<br><span style="font-weight:normal;">VA {{ $invoice['va_number'] }}</span>@endif</div>
+                </td>
+                <td style="width:25%;">
+                    <div class="label">Jenis transaksi</div>
+                    <div class="value">{{ $invoice['type'] }}</div>
+                </td>
+                <td>
+                    <div class="label">Referensi</div>
+                    <div class="value" style="font-weight:normal; word-wrap:break-word;">{{ $invoice['reference'] ?? $invoice['number'] }}</div>
+                </td>
+            </tr>
+        </table>
+
+        @if ($t['intro_text'])
+            <div class="intro">{!! nl2br(e($t['intro_text'])) !!}</div>
+        @endif
+
+        {{-- ITEM --}}
+        <table class="items">
+            <thead>
+                <tr>
+                    <th style="width:54%;">Deskripsi</th>
+                    <th class="qty" style="width:10%; text-align:center;">Qty</th>
+                    <th class="num" style="width:18%; text-align:right;">Harga satuan</th>
+                    <th class="num" style="width:18%; text-align:right;">Jumlah</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach ($invoice['lines'] as $line)
+                    <tr>
+                        <td class="item-name" style="padding-right:12pt;">{{ $line['name'] }}</td>
+                        <td class="qty">{{ $line['quantity'] }}</td>
+                        <td class="num">{{ $rp($line['unit_price']) }}</td>
+                        <td class="num">{{ $rp($line['subtotal']) }}</td>
+                    </tr>
+                @endforeach
+            </tbody>
+        </table>
+
+        @if (! empty($invoice['bookings']))
+            <table class="detail">
+                <tr><td colspan="3" class="label" style="padding-bottom:5pt;">Jadwal main</td></tr>
+                @foreach ($invoice['bookings'] as $booking)
+                    <tr>
+                        <td style="width:32%;"><strong>{{ $booking['court'] }}</strong></td>
+                        <td style="width:48%;">{{ $booking['date'] }} &nbsp;·&nbsp; {{ $booking['time'] }}</td>
+                        <td class="right code">{{ $booking['code'] }}</td>
+                    </tr>
+                @endforeach
+            </table>
+        @endif
+
+        @if (! empty($invoice['membership']))
+            <table class="detail">
+                <tr><td colspan="2" class="label" style="padding-bottom:5pt;">Membership</td></tr>
+                <tr>
+                    <td style="width:38%;"><strong>{{ $invoice['membership']['plan'] }}</strong></td>
+                    <td>
+                        @if ($invoice['membership']['period'])Masa aktif {{ $invoice['membership']['period'] }}@endif
+                        @if ($invoice['membership']['code'])<span class="code"> · {{ $invoice['membership']['code'] }}</span>@endif
+                    </td>
+                </tr>
+            </table>
+        @endif
+
+        {{-- KONFIRMASI + TOTAL --}}
+        <table class="summary">
+            <tr>
+                <td style="width:50%; padding-right:24pt;">
+                    <div class="paid-note">
+                        <div class="title">Pembayaran diterima</div>
+                        Dibayar lunas pada {{ $invoice['paid_at'] }} melalui {{ $invoice['method'] }}.
+                    </div>
+                </td>
+                <td style="width:50%;">
+                    <table class="totals">
+                        @if ($hasAdjustments)
+                            <tr><td class="muted">Subtotal</td><td class="num">{{ $rp($invoice['subtotal']) }}</td></tr>
+                        @endif
+                        @if (($invoice['discount'] ?? 0) > 0)
+                            <tr><td class="muted">Diskon{{ $invoice['voucher_code'] ? ' ('.$invoice['voucher_code'].')' : '' }}</td><td class="num minus">-{{ $rp($invoice['discount']) }}</td></tr>
+                        @endif
+                        @if (($invoice['service_charge'] ?? 0) > 0)
+                            <tr><td class="muted">{{ $invoice['service_charge_name'] }}</td><td class="num">{{ $rp($invoice['service_charge']) }}</td></tr>
+                        @endif
+                        @if (($invoice['tax'] ?? 0) > 0)
+                            <tr><td class="muted">{{ $invoice['tax_name'] }}</td><td class="num">{{ $rp($invoice['tax']) }}</td></tr>
+                        @endif
+                    </table>
+                    <table class="grand">
+                        <tr>
+                            <td class="k">Total dibayar</td>
+                            <td class="v">{{ $rp($invoice['grand_total']) }}</td>
+                        </tr>
+                    </table>
+                </td>
+            </tr>
+        </table>
+
+        @if ($t['notes_text'])
+            <div class="notes">
+                <div class="label">Catatan</div>
+                {!! nl2br(e($t['notes_text'])) !!}
+            </div>
+        @endif
     </div>
 </body>
 </html>

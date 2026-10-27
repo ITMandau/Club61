@@ -2,7 +2,7 @@
 
 namespace App\Mail;
 
-use Barryvdh\DomPDF\Facade\Pdf;
+use App\Services\Mail\InvoicePdf;
 use Illuminate\Mail\Mailable;
 use Illuminate\Mail\Mailables\Attachment;
 use Illuminate\Mail\Mailables\Content;
@@ -36,7 +36,8 @@ class OrderInvoiceMail extends Mailable
     {
         return [
             Attachment::fromData(
-                fn () => Pdf::loadView('emails.invoice.pdf', ['invoice' => $this->invoice])->setPaper('a5', 'portrait')->output(),
+                // A4 dari Template Invoice (Keuangan → Template Invoice): logo, identitas & kalimat diatur admin.
+                fn () => InvoicePdf::output($this->invoice),
                 "Invoice-{$this->invoice['number']}.pdf",
             )->withMime('application/pdf'),
         ];

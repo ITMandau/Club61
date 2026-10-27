@@ -136,6 +136,7 @@ class AdminPanelProvider extends PanelProvider
                 \App\Filament\Pages\MasterData::class,
                 \App\Filament\Pages\PengaturanBiayaPajak::class,
                 \App\Filament\Pages\MetodePembayaranOnline::class,
+                \App\Filament\Pages\TemplateInvoice::class,
                 \App\Filament\Pages\KelolaKontenWebsite::class,
                 \App\Filament\Pages\KelolaMenuFnb::class,
                 \App\Filament\Pages\SponsorDashboard::class,
