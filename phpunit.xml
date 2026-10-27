@@ -45,6 +45,7 @@
         <env name="DOKU_IS_PRODUCTION" value="false" force="true"/>
         <env name="DOKU_NOTIFICATION_URL" value="" force="true"/>
         <env name="DOKU_SNAP_DEBUG_INBOUND" value="false" force="true"/>
+        <env name="DOKU_SNAP_VERIFY_VA_SIGNATURE" value="false" force="true"/>
         <env name="PULSE_ENABLED" value="false"/>
         <env name="QUEUE_CONNECTION" value="sync"/>
         <env name="SESSION_DRIVER" value="array"/>

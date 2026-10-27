@@ -207,7 +207,12 @@ class DokuReconciliationService
         $session = $bill ? (DokuSessionGuard::session($bill, $invoice) ?? []) : [];
         $amount = (float) ($data['order']['amount'] ?? $session['amount'] ?? 0);
 
-        Log::channel('doku')->info("DOKU: order {$order->order_number} LUNAS lewat {$invoice} ({$via}).");
+        // Sesi ini sudah lunas (mis. polling duluan, notifikasi menyusul): markOrderAsPaid mengabaikannya — tanpa catatan
+        // pembayaran / email baru. Log dibedakan supaya tidak terbaca seperti pelunasan kedua.
+        $alreadyPaid = Payment::where('transaction_id', $invoice)->where('status', 'SUCCESS')->exists();
+        Log::channel('doku')->info($alreadyPaid
+            ? "DOKU: order {$order->order_number} sudah LUNAS lewat {$invoice} sebelumnya — {$via} tidak mengubah apa pun."
+            : "DOKU: order {$order->order_number} LUNAS lewat {$invoice} ({$via}).");
 
         $this->orchestrator->markOrderAsPaid($order, [
             'payment_gateway' => 'DOKU',

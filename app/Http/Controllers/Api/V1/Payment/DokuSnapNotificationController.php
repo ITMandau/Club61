@@ -7,6 +7,7 @@ use App\Models\Payment\DokuNotification;
 use App\Models\Pos\Payment;
 use App\Services\Payment\Doku\DokuClient;
 use App\Services\Payment\Doku\DokuNotificationProcessor;
+use App\Services\Payment\Doku\DokuNotificationReceiver;
 use App\Services\Payment\Doku\DokuSessionGuard;
 use App\Services\Payment\Doku\Snap\DokuSnapClient;
 use App\Services\Payment\Doku\Snap\DokuSnapService;
@@ -22,7 +23,9 @@ use Illuminate\Support\Facades\Log;
  *   - VA        : Virtual Account SNAP > Configure  → POST /api/v1/payments/doku-snap/v1.1/transfer-va/payment
  *   - QRIS      : QRIS Notify URL                   → POST /api/v1/payments/doku-snap/v1.0/qr/qr-mpm-notify
  *
- * Token: tanda tangan RSA DOKU dicek dengan public key DOKU, dibalas JWT kita. Notifikasi wajib membawa JWT itu.
+ * Token: tanda tangan RSA DOKU dicek dengan public key DOKU, dibalas JWT kita. Notifikasi VA wajib membawa JWT itu (+ X-SIGNATURE
+ * HMAC-SHA512, lihat virtualAccountPayment). Notifikasi QRIS dikirim DOKU dengan format NON-SNAP (Signature HMACSHA256, tanpa
+ * token) → DokuNotificationReceiver; QRIS yang membawa token tetap diterima lewat jalur token.
  * Seperti DOKU Checkout, notifikasi TIDAK langsung melunasi: disimpan di doku_notifications lalu
  * DokuNotificationProcessor mengonfirmasi ke API status SNAP (DokuCheckoutService::state → DokuSnapService) dan
  * mencocokkan nominal sebelum melunasi. Balasan 200 dikirim segera.
@@ -43,7 +46,11 @@ class DokuSnapNotificationController extends Controller
         $token = $valid ? $this->client->issueInboundToken() : null;
 
         if (! $token) {
-            DokuClient::alert('DOKU SNAP: permintaan token DITOLAK (tanda tangan / client key / jam tidak cocok)', ['ip' => $request->ip()]);
+            // Pengaman salah pasang: file DOKU Public Key berisi public key KITA → DOKU tidak akan pernah dapat token.
+            $key = $this->client->dokuPublicKeyCheck();
+            DokuClient::alert(($key['same_as_our_key'] ?? false) === true
+                ? 'DOKU SNAP: permintaan token DITOLAK — file DOKU_SNAP_DOKU_PUBLIC_KEY_PATH berisi public key KITA sendiri, ganti dengan DOKU Public Key dari dashboard DOKU'
+                : 'DOKU SNAP: permintaan token DITOLAK (tanda tangan / client key / jam tidak cocok)', ['ip' => $request->ip(), 'doku_public_key' => $key]);
 
             return response()->json(['responseCode' => '4017300', 'responseMessage' => 'Unauthorized. Invalid Signature'], 401)
                 ->header('X-TIMESTAMP', $timestamp);
@@ -68,6 +75,10 @@ class DokuSnapNotificationController extends Controller
             return response()->json(['responseCode' => '4012501', 'responseMessage' => 'Unauthorized. Invalid Token (B2B)'], 401);
         }
 
+        if (! $this->vaSignatureAccepted($request)) {
+            return response()->json(['responseCode' => '4012500', 'responseMessage' => 'Unauthorized. Invalid Signature'], 401);
+        }
+
         $data = $request->json()->all();
         $invoice = is_string($data['trxId'] ?? null) && $data['trxId'] !== '' ? $data['trxId'] : $this->invoiceForVa((string) ($data['virtualAccountNo'] ?? ''));
         $this->store('VA', $request, $data, $invoice, 'SUCCESS', $data['paidAmount']['value'] ?? null);
@@ -85,9 +96,16 @@ class DokuSnapNotificationController extends Controller
         ]);
     }
 
-    public function qrisNotify(Request $request): JsonResponse
+    public function qrisNotify(Request $request, DokuNotificationReceiver $receiver): JsonResponse
     {
         $this->debugInbound('qris', $request);
+
+        // Format yang benar-benar dikirim DOKU untuk QRIS: non-SNAP (Signature HMACSHA256 dengan Request-Target = path ini,
+        // dedup per Request-Id, status dicek ulang lewat qr-mpm-query sebelum lunas). Yang membawa token → jalur SNAP.
+        if (! $request->headers->has('Authorization') && $request->headers->has('Signature')) {
+            return $receiver->receive($request);
+        }
+
         if (! $this->client->verifyInboundToken($request->header('Authorization'))) {
             DokuClient::alert('Notifikasi QRIS DOKU SNAP DITOLAK: token tidak sah', ['ip' => $request->ip()]);
 
@@ -99,6 +117,39 @@ class DokuSnapNotificationController extends Controller
         $this->store('QRIS', $request, $data, $data['originalPartnerReferenceNo'] ?? null, $status === '00' ? 'SUCCESS' : 'QRIS_'.$status, $data['amount']['value'] ?? null);
 
         return response()->json(['responseCode' => '2005200', 'responseMessage' => 'Successful']);
+    }
+
+    /**
+     * Lapisan kedua notifikasi VA (setelah token B2B sah): X-SIGNATURE HMAC-SHA512. Rumusnya masih ASUMSI dari dokumentasi
+     * (DokuSnapClient::verifyInboundSignature), jadi bawaannya mode PANTAU: hasil cocok/tidak dicatat di log doku tapi
+     * notifikasi tetap diterima. DOKU_SNAP_VERIFY_VA_SIGNATURE=true (setelah log menunjukkan "cocok") → tidak cocok = 401.
+     */
+    private function vaSignatureAccepted(Request $request): bool
+    {
+        $matches = $this->client->verifyInboundSignature(
+            '/'.ltrim($request->route()->uri(), '/'),
+            $request->header('Authorization'),
+            $request->getContent(),
+            (string) $request->header('X-TIMESTAMP', ''),
+            (string) $request->header('X-SIGNATURE', ''),
+        );
+        $externalId = mb_substr((string) $request->header('X-EXTERNAL-ID', ''), 0, 64);
+
+        if ($matches) {
+            Log::channel('doku')->info('Notifikasi VA DOKU SNAP: X-SIGNATURE cocok', ['x_external_id' => $externalId]);
+
+            return true;
+        }
+
+        if (config('services.doku.snap.verify_va_signature')) {
+            DokuClient::alert('Notifikasi VA DOKU SNAP DITOLAK: X-SIGNATURE tidak cocok', ['ip' => $request->ip(), 'x_external_id' => $externalId]);
+
+            return false;
+        }
+
+        Log::channel('doku')->warning('Notifikasi VA DOKU SNAP: X-SIGNATURE TIDAK cocok (mode pantau — tetap diterima karena token B2B sah)', ['x_external_id' => $externalId]);
+
+        return true;
     }
 
     /** Simpan sekali per notifikasi lalu proses setelah respons (sama dengan DokuNotificationController). */
@@ -185,6 +236,7 @@ class DokuSnapNotificationController extends Controller
                     },
                 ],
                 'x_timestamp' => $timestamp === '' ? null : mb_substr($timestamp, 0, 40),
+                'doku_public_key' => $endpoint === 'token' ? $this->client->dokuPublicKeyCheck() : null,
                 'clock_skew_seconds' => $skew,
                 'x_client_key_matches' => $matchesClientId('X-CLIENT-KEY'),
                 'x_partner_id_matches' => $matchesClientId('X-PARTNER-ID'),
