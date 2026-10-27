@@ -44,7 +44,8 @@ return [
             'encryption' => env('MAIL_ENCRYPTION', 'tls'),
             'username' => env('MAIL_USERNAME'),
             'password' => env('MAIL_PASSWORD'),
-            'timeout' => null,
+            // Jangan biarkan proses menunggu SMTP sampai batas socket PHP (±60 dtk). Lihat MAIL_TIMEOUT di .env.example.
+            'timeout' => (int) env('MAIL_TIMEOUT', 10),
             'local_domain' => env('MAIL_EHLO_DOMAIN'),
         ],
 
@@ -60,7 +61,8 @@ return [
             'encryption' => env('MAIL_BILLING_ENCRYPTION', env('MAIL_ENCRYPTION', 'tls')),
             'username' => env('MAIL_BILLING_USERNAME'),
             'password' => env('MAIL_BILLING_PASSWORD'),
-            'timeout' => null,
+            // Jangan biarkan proses menunggu SMTP sampai batas socket PHP (±60 dtk). Lihat MAIL_TIMEOUT di .env.example.
+            'timeout' => (int) env('MAIL_TIMEOUT', 10),
             'local_domain' => env('MAIL_EHLO_DOMAIN'),
             'from' => [
                 'address' => env('MAIL_BILLING_FROM_ADDRESS', env('MAIL_BILLING_USERNAME', env('MAIL_FROM_ADDRESS', 'hello@example.com'))),

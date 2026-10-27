@@ -60,12 +60,36 @@ class OrderInvoiceEmailTest extends TestCase
         return $order;
     }
 
-    private function pay(Order $order, string $trx = 'MID-MAIL-1'): void
+    /** Lunas lalu "respons terkirim" (app terminate) — email invoice dikirim setelah respons, bukan di dalam request. */
+    private function pay(Order $order, string $trx = 'MID-MAIL-1', bool $finishRequest = true): void
     {
         app(PaymentOrchestratorService::class)->markOrderAsPaid($order, [
             'payment_gateway' => 'MIDTRANS', 'transaction_id' => $trx, 'payment_method' => 'bank_transfer',
             'amount' => (float) $order->grand_total,
         ]);
+
+        if ($finishRequest) {
+            $this->finishRequest();
+        }
+    }
+
+    private function finishRequest(): void
+    {
+        $this->app->terminate();
+    }
+
+    public function test_invoice_email_waits_until_the_response_is_sent(): void
+    {
+        Mail::fake();
+        $order = $this->onlineBookingOrder();
+
+        // Sudah lunas, tapi PDF + SMTP belum jalan selama request (halaman invoice tidak ikut menunggu).
+        $this->pay($order, finishRequest: false);
+        $this->assertSame('PAID', $order->fresh()->payment_status);
+        Mail::assertNothingSent();
+
+        $this->finishRequest();
+        Mail::assertSent(OrderInvoiceMail::class, 1);
     }
 
     public function test_paid_online_booking_emails_one_invoice_from_billing_with_the_pdf(): void

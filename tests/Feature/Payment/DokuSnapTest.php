@@ -682,6 +682,44 @@ class DokuSnapTest extends TestCase
         $this->assertSame('SUCCESS', $bill->fresh()->status);
     }
 
+    public function test_invoice_email_after_a_notification_is_sent_once_after_the_response(): void
+    {
+        $checkout = $this->padelCheckout('QRIS')->assertOk();
+        $bill = $this->bill($checkout->json('data.order_id'));
+        $bookingId = $checkout->json('data.booking_id');
+        $this->qrisStatus[$bill->transaction_id] = '00';
+        $token = $this->dokuTokenRequest()->json('accessToken');
+        \Illuminate\Support\Facades\Mail::fake();
+
+        // Notifikasi diproses setelah respons (job) → pelunasan → email (defer) di akhir job itu: tetap terkirim.
+        $this->withHeaders(['Authorization' => 'Bearer '.$token, 'X-EXTERNAL-ID' => '231'])->postJson('/api/v1/payments/doku-snap/v1.0/qr/qr-mpm-notify', [
+            'originalReferenceNo' => 'REF-'.$bill->transaction_id, 'originalPartnerReferenceNo' => $bill->transaction_id,
+            'latestTransactionStatus' => '00', 'amount' => ['value' => number_format((float) $bill->amount, 2, '.', ''), 'currency' => 'IDR'],
+        ])->assertOk();
+        $this->assertSame('SUCCESS', $bill->fresh()->status);
+        \Illuminate\Support\Facades\Mail::assertSent(\App\Mail\OrderInvoiceMail::class, 1);
+
+        // Polling halaman invoice sesudahnya tidak mengirim ulang.
+        $this->flushHeaders();
+        $this->actingAs($this->customer, 'sanctum')->getJson("/api/v1/padel/bookings/{$bookingId}/ticket?verify_payment=1")->assertOk();
+        \Illuminate\Support\Facades\Mail::assertSent(\App\Mail\OrderInvoiceMail::class, 1);
+    }
+
+    public function test_polling_shows_paid_even_when_the_invoice_email_fails(): void
+    {
+        $checkout = $this->padelCheckout('QRIS')->assertOk();
+        $bill = $this->bill($checkout->json('data.order_id'));
+        $bookingId = $checkout->json('data.booking_id');
+        $this->qrisStatus[$bill->transaction_id] = '00';
+        // SMTP mati: email gagal SETELAH respons — halaman invoice tetap langsung "Lunas".
+        \Illuminate\Support\Facades\Mail::shouldReceive('mailer')->with('billing')->andThrow(new \RuntimeException('SMTP timeout'));
+
+        $this->getJson("/api/v1/padel/bookings/{$bookingId}/ticket?verify_payment=1")->assertOk()->assertJsonPath('data.status', 'PAID');
+
+        $this->assertSame('SUCCESS', $bill->fresh()->status);
+        $this->assertNull(\App\Models\Pos\Order::where('order_number', $checkout->json('data.order_id'))->value('invoice_emailed_at'), 'klaim dilepas → bisa dikirim ulang');
+    }
+
     // ── Kasir ───────────────────────────────────────────────────────────────────────────────────────────────────
 
     public function test_cashier_qris_shows_our_own_qr_and_cancel_expires_it(): void
