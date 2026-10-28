@@ -76,6 +76,32 @@ class TemplateInvoiceTest extends TestCase
         $this->assertStringStartsWith('%PDF', InvoicePdf::output(InvoicePdf::sample()));
     }
 
+    public function test_email_body_follows_the_same_template_as_the_pdf(): void
+    {
+        $this->page()
+            ->set('form.business_name', 'Club 61 Medan')
+            ->set('form.status_label', 'Paid')
+            ->set('form.footer_text', 'Penutup <b>uji</b>')
+            ->set('form.email', 'billing@club61.test')
+            ->set('form.accent', 'ink')
+            ->call('save')
+            ->assertHasNoErrors();
+
+        $mail = new OrderInvoiceMail(InvoicePdf::sample());
+        $html = $mail->render();
+        $this->assertStringContainsString('#231815', $html, 'warna aksen template');
+        $this->assertStringNotContainsString('#D4AF37', $html, 'warna emas lama tidak dipakai lagi');
+        $this->assertStringContainsString('Club 61 Medan', $html);
+        $this->assertStringContainsString('Paid', $html);
+        $this->assertStringContainsString('mailto:billing@club61.test', $html);
+        $this->assertStringContainsString('CONTOH-REF-7F3A21', $html, 'nomor referensi seperti di PDF');
+        $this->assertStringContainsString('Penutup &lt;b&gt;uji&lt;/b&gt;', $html, 'teks admin di-escape');
+
+        $text = view('emails.invoice.paid-text', ['invoice' => InvoicePdf::sample()])->render();
+        $this->assertStringContainsString('Club 61 Medan', $text);
+        $this->assertStringContainsString('Referensi   : CONTOH-REF-7F3A21', $text);
+    }
+
     public function test_admin_text_cannot_inject_html_into_the_invoice(): void
     {
         $this->page()->set('form.notes_text', '<script>alert(1)</script><b>tebal</b>')->call('save')->assertHasNoErrors();
