@@ -17,7 +17,9 @@
                 @if ($rows->count() >= 100) &bull; menampilkan 100 terbaru, persempit dengan pencarian @endif
             </div>
         </div>
-        <div style="display:flex; gap:0.5rem; flex-wrap:wrap;">
+        <div style="display:flex; gap:0.5rem; flex-wrap:wrap; align-items:center;">
+            {{-- Rekap Penjualan Harian (X-Report) untuk tanggal yang dipilih di sebelahnya. --}}
+            @include('pos.partials.sales-recap-button')
             <input type="date" wire:model.live="historyDate"
                 style="border:1.5px solid #E6DAC0; border-radius:8px; padding:0.35rem 0.6rem; font-size:0.75rem; background:#FCF8EE; font-weight:700;">
             <input type="text" wire:model.live.debounce.400ms="historySearch" placeholder="Cari no. order / kode booking / nama / HP"

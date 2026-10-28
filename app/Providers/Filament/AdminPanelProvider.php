@@ -109,6 +109,11 @@ class AdminPanelProvider extends PanelProvider
                 'panels::body.end',
                 fn () => view('partials.livewire-session-expired', ['filamentConfirm' => true])
             )
+            // Hak akses diubah admin saat halaman terbuka → menu ikut berubah / dipindah ke halaman yang masih boleh.
+            ->renderHook(
+                'panels::body.end',
+                fn () => view('partials.access-watch', ['filamentConfirm' => true])
+            )
             // Update realtime (Reverb): Echo bawaan Filament dinyalakan hanya kalau Reverb dikonfigurasi; halaman jadwal
             // memakai club61LiveRefresh (event + polling cadangan).
             ->bootUsing(fn () => config(['filament.broadcasting.echo' => \App\Support\Realtime::echo()]))
@@ -131,6 +136,7 @@ class AdminPanelProvider extends PanelProvider
                 \App\Filament\Pages\MasterData::class,
                 \App\Filament\Pages\PengaturanBiayaPajak::class,
                 \App\Filament\Pages\MetodePembayaranOnline::class,
+                \App\Filament\Pages\TemplateInvoice::class,
                 \App\Filament\Pages\KelolaKontenWebsite::class,
                 \App\Filament\Pages\KelolaMenuFnb::class,
                 \App\Filament\Pages\SponsorDashboard::class,

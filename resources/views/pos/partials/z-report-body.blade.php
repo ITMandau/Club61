@@ -37,6 +37,10 @@
         <div>Buka : {{ $report['opened_at'] }} ({{ $report['opened_by'] }})</div>
         <div>Tutup: {{ $report['closed_at'] }} ({{ $report['closed_by'] }})</div>
         <div>Total Transaksi: {{ $report['total_transactions'] }}</div>
+        {{-- Rekap harian (X-Report) memperlihatkan angka sistem — admin perlu tahu kalau dibuka sebelum tutup shift. --}}
+        @isset($report['sales_recap_views'])
+            <div>Rekap harian dilihat: {{ $report['sales_recap_views'] }}x</div>
+        @endisset
     </div>
 
     @if (! empty($report['reconciliation']))

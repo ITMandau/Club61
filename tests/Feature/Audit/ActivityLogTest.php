@@ -203,8 +203,8 @@ class ActivityLogTest extends TestCase
     {
         $this->actingAs(User::factory()->admin()->create());
 
-        $this->get(LogAktivitas::getUrl())->assertForbidden();
-        $this->get(LogAktivitas::getUrl())->assertForbidden();
+        $this->get(LogAktivitas::getUrl())->assertDenied();
+        $this->get(LogAktivitas::getUrl())->assertDenied();
 
         $this->assertSame(1, ActivityLog::where('event', 'auth.access_denied')->count());
     }
@@ -297,7 +297,7 @@ class ActivityLogTest extends TestCase
 
         foreach (['admin', 'cashier', 'receptionist'] as $role) {
             $this->actingAs(User::factory()->role($role)->create());
-            $this->get(LogAktivitas::getUrl())->assertForbidden();
+            $this->get(LogAktivitas::getUrl())->assertDenied();
         }
     }
 

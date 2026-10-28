@@ -5,15 +5,20 @@
         /* Kartu tinggi seragam — semua kotak sama besar & rapi, isi (foto/teks) menyesuaikan kotak */
         .fnbpos-card { height: 19rem; padding: 0.85rem; border-radius: 16px; cursor: pointer; transition: all 0.15s ease; box-shadow: 0 8px 20px -8px rgba(79,47,42,0.10); border: 1.5px solid #E6DAC0; background: #FFFFFF; display: flex; flex-direction: column; overflow: hidden; }
         .fnbpos-card:hover { transform: scale(1.02); }
-        .fnbpos-card-photo { width: 100%; height: 8.5rem; border-radius: 10px; overflow: hidden; margin-bottom: 0.6rem; background: #F7F0DB; flex-shrink: 0; display: flex; align-items: center; justify-content: center; }
-        .fnbpos-card-photo img { width: 100% !important; height: 100% !important; max-width: none !important; object-fit: cover; display: block; }
+        .fnbpos-card-photo { position: relative; width: 100%; height: 8.5rem; border-radius: 10px; overflow: hidden; margin-bottom: 0.6rem; background: #F7F0DB; flex-shrink: 0; display: flex; align-items: center; justify-content: center; }
+        /* Foto apa pun ukurannya / orientasinya (portrait, landscape, kecil, besar) dipasang UTUH di dalam bingkai yang
+           ukurannya sama di semua kartu: gambar diposisikan absolut supaya ukuran aslinya tidak ikut membesarkan bingkai
+           (dulu foto portrait mendorong nama & deskripsi menu ke bawah sampai terpotong), contain = tidak ada yang terpotong. */
+        .fnbpos-card-photo.has-photo { background: #FFFFFF; border: 1px solid #EFE6D2; }
+        .fnbpos-card-photo img { position: absolute; inset: 0; width: 100% !important; height: 100% !important; max-width: none !important; object-fit: contain; display: block; }
         .fnbpos-card-photo .fnbpos-photo-initial { font-family: 'Cheltenham Classic', 'Source Serif 4', Georgia, serif; font-size: 2rem; font-weight: 900; color: #662721; opacity: 0.55; }
         /* Desktop lebar: 1 halaman = 2 baris x 4 kolom yang dibagi rata mengisi tinggi layar,
            supaya tidak ada ruang kosong di bawah grid. Foto ikut membesar mengisi kotak. */
         @media (min-width: 1280px) {
             .fnbpos-grid { grid-template-rows: repeat(2, minmax(0, 1fr)); overflow-y: hidden; }
             .fnbpos-grid .fnbpos-card { height: 100%; min-height: 0; }
-            .fnbpos-grid .fnbpos-card-photo { height: auto; flex: 1 1 auto; min-height: 5rem; }
+            /* flex-basis 0: tinggi bingkai = sisa ruang kartu, bukan tinggi asli fotonya. */
+            .fnbpos-grid .fnbpos-card-photo { height: auto; flex: 1 1 0; min-height: 5rem; }
         }
         .fnbpos-page-btn { padding: 0.5rem 1rem; border-radius: 10px; font-size: 0.75rem; font-weight: 800; border: 1.5px solid #E6DAC0; background: rgba(255,255,255,0.95); color: #4F2F2A; cursor: pointer; }
         .fnbpos-page-btn:disabled { opacity: 0.4; cursor: not-allowed; }
@@ -61,7 +66,7 @@
         .fnbpos-history-table td { padding: 0.6rem 0.75rem; font-size: 0.75rem; border-top: 1px solid #EFE6D2; vertical-align: middle; white-space: nowrap; }
         .fnbpos-history-table td.fnbpos-cell-clip { max-width: 9rem; overflow: hidden; text-overflow: ellipsis; }
     </style>
-    @include('pos.partials.receipt-print-style', ['selectors' => ['#fnbpos-receipt', '#printable-z-report']])
+    @include('pos.partials.receipt-print-style', ['selectors' => ['#fnbpos-receipt', '#printable-z-report', '#printable-sales-recap']])
 
     @if($errorMessage)
         <div class="fixed top-4 right-4 z-[10000] max-w-sm p-4 rounded-xl shadow-2xl" style="background: #FEE2E2; border: 1.5px solid #FCA5A5; color: #991B1B;">
@@ -109,7 +114,7 @@
 
                         {{-- Kotak foto ukurannya SAMA di semua kartu; menu tanpa foto tetap dapat kotak
                              placeholder supaya grid tetap rapi & sejajar. --}}
-                        <div class="fnbpos-card-photo">
+                        <div class="fnbpos-card-photo {{ $menu->image_url ? 'has-photo' : '' }}">
                             @if($menu->image_url)
                                 <img src="{{ '/storage/'.$menu->image_url }}" alt="{{ $menu->name }}" loading="lazy">
                             @else
@@ -283,9 +288,13 @@
     @if($posStep === 'history')
         {{-- ================= TAB: RIWAYAT TRANSAKSI ================= --}}
         <section class="flex-1 flex flex-col overflow-hidden" style="background: rgba(255,255,255,0.72);">
-            <div class="p-4 border-b border-[#E6DAC0]/60 bg-white/80">
-                <div class="font-display font-black text-base text-[#4F2F2A]">Riwayat Transaksi F&amp;B</div>
-                <div class="text-[11px] text-[#7A5A52]">{{ $this->activeShift ? 'Selama shift '.$this->activeShift->shift_number.' berjalan' : '50 transaksi terakhir (belum ada shift aktif)' }}</div>
+            <div class="p-4 border-b border-[#E6DAC0]/60 bg-white/80 flex flex-wrap items-center justify-between gap-3">
+                <div>
+                    <div class="font-display font-black text-base text-[#4F2F2A]">Riwayat Transaksi F&amp;B</div>
+                    <div class="text-[11px] text-[#7A5A52]">{{ $this->activeShift ? 'Selama shift '.$this->activeShift->shift_number.' berjalan' : '50 transaksi terakhir (belum ada shift aktif)' }}</div>
+                </div>
+                {{-- Rekap Penjualan Harian (X-Report) loket F&B hari ini. --}}
+                @include('pos.partials.sales-recap-button')
             </div>
 
             <div class="flex-1 overflow-auto p-4">
@@ -452,4 +461,6 @@
     {{-- Tutup shift blind + laporan Z (sama dengan POS Padel) — App\Livewire\Concerns\ClosesPosShift. --}}
     @include('pos.partials.shift-close-modal')
     @include('pos.partials.shift-report-modal')
+    {{-- Rekap Penjualan Harian loket F&B (X-Report) — App\Livewire\Concerns\PrintsDailySalesRecap. --}}
+    @include('pos.partials.sales-recap-modal')
 </div>

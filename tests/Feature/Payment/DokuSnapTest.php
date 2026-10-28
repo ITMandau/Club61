@@ -596,6 +596,49 @@ class DokuSnapTest extends TestCase
         $this->dokuTokenRequest(timestamp: now()->subMinutes(20)->timezone('Asia/Jakarta')->format('c'))->assertStatus(401);
     }
 
+    public function test_inbound_debug_log_shows_the_request_shape_without_secrets_and_does_not_change_verification(): void
+    {
+        $log = $this->captureDokuLog();
+        $diagnoses = fn () => collect($log->getRecords())->filter(fn ($r) => str_contains($r->message, '(diagnosa)'))->values();
+
+        // Bawaan mati: tidak ada yang dicatat.
+        $token = $this->dokuTokenRequest()->assertOk()->json('accessToken');
+        $this->assertCount(0, $diagnoses());
+
+        config(['services.doku.snap.debug_inbound' => true]);
+        $tokenResponse = $this->dokuTokenRequest()->assertOk();
+        $this->flushHeaders();
+        $body = ['originalPartnerReferenceNo' => 'INV-TIDAK-ADA', 'latestTransactionStatus' => '00', 'customerName' => 'Budi Rahasia',
+            'amount' => ['value' => '10000.00', 'currency' => 'IDR'], 'additionalInfo' => ['channel' => 'QRIS']];
+        $this->withHeaders(['Authorization' => 'Bearer '.$token, 'X-PARTNER-ID' => self::CLIENT_ID, 'X-EXTERNAL-ID' => '901', 'CHANNEL-ID' => '95221', 'X-SIGNATURE' => base64_encode(random_bytes(64))])
+            ->postJson('/api/v1/payments/doku-snap/v1.0/qr/qr-mpm-notify', $body)->assertOk();
+        $this->flushHeaders();
+        // Diagnosa tidak melonggarkan apa pun: token palsu tetap ditolak; token tanpa skema tidak ikut tertulis.
+        $this->withHeader('Authorization', 'tokenpalsu.tanpa.skema')->postJson('/api/v1/payments/doku-snap/v1.1/transfer-va/payment', [])->assertStatus(401);
+
+        [$tokenLog, $qrisLog, $vaLog] = $diagnoses()->all();
+        $this->assertStringContainsString('[token]', $tokenLog->message);
+        $this->assertTrue($tokenLog->context['x_client_key_matches']);
+        $this->assertSame(['decoded_bytes' => 256, 'kind' => 'asimetris (RSA)'], \Illuminate\Support\Arr::only($tokenLog->context['x_signature'], ['decoded_bytes', 'kind']));
+
+        $this->assertStringContainsString('[qris]', $qrisLog->message);
+        $this->assertSame(['scheme' => 'Bearer', 'length' => strlen($token), 'jwt_alg' => 'RS256'], $qrisLog->context['authorization']);
+        $this->assertSame('simetris (HMAC-SHA512)', $qrisLog->context['x_signature']['kind']);
+        $this->assertTrue($qrisLog->context['x_partner_id_matches']);
+        $this->assertSame(['901', '95221'], [$qrisLog->context['x_external_id'], $qrisLog->context['channel_id']]);
+        $this->assertSame(['originalPartnerReferenceNo', 'latestTransactionStatus', 'customerName', 'amount', 'additionalInfo'], $qrisLog->context['body_fields']);
+        $this->assertSame(['channel'], $qrisLog->context['additional_info_fields']);
+        $this->assertContains('authorization', $qrisLog->context['headers']);
+
+        $this->assertStringContainsString('[va]', $vaLog->message);
+        $this->assertNull($vaLog->context['authorization']['scheme']);
+
+        $written = json_encode($diagnoses()->map(fn ($r) => [$r->message, $r->context])->all());
+        foreach ([$token, $tokenResponse->json('accessToken'), self::CLIENT_ID, 'Budi Rahasia', 'INV-TIDAK-ADA', 'tokenpalsu'] as $secret) {
+            $this->assertStringNotContainsString($secret, $written);
+        }
+    }
+
     public function test_va_notification_with_our_token_is_confirmed_by_the_status_api_before_paying(): void
     {
         $checkout = $this->padelCheckout('BCA_VA')->assertOk();
@@ -680,6 +723,208 @@ class DokuSnapTest extends TestCase
         ])->assertOk()->assertJsonPath('responseCode', '2005200');
 
         $this->assertSame('SUCCESS', $bill->fresh()->status);
+    }
+
+    public function test_invoice_email_after_a_notification_is_sent_once_after_the_response(): void
+    {
+        $checkout = $this->padelCheckout('QRIS')->assertOk();
+        $bill = $this->bill($checkout->json('data.order_id'));
+        $bookingId = $checkout->json('data.booking_id');
+        $this->qrisStatus[$bill->transaction_id] = '00';
+        $token = $this->dokuTokenRequest()->json('accessToken');
+        \Illuminate\Support\Facades\Mail::fake();
+
+        // Notifikasi diproses setelah respons (job) → pelunasan → email (defer) di akhir job itu: tetap terkirim.
+        $this->withHeaders(['Authorization' => 'Bearer '.$token, 'X-EXTERNAL-ID' => '231'])->postJson('/api/v1/payments/doku-snap/v1.0/qr/qr-mpm-notify', [
+            'originalReferenceNo' => 'REF-'.$bill->transaction_id, 'originalPartnerReferenceNo' => $bill->transaction_id,
+            'latestTransactionStatus' => '00', 'amount' => ['value' => number_format((float) $bill->amount, 2, '.', ''), 'currency' => 'IDR'],
+        ])->assertOk();
+        $this->assertSame('SUCCESS', $bill->fresh()->status);
+        \Illuminate\Support\Facades\Mail::assertSent(\App\Mail\OrderInvoiceMail::class, 1);
+
+        // Polling halaman invoice sesudahnya tidak mengirim ulang.
+        $this->flushHeaders();
+        $this->actingAs($this->customer, 'sanctum')->getJson("/api/v1/padel/bookings/{$bookingId}/ticket?verify_payment=1")->assertOk();
+        \Illuminate\Support\Facades\Mail::assertSent(\App\Mail\OrderInvoiceMail::class, 1);
+    }
+
+    // ── Notifikasi QRIS format non-SNAP (yang benar-benar dikirim DOKU) ───────────────────────────────────────────
+
+    private const QRIS_NOTIFY_PATH = '/api/v1/payments/doku-snap/v1.0/qr/qr-mpm-notify';
+
+    /** Persis bentuk kiriman DOKU: Client-Id/Request-Id/Request-Timestamp/Signature HMACSHA256 (Secret Key DOKU), tanpa token. */
+    private function nonSnapQrisNotification(Payment $bill, string $requestId, ?string $target = null, ?string $secret = null): \Illuminate\Testing\TestResponse
+    {
+        $raw = json_encode([
+            'service' => ['id' => 'QRIS', 'name' => 'QRIS'],
+            'acquirer' => ['id' => 'DOKU', 'name' => 'DOKU'],
+            'channel' => ['id' => 'QRIS_DOKU', 'name' => 'QRIS-DOKU'],
+            'customer' => ['doku_id' => '1673637808', 'name' => 'Budi Rahasia', 'email' => 'budi.rahasia@example.test', 'phone' => '6281747637808'],
+            'order' => ['invoice_number' => $bill->transaction_id, 'amount' => (float) $bill->amount],
+            'emoney_payment' => ['account_id' => '1673637808', 'approval_code' => '234604941'],
+            'transaction' => ['status' => 'SUCCESS', 'date' => now()->utc()->format('Y-m-d\TH:i:s\Z'), 'original_request_id' => 'ORQ-1'],
+            'additional_info' => ['origin' => ['product' => 'QRIS', 'system' => 'snap-adapter', 'apiFormat' => 'SNAP', 'source' => 'DIRECT']],
+        ]);
+        $timestamp = now()->utc()->format('Y-m-d\TH:i:s\Z');
+        $this->flushHeaders();
+
+        return $this->call('POST', self::QRIS_NOTIFY_PATH, [], [], [], [
+            'CONTENT_TYPE' => 'application/json',
+            'HTTP_ACCEPT' => 'application/json',
+            'HTTP_CLIENT_ID' => 'BRN-CHECKOUT-TEST',
+            'HTTP_REQUEST_ID' => $requestId,
+            'HTTP_REQUEST_TIMESTAMP' => $timestamp,
+            'HTTP_SIGNATURE' => \App\Services\Payment\Doku\DokuSignature::make('BRN-CHECKOUT-TEST', $requestId, $timestamp, $target ?? self::QRIS_NOTIFY_PATH, $raw, $secret ?? 'SK-checkout-test'),
+        ], $raw);
+    }
+
+    public function test_qris_notification_in_doku_non_snap_format_settles_after_the_status_check(): void
+    {
+        $bill = $this->bill($this->padelCheckout('QRIS')->assertOk()->json('data.order_id'));
+        $this->qrisStatus[$bill->transaction_id] = '00';
+
+        $this->nonSnapQrisNotification($bill, 'rid-qris-1')->assertOk()->assertJsonPath('success', true);
+
+        $this->assertSame('SUCCESS', $bill->fresh()->status);
+        $this->assertSame(DokuNotification::PROCESSED, DokuNotification::where('request_id', 'rid-qris-1')->value('result'));
+        $this->assertNotEmpty($this->sentTo(DokuSnapService::QRIS_QUERY_PATH), 'status dicek ulang lewat qr-mpm-query sebelum lunas');
+        $this->assertArrayNotHasKey('customer', DokuNotification::where('request_id', 'rid-qris-1')->first()->payload, 'data customer tidak disimpan');
+    }
+
+    public function test_non_snap_qris_notification_with_a_wrong_signature_or_another_path_is_rejected(): void
+    {
+        $bill = $this->bill($this->padelCheckout('QRIS')->assertOk()->json('data.order_id'));
+        $this->qrisStatus[$bill->transaction_id] = '00';
+
+        $this->nonSnapQrisNotification($bill, 'rid-qris-2', secret: 'SK-palsu')->assertStatus(401);
+        // Tanda tangan sah, tapi dibuat untuk alamat notifikasi Checkout → Request-Target tidak cocok.
+        $this->nonSnapQrisNotification($bill, 'rid-qris-3', target: '/api/v1/payments/doku/notification')->assertStatus(401);
+
+        $this->assertSame(0, DokuNotification::count());
+        $this->assertSame('PENDING', $bill->fresh()->status);
+    }
+
+    public function test_same_non_snap_qris_notification_sent_twice_is_processed_once(): void
+    {
+        $bill = $this->bill($this->padelCheckout('QRIS')->assertOk()->json('data.order_id'));
+        $this->qrisStatus[$bill->transaction_id] = '00';
+        \Illuminate\Support\Facades\Mail::fake();
+
+        $this->nonSnapQrisNotification($bill, 'rid-qris-4')->assertOk()->assertJsonPath('message', 'Received.');
+        $this->app->terminate();
+        $this->nonSnapQrisNotification($bill, 'rid-qris-4')->assertOk()->assertJsonPath('message', 'Already processed.');
+        $this->app->terminate();
+
+        $this->assertSame(1, DokuNotification::where('request_id', 'rid-qris-4')->count());
+        $this->assertSame(1, Payment::where('order_id', $bill->order_id)->where('status', 'SUCCESS')->count());
+        \Illuminate\Support\Facades\Mail::assertSent(\App\Mail\OrderInvoiceMail::class, 1);
+    }
+
+    public function test_non_snap_qris_notification_is_not_paid_until_doku_confirms(): void
+    {
+        $bill = $this->bill($this->padelCheckout('QRIS')->assertOk()->json('data.order_id'));
+
+        $this->nonSnapQrisNotification($bill, 'rid-qris-5')->assertOk();
+
+        $this->assertSame('PENDING', $bill->fresh()->status, 'status DOKU masih pending → belum dilunasi');
+        $this->assertSame(DokuNotification::RETRY, DokuNotification::where('request_id', 'rid-qris-5')->value('result'));
+    }
+
+    public function test_notification_after_polling_already_paid_adds_no_second_payment_or_email(): void
+    {
+        $checkout = $this->padelCheckout('QRIS')->assertOk();
+        $bill = $this->bill($checkout->json('data.order_id'));
+        $this->qrisStatus[$bill->transaction_id] = '00';
+        \Illuminate\Support\Facades\Mail::fake();
+        $log = $this->captureDokuLog();
+
+        $this->getJson("/api/v1/padel/bookings/{$checkout->json('data.booking_id')}/ticket?verify_payment=1")->assertJsonPath('data.status', 'PAID');
+        $this->app->terminate();
+        $this->nonSnapQrisNotification($bill, 'rid-qris-6')->assertOk();
+        $this->app->terminate();
+
+        $this->assertSame(DokuNotification::PROCESSED, DokuNotification::where('request_id', 'rid-qris-6')->value('result'));
+        $this->assertSame(1, Payment::where('order_id', $bill->order_id)->where('status', 'SUCCESS')->count(), 'satu catatan pembayaran');
+        \Illuminate\Support\Facades\Mail::assertSent(\App\Mail\OrderInvoiceMail::class, 1);
+        $messages = collect($log->getRecords())->pluck('message');
+        $this->assertTrue($messages->contains(fn ($m) => str_contains($m, 'sudah LUNAS lewat') && str_contains($m, 'tidak mengubah apa pun')), 'log tidak terbaca seperti pelunasan kedua');
+    }
+
+    // ── Notifikasi VA: X-SIGNATURE HMAC-SHA512 di samping token ──────────────────────────────────────────────────
+
+    public function test_va_notification_signature_is_watched_by_default_and_rejected_when_enforced(): void
+    {
+        $bill = $this->bill($this->padelCheckout('BCA_VA')->assertOk()->json('data.order_id'));
+        $session = DokuSessionGuard::session($bill, $bill->transaction_id);
+        $body = ['partnerServiceId' => $session['partner_service_id'], 'customerNo' => $session['customer_no'], 'virtualAccountNo' => $session['va_number'],
+            'trxId' => $bill->transaction_id, 'paymentRequestId' => 'PRQ-SIG', 'paidAmount' => ['value' => number_format((float) $bill->amount, 2, '.', ''), 'currency' => 'IDR']];
+        $path = '/api/v1/payments/doku-snap/v1.1/transfer-va/payment';
+        $token = $this->dokuTokenRequest()->json('accessToken');
+        $timestamp = DokuSnapClient::timestamp();
+        $good = DokuSnapClient::symmetricSignature('POST', $path, $token, DokuSnapClient::minify($body), $timestamp, self::SECRET);
+        $send = function (string $signature, string $externalId) use ($body, $path, $token, $timestamp) {
+            $this->flushHeaders();
+
+            return $this->withHeaders(['Authorization' => 'Bearer '.$token, 'X-TIMESTAMP' => $timestamp, 'X-SIGNATURE' => $signature, 'X-EXTERNAL-ID' => $externalId])->postJson($path, $body);
+        };
+        $log = $this->captureDokuLog();
+
+        // Mode pantau (bawaan): cocok / tidak dicatat, notifikasi tetap diterima karena token sah.
+        $send($good, '501')->assertOk();
+        $send(base64_encode(random_bytes(64)), '502')->assertOk();
+        $messages = collect($log->getRecords())->pluck('message');
+        $this->assertTrue($messages->contains('Notifikasi VA DOKU SNAP: X-SIGNATURE cocok'));
+        $this->assertTrue($messages->contains(fn ($m) => str_contains($m, 'X-SIGNATURE TIDAK cocok (mode pantau')));
+
+        // Ditegakkan: tidak cocok → 401 & tidak disimpan; cocok → diterima.
+        config(['services.doku.snap.verify_va_signature' => true]);
+        $send(base64_encode(random_bytes(64)), '503')->assertStatus(401)->assertJsonPath('responseCode', '4012500');
+        $this->assertFalse(DokuNotification::where('request_id', 'SNAP-VA-503')->exists());
+        $send($good, '504')->assertOk()->assertJsonPath('responseCode', '2002500');
+    }
+
+    // ── Token B2B: format persis kiriman DOKU & pengaman kunci ketuker ───────────────────────────────────────────
+
+    public function test_token_request_exactly_like_doku_sends_it_is_accepted(): void
+    {
+        $this->travelTo(Carbon::parse('2026-10-27T14:48:29+07:00'));
+
+        $this->dokuTokenRequest('2026-10-27T14:48:29+07:00')->assertOk()->assertJsonPath('responseCode', '2007300');
+
+        $check = app(DokuSnapClient::class)->dokuPublicKeyCheck();
+        $this->assertSame([true, 2048, false], [$check['parsed'], $check['bits'], $check['same_as_our_key']]);
+        $this->assertMatchesRegularExpression('/^[0-9a-f]{16}$/', $check['fingerprint']);
+    }
+
+    public function test_token_rejection_says_so_when_the_doku_public_key_file_holds_our_own_key(): void
+    {
+        file_put_contents($this->keyDir.'/doku-public.pem', openssl_pkey_get_details($this->ourPrivateKey)['key']);
+        $log = $this->captureDokuLog();
+
+        $this->dokuTokenRequest()->assertStatus(401);
+
+        $alert = collect($log->getRecords())->first(fn ($r) => str_contains($r->message, 'permintaan token DITOLAK'));
+        $this->assertStringContainsString('berisi public key KITA sendiri', $alert->message);
+        $this->assertTrue($alert->context['doku_public_key']['same_as_our_key']);
+        $this->assertStringNotContainsString('BEGIN PUBLIC KEY', json_encode($alert->context), 'isi kunci tidak ditulis');
+
+        file_put_contents($this->keyDir.'/doku-public.pem', 'bukan kunci');
+        $this->assertSame(['parsed' => false], app(DokuSnapClient::class)->dokuPublicKeyCheck());
+    }
+
+    public function test_polling_shows_paid_even_when_the_invoice_email_fails(): void
+    {
+        $checkout = $this->padelCheckout('QRIS')->assertOk();
+        $bill = $this->bill($checkout->json('data.order_id'));
+        $bookingId = $checkout->json('data.booking_id');
+        $this->qrisStatus[$bill->transaction_id] = '00';
+        // SMTP mati: email gagal SETELAH respons — halaman invoice tetap langsung "Lunas".
+        \Illuminate\Support\Facades\Mail::shouldReceive('mailer')->with('billing')->andThrow(new \RuntimeException('SMTP timeout'));
+
+        $this->getJson("/api/v1/padel/bookings/{$bookingId}/ticket?verify_payment=1")->assertOk()->assertJsonPath('data.status', 'PAID');
+
+        $this->assertSame('SUCCESS', $bill->fresh()->status);
+        $this->assertNull(\App\Models\Pos\Order::where('order_number', $checkout->json('data.order_id'))->value('invoice_emailed_at'), 'klaim dilepas → bisa dikirim ulang');
     }
 
     // ── Kasir ───────────────────────────────────────────────────────────────────────────────────────────────────

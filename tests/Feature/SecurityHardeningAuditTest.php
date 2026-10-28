@@ -289,10 +289,10 @@ class SecurityHardeningAuditTest extends TestCase
 
         // 4. Kasir akses /pos -> 200 OK, tapi akses /kitchen -> 403 Forbidden
         $this->actingAs($this->cashier)->get('/pos')->assertStatus(200);
-        $this->actingAs($this->cashier)->get('/kitchen')->assertStatus(403);
+        $this->actingAs($this->cashier)->get('/kitchen')->assertDenied();
 
         // 5. Staf Kitchen akses /kitchen -> 200 OK, tapi akses /pos -> 403 Forbidden
         $this->actingAs($this->kitchen)->get('/kitchen')->assertStatus(200);
-        $this->actingAs($this->kitchen)->get('/pos')->assertStatus(403);
+        $this->actingAs($this->kitchen)->get('/pos')->assertDenied();
     }
 }

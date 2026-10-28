@@ -5,6 +5,7 @@ namespace App\Models\Fnb;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 
 class FnbMenu extends Model
@@ -36,15 +37,20 @@ class FnbMenu extends Model
      */
     protected static function booted(): void
     {
-        static::saving(function (self $menu) {
-            if ($menu->exists && $menu->isDirty('image_url') && $menu->getOriginal('image_url')) {
-                Storage::disk('public')->delete($menu->getOriginal('image_url'));
+        // File lama baru dibuang SETELAH perubahan benar-benar tersimpan (updated / deleted, lalu menunggu commit kalau
+        // ada transaksi). Dulu dibuang saat saving / deleting: kalau simpan gagal, atau hapus ditolak database (menu
+        // masih dipakai riwayat order), fotonya sudah hilang padahal menunya masih menunjuk ke file itu.
+        static::updated(function (self $menu) {
+            $oldPath = $menu->getOriginal('image_url');
+            if ($menu->wasChanged('image_url') && $oldPath) {
+                DB::afterCommit(fn () => Storage::disk('public')->delete($oldPath));
             }
         });
 
-        static::deleting(function (self $menu) {
-            if ($menu->image_url) {
-                Storage::disk('public')->delete($menu->image_url);
+        static::deleted(function (self $menu) {
+            $path = $menu->image_url;
+            if ($path) {
+                DB::afterCommit(fn () => Storage::disk('public')->delete($path));
             }
         });
     }

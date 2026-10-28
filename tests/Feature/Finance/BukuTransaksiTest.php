@@ -115,7 +115,7 @@ class BukuTransaksiTest extends TestCase
 
         foreach (['admin', 'cashier'] as $role) {
             $user = User::factory()->role($role)->create();
-            $this->actingAs($user)->get(BukuTransaksi::getUrl())->assertForbidden();
+            $this->actingAs($user)->get(BukuTransaksi::getUrl())->assertDenied();
             $this->actingAs($user)->get(route('admin.buku-transaksi.export', ['format' => 'pdf']))->assertForbidden();
         }
 
@@ -130,7 +130,7 @@ class BukuTransaksiTest extends TestCase
         $this->actingAs(User::factory()->role('admin')->create())->get(AntrianRefund::getUrl())->assertOk();
         foreach (['cashier', 'receptionist'] as $role) {
             $this->assertNotContains('process_refund_queue', Club61PermissionMatrix::defaultRolePermissions($role));
-            $this->actingAs(User::factory()->role($role)->create())->get(AntrianRefund::getUrl())->assertForbidden();
+            $this->actingAs(User::factory()->role($role)->create())->get(AntrianRefund::getUrl())->assertDenied();
         }
     }
 

@@ -60,4 +60,45 @@ class SecureImageUploader
 
         return $filename;
     }
+
+    /**
+     * Sama dengan store() (divalidasi dari isi file, dibuat ulang lewat GD, metadata terbuang), tapi hasilnya PNG
+     * dengan transparansi utuh — untuk logo: JPG mengubah latar transparan jadi hitam.
+     */
+    public static function storePng(TemporaryUploadedFile|UploadedFile $upload, string $directory, int $maxWidth = 1200, string $disk = 'public'): string
+    {
+        $realPath = $upload->getRealPath();
+        $info = @getimagesize($realPath);
+
+        abort_unless($info !== false, 422, 'File yang diunggah bukan gambar yang valid.');
+
+        $source = match ($info['mime']) {
+            'image/jpeg' => @imagecreatefromjpeg($realPath),
+            'image/png' => @imagecreatefrompng($realPath),
+            'image/webp' => @imagecreatefromwebp($realPath),
+            default => null,
+        };
+
+        abort_unless($source !== null && $source !== false, 422, 'Format gambar tidak didukung. Gunakan JPG, PNG, atau WEBP.');
+
+        $width = imagesx($source);
+        $height = imagesy($source);
+        $newWidth = min($width, $maxWidth);
+        $newHeight = (int) max(1, round($height * ($newWidth / $width)));
+
+        // Kanvas baru yang transparan, lalu gambar asli disalin — sekaligus membuang apa pun di luar data piksel.
+        $canvas = imagecreatetruecolor($newWidth, $newHeight);
+        imagealphablending($canvas, false);
+        imagesavealpha($canvas, true);
+        imagefill($canvas, 0, 0, imagecolorallocatealpha($canvas, 0, 0, 0, 127));
+        imagecopyresampled($canvas, $source, 0, 0, 0, 0, $newWidth, $newHeight, $width, $height);
+        imagedestroy($source);
+
+        Storage::disk($disk)->makeDirectory($directory);
+        $filename = $directory.'/'.Str::uuid().'.png';
+        imagepng($canvas, Storage::disk($disk)->path($filename), 6);
+        imagedestroy($canvas);
+
+        return $filename;
+    }
 }

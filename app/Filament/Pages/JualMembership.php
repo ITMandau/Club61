@@ -26,6 +26,7 @@ use UnitEnum;
 class JualMembership extends Page
 {
     use \App\Livewire\Concerns\AutoPrintsReceipts;
+    use \App\Livewire\Concerns\PrintsDailySalesRecap;
     use HasPageShield;
 
     protected static string|BackedEnum|null $navigationIcon = 'heroicon-o-credit-card';
@@ -689,6 +690,28 @@ class JualMembership extends Page
     public function updatedHistoryDate(): void
     {
         $this->historyDate = $this->resolvedHistoryDate();
+    }
+
+    // Rekap Penjualan Harian (X-Report) — loket & shift yang sama dengan POS Walk-In; tanggal = filter tanggal Riwayat.
+    protected function salesRecapCounter(): string
+    {
+        return 'PADEL_FRONTDESK';
+    }
+
+    protected function salesRecapDate(): string
+    {
+        return $this->resolvedHistoryDate();
+    }
+
+    protected function salesRecapNotice(string $level, string $title, string $body): void
+    {
+        $notification = Notification::make()->title($title)->body($body);
+        match ($level) {
+            'success' => $notification->success(),
+            'danger' => $notification->danger(),
+            default => $notification->warning(),
+        };
+        $notification->send();
     }
 
     public function showCashier(): void

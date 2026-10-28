@@ -314,9 +314,14 @@ class PaymentOrchestratorService
 
                 // Invoice PDF ke email customer (booking online & membership) — setelah commit, supaya email tidak
                 // terkirim untuk pelunasan yang di-rollback dan gagal kirim email tidak menggagalkan pelunasan.
+                // Lalu SETELAH respons terkirim: render PDF + SMTP dulu menahan polling invoice / webhook sampai ±60 dtk
+                // (504 di nginx) padahal ordernya sudah lunas. Customer langsung melihat "Lunas", email menyusul.
+                // app()->terminating (bukan dispatch(closure)->afterResponse / defer): closure bersarang satu baris salah
+                // diserialisasi oleh dispatch (berulang tanpa henti), dan defer() melewatkan callback yang didaftarkan
+                // saat notifikasi DOKU diproses setelah respons. terminating juga jalan di akhir perintah artisan.
                 if ($justPaid && app(OrderInvoiceMailer::class)->shouldSend($order)) {
                     $orderId = $order->id;
-                    DB::afterCommit(fn () => app(OrderInvoiceMailer::class)->send($orderId));
+                    DB::afterCommit(fn () => self::afterResponse(fn () => app(OrderInvoiceMailer::class)->send($orderId)));
                 }
             } elseif ($totalPaid > 0) {
                 $order->update(['payment_status' => 'PARTIALLY_PAID']);
@@ -378,8 +383,10 @@ class PaymentOrchestratorService
     {
         $paidBillId = $payment->id;
 
+        // Menutup sesi lain = beberapa panggilan HTTP ke gateway (cek, batal, cek ulang; masing-masing s.d. 10 dtk) →
+        // dijalankan setelah respons terkirim, bukan menahan halaman invoice / webhook yang barusan melunasi.
         if (strtoupper($paymentGateway) === 'DOKU' && $transactionId && count(\App\Services\Payment\Doku\DokuSessionGuard::sessionsOf($payment)) > 1) {
-            DB::afterCommit(fn () => rescue(fn () => app(\App\Services\Payment\Doku\DokuSessionGuard::class)->closeSiblings($paidBillId), null, false));
+            DB::afterCommit(fn () => self::afterResponse(fn () => app(\App\Services\Payment\Doku\DokuSessionGuard::class)->closeSiblings($paidBillId)));
 
             return;
         }
@@ -388,7 +395,18 @@ class PaymentOrchestratorService
             return;
         }
 
-        DB::afterCommit(fn () => rescue(fn () => app(SnapSessionGuard::class)->closeSiblings($paidBillId), null, false));
+        DB::afterCommit(fn () => self::afterResponse(fn () => app(SnapSessionGuard::class)->closeSiblings($paidBillId)));
+    }
+
+    /**
+     * Kerja lambat sesudah pelunasan (email invoice, menutup sesi gateway lain) dijalankan setelah respons terkirim
+     * ke browser / gateway — atau di akhir perintah artisan. Gagal tidak pernah merusak pelunasan (dicatat saja).
+     * Catatan: worker antrean (queue:work) tidak menjalankan terminating — pindahkan ke job kalau pelunasan kelak
+     * dijalankan dari antrean.
+     */
+    private static function afterResponse(\Closure $work): void
+    {
+        app()->terminating(fn () => rescue($work, null, true));
     }
 
     /** Tagihan ini pemilik order_id gateway tersebut (transaction_id-nya, atau salah satu sesi Snap-nya)? */

@@ -25,6 +25,7 @@ class FnbCashierTerminal extends Component
 {
     use \App\Livewire\Concerns\AutoPrintsReceipts;
     use \App\Livewire\Concerns\ClosesPosShift;
+    use \App\Livewire\Concerns\PrintsDailySalesRecap;
     use WithPagination;
 
     private const COUNTER = 'FNB_COUNTER';
@@ -275,6 +276,17 @@ class FnbCashierTerminal extends Component
     protected function shiftNotice(string $level, string $title, string $body): void
     {
         $this->errorMessage = $level === 'success' ? null : $body;
+    }
+
+    // Rekap Penjualan Harian (X-Report) loket F&B — selalu hari ini (riwayat F&B tidak punya filter tanggal).
+    protected function salesRecapCounter(): string
+    {
+        return 'FNB_COUNTER';
+    }
+
+    protected function salesRecapNotice(string $level, string $title, string $body): void
+    {
+        $this->shiftNotice($level, $title, $body);
     }
 
     // ==========================================

@@ -259,6 +259,65 @@ class DokuSnapClient
             && hash_equals($this->clientId(), (string) ($claims['clientId'] ?? ''));
     }
 
+    /**
+     * X-SIGNATURE notifikasi SNAP dari DOKU (VA): HMAC-SHA512 dengan client secret atas
+     * "POST:{path}:{token}:{lowercase hex sha256(body minify)}:{X-TIMESTAMP}" — rumus dari spesifikasi notifikasi VA SNAP
+     * DOKU (sama dengan rumus request kita ke DOKU, symmetricSignature()).
+     * ASUMSI (belum dikonfirmasi DOKU / belum terbukti dari notifikasi asli): path = path relatif yang dipanggil DOKU,
+     * token = Bearer tanpa awalan "Bearer ", body = body mentah ATAU hasil minify ulang (dua-duanya dicoba).
+     */
+    public function verifyInboundSignature(string $path, ?string $authorization, string $rawBody, string $timestamp, string $signature): bool
+    {
+        $secret = trim((string) config('services.doku.snap.client_secret'));
+        $token = trim((string) preg_replace('/^Bearer\s+/i', '', (string) $authorization));
+        if ($secret === '' || $token === '' || $timestamp === '' || $signature === '') {
+            return false;
+        }
+
+        $decoded = json_decode($rawBody, true);
+        $bodies = array_unique(array_filter([$rawBody, is_array($decoded) ? self::minify($decoded) : null], fn ($body) => $body !== null));
+        foreach ($bodies as $body) {
+            if (hash_equals(self::symmetricSignature('POST', $path, $token, $body, $timestamp, $secret), $signature)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Pengaman salah pasang kunci: DOKU Public Key yang terpasang bisa diparse, jumlah bit, sidik jari (16 karakter awal
+     * SHA-256 DER — sama dengan `openssl pkey -pubin -outform DER | sha256sum`), dan apakah ternyata public key KITA
+     * sendiri (DOKU lalu tidak pernah bisa meminta token). Isi kunci tidak pernah dikembalikan.
+     *
+     * @return array{parsed: bool, bits?: int, fingerprint?: string, same_as_our_key?: ?bool}
+     */
+    public function dokuPublicKeyCheck(): array
+    {
+        $key = $this->dokuPublicKey();
+        $details = $key ? openssl_pkey_get_details($key) : false;
+        if (! is_array($details) || ! isset($details['key'])) {
+            return ['parsed' => false];
+        }
+
+        $privateKey = $this->privateKey();
+        $ours = $privateKey ? (openssl_pkey_get_details($privateKey)['key'] ?? null) : null;
+
+        return [
+            'parsed' => true,
+            'bits' => (int) $details['bits'],
+            'fingerprint' => self::fingerprint($details['key']),
+            'same_as_our_key' => $ours === null ? null : hash_equals(self::fingerprint($ours), self::fingerprint($details['key'])),
+        ];
+    }
+
+    private static function fingerprint(string $publicKeyPem): string
+    {
+        $der = base64_decode((string) preg_replace('/-----[^-]+-----|\s+/', '', $publicKeyPem));
+
+        return substr(hash('sha256', (string) $der), 0, 16);
+    }
+
     // ── Rumus (statis, diuji langsung) ──────────────────────────────────────────────────────────────────────────
 
     public static function asymmetricSignature(string $stringToSign, \OpenSSLAsymmetricKey $privateKey): ?string

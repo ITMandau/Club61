@@ -79,6 +79,7 @@ class Club61PermissionMatrix
                 'process_fnb_order',
                 'open_pos_shift',
                 'close_pos_shift',
+                'print_sales_recap',
                 'View:KelolaPemesanan',
                 'request_refund_padel',
             ],
@@ -88,6 +89,7 @@ class Club61PermissionMatrix
                 'process_walkin_booking',
                 'open_pos_shift',
                 'close_pos_shift',
+                'print_sales_recap',
                 'pos_qris_payment',
                 'apply_pos_voucher',
                 'settle_unpaid_booking',
@@ -167,6 +169,8 @@ class Club61PermissionMatrix
                             'apply_pos_voucher' => 'Terapkan Voucher Diskon & Promosi',
                             'open_pos_shift' => 'Buka Sesi Shift Kasir Baru',
                             'close_pos_shift' => 'Tutup Sesi Shift & Rekonsiliasi Kas',
+                            // Angka sistem per metode bayar (yang di form Tutup Shift disembunyikan) — tiap kali dibuka tercatat di log.
+                            'print_sales_recap' => 'Cetak Rekap Penjualan Harian (X-Report) per Metode Bayar',
                             // Admin / manager: shift yang selisih (toleransi Rp0) & koreksi metode bayar salah klik kasir.
                             'approve_shift_closing' => 'Review Shift Kasir: Setujui / Tolak Selisih & Koreksi Metode Bayar',
                             'View:JualMembership' => 'Akses Halaman POS Jual Membership',
@@ -354,6 +358,13 @@ class Club61PermissionMatrix
                             'View:DaftarVoucher' => 'Akses Halaman Daftar Voucher (kode promo & voucher saldo customer)',
                             'View:ImportPenjualan' => 'Akses Halaman Import Penjualan (Excel)',
                             'import_sales_data' => 'Import Data Penjualan Booking Padel & F&B dari Excel',
+                        ],
+                    ],
+                    'invoice_template' => [
+                        'label' => 'Template Invoice (PDF Email Invoice Lunas)',
+                        'actions' => [
+                            'View:TemplateInvoice' => 'Akses Halaman Template Invoice & Unduh Contoh PDF',
+                            'manage_invoice_template' => 'Ubah Logo, Identitas Usaha & Kalimat Template Invoice',
                         ],
                     ],
                 ],

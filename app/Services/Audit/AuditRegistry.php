@@ -176,6 +176,7 @@ class AuditRegistry
             // bernama class induk, jadi didaftarkan juga supaya tidak ada role baru yang lolos.
             \Spatie\Permission\Models\Role::class => ['module' => 'USER_ROLE', 'label' => 'Peran (Role)', 'severity' => ['created' => ActivityLogger::WARNING, 'updated' => ActivityLogger::WARNING, 'deleted' => ActivityLogger::CRITICAL]],
             CompanyProfileSetting::class => ['module' => 'CONTENT', 'label' => 'Konten Website', 'title' => fn () => 'Landing Page'],
+            \App\Models\Setting\InvoiceTemplateSetting::class => ['module' => 'FINANCE', 'label' => 'Template Invoice', 'title' => fn () => 'PDF Invoice Email'],
             CompanyProfileFacility::class => ['module' => 'CONTENT', 'label' => 'Fasilitas Website'],
             CompanyProfileValueProp::class => ['module' => 'CONTENT', 'label' => 'Keunggulan Website'],
             \App\Models\Marketing\LinkBioLink::class => ['module' => 'CONTENT', 'label' => 'Tombol Link Bio', 'title' => ['label']],

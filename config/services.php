@@ -77,6 +77,12 @@ return [
             // BIN BCA DOKU (contoh resmi "   19008") + prefix sub-BIN merchant (contoh resmi "0"); sisa nomor VA dibuat DOKU (DGPC).
             'bca_partner_service_id' => env('DOKU_SNAP_BCA_PARTNER_SERVICE_ID'),
             'bca_customer_no' => env('DOKU_SNAP_BCA_CUSTOMER_NO', '0'),
+            // Diagnosa SEMENTARA: bentuk permintaan DOKU ke kita (nama header, panjang, cocok/tidak — tanpa token/tanda
+            // tangan/data customer) ditulis ke storage/logs/doku-*.log. Matikan lagi setelah selesai melacak.
+            'debug_inbound' => (bool) env('DOKU_SNAP_DEBUG_INBOUND', false),
+            // X-SIGNATURE (HMAC-SHA512) notifikasi VA: false = pantau (dicatat cocok/tidak, tetap diterima karena token B2B
+            // sah), true = tidak cocok ditolak. Nyalakan setelah log doku menunjukkan "X-SIGNATURE cocok" untuk notifikasi asli.
+            'verify_va_signature' => (bool) env('DOKU_SNAP_VERIFY_VA_SIGNATURE', false),
         ],
     ],
 

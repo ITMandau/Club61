@@ -1140,9 +1140,10 @@
     {{-- Tutup shift blind + laporan Z (sama dengan POS F&B) — App\Livewire\Concerns\ClosesPosShift. --}}
     @include('pos.partials.shift-close-modal')
     @include('pos.partials.shift-report-modal')
+    @include('pos.partials.sales-recap-modal')
 
     {{-- Struk & Z-Report dicetak di printer thermal 58mm (App\Support\ReceiptPaper). --}}
-    @include('pos.partials.receipt-print-style', ['selectors' => ['#printable-pos-receipt', '#printable-z-report']])
+    @include('pos.partials.receipt-print-style', ['selectors' => ['#printable-pos-receipt', '#printable-z-report', '#printable-sales-recap']])
     <script>
         window.addEventListener('beforeunload', function(e) {
             if (@this.get('posStep') === 'payment') {

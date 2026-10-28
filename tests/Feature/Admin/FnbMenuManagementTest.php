@@ -14,6 +14,7 @@ use App\Services\Media\SecureImageUploader;
 use App\Services\Permission\Club61PermissionMatrix;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Livewire\Livewire;
 use Tests\TestCase;
@@ -199,6 +200,53 @@ class FnbMenuManagementTest extends TestCase
 
         Storage::disk('public')->assertMissing($oldPath);
         Storage::disk('public')->assertExists($newPath);
+    }
+
+    public function test_old_photo_is_kept_when_the_change_is_rolled_back(): void
+    {
+        Storage::fake('public');
+
+        $category = FnbCategory::create(['name' => 'Coffee & Drinks', 'sort_order' => 1]);
+        $oldPath = SecureImageUploader::store(UploadedFile::fake()->image('latte-v1.jpg', 800, 600), 'fnb/menu');
+        $menu = FnbMenu::create(['category_id' => $category->id, 'name' => 'Iced Spanish Latte', 'base_price' => 38000, 'is_available' => true, 'image_url' => $oldPath]);
+
+        // Ganti foto & hapus menu yang batal (transaksi di-rollback) tidak boleh membuang foto yang masih dipakai.
+        DB::beginTransaction();
+        $menu->update(['image_url' => 'fnb/menu/baru.jpg']);
+        DB::rollBack();
+        Storage::disk('public')->assertExists($oldPath);
+
+        DB::beginTransaction();
+        $menu->fresh()->delete();
+        DB::rollBack();
+        Storage::disk('public')->assertExists($oldPath);
+        $this->assertSame($oldPath, $menu->fresh()->image_url);
+    }
+
+    public function test_failed_save_discards_the_new_upload_and_keeps_the_old_photo(): void
+    {
+        Storage::fake('public');
+
+        $admin = User::factory()->admin()->create();
+        $this->actingAs($admin);
+        $category = FnbCategory::create(['name' => 'Coffee & Drinks', 'sort_order' => 1]);
+        $oldPath = SecureImageUploader::store(UploadedFile::fake()->image('latte-v1.jpg', 800, 600), 'fnb/menu');
+        $menu = FnbMenu::create(['category_id' => $category->id, 'name' => 'Iced Spanish Latte', 'base_price' => 38000, 'is_available' => true, 'image_url' => $oldPath]);
+
+        FnbMenu::updating(fn () => throw new \RuntimeException('database putus'));
+
+        try {
+            Livewire::test(KelolaMenuFnb::class)
+                ->call('openEditMenuModal', $menu->id)
+                ->set('menuPhotoUpload', UploadedFile::fake()->image('latte-v2.jpg', 800, 600))
+                ->call('saveMenu');
+            $this->fail('Simpan seharusnya gagal.');
+        } catch (\RuntimeException $e) {
+            $this->assertSame('database putus', $e->getMessage());
+        }
+
+        $this->assertSame([$oldPath], Storage::disk('public')->files('fnb/menu'));
+        $this->assertSame($oldPath, $menu->fresh()->image_url);
     }
 
     public function test_deleting_menu_removes_its_photo_from_disk(): void
