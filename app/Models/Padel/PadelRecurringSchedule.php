@@ -25,6 +25,9 @@ class PadelRecurringSchedule extends Model
 
     public const STATUS_PAUSED = 'PAUSED';
 
+    /** Dihapus admin setelah ada sesi yang dimainkan: tidak membuat booking lagi, disimpan untuk riwayat. */
+    public const STATUS_STOPPED = 'STOPPED';
+
     public const DAYS = [1 => 'Senin', 2 => 'Selasa', 3 => 'Rabu', 4 => 'Kamis', 5 => 'Jumat', 6 => 'Sabtu', 7 => 'Minggu'];
 
     public const MAX_WEEKS_AHEAD = 12;
@@ -79,6 +82,11 @@ class PadelRecurringSchedule extends Model
     public function isActive(): bool
     {
         return $this->status === self::STATUS_ACTIVE;
+    }
+
+    public function isStopped(): bool
+    {
+        return $this->status === self::STATUS_STOPPED;
     }
 
     /** Kuota jam PADEL yang dipotong jadwal ini (null = membership tidak punya kuota jam PADEL). */

@@ -11,7 +11,6 @@ use App\Services\Padel\RecurringScheduleService;
 use BackedEnum;
 use Filament\Actions\Action;
 use Filament\Actions\ActionGroup;
-use Filament\Actions\DeleteAction;
 use Filament\Actions\EditAction;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Select;
@@ -64,13 +63,13 @@ class PadelRecurringScheduleResource extends Resource
 
     public static function canEdit(Model $record): bool
     {
-        return self::canViewAny();
+        return self::canViewAny() && ! ($record instanceof PadelRecurringSchedule && $record->isStopped());
     }
 
-    /** Hanya jadwal yang belum pernah membuat booking; selebihnya cukup dijeda. */
+    /** Hapus bawaan Filament tidak dipakai: booking & kuota jam harus ikut dibereskan → aksi "Hapus jadwal" (RecurringScheduleService::remove). */
     public static function canDelete(Model $record): bool
     {
-        return self::canViewAny() && $record instanceof PadelRecurringSchedule && ! $record->occurrences()->exists();
+        return false;
     }
 
     public static function canDeleteAny(): bool
@@ -139,8 +138,16 @@ class PadelRecurringScheduleResource extends Resource
                 TextColumn::make('starts_on')->label('Periode')->date('d M Y')
                     ->description(fn (PadelRecurringSchedule $r) => $r->ends_on ? 's/d '.$r->ends_on->translatedFormat('d M Y') : 'tanpa tanggal akhir'),
                 TextColumn::make('status')->label('Status')->badge()
-                    ->formatStateUsing(fn (string $state) => $state === PadelRecurringSchedule::STATUS_ACTIVE ? 'Aktif' : 'Dijeda')
-                    ->color(fn (string $state) => $state === PadelRecurringSchedule::STATUS_ACTIVE ? 'success' : 'gray'),
+                    ->formatStateUsing(fn (string $state) => match ($state) {
+                        PadelRecurringSchedule::STATUS_ACTIVE => 'Aktif',
+                        PadelRecurringSchedule::STATUS_STOPPED => 'Dihentikan',
+                        default => 'Dijeda',
+                    })
+                    ->color(fn (string $state) => match ($state) {
+                        PadelRecurringSchedule::STATUS_ACTIVE => 'success',
+                        PadelRecurringSchedule::STATUS_STOPPED => 'danger',
+                        default => 'gray',
+                    }),
             ])
             ->recordActions([
                 Action::make('history')->label('Riwayat')->icon('heroicon-o-list-bullet')->color('gray')
@@ -158,6 +165,7 @@ class PadelRecurringScheduleResource extends Resource
                         ->modalDescription(fn (PadelRecurringSchedule $r) => 'Booking minggu yang belum dibuat (sampai '.$r->weeks_ahead.' minggu ke depan) dibuat sekarang dan dipotong dari kuota jam. Sistem juga menjalankan ini otomatis tiap malam.')
                         ->action(fn (PadelRecurringSchedule $record) => self::notifyGenerated(app(RecurringScheduleService::class)->generate($record, auth()->user()))),
                     Action::make('skip')->label('Lewati tanggal')->icon('heroicon-o-forward')->color('warning')
+                        ->visible(fn (PadelRecurringSchedule $r) => ! $r->isStopped())
                         ->modalDescription('Semua lapangan jadwal ini di tanggal itu dilewati. Booking yang sudah dibuat dibatalkan dan jam kuotanya dikembalikan.')
                         ->schema(fn (PadelRecurringSchedule $record) => [
                             Select::make('date')->label('Tanggal')->required()->native(false)
@@ -171,7 +179,7 @@ class PadelRecurringScheduleResource extends Resource
                             return 'Tanggal dilewati'.($cancelled ? " — {$cancelled} booking dibatalkan, kuota jam dikembalikan." : '.');
                         })),
                     Action::make('unskip')->label('Batal lewati')->icon('heroicon-o-arrow-uturn-left')->color('gray')
-                        ->visible(fn (PadelRecurringSchedule $r) => $r->occurrences()->where('status', PadelRecurringOccurrence::STATUS_SKIPPED)
+                        ->visible(fn (PadelRecurringSchedule $r) => ! $r->isStopped() && $r->occurrences()->where('status', PadelRecurringOccurrence::STATUS_SKIPPED)
                             ->whereDate('occurrence_date', '>=', now()->toDateString())->exists())
                         ->modalDescription('Tanggal ini dibuatkan booking lagi saat "Buat booking sekarang" / proses otomatis malam berikutnya (kalau slotnya masih kosong).')
                         ->schema(fn (PadelRecurringSchedule $record) => [
@@ -187,6 +195,7 @@ class PadelRecurringScheduleResource extends Resource
                             return 'Tanggal tidak jadi dilewati.';
                         })),
                     Action::make('toggle')
+                        ->visible(fn (PadelRecurringSchedule $r) => ! $r->isStopped())
                         ->label(fn (PadelRecurringSchedule $r) => $r->isActive() ? 'Jeda' : 'Aktifkan')
                         ->icon(fn (PadelRecurringSchedule $r) => $r->isActive() ? 'heroicon-o-pause' : 'heroicon-o-play')
                         ->requiresConfirmation()
@@ -206,7 +215,14 @@ class PadelRecurringScheduleResource extends Resource
                             return $record;
                         })
                         ->successNotification(null),
-                    DeleteAction::make(),
+                    Action::make('remove')->label('Hapus jadwal')->icon('heroicon-o-trash')->color('danger')
+                        ->visible(fn (PadelRecurringSchedule $r) => ! $r->isStopped())
+                        ->authorize(fn () => self::canViewAny())
+                        ->requiresConfirmation()
+                        ->modalHeading(fn (PadelRecurringSchedule $r) => 'Hapus jadwal '.$r->name.'?')
+                        ->modalDescription(fn (PadelRecurringSchedule $r) => self::removalDescription($r))
+                        ->modalSubmitActionLabel('Hapus jadwal')
+                        ->action(fn (PadelRecurringSchedule $record) => self::notifyRemoved($record)),
                 ]),
             ]);
     }
@@ -258,6 +274,48 @@ class PadelRecurringScheduleResource extends Resource
             $notification->body($result['booked'] ? null : 'Semua minggu dalam jangkauan sudah dibuat / dilewati.')->success();
         }
         $notification->send();
+    }
+
+    /** Isi dialog konfirmasi "Hapus jadwal": apa yang dibatalkan, berapa jam kembali, apa yang tetap. */
+    private static function removalDescription(PadelRecurringSchedule $schedule): string
+    {
+        $preview = app(RecurringScheduleService::class)->removalPreview($schedule);
+        $lines = [
+            $preview['cancel'] > 0
+                ? "{$preview['cancel']} booking yang jam mainnya belum mulai dibatalkan, ".self::num($preview['hours']).' jam kembali utuh ke kuota dan lapangannya kosong lagi.'
+                : 'Tidak ada booking mendatang yang perlu dibatalkan.',
+            $preview['played'] > 0
+                ? "{$preview['played']} sesi yang jamnya sudah lewat dianggap sudah dimainkan: tetap tercatat dan jamnya terpakai. Jadwal ditandai Dihentikan supaya riwayatnya tetap bisa dilihat."
+                : 'Jadwal dihapus dari daftar.',
+        ];
+
+        return implode(' ', $lines);
+    }
+
+    private static function notifyRemoved(PadelRecurringSchedule $schedule): void
+    {
+        try {
+            $result = app(RecurringScheduleService::class)->remove($schedule, auth()->user());
+        } catch (HttpException $e) {
+            Notification::make()->title('Gagal menghapus jadwal')->body($e->getMessage().' Tidak ada yang diubah.')->danger()->send();
+
+            return;
+        }
+
+        if ($result['busy']) {
+            Notification::make()->title('Sedang diproses')->body('Jadwal ini sedang dibuatkan booking oleh proses lain. Coba lagi sebentar.')->warning()->send();
+
+            return;
+        }
+
+        Notification::make()
+            ->title($result['deleted'] ? 'Jadwal dihapus' : 'Jadwal dihentikan')
+            ->body(implode(' ', array_filter([
+                $result['cancelled'] ? $result['cancelled'].' booking dibatalkan, '.self::num($result['hours_returned']).' jam kembali ke kuota.' : null,
+                $result['played'] ? $result['played'].' sesi yang sudah lewat tetap tercatat.' : null,
+            ])) ?: null)
+            ->success()
+            ->send();
     }
 
     private static function attempt(callable $callback): void

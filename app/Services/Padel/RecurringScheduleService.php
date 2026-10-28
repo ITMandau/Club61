@@ -233,6 +233,9 @@ class RecurringScheduleService
      */
     public function updateSchedule(PadelRecurringSchedule $schedule, array $data, User $actor): array
     {
+        if ($schedule->isStopped()) {
+            throw new HttpException(422, 'Jadwal ini sudah dihapus.');
+        }
         $old = ['day' => $schedule->day_of_week, 'start' => $schedule->start_time, 'end' => $schedule->end_time, 'courts' => array_values((array) $schedule->court_ids)];
         $schedule->update($data);
         $schedule->refresh();
@@ -413,6 +416,9 @@ class RecurringScheduleService
      */
     public function skip(PadelRecurringSchedule $schedule, string $date, string $reason, User $actor): int
     {
+        if ($schedule->isStopped()) {
+            throw new HttpException(422, 'Jadwal ini sudah dihapus.');
+        }
         $day = Carbon::parse($date)->startOfDay();
         if ($day->dayOfWeekIso !== $schedule->day_of_week) {
             throw new HttpException(422, 'Tanggal itu bukan hari '.PadelRecurringSchedule::DAYS[$schedule->day_of_week].'.');
@@ -467,9 +473,122 @@ class RecurringScheduleService
         return $cancelled;
     }
 
+    /**
+     * Ringkasan sebelum "Hapus jadwal" (ditampilkan di dialog konfirmasi).
+     *
+     * @return array{cancel: int, hours: float, played: int}
+     */
+    public function removalPreview(PadelRecurringSchedule $schedule): array
+    {
+        $upcoming = $this->upcomingBookings($schedule);
+
+        return [
+            'cancel' => $upcoming->count(),
+            'hours' => round((float) $upcoming->sum('member_hours_consumed'), 2),
+            'played' => $this->playedBookings($schedule)->count(),
+        ];
+    }
+
+    /**
+     * Hapus jadwal. Patokannya jam main (kode tidak tahu member benar-benar datang atau tidak):
+     *   - jam main BELUM mulai → dibatalkan lewat jalur pembatalan biasa (sama dengan "Lewati tanggal"): kuota jam kembali
+     *     utuh, lapangan kosong lagi;
+     *   - jam main SUDAH mulai / lewat → dianggap sudah dimainkan, tidak disentuh, jamnya terpakai.
+     * Belum ada sesi yang lewat → jadwal dihapus; sudah ada → ditandai Dihentikan supaya riwayatnya tetap bisa dilihat.
+     *
+     * @return array{busy: bool, cancelled: int, hours_returned: float, played: int, deleted: bool}
+     */
+    public function remove(PadelRecurringSchedule $schedule, User $actor): array
+    {
+        $result = ['busy' => false, 'cancelled' => 0, 'hours_returned' => 0.0, 'played' => 0, 'deleted' => false];
+
+        // Kunci yang sama dengan generate(): proses otomatis malam tidak bisa membuat booking baru di tengah penghapusan.
+        $lock = Cache::lock('padel-recurring:'.$schedule->id, 300);
+        if (! $lock->get()) {
+            $result['busy'] = true;
+
+            return $result;
+        }
+
+        try {
+            // Dibaca ulang dari database: relasi membership yang sudah termuat bisa menyimpan saldo lama.
+            $balance = $schedule->padelBalance()?->fresh();
+            $before = $balance ? (float) $balance->remaining_quota : null;
+
+            DB::transaction(function () use ($schedule, $actor, &$result) {
+                foreach ($this->upcomingBookings($schedule) as $booking) {
+                    $this->bookings->requestCancelAndRefund($booking->id, 'JADWAL_TETAP_DIHAPUS', 'Jadwal tetap "'.$schedule->name.'" dihapus', $actor);
+                    $result['cancelled']++;
+                }
+
+                $result['played'] = $this->playedBookings($schedule)->count();
+
+                if ($result['played'] === 0) {
+                    // Tidak ada sesi yang sudah dimainkan: hapus total (minggu-minggunya ikut terhapus, booking yang barusan
+                    // dibatalkan tetap ada sebagai CANCELLED tanpa tautan jadwal).
+                    $schedule->delete();
+                    $result['deleted'] = true;
+
+                    return;
+                }
+
+                $schedule->occurrences()
+                    ->where(fn ($q) => $q->whereIn('status', [PadelRecurringOccurrence::STATUS_PENDING, PadelRecurringOccurrence::STATUS_FAILED])
+                        ->orWhere(fn ($q) => $q->where('status', PadelRecurringOccurrence::STATUS_BOOKED)
+                            ->whereIn('booking_id', PadelBooking::where('recurring_schedule_id', $schedule->id)->where('status', 'CANCELLED')->select('id'))))
+                    ->update(['status' => PadelRecurringOccurrence::STATUS_SKIPPED, 'note' => 'Jadwal dihapus']);
+                $schedule->update(['status' => PadelRecurringSchedule::STATUS_STOPPED]);
+            });
+
+            if ($balance && $before !== null) {
+                $result['hours_returned'] = round((float) $balance->fresh()->remaining_quota - $before, 2);
+            }
+        } finally {
+            $lock->release();
+        }
+
+        ActivityLogger::record(
+            module: 'PADEL',
+            event: 'recurring.removed',
+            description: "Jadwal Tetap \"{$schedule->name}\" dihapus: {$result['cancelled']} booking dibatalkan, {$result['hours_returned']} jam kembali ke kuota"
+                .($result['played'] ? ", {$result['played']} sesi sudah lewat (jam terpakai) — jadwal ditandai Dihentikan" : ''),
+            subject: $result['deleted'] ? null : $schedule,
+            meta: [
+                'jadwal' => $schedule->name.' — '.$schedule->scheduleLabel(),
+                'booking_dibatalkan' => $result['cancelled'],
+                'jam_kembali' => $result['hours_returned'],
+                'sesi_sudah_lewat' => $result['played'],
+            ],
+            causer: $actor,
+        );
+
+        return $result;
+    }
+
+    /** Booking jadwal ini yang masih bisa dibatalkan: belum dibatalkan & jam mainnya belum mulai. */
+    private function upcomingBookings(PadelRecurringSchedule $schedule): Collection
+    {
+        return PadelBooking::where('recurring_schedule_id', $schedule->id)
+            ->whereIn('status', ['PAID', 'LOCKED'])
+            ->where('start_time', '>', now())
+            ->get();
+    }
+
+    /** Booking jadwal ini yang jam mainnya sudah mulai / lewat (dianggap sudah dimainkan; tidak datang = EXPIRED, jam tetap terpakai). */
+    private function playedBookings(PadelRecurringSchedule $schedule): Collection
+    {
+        return PadelBooking::where('recurring_schedule_id', $schedule->id)
+            ->whereNotIn('status', ['CANCELLED', 'REFUND_PENDING', 'REFUNDED'])
+            ->where('start_time', '<=', now())
+            ->get(['id']);
+    }
+
     /** Batalkan "lewati": tanggal itu dibuatkan booking lagi di putaran berikutnya (kalau masih dalam jangkauan). */
     public function unskip(PadelRecurringSchedule $schedule, string $date, User $actor): int
     {
+        if ($schedule->isStopped()) {
+            throw new HttpException(422, 'Jadwal ini sudah dihapus.');
+        }
         $count = PadelRecurringOccurrence::where('recurring_schedule_id', $schedule->id)
             ->whereDate('occurrence_date', $date)
             ->where('status', PadelRecurringOccurrence::STATUS_SKIPPED)

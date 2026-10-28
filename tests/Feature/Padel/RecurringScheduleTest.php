@@ -527,6 +527,85 @@ class RecurringScheduleTest extends TestCase
         $this->assertSame(['Sun 2026-11-08 19:00-21:00 Court A'], $this->codes($schedule));
     }
 
+    // ── Hapus jadwal: patokan jam main — belum mulai = batal & jam kembali utuh, sudah mulai / lewat = jam terpakai ──
+
+    public function test_removing_a_schedule_before_anything_is_played_returns_every_hour_and_deletes_it(): void
+    {
+        $schedule = $this->schedule();
+        $this->service()->generate($schedule, $this->admin);
+        $this->assertEquals(82, (float) $this->balance->fresh()->remaining_quota);
+        $this->assertSame(['cancel' => 6, 'hours' => 18.0, 'played' => 0], $this->service()->removalPreview($schedule));
+
+        $result = $this->service()->remove($schedule, $this->admin);
+
+        $this->assertSame([false, 6, 18.0, 0, true], [$result['busy'], $result['cancelled'], $result['hours_returned'], $result['played'], $result['deleted']]);
+        $this->assertEquals(100, (float) $this->balance->fresh()->remaining_quota, 'kuota balik utuh');
+        $this->assertNull(PadelRecurringSchedule::find($schedule->id));
+        $this->assertSame(0, PadelRecurringOccurrence::count());
+        $this->assertSame(6, PadelBooking::where('status', 'CANCELLED')->count(), 'booking tetap ada sebagai CANCELLED');
+        $this->assertSame(0, PadelBooking::whereIn('status', ['PAID', 'LOCKED'])->count(), 'lapangan kosong lagi');
+        $this->assertTrue(\App\Models\Audit\ActivityLog::where('event', 'recurring.removed')->exists());
+
+        // Proses malam tidak membuat apa pun lagi.
+        $this->artisan('padel:generate-recurring')->assertSuccessful();
+        $this->assertSame(0, PadelBooking::whereIn('status', ['PAID', 'LOCKED'])->count());
+    }
+
+    public function test_removing_after_a_session_started_keeps_its_hours_and_stops_the_schedule(): void
+    {
+        $schedule = $this->schedule();
+        $this->service()->generate($schedule, $this->admin);
+
+        // Kamis 5 Nov 19:30 — sesi minggu ini sedang berjalan (dianggap sudah main), minggu 12 Nov belum.
+        Carbon::setTestNow(Carbon::parse('2026-11-05 19:30:00'));
+        $this->assertSame(['cancel' => 3, 'hours' => 9.0, 'played' => 3], $this->service()->removalPreview($schedule));
+
+        $result = $this->service()->remove($schedule, $this->admin);
+
+        $this->assertSame([3, 9.0, 3, false], [$result['cancelled'], $result['hours_returned'], $result['played'], $result['deleted']]);
+        $this->assertEquals(91, (float) $this->balance->fresh()->remaining_quota, 'hanya jam yang belum dimainkan yang kembali');
+        $this->assertSame(3, PadelBooking::whereDate('booking_date', '2026-11-05')->where('status', 'PAID')->count(), 'sesi yang sudah mulai tidak disentuh');
+        $this->assertSame(3, PadelBooking::whereDate('booking_date', '2026-11-12')->where('status', 'CANCELLED')->count());
+
+        $schedule->refresh();
+        $this->assertSame(PadelRecurringSchedule::STATUS_STOPPED, $schedule->status);
+        $this->assertSame(0, PadelRecurringOccurrence::where('recurring_schedule_id', $schedule->id)->whereIn('status', ['PENDING', 'FAILED'])->count());
+        $this->assertSame(3, PadelRecurringOccurrence::where('recurring_schedule_id', $schedule->id)->whereDate('occurrence_date', '2026-11-12')->where('status', 'SKIPPED')->count());
+
+        // Jadwal yang dihentikan tidak membuat booking lagi & tidak bisa diubah.
+        Carbon::setTestNow(Carbon::parse('2026-11-09 01:00:00'));
+        $this->artisan('padel:generate-recurring')->assertSuccessful();
+        $this->assertSame(0, PadelBooking::where('recurring_schedule_id', $schedule->id)->whereIn('status', ['PAID', 'LOCKED'])->where('start_time', '>', now())->count());
+        $this->expectException(HttpException::class);
+        $this->service()->skip($schedule, '2026-11-19', 'Coba', $this->admin);
+    }
+
+    public function test_remove_waits_for_a_running_generation(): void
+    {
+        $schedule = $this->schedule();
+        $lock = Cache::lock('padel-recurring:'.$schedule->id, 300);
+        $lock->get();
+
+        $this->assertTrue($this->service()->remove($schedule, $this->admin)['busy']);
+        $this->assertNotNull(PadelRecurringSchedule::find($schedule->id));
+        $lock->release();
+    }
+
+    public function test_admin_removes_a_schedule_from_the_panel_after_seeing_the_summary(): void
+    {
+        $schedule = $this->schedule(['court_ids' => [$this->courts[0]->id]]);
+        $this->service()->generate($schedule, $this->admin);
+
+        Livewire::actingAs($this->admin)->test(ManagePadelRecurringSchedules::class)
+            ->mountTableAction('remove', $schedule)
+            ->assertMountedActionModalSee('2 booking yang jam mainnya belum mulai dibatalkan, 6 jam kembali utuh ke kuota')
+            ->callMountedTableAction()
+            ->assertNotified('Jadwal dihapus');
+
+        $this->assertNull(PadelRecurringSchedule::find($schedule->id));
+        $this->assertEquals(100, (float) $this->balance->fresh()->remaining_quota);
+    }
+
     public function test_staff_without_permission_cannot_open_the_page(): void
     {
         $receptionist = User::factory()->receptionist()->create();
