@@ -68,7 +68,7 @@
             </div>
         @endfor
     </main>
-    <p class="note">Dokumen internal Club 61 — hanya untuk dibaca, dilarang disalin atau disebarkan.<br>Setiap halaman memuat tanda waktu &amp; alamat IP pembuka, dan setiap pembukaan link dicatat.</p>
+    <p class="note">Dokumen internal Club61.<br>Setiap halaman memuat tanda waktu &amp; alamat IP pembuka, dan setiap pembukaan link dicatat.</p>
 
     <div class="shield-msg">Konten disembunyikan. Klik halaman ini untuk melanjutkan membaca.</div>
 

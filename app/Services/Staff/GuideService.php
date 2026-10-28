@@ -19,7 +19,7 @@ use Symfony\Component\HttpKernel\Exception\HttpException;
  */
 class GuideService
 {
-    private const FONT = 'vendor/dompdf/dompdf/lib/fonts/DejaVuSans-Bold.ttf';
+    private const FONT = 'vendor/dompdf/dompdf/lib/fonts/DejaVuSans.ttf';
 
     public function __construct(private GuidePdfRenderer $renderer) {}
 
@@ -136,21 +136,22 @@ class GuideService
 
         $width = imagesx($image);
         $height = imagesy($image);
-        $color = imagecolorallocatealpha($image, 102, 39, 33, 96); // terakota brand, ±25% terlihat
+        // Tipis & jarang: abu-abu hangat ±10% terlihat, isi halaman tetap nyaman dibaca, tapi tetap ikut di setiap foto layar.
+        $color = imagecolorallocatealpha($image, 110, 96, 90, 114);
         $font = base_path(self::FONT);
 
         if (function_exists('imagettftext') && is_file($font)) {
-            $size = max(12, (int) round($width / 55));
+            $size = max(11, (int) round($width / 80));
             $box = imagettfbbox($size, 0, $font, $mark);
             $textWidth = abs($box[2] - $box[0]);
-            for ($y = 0; $y < $height + $width; $y += $size * 9) {
-                for ($x = -$width; $x < $width; $x += $textWidth + $size * 4) {
+            for ($y = 0; $y < $height + $width; $y += $size * 24) {
+                for ($x = -$width; $x < $width; $x += $textWidth + $size * 14) {
                     imagettftext($image, $size, 30, $x, $y, $color, $font, $mark);
                 }
             }
         } else {
             // Cadangan tanpa FreeType: teks mendatar berulang.
-            for ($y = 10; $y < $height; $y += 60) {
+            for ($y = 40; $y < $height; $y += 220) {
                 for ($x = ($y / 60 % 2) * 120; $x < $width; $x += strlen($mark) * imagefontwidth(5) + 80) {
                     imagestring($image, 5, (int) $x, $y, $mark, $color);
                 }
