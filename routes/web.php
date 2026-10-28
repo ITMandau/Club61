@@ -190,6 +190,17 @@ Route::middleware('auth')->group(function () {
     Route::get('/admin/signature/preview/{key}/live', [\App\Http\Controllers\SignatureController::class, 'previewLive'])->name('signature.preview.live');
 });
 
+// Panduan karyawan — link rahasia tanpa login (seperti Signature), hanya gambar halaman ber-watermark. Gambar dibatasi
+// lebih longgar karena satu panduan bisa puluhan halaman.
+Route::get('/panduan/{token}', [\App\Http\Controllers\GuideController::class, 'show'])->middleware('throttle:30,1')->name('guide.show');
+Route::get('/panduan/{token}/status', [\App\Http\Controllers\GuideController::class, 'status'])->middleware('throttle:30,1')->name('guide.status');
+Route::get('/panduan/{token}/halaman/{page}', [\App\Http\Controllers\GuideController::class, 'page'])->whereNumber('page')->middleware('throttle:300,1')->name('guide.page');
+// Pratinjau admin (panduan nonaktif pun bisa dicek) — izin manage_guides dicek di controller.
+Route::middleware('auth')->group(function () {
+    Route::get('/admin/panduan/{guide}/pratinjau', [\App\Http\Controllers\GuideController::class, 'preview'])->name('guide.preview');
+    Route::get('/admin/panduan/{guide}/pratinjau/{page}', [\App\Http\Controllers\GuideController::class, 'previewPage'])->whereNumber('page')->name('guide.preview.page');
+});
+
 // Export Buku Transaksi (Modul 17) — route GET biasa, izin View:BukuTransaksi + export_ledger dicek di controller.
 Route::get('/admin/buku-transaksi/export', \App\Http\Controllers\Admin\LedgerExportController::class)
     ->middleware('auth')
