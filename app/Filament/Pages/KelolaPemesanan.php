@@ -616,6 +616,7 @@ class KelolaPemesanan extends Page
 
         $counts = Cache::remember('kelola_pemesanan_tab_counts', 60, function () {
             $rawCounts = DB::table('padel_bookings')
+                ->whereNull('deleted_at')
                 ->selectRaw("
                     COUNT(*) as total,
                     SUM(CASE WHEN status = 'PAID' THEN 1 ELSE 0 END) as confirmed,
