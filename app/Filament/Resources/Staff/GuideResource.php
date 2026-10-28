@@ -153,6 +153,8 @@ class GuideResource extends Resource
                         ->modalSubmitAction(false)->modalCancelActionLabel('Tutup')->modalWidth('2xl')
                         ->modalContent(fn (Guide $r) => view('filament.resources.staff.guide-access', [
                             'logs' => $r->accessLogs()->orderByDesc('viewed_at')->limit(100)->get(),
+                            'total' => $r->accessLogs()->count(),
+                            'ips' => $r->accessLogs()->distinct()->count('ip'),
                         ])),
                     EditAction::make()->modalWidth('2xl')
                         ->mutateRecordDataUsing(fn (array $data) => array_intersect_key($data, array_flip(['title', 'description', 'version'])))

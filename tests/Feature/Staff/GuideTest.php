@@ -214,6 +214,20 @@ class GuideTest extends TestCase
         $this->actingAs(User::factory()->receptionist()->create(['is_active' => true]))->get(route('guide.preview', $guide))->assertForbidden();
     }
 
+    public function test_access_log_shows_readable_devices_and_a_summary(): void
+    {
+        $guide = $this->guide();
+        GuideAccessLog::create(['guide_id' => $guide->id, 'ip' => '103.166.105.93', 'viewed_at' => now(),
+            'user_agent' => 'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36']);
+        GuideAccessLog::create(['guide_id' => $guide->id, 'ip' => '103.153.229.136', 'viewed_at' => now()->subMinutes(8),
+            'user_agent' => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36']);
+
+        Livewire::actingAs($this->admin)->test(ManageGuides::class)
+            ->mountTableAction('access', $guide)
+            ->assertMountedActionModalSee('Chrome · Android')->assertMountedActionModalSee('Chrome · Windows')
+            ->assertMountedActionModalSee('IP berbeda')->assertMountedActionModalSee('2×')->assertMountedActionModalSee('103.166.105.93');
+    }
+
     public function test_only_staff_with_manage_guides_open_the_admin_page(): void
     {
         $guide = $this->guide();
