@@ -46,7 +46,7 @@
                         <div class="flex flex-col sm:flex-row sm:items-center gap-4 p-5 rounded-xl border-2 border-dashed border-[#E6DAC0] bg-[#FCF8EE]">
                             <div class="flex-1">
                                 <div class="font-display font-black text-lg">Become a Club 61 member</div>
-                                <p class="text-xs text-[#7A5A52] mt-1">Play hours, member prices, and access to the sauna and gym — in one membership.</p>
+                                <p class="text-xs text-[#7A5A52] mt-1">Play hours, member prices, and access to wellness and gym — in one membership.</p>
                             </div>
                             <a href="{{ route('customer.membership') }}" class="bk-tap inline-flex items-center justify-center h-11 px-5 rounded-lg bg-[#662721] hover:bg-[#511D18] text-[#F7F0DB] text-xs font-black uppercase tracking-wider shadow-md transition-colors">
                                 See membership plans

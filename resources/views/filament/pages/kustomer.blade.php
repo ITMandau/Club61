@@ -107,7 +107,7 @@
             </div>
 
             <div class="c61-kpi">
-                <div class="c61-kpi-label">Finnish Sauna</div>
+                <div class="c61-kpi-label">Wellness</div>
                 <div class="c61-kpi-value">
                     @if($saunaBal && $saunaBal->initial_quota)
                         {{ (float) $saunaBal->remaining_quota }} <small>/ {{ (float) $saunaBal->initial_quota }} Sesi</small>
@@ -162,7 +162,7 @@
                             <div class="v">{{ $habit['total_matches'] }} Sesi</div>
                         </div>
                         <div>
-                            <div class="k">Kunjungan Gym / Sauna</div>
+                            <div class="k">Kunjungan Gym / Wellness</div>
                             <div class="v">{{ $habit['total_checkins'] }} Check-in</div>
                         </div>
                         <div>
@@ -254,7 +254,7 @@
             <!-- Check-in gym & sauna -->
             <div class="c61-card">
                 <div class="c61-card-head">
-                    <div class="c61-card-title">Riwayat Kunjungan Fasilitas Fisik (Gym &amp; Sauna Turnstile)</div>
+                    <div class="c61-card-title">Riwayat Kunjungan Fasilitas Fisik (Gym &amp; Wellness Turnstile)</div>
                 </div>
 
                 <div class="c61-table-wrap">
@@ -280,7 +280,7 @@
                                 </tr>
                             @empty
                                 <tr>
-                                    <td colspan="4" class="c61-empty">Belum ada catatan check-in fasilitas gym atau sauna.</td>
+                                    <td colspan="4" class="c61-empty">Belum ada catatan check-in fasilitas gym atau wellness.</td>
                                 </tr>
                             @endforelse
                         </tbody>
@@ -519,7 +519,7 @@
                     <span class="c61-kpi-icon is-ok"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg></span>
                 </div>
                 <div class="c61-kpi-value is-ok">{{ $this->metrics['today_usage_count'] }} <small>Log</small></div>
-                <div class="c61-kpi-foot"><span>Padel, Gym turnstile &amp; Finnish sauna</span></div>
+                <div class="c61-kpi-foot"><span>Padel, Gym turnstile &amp; wellness</span></div>
             </div>
         </div>
 
@@ -565,7 +565,7 @@
                                 <th>Kartu Member</th>
                                 <th>Paket Terpilih</th>
                                 <th>Saluran Beli</th>
-                                <th>Sisa Saldo Kuota (Padel / Gym / Sauna)</th>
+                                <th>Sisa Saldo Kuota (Padel / Gym / Wellness)</th>
                                 <th>Masa Berlaku</th>
                                 <th>Status</th>
                                 <th style="text-align: right;">Aksi</th>
@@ -632,7 +632,7 @@
                                                     -
                                                 @endif
                                             </span>
-                                            <span>Sauna</span>
+                                            <span>Wellness</span>
                                             <span>
                                                 @if($sBal && $sBal->initial_quota)
                                                     <span class="ok">{{ (float) $sBal->remaining_quota }}</span> / {{ (float) $sBal->initial_quota }} Sesi
@@ -697,7 +697,7 @@
                             <span>Stream Mutasi &amp; Pemakaian Kuota (Live Audit Feed)</span>
                         </div>
                         <div class="c61-card-sub">
-                            Seluruh aktivitas pemotongan jam lapangan, check-in gym turnstile, sauna, top-up kuota, dan reversal pembatalan tercatat secara permanen tanpa dapat diubah.
+                            Seluruh aktivitas pemotongan jam lapangan, check-in gym turnstile, wellness, top-up kuota, dan reversal pembatalan tercatat secara permanen tanpa dapat diubah.
                         </div>
                     </div>
 

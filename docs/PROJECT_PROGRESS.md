@@ -462,6 +462,20 @@ PRD: [`PRD_MODUL_24_COACHING_OPSI_B_SEWA_LAPANGAN_ACADEMY.md`](PRD_MODUL_24_COAC
   - **Analytics**: Rekap Coaching per Academy (sesi, jam, nilai sewa) & per Coach (sesi utama / tambahan, jam).
 
 ---
+## MODUL 28: HASIL MEETING TRAINING (28 OKT 2026)
+
+### Status: Batch 1 dibangun 28 Okt 2026 (belum di-commit); batch 2–5 menunggu keputusan
+
+PRD: [`PRD_MODUL_28_HASIL_MEETING_TRAINING_28_OKT_2026.md`](PRD_MODUL_28_HASIL_MEETING_TRAINING_28_OKT_2026.md) (berisi daftar pertanyaan terbuka).
+
+- [x] **EDC hanya BCA**: pilihan Mesin EDC Mandiri / Lainnya hilang dari semua layar bayar kasir & koreksi metode; server menolak terminal selain BCA (`PosPaymentProof::ACTIVE_EDC_TERMINALS`). Data lama tetap terbaca.
+- [x] **Reschedule maks. 3x per booking** (`PadelBookingService::MAX_RESCHEDULES`), termasuk pindahan Jadwal Tetap; tombol di Kelola Pemesanan nonaktif setelah 3x.
+- [x] **Sauna → Wellness** di teks tampilan (portal customer termasuk My Club, admin, label izin). Kode internal `SAUNA` tetap. Nama fasilitas yang tersimpan di database diganti admin di tiap server.
+- [x] **Revoke dihapus** dari portal corporate (tombol & endpoint API). Anggota lama berstatus REVOKED tetap bisa diaktifkan lagi.
+- [~] ~~Selisih prime → regular jadi voucher~~ — batal (28 Okt 2026); selisih tetap HANGUS.
+- [ ] Batch 2 aturan akses paket (hari + jam / di luar peak), Batch 3 tampilan mingguan & bulanan, Batch 4 coaching kontrak, Batch 5 Indosat dua kantong jam.
+
+---
 ## MODUL 20: HALAMAN ADMIN PENDUKUNG
 
 ### Status: 0% (semua DUMMY)

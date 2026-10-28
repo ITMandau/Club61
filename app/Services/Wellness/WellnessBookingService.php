@@ -62,7 +62,7 @@ class WellnessBookingService
                 }
 
                 if ($balance->facility !== 'SAUNA') {
-                    throw new DomainException("Benefit bukan untuk fasilitas Sauna/Wellness.");
+                    throw new DomainException("Benefit bukan untuk fasilitas Wellness.");
                 }
 
                 // Time window check
@@ -91,7 +91,7 @@ class WellnessBookingService
                         balanceId: $balance->id,
                         changeType: 'DECREMENT',
                         quantity: 1.0,
-                        notes: 'Pemakaian sesi Sauna slot ' . $slot->id,
+                        notes: 'Pemakaian sesi Wellness slot ' . $slot->id,
                         relatedType: WellnessBooking::class
                     );
                 } elseif ((float) $balance->discount_percent > 0) {
@@ -172,7 +172,7 @@ class WellnessBookingService
                     balanceId: $locked->membership_balance_id,
                     changeType: 'REVERSAL',
                     quantity: (float) $locked->member_sessions_consumed,
-                    notes: 'Reversal pembatalan sesi Sauna: ' . ($reason ?? 'User cancel'),
+                    notes: 'Reversal pembatalan sesi Wellness: ' . ($reason ?? 'User cancel'),
                     relatedType: WellnessBooking::class,
                     relatedId: $locked->id
                 );

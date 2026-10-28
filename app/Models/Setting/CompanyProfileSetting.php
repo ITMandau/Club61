@@ -138,7 +138,7 @@ class CompanyProfileSetting extends Model
                     'court_count' => 3,
                     'facility_cards' => [
                         ['icon_key' => 'arena', 'title' => 'Padel Arena', 'subtitle' => ''],
-                        ['icon_key' => 'wellness', 'title' => 'Wellness Suite', 'subtitle' => 'Sauna'],
+                        ['icon_key' => 'wellness', 'title' => 'Wellness Suite', 'subtitle' => ''],
                         ['icon_key' => 'lounge', 'title' => 'Social Lounge', 'subtitle' => 'Artisan Cafe & Bar'],
                     ],
                     'address_line' => self::DEFAULT_ADDRESS,

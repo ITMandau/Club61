@@ -536,6 +536,33 @@ class WalkInBookingTest extends TestCase
         );
     }
 
+    /** Meeting 28 Okt 2026: mesin EDC fisik hanya BCA — walk-in dengan terminal lain ditolak, slot tidak terjual. */
+    public function test_walk_in_rejects_edc_terminals_other_than_bca(): void
+    {
+        $customer = $this->service->findOrCreateWalkInCustomer(name: 'Kartu Mandiri', phone: '081600000077');
+
+        foreach ([['EDC_MANDIRI', []], ['DEBIT_CARD', ['terminal' => 'EDC_LAINNYA', 'card_last_4' => '1234', 'approval_code' => 'APR55', 'trace_number' => 'TRC55']]] as [$method, $meta]) {
+            try {
+                $this->service->processWalkInCheckout(
+                    customer: $customer,
+                    slots: [['court_id' => $this->court1->id, 'start_time' => '15:00:00', 'end_time' => '16:00:00']],
+                    bookingDate: $this->bookingDate,
+                    equipments: [],
+                    paymentMethod: $method,
+                    cashier: $this->cashier,
+                    paymentMeta: $meta,
+                );
+                $this->fail("Terminal {$method} harus ditolak.");
+            } catch (\Symfony\Component\HttpKernel\Exception\HttpException $e) {
+                $this->assertSame(422, $e->getStatusCode());
+                $this->assertStringContainsString('hanya BCA', $e->getMessage());
+            }
+        }
+
+        $this->assertSame(0, Payment::where('status', 'SUCCESS')->count());
+        $this->assertSame(0, PadelBooking::where('status', 'PAID')->count());
+    }
+
     /**
      * Test 11: EDC_BCA dan QRIS_STATIS tidak dikenakan biaya gateway (0 service_charge).
      */
@@ -557,7 +584,7 @@ class WalkInBookingTest extends TestCase
             ],
             bookingDate: $this->bookingDate,
             equipments: [],
-            paymentMethod: 'EDC_MANDIRI',
+            paymentMethod: 'EDC_BCA',
             cashier: $this->cashier,
             autoCheckIn: false
         );

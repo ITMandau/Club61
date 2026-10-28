@@ -1329,6 +1329,7 @@ trait ManagesCheckoutAndPayments
 
                 // Satu RRN / approval code hanya boleh melunasi satu transaksi (dulu walk-in tidak pernah dicek).
                 if (! $coveredByVoucher) {
+                    \App\Services\Pos\PosPaymentProof::assertPayloadEdcTerminalActive($payloadLog);
                     \App\Services\Pos\PosPaymentProof::assertProofNotReused($payloadLog);
                 } else {
                     $payloadLog['covered_by'] = $paymentMethod;

@@ -44,7 +44,7 @@
                         Club 61 Padel Court Medan
                     </h2>
                     <p class="text-xs sm:text-sm text-emerald-100/80 mt-3 font-medium leading-relaxed">
-                        Medan's padel venue at Gedung Indosat: 3 international-standard padel courts, a sauna, and a specialty cafe lounge.
+                        Medan's padel venue at Gedung Indosat: 3 international-standard padel courts, a wellness room, and a specialty cafe lounge.
                     </p>
 
                     {{-- Alamat & jam dari Konten Website → Fakta Venue (sama dengan halaman depan). --}}
@@ -87,7 +87,7 @@
                 <div class="flex items-center justify-between px-1">
                     <div>
                         <h3 class="font-display font-extrabold text-lg text-[#4F2F2A]">Paket Keanggotaan Club 61</h3>
-                        <p class="text-xs text-[#7A5A52]">Satu keanggotaan terintegrasi untuk seluruh fasilitas: Padel Court, Gym Fitness, dan Finnish Sauna</p>
+                        <p class="text-xs text-[#7A5A52]">Satu keanggotaan terintegrasi untuk seluruh fasilitas: Padel Court, Gym Fitness, dan Wellness</p>
                     </div>
                     <span class="text-xs font-bold text-[#662721]">{{ $allPlans->count() }} Pilihan Paket</span>
                 </div>
@@ -209,16 +209,16 @@
                         </div>
                     </div>
 
-                    <!-- Facility 2: Sauna -->
+                    <!-- Facility 2: Wellness -->
                     <div class="p-6 rounded-xl bg-white/95 border border-[#E6DAC0] shadow-sm flex flex-col justify-between hover:border-[#662721] hover:shadow-[0_10px_25px_rgba(102,39,33,0.2)] transition-all group">
                         <div class="flex items-start gap-4">
                             <div class="w-12 h-12 rounded-lg bg-[#F7F0DB] border border-[#E6DAC0] flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform">
-                                <span class="text-[10px] font-black tracking-widest text-[#662721] uppercase">SAUNA</span>
+                                <span class="text-[10px] font-black tracking-widest text-[#662721] uppercase">WELLNESS</span>
                             </div>
                             <div>
-                                <h4 class="font-display font-black text-sm text-[#4F2F2A]">Finnish Cedarwood Sauna</h4>
+                                <h4 class="font-display font-black text-sm text-[#4F2F2A]">Wellness Room</h4>
                                 <p class="text-xs text-[#7A5A52] mt-1.5 leading-relaxed">
-                                    Finnish red cedarwood sauna for optimal post-match muscle recovery.
+                                    Wellness room for optimal post-match muscle recovery.
                                 </p>
                             </div>
                         </div>
@@ -344,8 +344,8 @@
                         <div class="flex items-start gap-3 p-3 rounded-lg bg-[#FCF8EE] border border-[#E6DAC0]/60">
                             <span class="font-black text-[#662721] shrink-0">03.</span>
                             <div>
-                                <strong class="text-[#4F2F2A]">Sauna Protocol:</strong>
-                                <span class="text-[#7A5A52] block mt-0.5">Showering is mandatory prior to entering the sauna to preserve hygiene and community wellness.</span>
+                                <strong class="text-[#4F2F2A]">Wellness Protocol:</strong>
+                                <span class="text-[#7A5A52] block mt-0.5">Showering is mandatory prior to entering the wellness room to preserve hygiene and community wellness.</span>
                             </div>
                         </div>
                     </div>
@@ -385,7 +385,7 @@
                                 <span class="text-[#E6DAC0] font-bold mt-0.5">&bull;</span>
                                 <div>
                                     <strong class="text-white block font-bold">Integrated Multi-Facility Access</strong>
-                                    <span class="text-[11px] text-emerald-100/70">Akses terpadu fasilitas Technogym Fitness Center &amp; Finnish Sauna.</span>
+                                    <span class="text-[11px] text-emerald-100/70">Akses terpadu fasilitas Technogym Fitness Center &amp; Wellness.</span>
                                 </div>
                             </li>
                             <li class="flex items-start gap-2.5">

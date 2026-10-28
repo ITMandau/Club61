@@ -614,7 +614,7 @@
                 if (payment && payment.is_mock) {
                     showLuxuryNotice({
                         title: 'Pembayaran Berhasil!',
-                        message: 'Pembayaran berhasil dikonfirmasi. Paket keanggotaan Anda telah aktif dan seluruh kuota fasilitas (Padel, Gym, Sauna) siap digunakan.',
+                        message: 'Pembayaran berhasil dikonfirmasi. Paket keanggotaan Anda telah aktif dan seluruh kuota fasilitas (Padel, Gym, Wellness) siap digunakan.',
                         type: 'success',
                         btnText: 'Buka Member Pass &rarr;',
                         onConfirm: function() {

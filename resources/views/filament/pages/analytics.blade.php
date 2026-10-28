@@ -244,7 +244,7 @@
             <div class="c61-card-head">
                 <div>
                     <div class="c61-card-title">Pemasukan Penjualan Paket Membership</div>
-                    <div class="c61-card-sub">Uang riil diterima saat paket dibeli (Padel/Gym/Sauna) &mdash; kanal terpisah dari sewa lapangan</div>
+                    <div class="c61-card-sub">Uang riil diterima saat paket dibeli (Padel/Gym/Wellness) &mdash; kanal terpisah dari sewa lapangan</div>
                 </div>
                 <span class="c61-pill c61-pill-ok">Cash In</span>
             </div>

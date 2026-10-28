@@ -34,7 +34,7 @@
     <div class="pos-toolbar">
         <div style="min-width:0;">
             <div style="font-size:0.9375rem; font-weight:900; color:#4F2F2A;">Kasir Penjualan Membership</div>
-            <div style="font-size:0.75rem; color:#7A5A52; margin-top:0.1rem;">Terbitkan keanggotaan multi-fasilitas (Padel, Gym, Sauna) untuk pelanggan secara instan.</div>
+            <div style="font-size:0.75rem; color:#7A5A52; margin-top:0.1rem;">Terbitkan keanggotaan multi-fasilitas (Padel, Gym, Wellness) untuk pelanggan secara instan.</div>
         </div>
         <div class="pos-kpis">
             <div class="pos-kpi"><span class="pos-kpi-value">{{ $this->plans->count() }}</span><span class="pos-kpi-label">Paket Aktif Tersedia</span></div>
@@ -214,8 +214,6 @@
                                 <label style="display:block; font-size:0.75rem; font-weight:800; color:#4F2F2A; margin-bottom:0.3rem;">Mesin EDC Fisik *</label>
                                 <select wire:model="edcTerminal" class="pos-input" style="background:#FFFFFF; font-weight:700;">
                                     <option value="EDC_BCA">Mesin EDC BCA</option>
-                                    <option value="EDC_MANDIRI">Mesin EDC Mandiri</option>
-                                    <option value="EDC_LAINNYA">Mesin EDC Lainnya</option>
                                 </select>
                             </div>
                             <div>
@@ -286,8 +284,6 @@
                                 <label style="display:block; font-size:0.75rem; font-weight:800; color:#4F2F2A; margin-bottom:0.3rem;">Mesin EDC Fisik *</label>
                                 <select wire:model="edcTerminal" class="pos-input" style="background:#FFFFFF; font-weight:700;">
                                     <option value="EDC_BCA">Mesin EDC BCA</option>
-                                    <option value="EDC_MANDIRI">Mesin EDC Mandiri</option>
-                                    <option value="EDC_LAINNYA">Mesin EDC Lainnya</option>
                                 </select>
                             </div>
                             <div>

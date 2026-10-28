@@ -154,6 +154,7 @@ class FnbPosService
             // Satu RRN QRIS / approval code EDC hanya boleh melunasi satu transaksi — sama dengan kasir padel, reschedule,
             // dan jual membership. Dulu F&B tidak dicek: satu struk asli bisa diketik ulang di banyak order (semua LUNAS,
             // dapur mencetak, rekap shift menghitung, uangnya tidak ada). Repeat order aman: tiap transaksi dapat kode baru.
+            \App\Services\Pos\PosPaymentProof::assertPayloadEdcTerminalActive($payloadLog);
             \App\Services\Pos\PosPaymentProof::assertProofNotReused($payloadLog);
 
             $this->orchestrator->markOrderAsPaid($order, [

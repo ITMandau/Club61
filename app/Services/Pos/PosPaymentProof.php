@@ -24,6 +24,34 @@ class PosPaymentProof
     ];
 
     /**
+     * Mesin EDC fisik yang ada di venue — hanya BCA (meeting 28 Okt 2026). EDC Mandiri / Lainnya tetap ada di METHODS
+     * supaya pembayaran lama tetap terbaca di struk, rekap & tutup shift, tapi tidak bisa dipakai untuk pembayaran baru.
+     */
+    public const ACTIVE_EDC_TERMINALS = ['EDC_BCA'];
+
+    /** Pilihan metode untuk pembayaran / koreksi baru (tanpa mesin EDC yang sudah tidak dipakai). */
+    public static function activeMethods(): array
+    {
+        return array_filter(self::METHODS, fn (string $code) => ! str_starts_with($code, 'EDC_') || in_array($code, self::ACTIVE_EDC_TERMINALS, true), ARRAY_FILTER_USE_KEY);
+    }
+
+    /** Tolak terminal EDC yang tidak ada di venue. Dicek di server karena pilihan terminal datang dari form kasir. */
+    public static function assertActiveEdcTerminal(string $terminal): void
+    {
+        if (! in_array(strtoupper(trim($terminal)), self::ACTIVE_EDC_TERMINALS, true)) {
+            throw new HttpException(422, 'Mesin EDC di venue hanya BCA. Gesek kartu di Mesin EDC BCA lalu pilih "Mesin EDC BCA".');
+        }
+    }
+
+    /** Sama dengan assertActiveEdcTerminal untuk payload yang sudah tersusun (checkout walk-in / F&B). */
+    public static function assertPayloadEdcTerminalActive(array $payloadLog): void
+    {
+        if (isset($payloadLog['edc_details']['terminal'])) {
+            self::assertActiveEdcTerminal((string) $payloadLog['edc_details']['terminal']);
+        }
+    }
+
+    /**
      * Terjemahkan isian form pembayaran POS Walk-In (pos.partials.payment-method-form) ke format
      * validate(). Dipakai untuk pelunasan tagihan di kasir supaya kasir memakai layar bayar yang sama.
      *
@@ -122,7 +150,7 @@ class PosPaymentProof
         $text = fn (string $key) => trim((string) ($input[$key] ?? ''));
 
         if (! array_key_exists($method, self::METHODS)) {
-            throw new HttpException(422, 'Metode pembayaran tidak dikenali. Pilih QRIS, EDC BCA, EDC Mandiri, atau Transfer Bank (venue 100% cashless).');
+            throw new HttpException(422, 'Metode pembayaran tidak dikenali. Pilih QRIS, EDC BCA, atau Transfer Bank (venue 100% cashless).');
         }
 
         if ($method === 'QRIS') {
@@ -146,6 +174,7 @@ class PosPaymentProof
         }
 
         if (in_array($method, ['EDC_BCA', 'EDC_MANDIRI', 'EDC_LAINNYA'], true)) {
+            self::assertActiveEdcTerminal($method);
             $last4 = $text('card_last_4');
             $approval = strtoupper($text('approval_code'));
             $trace = strtoupper($text('trace_number'));

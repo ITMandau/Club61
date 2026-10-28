@@ -446,7 +446,7 @@ class SponsorOrganizationApiTest extends TestCase
         $this->assertEquals(5.0, (float) $voucherOfB->fresh()->hours_granted);
     }
 
-    public function test_pic_can_revoke_and_reactivate_member(): void
+    public function test_revoke_is_gone_but_a_previously_revoked_member_can_be_reactivated(): void
     {
         $pic = User::factory()->create();
         $org = $this->makeOrganization($pic);
@@ -457,9 +457,11 @@ class SponsorOrganizationApiTest extends TestCase
             'status' => 'ACTIVE',
         ]);
 
-        $this->actingAs($pic)->postJson("/api/v1/sponsor/organization/members/{$member->id}/revoke")
-            ->assertStatus(200)->assertJsonPath('data.status', 'REVOKED');
+        // Meeting 28 Okt 2026: tidak ada revoke — jam karyawan tidak boleh tersangkut.
+        $this->actingAs($pic)->postJson("/api/v1/sponsor/organization/members/{$member->id}/revoke")->assertNotFound();
+        $this->assertEquals('ACTIVE', $member->fresh()->status);
 
+        $member->update(['status' => 'REVOKED']); // data lama
         $this->actingAs($pic)->postJson("/api/v1/sponsor/organization/members/{$member->id}/reactivate")
             ->assertStatus(200)->assertJsonPath('data.status', 'ACTIVE');
     }
@@ -475,15 +477,15 @@ class SponsorOrganizationApiTest extends TestCase
         $memberOfB = SponsorOrganizationMember::create([
             'sponsor_organization_id' => $orgB->id,
             'user_id' => $employeeOfB->id,
-            'status' => 'ACTIVE',
+            'status' => 'REVOKED',
         ]);
 
-        // PIC A mencoba mencabut akses anggota milik organisasi B lewat ID yang ditebak/diketahui.
+        // PIC A mencoba mengubah status anggota milik organisasi B lewat ID yang ditebak/diketahui.
         $this->actingAs($picA)
-            ->postJson("/api/v1/sponsor/organization/members/{$memberOfB->id}/revoke")
+            ->postJson("/api/v1/sponsor/organization/members/{$memberOfB->id}/reactivate")
             ->assertStatus(404);
 
-        $this->assertEquals('ACTIVE', $memberOfB->fresh()->status);
+        $this->assertEquals('REVOKED', $memberOfB->fresh()->status);
     }
 
     public function test_csv_import_creates_reactivates_skips_duplicates_issues_vouchers_and_reports_invalid_rows(): void

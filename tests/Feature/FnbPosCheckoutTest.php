@@ -598,7 +598,7 @@ class FnbPosCheckoutTest extends TestCase
             ->assertSee('Retrieval Reference Number')
             ->call('setPaymentMethod', 'DEBIT_CARD')
             ->assertSee('Pembayaran Kartu Debit (Debit Card)')
-            ->assertSee('Mesin EDC Mandiri')
+            ->assertSee('Mesin EDC BCA')->assertDontSee('Mesin EDC Mandiri')->assertDontSee('Mesin EDC Lainnya')
             ->assertSee('Keamanan PCI-DSS');
     }
 
@@ -645,6 +645,33 @@ class FnbPosCheckoutTest extends TestCase
             ->assertSee('QRIS Kasir Frontdesk');
     }
 
+    /** Meeting 28 Okt 2026: mesin EDC fisik hanya BCA — terminal lain ditolak di server, data lama tetap terbaca. */
+    public function test_only_the_bca_edc_machine_is_accepted_for_new_payments(): void
+    {
+        $this->openFnbShift();
+        $this->actingAs($this->cashier);
+
+        Livewire::test(FnbCashierTerminal::class)
+            ->call('addToCart', $this->latte->id)
+            ->call('proceedToPayment')
+            ->call('setPaymentMethod', 'DEBIT_CARD')
+            ->set('edcTerminal', 'EDC_MANDIRI') // request hasil rekayasa: pilihannya sudah tidak ada di layar
+            ->set('edcLast4', '1234')->set('edcApprovalCode', 'APR777')->set('edcTraceNumber', 'TRC777')
+            ->call('submitFnbCheckout')
+            ->assertSet('showReceiptModal', false)
+            ->assertSet('errorMessage', fn ($m) => str_contains((string) $m, 'hanya BCA'));
+        $this->assertSame(0, Payment::where('status', 'SUCCESS')->count());
+
+        $this->assertSame(['QRIS', 'EDC_BCA', 'TRANSFER_BANK'], array_keys(\App\Services\Pos\PosPaymentProof::activeMethods()));
+        $this->assertSame('Mesin EDC Mandiri', \App\Services\Pos\PosPaymentProof::METHODS['EDC_MANDIRI'], 'label data lama tetap ada');
+        try {
+            \App\Services\Pos\PosPaymentProof::validate('EDC_LAINNYA', ['card_last_4' => '1234', 'approval_code' => 'APR888', 'trace_number' => 'TRC888'], 25000);
+            $this->fail('EDC Lainnya harus ditolak.');
+        } catch (\Symfony\Component\HttpKernel\Exception\HttpException $e) {
+            $this->assertSame(422, $e->getStatusCode());
+        }
+    }
+
     /** Checkout 1 latte lewat metode tertentu (helper untuk skenario closing). */
     protected function checkoutLatte(string $method, array $fields): void
     {
@@ -674,24 +701,21 @@ class FnbPosCheckoutTest extends TestCase
 
         $this->checkoutLatte('QRIS', ['qrisProvider' => 'BCA_QRIS', 'qrisRrn' => '123456789012']);
         $this->checkoutLatte('DEBIT_CARD', ['edcTerminal' => 'EDC_BCA', 'edcLast4' => '1234', 'edcApprovalCode' => 'APR001', 'edcTraceNumber' => 'TRC001']);
-        $this->checkoutLatte('CREDIT_CARD', ['edcTerminal' => 'EDC_MANDIRI', 'edcLast4' => '5678', 'edcApprovalCode' => 'APR002', 'edcTraceNumber' => 'TRC002']);
+        $this->checkoutLatte('CREDIT_CARD', ['edcTerminal' => 'EDC_BCA', 'edcLast4' => '5678', 'edcApprovalCode' => 'APR002', 'edcTraceNumber' => 'TRC002']);
 
         $component = Livewire::test(FnbCashierTerminal::class)->call('prepareCloseShift');
         $rows = collect($component->get('closingRows'))->keyBy('key');
 
         // Tiap mesin EDC: baris debit & kredit; tidak ada jumlah transaksi / nominal sistem di browser.
-        $this->assertEqualsCanonicalizing(['QRIS_BCA_QRIS', 'EDC_BCA_DEBIT', 'EDC_BCA_CREDIT', 'EDC_MANDIRI_DEBIT', 'EDC_MANDIRI_CREDIT'], $rows->keys()->all());
+        $this->assertEqualsCanonicalizing(['QRIS_BCA_QRIS', 'EDC_BCA_DEBIT', 'EDC_BCA_CREDIT'], $rows->keys()->all());
         $rows->each(fn (array $row) => $this->assertArrayNotHasKey('system_amount', $row));
         $rows->each(fn (array $row) => $this->assertArrayNotHasKey('count', $row));
-        $this->assertSame(['EDC_BCA' => '', 'EDC_MANDIRI' => ''], $component->get('edcModes'));
+        $this->assertSame(['EDC_BCA' => ''], $component->get('edcModes'));
 
         $component->set('settlementInputs.QRIS_BCA_QRIS', number_format($this->paidAmount($shift, 'QRIS'), 0, ',', '.'))
             ->set('settlementInputs.EDC_BCA_DEBIT', (string) $this->paidAmount($shift, 'DEBIT_CARD'))
-            ->set('settlementInputs.EDC_BCA_CREDIT', '0')
-            ->set('settlementInputs.EDC_MANDIRI_DEBIT', '0')
-            ->set('settlementInputs.EDC_MANDIRI_CREDIT', (string) $this->paidAmount($shift, 'CREDIT_CARD'))
+            ->set('settlementInputs.EDC_BCA_CREDIT', (string) $this->paidAmount($shift, 'CREDIT_CARD'))
             ->set('edcModes.EDC_BCA', 'SETTLE')
-            ->set('edcModes.EDC_MANDIRI', 'SETTLE')
             ->call('executeCloseShift')
             ->assertSet('showShiftReportModal', true)
             ->assertSee("club61PrintReceipt('#printable-z-report')", false);
@@ -700,8 +724,8 @@ class FnbPosCheckoutTest extends TestCase
         $this->assertSame('CLOSED', $shift->status);
         $this->assertSame(PosCashierShift::REVIEW_MATCHED, $shift->review_status);
         $this->assertEquals(0, (float) $shift->settlement_difference);
-        $this->assertCount(5, $shift->settlement_reconciliation);
-        $this->assertSame(2, \App\Models\Pos\PosEdcSettlement::where('pos_shift_id', $shift->id)->where('source', 'CLOSING')->count());
+        $this->assertCount(3, $shift->settlement_reconciliation);
+        $this->assertSame(1, \App\Models\Pos\PosEdcSettlement::where('pos_shift_id', $shift->id)->where('source', 'CLOSING')->count());
     }
 
     public function test_a_difference_freezes_the_typed_numbers_requires_notes_and_needs_review(): void

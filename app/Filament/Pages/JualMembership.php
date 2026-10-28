@@ -78,7 +78,7 @@ class JualMembership extends Page
     // Booking (BookOfflineCourt.php / book-offline-court.blade.php) supaya kedua loket konsisten.
     public string $paymentMethod = 'QRIS'; // DEBIT_CARD | CREDIT_CARD | QRIS
 
-    public string $edcTerminal = 'EDC_BCA'; // EDC_BCA, EDC_MANDIRI, EDC_LAINNYA
+    public string $edcTerminal = 'EDC_BCA'; // hanya EDC_BCA (PosPaymentProof::ACTIVE_EDC_TERMINALS)
     public string $edcCardType = 'DEBIT'; // DEBIT, CREDIT
     public string $edcCardNetwork = 'GPN'; // GPN, VISA, MASTERCARD, JCB, AMEX, LAINNYA
     public string $edcBank = 'BCA'; // BCA, MANDIRI, BNI, BRI, CIMB, PERMATA, DANAMON, OVERSEAS, LAINNYA

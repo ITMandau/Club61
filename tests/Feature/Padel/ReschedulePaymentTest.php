@@ -567,7 +567,7 @@ class ReschedulePaymentTest extends TestCase
             ->call('proceedToPayment')
             ->assertSet('posStep', 'payment')
             ->call('setPaymentMethod', 'DEBIT_CARD')
-            ->set('edcTerminal', 'EDC_MANDIRI')
+            ->set('edcTerminal', 'EDC_BCA')
             ->set('edcLast4', '9876')
             ->set('edcApprovalCode', 'AP9988')
             ->set('edcTraceNumber', 'TR7766')
@@ -580,10 +580,34 @@ class ReschedulePaymentTest extends TestCase
         $this->assertNotNull($booking->fresh()->qr_code_hash);
         $paid = Payment::where('order_id', $booking->order_id)->where('transaction_id', 'like', 'SUPP-%')->sole();
         $this->assertSame('SUCCESS', $paid->status);
-        $this->assertSame('EDC_MANDIRI', $paid->payment_method);
+        $this->assertSame('EDC_BCA', $paid->payment_method);
         $this->assertSame($shift->id, $paid->pos_shift_id);
         $this->assertSame('9876', $paid->payload_log['edc_details']['card_last_4']);
         $pos->assertDontSeeHtml("startSettlement('{$booking->id}')"); // slot sekarang tampil terisi biasa
+    }
+
+    /** Meeting 28 Okt 2026: satu booking paling banyak dipindah 3x. */
+    public function test_a_booking_can_be_rescheduled_at_most_three_times(): void
+    {
+        $booking = $this->paidBooking('09:00', 1, 200000, 0, 'BK-RS-MAX3');
+        foreach (['10:00', '11:00', '12:00'] as $start) {
+            $this->reschedule($booking, $start);
+        }
+        $this->assertSame(3, (int) $booking->fresh()->reschedule_count);
+
+        try {
+            $this->reschedule($booking, '13:00');
+            $this->fail('Reschedule ke-4 harus ditolak.');
+        } catch (HttpException $e) {
+            $this->assertSame(422, $e->getStatusCode());
+            $this->assertStringContainsString('batas maksimal reschedule', $e->getMessage());
+        }
+        $this->assertSame('12:00', $booking->fresh()->start_time->format('H:i'));
+
+        Livewire::actingAs($this->admin)->test(KelolaPemesanan::class)
+            ->call('openRescheduleModal', $booking->id)
+            ->assertSet('showRescheduleModal', false)
+            ->assertNotified('Tidak Bisa Dipindah');
     }
 
     public function test_pos_settlement_rejects_missing_proof_and_requires_shift(): void

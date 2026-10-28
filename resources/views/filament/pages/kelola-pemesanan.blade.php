@@ -308,10 +308,12 @@
                                         </button>
                                     @endif
 
-                                    @if ($this->canReschedule && in_array($b->status, ['PAID', 'LOCKED']) && now()->gte(\App\Services\Padel\PadelBookingService::rescheduleDeadline($b)))
-                                        {{-- Lewat batas reschedule (diatur admin lewat tombol Batas Reschedule di Jadwal Tetap Mingguan) → tombol nonaktif. --}}
+                                    @if ($this->canReschedule && in_array($b->status, ['PAID', 'LOCKED']) && (now()->gte(\App\Services\Padel\PadelBookingService::rescheduleDeadline($b)) || \App\Services\Padel\PadelBookingService::rescheduleLimitReached($b)))
+                                        {{-- Lewat batas reschedule (diatur admin lewat tombol Batas Reschedule di Jadwal Tetap Mingguan) atau sudah dipindah 3x → tombol nonaktif. --}}
                                         <button type="button" disabled
-                                            title="Lewat batas reschedule ({{ \App\Services\Padel\PadelBookingService::rescheduleCutoffLabel($b) }} sebelum main)"
+                                            title="{{ \App\Services\Padel\PadelBookingService::rescheduleLimitReached($b)
+                                                ? 'Sudah dipindah '.\App\Services\Padel\PadelBookingService::MAX_RESCHEDULES.'x (batas maksimal reschedule)'
+                                                : 'Lewat batas reschedule ('.\App\Services\Padel\PadelBookingService::rescheduleCutoffLabel($b).' sebelum main)' }}"
                                             class="c61-icon-btn" style="opacity: 0.35; cursor: not-allowed;">
                                             <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
@@ -321,7 +323,7 @@
                                     @elseif ($this->canReschedule && in_array($b->status, ['PAID', 'LOCKED']))
                                         <button type="button"
                                             wire:click="openRescheduleModal('{{ $b->id }}')"
-                                            wire:loading.attr="disabled" title="Pindah Jadwal (Reschedule)"
+                                            wire:loading.attr="disabled" title="Pindah Jadwal (Reschedule) — sudah {{ (int) $b->reschedule_count }}/{{ \App\Services\Padel\PadelBookingService::MAX_RESCHEDULES }}x"
                                             class="c61-icon-btn">
                                             <span wire:loading.remove
                                                 wire:target="openRescheduleModal('{{ $b->id }}')">
@@ -461,6 +463,9 @@
                             </span>
                             <span class="c61-pill c61-pill-gray">
                                 Sewa Raket: Terikut Otomatis (Order ID)
+                            </span>
+                            <span class="c61-pill c61-pill-gray">
+                                Reschedule ke-{{ ($selectedBookingData['reschedule_count'] ?? 0) + 1 }} dari maks. {{ \App\Services\Padel\PadelBookingService::MAX_RESCHEDULES }}
                             </span>
                         </div>
                     </div>

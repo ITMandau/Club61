@@ -121,4 +121,14 @@ class CustomerPortalTest extends TestCase
             ->assertDontSee('KR-NOTHERE1')
             ->assertDontSee('My Credit Vouchers');
     }
+
+    /** Meeting 28 Okt 2026: nama fasilitas di portal customer "Wellness", bukan "Sauna". */
+    public function test_customer_pages_say_wellness_instead_of_sauna(): void
+    {
+        foreach (['/my-club', '/dashboard'] as $url) {
+            $page = $this->actingAs($this->customer)->get($url)->assertOk();
+            $this->assertStringNotContainsStringIgnoringCase('sauna', $page->getContent(), $url);
+        }
+        $this->actingAs($this->customer)->get('/my-club')->assertSee('Wellness Protocol');
+    }
 }

@@ -195,7 +195,7 @@ class AnalyticsLedgerTest extends TestCase
             ->assertViewHas('membership', fn ($m) => $m['sales'] === 1500000.0 && $m['others'] === 405000.0)
             ->assertSee('Distribusi Kanal Pembayaran')
             ->assertSee('Food &amp; Beverage (F&amp;B)', false)
-            ->assertSee('Wellness &amp; Sauna', false)
+            ->assertSee('Akses wellness di luar paket membership')
             ->assertSee('Pelatih &amp; Coaching Session', false)
             ->assertSee('Menyusul')
             ->assertSee('Lainnya (Merchandise)')
