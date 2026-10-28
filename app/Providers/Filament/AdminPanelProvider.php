@@ -82,6 +82,7 @@ class AdminPanelProvider extends PanelProvider
                 \App\Filament\Resources\Coaching\CoachingRateResource::class,
                 \App\Filament\Resources\Marketing\LinkBioLinkResource::class,
                 \App\Filament\Resources\Padel\PadelRecurringScheduleResource::class,
+                \App\Filament\Resources\Staff\GuideResource::class,
             ])
             ->plugins([
                 \BezhanSalleh\FilamentShield\FilamentShieldPlugin::make(),

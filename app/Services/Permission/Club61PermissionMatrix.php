@@ -312,6 +312,12 @@ class Club61PermissionMatrix
                             'delete_staff' => 'Hapus / Nonaktifkan Data Karyawan',
                         ],
                     ],
+                    'guides' => [
+                        'label' => 'Panduan Karyawan',
+                        'actions' => [
+                            'manage_guides' => 'Kelola Panduan (unggah PDF, aktif / nonaktif & buat ulang link baca, lihat log akses)',
+                        ],
+                    ],
                 ],
             ],
 
