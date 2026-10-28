@@ -160,7 +160,7 @@ class MembershipFacilityResource extends Resource
     {
         return match ($mode) {
             MembershipFacility::MODE_PADEL_BOOKING => $short ? 'Booking Padel' : 'Booking lapangan padel (kuota jam dipotong saat booking)',
-            MembershipFacility::MODE_WELLNESS_BOOKING => $short ? 'Booking Wellness' : 'Booking sesi wellness / sauna (kuota sesi dipotong saat booking)',
+            MembershipFacility::MODE_WELLNESS_BOOKING => $short ? 'Booking Wellness' : 'Booking sesi wellness (kuota sesi dipotong saat booking)',
             MembershipFacility::MODE_CHECK_IN => $short ? 'Check-in' : MembershipFacility::CUSTOM_MODES[MembershipFacility::MODE_CHECK_IN],
             MembershipFacility::MODE_INFO => $short ? 'Info saja' : MembershipFacility::CUSTOM_MODES[MembershipFacility::MODE_INFO],
             default => (string) $mode,

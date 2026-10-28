@@ -251,13 +251,9 @@ Siti Rahma,081399887766,5</pre>
                                                     class="px-2.5 py-1 rounded-lg bg-[#F7F0DB] hover:bg-[#F7F0DB] border border-[#E6DAC0] text-[#662721] text-[10px] font-bold">
                                                 🎟️ Give Hours
                                             </button>
-                                            @if($m->status === 'ACTIVE')
-                                                <button type="button" onclick="setMemberStatus('{{ $m->id }}', 'revoke')"
-                                                        class="px-2.5 py-1 rounded-lg bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-600 text-[10px] font-bold">
-                                                    Revoke
-                                                </button>
-                                            @else
-                                                <button type="button" onclick="setMemberStatus('{{ $m->id }}', 'reactivate')"
+                                            {{-- Tidak ada Revoke (meeting 28 Okt 2026): jam karyawan tidak boleh tersangkut. Anggota lama yang terlanjur dicabut tetap bisa diaktifkan lagi. --}}
+                                            @if($m->status !== 'ACTIVE')
+                                                <button type="button" onclick="reactivateMember('{{ $m->id }}')"
                                                         class="px-2.5 py-1 rounded-lg bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-700 text-[10px] font-bold">
                                                     Activate
                                                 </button>
@@ -358,13 +354,8 @@ Siti Rahma,081399887766,5</pre>
                                             class="px-2.5 py-1.5 rounded-lg bg-[#F7F0DB] hover:bg-[#F7F0DB] border border-[#E6DAC0] text-[#662721] text-[10px] font-bold">
                                         🎟️ Give Hours
                                     </button>
-                                    @if($m->status === 'ACTIVE')
-                                        <button type="button" onclick="setMemberStatus('{{ $m->id }}', 'revoke')"
-                                                class="px-2.5 py-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-600 text-[10px] font-bold">
-                                            Revoke
-                                        </button>
-                                    @else
-                                        <button type="button" onclick="setMemberStatus('{{ $m->id }}', 'reactivate')"
+                                    @if($m->status !== 'ACTIVE')
+                                        <button type="button" onclick="reactivateMember('{{ $m->id }}')"
                                                 class="px-2.5 py-1.5 rounded-lg bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-700 text-[10px] font-bold">
                                             Activate
                                         </button>
@@ -685,13 +676,13 @@ Siti Rahma,081399887766,5</pre>
                 );
             }
 
-            function setMemberStatus(memberId, action) {
+            function reactivateMember(memberId) {
                 openConfirmModal(
-                    action === 'revoke' ? 'Revoke Access' : 'Reactivate Member',
-                    action === 'revoke' ? "Revoke this member's access?" : 'Reactivate this member?',
+                    'Reactivate Member',
+                    'Reactivate this member? Their remaining hours can be used again.',
                     async () => {
                         try {
-                            const data = await apiCall(API_BASE + '/members/' + memberId + '/' + action, { method: 'POST' });
+                            const data = await apiCall(API_BASE + '/members/' + memberId + '/reactivate', { method: 'POST' });
                             showAlert(data.message, false);
                             setTimeout(() => location.reload(), 900);
                         } catch (err) {

@@ -153,7 +153,7 @@ class DetailShiftKasir extends Page implements HasTable
                     ->modalHeading(fn (Payment $p) => 'Koreksi metode bayar '.BukuTransaksi::rupiah($p->amount))
                     ->modalDescription('Nominal tidak berubah. Isi metode & bukti yang benar sesuai struk / slip. Buku Transaksi tetap satu baris dengan tanda koreksi; tercatat di Log Aktivitas (kritis).')
                     ->schema([
-                        Select::make('method')->label('Metode yang benar')->options(PaymentMethodCorrection::METHODS)->required()->native(false)->live(),
+                        Select::make('method')->label('Metode yang benar')->options(PosPaymentProof::activeMethods())->required()->native(false)->live(),
                         Select::make('card_type')->label('Jenis kartu')->options(['DEBIT' => 'Kartu Debit', 'CREDIT' => 'Kartu Kredit'])->default('DEBIT')
                             ->visible(fn (Get $get) => str_starts_with((string) $get('method'), 'EDC_'))->native(false),
                         TextInput::make('card_last_4')->label('4 digit terakhir kartu')->maxLength(4)

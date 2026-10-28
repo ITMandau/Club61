@@ -75,8 +75,6 @@
                                     <select wire:model="edcTerminal" class="pos-input"
                                         style="background:#FFFFFF; font-weight:700;">
                                         <option value="EDC_BCA">Mesin EDC BCA</option>
-                                        <option value="EDC_MANDIRI">Mesin EDC Mandiri</option>
-                                        <option value="EDC_LAINNYA">Mesin EDC Lainnya</option>
                                     </select>
                                 </div>
                                 <div>
@@ -180,8 +178,6 @@
                                     <select wire:model="edcTerminal" class="pos-input"
                                         style="background:#FFFFFF; font-weight:700;">
                                         <option value="EDC_BCA">Mesin EDC BCA</option>
-                                        <option value="EDC_MANDIRI">Mesin EDC Mandiri</option>
-                                        <option value="EDC_LAINNYA">Mesin EDC Lainnya</option>
                                     </select>
                                 </div>
                                 <div>

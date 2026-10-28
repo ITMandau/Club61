@@ -199,7 +199,7 @@ class Kustomer extends Page
                 'last_played' => now()->subDays(5)->format('d M Y, 17:00 WIB (Court 2)'),
                 'next_schedule' => now()->addDays(4)->format('d M Y, 17:00 - 19:00 WIB (Court 2)'),
                 'status' => 'ACTIVE',
-                'notes' => 'Sesi sore santai + sauna',
+                'notes' => 'Sesi sore santai + wellness',
             ],
             [
                 'name' => 'Dimas Setiawan',

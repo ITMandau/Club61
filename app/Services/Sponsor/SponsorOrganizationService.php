@@ -344,16 +344,7 @@ class SponsorOrganizationService
         });
     }
 
-    public function revokeMember(SponsorOrganizationMember $member): SponsorOrganizationMember
-    {
-        // Sengaja TIDAK menyentuh voucher yang sudah terbit — voucher yang masih berlaku tetap
-        // bisa dipakai sampai expired sendiri (keputusan bisnis eksplisit dari PM), revoke cuma
-        // menghentikan status keanggotaan roster (mis. anggota baru tidak dapat top-up baru lagi).
-        $member->update(['status' => 'REVOKED']);
-
-        return $member;
-    }
-
+    /** Anggota lama yang terlanjur berstatus REVOKED (revoke sudah dihapus 28 Okt 2026) → aktif lagi, sisa jamnya bisa dipakai. */
     public function reactivateMember(SponsorOrganizationMember $member): SponsorOrganizationMember
     {
         $member->update(['status' => 'ACTIVE']);

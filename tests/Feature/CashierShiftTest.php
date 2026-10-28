@@ -699,7 +699,7 @@ class CashierShiftTest extends TestCase
             ->set('walkInPhone', '081233334444')
             ->call('setPaymentMethod', 'CREDIT_CARD')
             ->assertSet('edcCardType', 'CREDIT')
-            ->set('edcTerminal', 'EDC_MANDIRI')
+            ->set('edcTerminal', 'EDC_BCA')
             ->set('edcBank', 'OVERSEAS')
             ->set('edcCardNetwork', 'VISA')
             ->set('edcLast4', '4321')

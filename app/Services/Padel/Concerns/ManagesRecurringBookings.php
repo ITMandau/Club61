@@ -149,6 +149,9 @@ trait ManagesRecurringBookings
             if (now()->gte(\App\Services\Padel\PadelBookingService::rescheduleDeadline($b))) {
                 throw new HttpException(422, 'Lewat batas reschedule ('.\App\Services\Padel\PadelBookingService::rescheduleCutoffLabel($b).' sebelum main) — tetap main sesuai jadwal lama.');
             }
+            if (\App\Services\Padel\PadelBookingService::rescheduleLimitReached($b)) {
+                throw new HttpException(422, 'Sudah dipindah '.\App\Services\Padel\PadelBookingService::MAX_RESCHEDULES.'x (batas maksimal reschedule) — tetap main sesuai jadwal lama.');
+            }
 
             $start = \Carbon\Carbon::parse("{$date} {$startTime}");
             $end = \Carbon\Carbon::parse("{$date} {$endTime}");

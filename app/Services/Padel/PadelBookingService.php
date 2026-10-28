@@ -44,6 +44,15 @@ class PadelBookingService
     /** Paling jauh sekian hari dari hari ini. */
     public const MAX_DAYS_AHEAD = 30;
 
+    /** Satu booking paling banyak dipindah jadwalnya sekian kali (meeting 28 Okt 2026), termasuk pindahan Jadwal Tetap. */
+    public const MAX_RESCHEDULES = 3;
+
+    /** Booking ini sudah mencapai batas jumlah reschedule. */
+    public static function rescheduleLimitReached(\App\Models\Padel\PadelBooking $booking): bool
+    {
+        return (int) $booking->reschedule_count >= self::MAX_RESCHEDULES;
+    }
+
     /** Batas akhir reschedule booking ini; lewat dari ini jadwal tidak bisa dipindah lagi. */
     public static function rescheduleDeadline(\App\Models\Padel\PadelBooking $booking): \Carbon\Carbon
     {

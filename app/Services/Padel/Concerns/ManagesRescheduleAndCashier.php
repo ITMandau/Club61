@@ -371,6 +371,9 @@ trait ManagesRescheduleAndCashier
             if (now()->gte(\App\Services\Padel\PadelBookingService::rescheduleDeadline($booking))) {
                 throw new HttpException(422, 'Reschedule paling lambat '.\App\Services\Padel\PadelBookingService::rescheduleCutoffLabel($booking).' sebelum jam main. Jadwal booking ini sudah tidak bisa dipindah.');
             }
+            if (\App\Services\Padel\PadelBookingService::rescheduleLimitReached($booking)) {
+                throw new HttpException(422, 'Booking ini sudah dipindah '.\App\Services\Padel\PadelBookingService::MAX_RESCHEDULES.'x — batas maksimal reschedule. Jadwalnya tidak bisa dipindah lagi.');
+            }
 
             $durationHours = (int) $booking->start_time->diffInHours($booking->end_time);
             if ($durationHours < 1) {

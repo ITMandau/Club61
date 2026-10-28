@@ -18,7 +18,8 @@ Route::prefix('v1/sponsor')->middleware(['auth:sanctum,web'])->group(function ()
     Route::post('/organization/members/import-csv', [SponsorOrganizationController::class, 'importCsv']);
     Route::post('/organization/members/{member}/release-voucher', [SponsorOrganizationController::class, 'releaseVoucher']);
     Route::post('/organization/members/bulk-release-voucher', [SponsorOrganizationController::class, 'bulkReleaseVoucher']);
-    Route::post('/organization/members/{member}/revoke', [SponsorOrganizationController::class, 'revokeMember']);
+    // Tidak ada revoke (meeting 28 Okt 2026): anggota yang dicabut tidak bisa memakai sisa jamnya dan jamnya tidak
+    // kembali ke kuota perusahaan. Reactivate tetap ada untuk anggota lama yang terlanjur berstatus REVOKED.
     Route::post('/organization/members/{member}/reactivate', [SponsorOrganizationController::class, 'reactivateMember']);
     Route::patch('/organization/vouchers/{voucher}', [SponsorOrganizationController::class, 'updateVoucher']);
     Route::delete('/organization/vouchers/{voucher}', [SponsorOrganizationController::class, 'deleteVoucher']);

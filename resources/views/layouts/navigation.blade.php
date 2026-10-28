@@ -179,7 +179,7 @@
                                             <span class="text-[9px] font-mono text-emerald-700 font-bold bg-emerald-100 px-1 py-0.5 rounded">VIP Plat</span>
                                         </div>
                                         <p class="text-[11px] text-[#7A5A52] mt-1 leading-snug">
-                                            Finnish cedarwood sauna facilities available complimentarily for Platinum members post-match.
+                                            Wellness facilities available complimentarily for Platinum members post-match.
                                         </p>
                                     </div>
                                 </div>

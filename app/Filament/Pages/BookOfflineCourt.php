@@ -110,7 +110,7 @@ class BookOfflineCourt extends Page
     public ?string $appliedVoucherCode = null;
 
     // Rincian Pembayaran Mesin EDC (Kartu Debit & Kredit)
-    public string $edcTerminal = 'EDC_BCA'; // EDC_BCA, EDC_MANDIRI, EDC_LAINNYA
+    public string $edcTerminal = 'EDC_BCA'; // hanya EDC_BCA (PosPaymentProof::ACTIVE_EDC_TERMINALS)
     public string $edcCardType = 'DEBIT'; // DEBIT, CREDIT
     public string $edcCardNetwork = 'GPN'; // GPN, VISA, MASTERCARD, JCB, AMEX, LAINNYA
     public string $edcBank = 'BCA'; // BCA, MANDIRI, BNI, BRI, CIMB, PERMATA, DANAMON, OVERSEAS, LAINNYA
@@ -1292,7 +1292,8 @@ class BookOfflineCourt extends Page
         $this->walkInEmail = $draft['walkInEmail'] ?? '';
         $this->rentalQuantities = $draft['rentalQuantities'] ?? [];
         $this->paymentMethod = $draft['paymentMethod'] ?? 'QRIS';
-        $this->edcTerminal = $draft['edcTerminal'] ?? 'EDC_BCA';
+        // Draf lama bisa menyimpan mesin EDC yang sudah tidak dipakai (hanya BCA sejak 28 Okt 2026).
+        $this->edcTerminal = in_array($draft['edcTerminal'] ?? null, \App\Services\Pos\PosPaymentProof::ACTIVE_EDC_TERMINALS, true) ? $draft['edcTerminal'] : 'EDC_BCA';
         $this->edcCardType = $draft['edcCardType'] ?? 'DEBIT';
         $this->edcCardNetwork = $draft['edcCardNetwork'] ?? 'GPN';
         $this->edcBank = $draft['edcBank'] ?? 'BCA';

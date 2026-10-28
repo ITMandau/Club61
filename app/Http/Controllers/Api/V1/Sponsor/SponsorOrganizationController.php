@@ -219,20 +219,6 @@ class SponsorOrganizationController extends Controller
         ]);
     }
 
-    public function revokeMember(Request $request, string $member): JsonResponse
-    {
-        $organization = $this->resolveOwnOrganization($request);
-        $this->authorize('manageMembers', $organization);
-
-        $memberModel = $this->service->revokeMember($this->resolveOwnMember($organization, $member));
-
-        return response()->json([
-            'success' => true,
-            'message' => 'Akses anggota berhasil dicabut. Voucher yang masih berlaku tetap bisa dipakai sampai expired.',
-            'data' => $memberModel,
-        ]);
-    }
-
     public function reactivateMember(Request $request, string $member): JsonResponse
     {
         $organization = $this->resolveOwnOrganization($request);

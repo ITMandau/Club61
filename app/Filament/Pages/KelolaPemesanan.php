@@ -192,6 +192,16 @@ class KelolaPemesanan extends Page
             return;
         }
 
+        if (PadelBookingService::rescheduleLimitReached($booking)) {
+            Notification::make()
+                ->title('Tidak Bisa Dipindah')
+                ->body('Booking ini sudah dipindah '.PadelBookingService::MAX_RESCHEDULES.'x — batas maksimal reschedule.')
+                ->warning()
+                ->send();
+
+            return;
+        }
+
         $this->selectedBookingId = $booking->id;
         $this->rescheduleCourtId = $booking->court_id;
 
@@ -213,6 +223,7 @@ class KelolaPemesanan extends Page
             'original_court_fee' => (float) $booking->court_fee,
             'original_benefit' => (float) $booking->member_discount_court + (float) $booking->sponsor_discount_court,
             'duration_hours' => $this->rescheduleDurationHours,
+            'reschedule_count' => (int) $booking->reschedule_count,
         ];
 
         $this->rescheduleReason = '';

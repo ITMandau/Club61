@@ -27,7 +27,7 @@ class KelolaClub extends Page
     {
         return [
             'eyebrow' => 'Modul Fasilitas • Venue Operations',
-            'sub' => 'Status operasional fasilitas venue: lapangan padel, sauna, dan lounge.',
+            'sub' => 'Status operasional fasilitas venue: lapangan padel, wellness, dan lounge.',
             'planned' => [
                 'Status tiap fasilitas (buka, penuh, tutup sementara).',
                 'Jadwal maintenance & penutupan sementara per fasilitas.',

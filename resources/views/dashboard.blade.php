@@ -44,7 +44,7 @@
                                     CLUB 61 <span class="text-[#E6DAC0] font-alex font-normal text-4xl sm:text-5xl block">Padel &amp; Wellness</span>
                                 </h1>
                                 <p class="text-xs sm:text-sm text-emerald-100/85 mt-3 leading-relaxed">
-                                    Welcome back, <span class="font-bold text-white">{{ Auth::user()->name }}</span>. Padel courts at {{ \App\Models\Setting\CompanyProfileSetting::receiptAddress() }}, plus sauna and a cafe lounge.
+                                    Welcome back, <span class="font-bold text-white">{{ Auth::user()->name }}</span>. Padel courts at {{ \App\Models\Setting\CompanyProfileSetting::receiptAddress() }}, plus wellness and a cafe lounge.
                                 </p>
 
                                 <div class="mt-5 grid grid-cols-1 sm:flex sm:flex-wrap items-center gap-2.5">
@@ -69,7 +69,7 @@
                                 </div>
                                 <div class="p-3.5 rounded-lg bg-[#662721]/20 border border-[#662721]/40">
                                     <div class="text-[10px] uppercase font-bold text-[#F7F0DB]">Wellness</div>
-                                    <div class="text-sm font-black text-[#F7F0DB] mt-0.5">Cedarwood Sauna</div>
+                                    <div class="text-sm font-black text-[#F7F0DB] mt-0.5">Wellness Room</div>
                                     <div class="text-[10px] text-[#E6DAC0] mt-0.5">After your match</div>
                                 </div>
                             </div>
@@ -304,7 +304,7 @@
                         @else
                             <div class="mt-1.5 inline-flex px-3 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wider bg-gray-100 text-gray-700 border border-gray-300">Regular member</div>
                             <p class="mt-3 p-3 rounded-xl bg-[#F7F0DB] border border-[#E6DAC0] text-xs text-[#7A5A52] leading-relaxed">
-                                Get court-hour quotas, member discounts and sauna access with a Club 61 membership.
+                                Get court-hour quotas, member discounts and wellness access with a Club 61 membership.
                             </p>
                         @endif
 
@@ -321,7 +321,7 @@
                             {{-- Dulu "Upgrade to Diamond Club" + priority booking (paket & fitur itu tidak ada). Isi mengikuti paket asli. --}}
                             <span class="inline-block px-2.5 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider bg-[#F7F0DB]/20 text-[#F7F0DB] border border-[#F7F0DB]/40">Membership</span>
                             <h3 class="font-display text-lg font-black leading-tight">Club 61 Membership</h3>
-                            <p class="text-xs text-emerald-100/85 leading-relaxed">Court-hour quotas, member prices and sauna access. See every plan and its benefits.</p>
+                            <p class="text-xs text-emerald-100/85 leading-relaxed">Court-hour quotas, member prices and wellness access. See every plan and its benefits.</p>
                             {{-- Dulu popup + WhatsApp (nomor tertulis di kode). Modul 23: langsung ke halaman Membership. --}}
                             <a href="{{ route('customer.membership') }}"
                                class="bk-tap w-full h-11 rounded-xl flex items-center justify-center text-xs font-black uppercase tracking-wider whitespace-nowrap text-[#4F2F2A] bg-[#F7F0DB] hover:bg-white shadow-md active:scale-[0.98] transition-transform">

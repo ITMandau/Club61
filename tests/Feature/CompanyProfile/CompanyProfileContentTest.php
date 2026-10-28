@@ -258,7 +258,7 @@ class CompanyProfileContentTest extends TestCase
         // Home customer (hero, kartu Courts, menu navigasi) memakai alamat yang sama.
         $this->actingAs(User::factory()->customer()->create());
         $this->get('/dashboard')->assertOk()
-            ->assertSee('Padel courts at Jl. Alamat Baru No. 9, Medan, plus sauna')
+            ->assertSee('Padel courts at Jl. Alamat Baru No. 9, Medan, plus wellness')
             ->assertSee('padel courts at Jl. Alamat Baru No. 9, Medan, complete with')
             ->assertDontSee('Gedung Indosat Medan')
             ->assertDontSee('Indosat Building');
