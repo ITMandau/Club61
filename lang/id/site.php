@@ -11,7 +11,7 @@ return [
     'btn_kitchen_screen' => 'Layar Dapur KDS',
     'btn_open_dashboard' => 'Buka Dashboard',
     'btn_login' => 'Masuk ke Club',
-    'btn_register' => 'Daftar Member',
+    'btn_register' => 'Daftar Akun',
     'btn_open_member_dashboard' => 'Buka Member Dashboard',
     'btn_logout' => 'Keluar / Logout',
     'btn_login_portal' => 'Masuk ke Club Portal',
