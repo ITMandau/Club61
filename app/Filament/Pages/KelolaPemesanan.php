@@ -38,6 +38,19 @@ class KelolaPemesanan extends Page
     public string $search = '';
     public int $perPage = 10;
 
+    /**
+     * Periode tanggal main yang ditampilkan: current (bawaan: bulan ini & mendatang — booking minggu depan yang sudah
+     * masuk bulan berikutnya tetap terlihat) / day / week / month / range / all. Data tidak dihapus — hanya tampilan yang
+     * dibatasi supaya tidak menumpuk. Pencarian selalu mencakup semua periode.
+     */
+    public string $period = 'current';
+    public string $periodDate = '';
+    public ?string $rangeStart = null;
+    public ?string $rangeEnd = null;
+
+    /** Status batal / refund / kedaluwarsa — tab sendiri, tidak ikut "Semua Aktif". */
+    public const INACTIVE_STATUSES = ['CANCELLED', 'REFUND_PENDING', 'REFUNDED', 'EXPIRED'];
+
     // Modal State
     public bool $showRescheduleModal = false;
     public bool $showCancelRefundModal = false;
@@ -75,6 +88,84 @@ class KelolaPemesanan extends Page
     public function mount(): void
     {
         $this->rescheduleDate = now()->format('Y-m-d');
+        $this->periodDate = now()->format('Y-m-d');
+    }
+
+    public function updatedPeriod(): void
+    {
+        $this->period = in_array($this->period, ['current', 'day', 'week', 'month', 'range', 'all'], true) ? $this->period : 'current';
+        $this->periodDate = now()->format('Y-m-d');
+        $this->resetPage();
+    }
+
+    public function updatedRangeStart(): void
+    {
+        $this->resetPage();
+    }
+
+    public function updatedRangeEnd(): void
+    {
+        $this->resetPage();
+    }
+
+    /** ‹ / › — mundur / maju satu hari, minggu, atau bulan. */
+    public function shiftPeriod(int $direction): void
+    {
+        $date = Carbon::parse($this->periodDate ?: now());
+        $step = $direction > 0 ? 1 : -1;
+        $this->periodDate = (match ($this->period) {
+            'day' => $date->addDays($step),
+            'week' => $date->addWeeks($step),
+            default => $date->startOfMonth()->addMonthsNoOverflow($step),
+        })->format('Y-m-d');
+        $this->resetPage();
+    }
+
+    /** @return array{0: string, 1: ?string}|null rentang tanggal main (Y-m-d; akhir null = tanpa batas), null = semua periode */
+    public function periodRange(): ?array
+    {
+        $date = Carbon::parse($this->periodDate ?: now());
+
+        return match ($this->period) {
+            'current' => [now()->startOfMonth()->toDateString(), null],
+            'day' => [$date->toDateString(), $date->toDateString()],
+            'week' => [$date->copy()->startOfWeek(Carbon::MONDAY)->toDateString(), $date->copy()->endOfWeek(Carbon::SUNDAY)->toDateString()],
+            'range' => $this->rangeStart && $this->rangeEnd
+                ? [min($this->rangeStart, $this->rangeEnd), max($this->rangeStart, $this->rangeEnd)]
+                : null,
+            'all' => null,
+            default => [$date->copy()->startOfMonth()->toDateString(), $date->copy()->endOfMonth()->toDateString()],
+        };
+    }
+
+    public function periodLabel(): string
+    {
+        $range = $this->periodRange();
+        if (! $range) {
+            return 'Semua periode';
+        }
+        if ($range[1] === null) {
+            return 'Sejak '.Carbon::parse($range[0])->translatedFormat('d F Y');
+        }
+        [$from, $to] = array_map(fn ($d) => Carbon::parse($d), $range);
+
+        return match ($this->period) {
+            'day' => $from->translatedFormat('l, d F Y'),
+            'month' => $from->translatedFormat('F Y'),
+            default => $from->translatedFormat('d M').' – '.$to->translatedFormat('d M Y'),
+        };
+    }
+
+    /** Batasi ke periode (tanggal main). Bentuk between supaya index booking_date terpakai. */
+    private function applyPeriod($query)
+    {
+        if ($range = $this->periodRange()) {
+            $range[1] === null
+                ? $query->where('booking_date', '>=', $range[0])
+                : $query->whereBetween('booking_date', [$range[0], $range[1].' 23:59:59']);
+        }
+
+        return $query;
     }
 
     public function setTab(string $tab): void
@@ -598,14 +689,21 @@ class KelolaPemesanan extends Page
         $query = PadelBooking::with(['user', 'court', 'order.payments', 'order.refunds', 'equipments.equipment', 'recurringSchedule'])
             ->latest('start_time');
 
-        if ($this->activeTab === 'CONFIRMED') {
+        // Pencarian (kode tiket / nama / HP …) mencakup semua periode — customer bisa datang membawa tiket lama.
+        if (trim($this->search) === '') {
+            $this->applyPeriod($query);
+        }
+
+        if ($this->activeTab === 'ALL') {
+            $query->whereNotIn('status', self::INACTIVE_STATUSES);
+        } elseif ($this->activeTab === 'CONFIRMED') {
             $query->where('status', 'PAID');
         } elseif ($this->activeTab === 'LOCKED_PENDING') {
             $query->where('status', 'LOCKED');
         } elseif ($this->activeTab === 'COMPLETED') {
             $query->whereIn('status', ['CHECKED_IN', 'COMPLETED']);
         } elseif ($this->activeTab === 'CANCELLED') {
-            $query->whereIn('status', ['CANCELLED', 'REFUND_PENDING', 'REFUNDED', 'EXPIRED']);
+            $query->whereIn('status', self::INACTIVE_STATUSES);
         }
 
         if (trim($this->search) !== '') {
@@ -625,9 +723,10 @@ class KelolaPemesanan extends Page
 
         $bookings = $query->paginate($this->perPage);
 
-        $counts = Cache::remember('kelola_pemesanan_tab_counts', 60, function () {
-            $rawCounts = DB::table('padel_bookings')
-                ->whereNull('deleted_at')
+        // Angka tab mengikuti periode yang dipilih. Dihitung langsung (query ber-index), tidak di-cache: kunci cache
+        // global lama tidak bisa mewakili setiap periode.
+        $counts = (function () {
+            $rawCounts = $this->applyPeriod(DB::table('padel_bookings')->whereNull('deleted_at'))
                 ->selectRaw("
                     COUNT(*) as total,
                     SUM(CASE WHEN status = 'PAID' THEN 1 ELSE 0 END) as confirmed,
@@ -638,13 +737,13 @@ class KelolaPemesanan extends Page
                 ->first();
 
             return [
-                'ALL' => (int) ($rawCounts->total ?? 0),
+                'ALL' => (int) ($rawCounts->total ?? 0) - (int) ($rawCounts->cancelled ?? 0),
                 'CONFIRMED' => (int) ($rawCounts->confirmed ?? 0),
                 'LOCKED_PENDING' => (int) ($rawCounts->locked ?? 0),
                 'COMPLETED' => (int) ($rawCounts->completed ?? 0),
                 'CANCELLED' => (int) ($rawCounts->cancelled ?? 0),
             ];
-        });
+        })();
 
         $courts = Cache::remember('active_padel_courts_list', 120, function () {
             return PadelCourt::where('is_active', true)->orderBy('name')->get();

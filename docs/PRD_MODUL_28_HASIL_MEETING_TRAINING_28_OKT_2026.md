@@ -7,8 +7,8 @@
 | Metadata Dokumen | Spesifikasi |
 | :--- | :--- |
 | **Kode Dokumen** | `PRD-MODUL-28-MEETING-TRAINING-28-OKT` |
-| **Versi** | `v0.2.0` |
-| **Status** | **DRAFT.** Batch 1 & 2 dibangun (belum di-commit); batch lain menunggu keputusan di bagian *Pertanyaan Terbuka*. |
+| **Versi** | `v0.3.0` |
+| **Status** | **DRAFT.** Batch 1–3 dibangun (belum di-commit); batch lain menunggu keputusan di bagian *Pertanyaan Terbuka*. |
 | **Sumber** | Catatan meeting "Training Club61" (28 Okt 2026) dan klarifikasi owner aplikasi di hari yang sama. |
 | **Dependensi** | POS Walk-In (Modul 11), Membership (Modul 5), Sponsor / Corporate (Modul 12), Voucher (Modul 22), Coaching Opsi B (Modul 24), Refund & Reschedule (Modul 21), Shift Kasir (Modul 25), Jadwal Tetap Mingguan. |
 
@@ -24,7 +24,7 @@
 | 4 | Hapus menu Revoke di Team sponsor | Tombol Revoke ada di portal corporate | **Batch 1** |
 | 5 | ~~Pindah prime → regular: selisih jadi voucher~~ | Selisih HANGUS (kebijakan PM 30 Sep 2026) | **Batal** (28 Okt 2026) — aturan hangus tetap (§3.5) |
 | 6 | Aturan akses paket (hari + jam / di luar peak) + paket "Khusus Front Desk / Admin" | Hanya batas jam; tidak dicek untuk karyawan corporate; semua paket aktif bisa dibeli online | **Batch 2** (dibangun 29 Okt 2026) |
-| 7 | Tampilan jadwal mingguan & bulanan | Monitoring & POS hanya harian | Batch 3 |
+| 7 | Tampilan jadwal mingguan & bulanan | Monitoring & POS hanya harian | **Batch 3** (dibangun 29 Okt 2026, di Monitoring Lapangan) |
 | 8 | Coaching sistem kontrak (tagihan per periode) | Coaching dibayar per booking | Batch 4 (PRD mini) |
 | 9 | Indosat: 100 jam off-peak + 100 jam anytime | Satu paket = satu saldo jam padel | Batch 5 |
 | 10 | Tombol "Batalkan & Ajukan" | **Sudah ada** di Kelola Pemesanan → modal Ajukan Pembatalan & Refund | Selesai |
@@ -93,11 +93,15 @@ Keputusan & yang dibangun (29 Okt 2026):
 ### 3.2 Tampilan mingguan & bulanan (Batch 3)
 Kebutuhan: di Monitoring dan POS Walk-In, selain harian, bisa melihat siapa saja yang booking di jam berapa dalam 1 minggu dan 1 bulan.
 
-Rancangan (usulan UI):
-- Tab baru **Rekap Jadwal** di Monitoring Lapangan, bisa dibuka juga dari POS Walk-In.
-- **Mode Minggu:** 7 kolom (Senin–Minggu); tiap kolom daftar booking urut jam — jam, lapangan, nama, warna per jenis (member / corporate / coaching / walk-in / online).
-- **Mode Bulan:** kalender sebulan; tiap tanggal menampilkan jumlah booking dan jam terpadat; klik tanggal → daftar lengkap hari itu.
-- Filter jenis booking, filter lapangan, cari nama. Hanya baca (tidak mengubah booking).
+Keputusan & yang dibangun (29 Okt 2026):
+- **Hanya di Monitoring Lapangan** (bukan POS Walk-In) supaya jelas bedanya: POS = transaksi, Monitoring = pantau. Resepsionis & admin bisa membuka keduanya; kasir (F&B) tidak.
+- Tombol **Harian / Mingguan / Bulanan**. Harian tetap seperti sebelumnya (+ filter per lapangan).
+- **Mingguan:** baris jam × kolom Senin–Minggu; tiap sel berisi lapangan + nama, warna per jenis (Member, Voucher Corporate, Coaching, Jadwal Tetap, Online, Walk-In). Booking beberapa jam tampil di setiap jamnya (jam lanjutan lebih pudar); menunggu bayar bergaris putus-putus. Klik tanggal → tampilan harian.
+- **Bulanan:** kalender Senin–Minggu; tiap tanggal menampilkan jumlah booking & persen keterisian. Klik tanggal → daftar booking hari itu + tombol Buka Harian.
+- **Rekap Pemain:** nama, jenis, jumlah booking, total jam, terakhir main — urut jam terbanyak.
+- Ringkasan periode (total booking, jam terisi, jumlah pemain, menunggu bayar), filter lapangan / jenis / cari nama, no. HP, kode. Klik booking membuka panel detail yang sama dengan harian (check-in tetap dari situ). Hanya baca.
+- Status yang dihitung sama dengan harian (menunggu bayar, lunas, check-in, selesai). Logika di `ScheduleOverview`.
+- Cetak / unduh Excel ditunda (Q12).
 
 ### 3.3 Coaching sistem kontrak (Batch 4)
 Kebutuhan: saat ini coaching dibayar per transaksi. Academy (mis. SR) mau sistem kontrak: dalam periode tertentu dihitung berapa sesi / coach yang melatih di venue, lalu ditagih sekaligus. Periode bisa **harian, mingguan, atau 2 mingguan**. Club 61 mengirim invoice ke academy.
@@ -144,7 +148,7 @@ jam prime tidak ditagih padahal selisihnya sudah keluar sebagai voucher.
 | Q9 | Kelas kids | Cakupan "per class" dan harga kelas kids — ditunda sampai jelas. |
 | Q10 | Harga 120 / 80 / 170 | Angka sewa belum pasti — diisi di tarif setelah final. |
 | Q11 | Indosat (§3.4) | Kantong off-peak IM3: 100 jam dibagi ke berapa customer, dan siapa yang membagikan (PIC Indosat lewat portal)? |
-| Q12 | Tampilan mingguan / bulanan (§3.2) | Perlu bisa dicetak / diunduh, atau cukup dilihat di layar? |
+| Q12 | Tampilan mingguan / bulanan (§3.2) | Cetak / unduh Excel — ditunda (29 Okt 2026), sementara cukup di layar. |
 
 ---
 
@@ -155,3 +159,4 @@ jam prime tidak ditagih padahal selisihnya sudah keluar sebagai voucher.
 | v0.1.0 | 28 Okt 2026 | Draft awal dari catatan meeting + klarifikasi owner aplikasi. |
 | v0.1.1 | 28 Okt 2026 | Batch 1 dibangun; poin 5 (selisih jadi voucher) dibatalkan — Q1 & Q2 dihapus. |
 | v0.2.0 | 29 Okt 2026 | Batch 2 dibangun: aturan akses paket (hari / jam / di luar peak) termasuk karyawan corporate, tombol Terapkan Aturan (super admin), paket "Khusus Front Desk / Admin". Menu Jadwal Akses Sponsor dibiarkan. |
+| v0.3.0 | 29 Okt 2026 | Batch 2 revisi (Waktu Berlaku satu pilihan, ringkasan jam, satu migrasi); Batch 3 dibangun: Monitoring Lapangan Mingguan / Bulanan + Rekap Pemain. |

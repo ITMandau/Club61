@@ -37,12 +37,13 @@
         </div>
     </div>
 
-    <!-- Tab status -->
-    <div>
+    <!-- Tab status + periode (tanggal main). Data lama tidak dihapus, hanya tampilan yang dibatasi. -->
+    <div style="display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; flex-wrap: wrap;">
         <div class="c61-seg">
             <button type="button" wire:click="setTab('ALL')" wire:loading.attr="disabled"
+                title="Booking aktif (menunggu bayar, lunas, check-in, selesai). Yang batal / refund ada di tab Dibatalkan."
                 class="c61-seg-btn {{ $activeTab === 'ALL' ? 'is-active' : '' }}">
-                Semua Reservasi <span class="count">{{ $counts['ALL'] }}</span>
+                Semua Aktif <span class="count">{{ $counts['ALL'] }}</span>
             </button>
             <button type="button" wire:click="setTab('CONFIRMED')" wire:loading.attr="disabled"
                 class="c61-seg-btn {{ $activeTab === 'CONFIRMED' ? 'is-active' : '' }}">
@@ -57,7 +58,33 @@
                 Dibatalkan / Refund <span class="count">{{ $counts['CANCELLED'] }}</span>
             </button>
         </div>
+
+        <div class="c61-row" style="gap: 0.4rem; flex-wrap: wrap; font-size: 0.75rem; color: var(--c-muted); font-weight: 700;">
+            <span>Periode:</span>
+            <select wire:model.live="period" class="c61-select" style="width: auto; height: 36px;">
+                <option value="current">Bulan Ini &amp; Mendatang</option>
+                <option value="day">Harian</option>
+                <option value="week">Mingguan</option>
+                <option value="month">Bulanan</option>
+                <option value="range">Pilih Rentang Tanggal</option>
+                <option value="all">Semua Data</option>
+            </select>
+            @if (in_array($period, ['day', 'week', 'month'], true))
+                <button type="button" wire:click="shiftPeriod(-1)" class="c61-btn c61-btn-ghost c61-btn-sm" title="Sebelumnya">&lsaquo;</button>
+                <span style="color: var(--c-brown); white-space: nowrap;">{{ $this->periodLabel() }}</span>
+                <button type="button" wire:click="shiftPeriod(1)" class="c61-btn c61-btn-ghost c61-btn-sm" title="Berikutnya">&rsaquo;</button>
+            @elseif ($period === 'current')
+                <span style="color: var(--c-brown); white-space: nowrap;">{{ $this->periodLabel() }}</span>
+            @elseif ($period === 'range')
+                <input type="date" wire:model.live="rangeStart" class="c61-input" style="width: auto; height: 36px;" aria-label="Dari tanggal">
+                <span>s/d</span>
+                <input type="date" wire:model.live="rangeEnd" class="c61-input" style="width: auto; height: 36px;" aria-label="Sampai tanggal">
+            @endif
+        </div>
     </div>
+    @if (trim($search) !== '' && $period !== 'all')
+        <div style="font-size: 0.75rem; color: var(--c-muted);">Pencarian mencakup semua periode.</div>
+    @endif
 
     <!-- Tabel reservasi -->
     <div class="c61-card">
@@ -91,7 +118,7 @@
         </div>
 
         <div class="c61-table-wrap" wire:loading.class="kp-dimmed"
-            wire:target="setTab, gotoPage, nextPage, previousPage, search, perPage">
+            wire:target="setTab, gotoPage, nextPage, previousPage, search, perPage, period, shiftPeriod, rangeStart, rangeEnd">
             <table class="c61-table kp-table">
                 <thead>
                     <tr>
