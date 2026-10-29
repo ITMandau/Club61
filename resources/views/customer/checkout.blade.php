@@ -307,6 +307,11 @@
                             <span class="min-w-0">Court rental</span>
                             <span class="shrink-0 font-bold tabular-nums whitespace-nowrap" x-text="'Rp ' + formatNumber(subtotal)"></span>
                         </div>
+                        {{-- Paket / voucher ada tapi jam ini di luar ketentuannya (penjelasan lengkap di pop-up sekali). --}}
+                        <div x-show="accessNotice" data-access-notice class="flex items-start gap-1.5 text-[11px] text-amber-800" style="display: none;">
+                            <svg class="w-3.5 h-3.5 mt-px shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                            <span x-text="accessNotice ? accessNotice.short : ''"></span>
+                        </div>
                         <div x-show="addonsTotal > 0" class="flex items-start justify-between gap-3">
                             <span class="min-w-0">Equipment add-ons</span>
                             <span class="shrink-0 font-bold tabular-nums whitespace-nowrap" x-text="'Rp ' + formatNumber(addonsTotal)"></span>
@@ -614,6 +619,7 @@
                 membershipNotice: null,
                 useMembershipBenefit: true,
                 sponsorVoucherBenefit: null,
+                accessNotice: null,
                 useSponsorVoucherBenefit: true,
                 isLoadingMembershipPreview: false,
                 holdData: null,
@@ -778,21 +784,53 @@
                         this.membershipNotice = (json.success && json.data && !json.data.has_benefit) ? ({
                             MEMBERSHIP_ENDS_BEFORE_PLAY_DATE: 'Your membership' + (json.data.plan_name ? ' (' + json.data.plan_name + ')' : '') + ' ends'
                                 + (json.data.membership_end_date ? ' on ' + this.formatDate(json.data.membership_end_date) : '') + ', before this play date — normal price applies.',
-                            OUTSIDE_TIME_WINDOW: 'This slot is outside your membership access hours — normal price applies.',
                         }[json.data.rejected_reason] || null) : null;
                         if (json.success && json.data && json.data.sponsor_voucher_benefit && json.data.sponsor_voucher_benefit.has_benefit) {
                             this.sponsorVoucherBenefit = json.data.sponsor_voucher_benefit;
                         } else {
                             this.sponsorVoucherBenefit = null;
                         }
+                        this.accessNotice = json.success && json.data ? this.buildAccessNotice(json.data) : null;
+                        this.showAccessNoticeOnce(bookingIds);
                     } catch (e) {
                         // Tidak fatal — customer tanpa membership/voucher tetap bisa checkout normal
                         this.membershipBenefit = null;
                         this.membershipNotice = null;
                         this.sponsorVoucherBenefit = null;
+                        this.accessNotice = null;
                     } finally {
                         this.isLoadingMembershipPreview = false;
                     }
+                },
+
+                /**
+                 * Membership / voucher ada tapi jam main ini di luar ketentuannya (hari / jam / jam peak) → satu pesan
+                 * gabungan: baris kecil di rincian harga + pop-up sekali per checkout. Harga normal (server yang menentukan).
+                 */
+                buildAccessNotice(data) {
+                    const outside = (b) => b && !b.has_benefit && b.rejected_reason === 'OUTSIDE_TIME_WINDOW';
+                    const member = outside(data);
+                    const voucher = outside(data.sponsor_voucher_benefit);
+                    if (!member && !voucher) return null;
+
+                    const what = member && voucher ? 'Your membership & voucher' : (member ? 'Your membership' : 'Your voucher');
+                    const rules = [...new Set([member ? data.access_rule_en : null, voucher ? data.sponsor_voucher_benefit.access_rule_en : null].filter(Boolean))];
+
+                    return {
+                        title: what + " can't be used at this time",
+                        message: (rules.length ? 'Valid only ' + rules.join(' / ') + '. ' : '') + 'Normal price applies to this booking.',
+                        short: (member && voucher ? 'Membership & voucher' : (member ? 'Membership' : 'Voucher')) + ' not valid at this time',
+                    };
+                },
+
+                showAccessNoticeOnce(bookingIds) {
+                    if (!this.accessNotice) return;
+                    const key = 'c61-access-notice:' + [...bookingIds].sort().join(',');
+                    try {
+                        if (sessionStorage.getItem(key)) return;
+                        sessionStorage.setItem(key, '1');
+                    } catch (e) { /* storage diblokir → tetap tampilkan */ }
+                    this.showNotice(this.accessNotice.title, this.accessNotice.message, 'info', 'OK');
                 },
 
                 toggleMembershipBenefit() {

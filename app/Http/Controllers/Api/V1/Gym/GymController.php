@@ -12,6 +12,7 @@ class GymController extends Controller
     {
         $packages = MembershipPlan::with('benefits')
             ->where('is_active', true)
+            ->soldOnline()
             ->whereHas('benefits', function ($query) {
                 $query->where('facility', 'GYM');
             })

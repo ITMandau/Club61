@@ -103,8 +103,10 @@ Route::middleware(['auth', 'verified', \App\Http\Middleware\CustomerPortalOnly::
     })->name('customer.my-club');
 
     Route::get('/membership', function (\Illuminate\Http\Request $request) {
+        // Paket "Hanya POS / Admin" (mis. kontrak corporate) tidak ditawarkan ke customer.
         $allPlans = \App\Models\Membership\MembershipPlan::with('benefits')
             ->where('is_active', true)
+            ->soldOnline()
             ->get();
         $selectedPlanId = $request->query('plan') ?? ($allPlans->firstWhere('code', 'MBR-SILVER')->id ?? $allPlans->first()?->id ?? null);
 

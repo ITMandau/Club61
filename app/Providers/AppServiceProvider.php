@@ -92,6 +92,7 @@ class AppServiceProvider extends ServiceProvider
                 \App\Models\Membership\MembershipPlan::query()
                     ->where('is_active', true)
                     ->where('ownership_type', 'INDIVIDUAL')
+                    ->soldOnline()
                     ->with('benefits')
                     ->orderBy('price')
                     ->get()

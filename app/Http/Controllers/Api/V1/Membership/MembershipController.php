@@ -39,6 +39,7 @@ class MembershipController extends Controller
         $facilities = app(\App\Services\Membership\MembershipFacilityService::class);
         $plans = MembershipPlan::with('benefits')
             ->where('is_active', true)
+            ->soldOnline() // paket "Hanya POS / Admin" tidak ditawarkan di aplikasi
             ->get()
             // Kartu benefit siap tampil (nama & deskripsi dari Master Fasilitas) — aplikasi mobile tidak perlu
             // menulis teks benefit sendiri.
@@ -79,6 +80,14 @@ class MembershipController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'Paket membership ini sedang tidak aktif.',
+            ], 422);
+        }
+
+        // Dicek di server: paket kontrak (Hanya POS / Admin) tidak bisa dibeli lewat web / aplikasi walau ID-nya diketahui.
+        if (! $plan->isSoldOnline()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Paket ini hanya dijual di front desk Club 61. Silakan hubungi admin.',
             ], 422);
         }
 

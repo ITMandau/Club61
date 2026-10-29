@@ -30,6 +30,8 @@ class Club61PermissionMatrix
         'manage_court_pricing',
         // Tarif setoran coaching & biaya coach tambahan (Modul 24 Opsi B) — harga, sama seperti tarif lapangan.
         'manage_coaching_rates',
+        // Mengubah aturan akses (hari / jam / peak) kartu member yang sudah terjual sekaligus (Modul 28).
+        'apply_membership_plan_rules',
         'View:RoleResource',
         'view_roles',
         'create_roles',
@@ -433,6 +435,7 @@ class Club61PermissionMatrix
                         'actions' => [
                             'view_membership_plans' => 'Lihat Daftar Paket Membership',
                             'manage_membership_plans' => 'Kelola Paket, Harga & Benefit Membership',
+                            'apply_membership_plan_rules' => 'Terapkan Aturan Akses Paket (Hari / Jam / Peak) ke Membership yang Sudah Aktif',
                             'manage_membership_facilities' => 'Kelola Master Fasilitas Membership (tambah fasilitas, nama & deskripsi benefit)',
                         ],
                     ],

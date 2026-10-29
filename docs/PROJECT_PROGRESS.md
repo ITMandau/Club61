@@ -464,7 +464,7 @@ PRD: [`PRD_MODUL_24_COACHING_OPSI_B_SEWA_LAPANGAN_ACADEMY.md`](PRD_MODUL_24_COAC
 ---
 ## MODUL 28: HASIL MEETING TRAINING (28 OKT 2026)
 
-### Status: Batch 1 dibangun 28 Okt 2026 (belum di-commit); batch 2–5 menunggu keputusan
+### Status: Batch 1 (28 Okt) & Batch 2 (29 Okt 2026) dibangun, belum di-commit; batch 3–5 menunggu keputusan
 
 PRD: [`PRD_MODUL_28_HASIL_MEETING_TRAINING_28_OKT_2026.md`](PRD_MODUL_28_HASIL_MEETING_TRAINING_28_OKT_2026.md) (berisi daftar pertanyaan terbuka).
 
@@ -473,7 +473,10 @@ PRD: [`PRD_MODUL_28_HASIL_MEETING_TRAINING_28_OKT_2026.md`](PRD_MODUL_28_HASIL_M
 - [x] **Sauna → Wellness** di teks tampilan (portal customer termasuk My Club, admin, label izin). Kode internal `SAUNA` tetap. Nama fasilitas yang tersimpan di database diganti admin di tiap server.
 - [x] **Revoke dihapus** dari portal corporate (tombol & endpoint API). Anggota lama berstatus REVOKED tetap bisa diaktifkan lagi.
 - [~] ~~Selisih prime → regular jadi voucher~~ — batal (28 Okt 2026); selisih tetap HANGUS.
-- [ ] Batch 2 aturan akses paket (hari + jam / di luar peak), Batch 3 tampilan mingguan & bulanan, Batch 4 coaching kontrak, Batch 5 Indosat dua kantong jam.
+- [x] **Batch 2 — aturan akses paket** (migrasi `2026_10_29_100001`): benefit Padel paket punya satu pilihan **Waktu Berlaku** (Kapan saja / Hanya di luar jam peak / Hanya di jam peak / Atur manual hari + jam 24 jam) dengan ringkasan "Paket Dapat Digunakan" dan tolak simpan kalau nol jam; satu pengecek `PadelAccessRule` dipakai checkout online, kasir Walk-In, **voucher jam karyawan corporate** (dulu tidak dicek), reschedule & Jadwal Tetap. Di luar aturan = harga normal + alasan di layar. Kartu memegang salinan aturan saat dibeli; tombol **Terapkan Aturan** (izin `apply_membership_plan_rules`, super admin) menyamakan kartu aktif dengan paket terbaru.
+- [x] **Saluran Penjualan paket**: *Khusus Front Desk / Admin* tidak tampil & tidak bisa dibeli di web / aplikasi (dicek di server); bawaan *Online (Web & Aplikasi) dan Front Desk* = perilaku lama.
+- [ ] Waktu Berlaku untuk gym & wellness; menu Jadwal Akses Sponsor (dibiarkan dulu). Master Data Jam Peak tiap server disesuaikan proposal harga (peak hanya Sen–Jum 17–24).
+- [ ] Batch 3 tampilan mingguan & bulanan, Batch 4 coaching kontrak, Batch 5 Indosat dua kantong jam.
 
 ---
 ## MODUL 20: HALAMAN ADMIN PENDUKUNG

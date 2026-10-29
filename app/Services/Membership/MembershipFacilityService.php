@@ -124,6 +124,15 @@ class MembershipFacilityService
         if ($benefit->time_window_start && $benefit->time_window_end) {
             $details[] = 'Jam akses '.substr((string) $benefit->time_window_start, 0, 5).'–'.substr((string) $benefit->time_window_end, 0, 5);
         }
+        if (($days = PadelAccessRule::days($benefit)) !== []) {
+            $details[] = 'Berlaku '.PadelAccessRule::daysLabel($days);
+        }
+        if ($benefit->off_peak_only) {
+            $details[] = 'Hanya di luar jam peak';
+        }
+        if ($benefit->peak_only) {
+            $details[] = 'Hanya di jam peak';
+        }
 
         $note = trim((string) (($benefit->extra_benefits ?? [])['note'] ?? ''));
 
