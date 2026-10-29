@@ -174,7 +174,7 @@
                     <div class="flex flex-col sm:flex-row items-center justify-between gap-2 py-4 border-t border-club-line text-sm">
                         <span class="text-club-muted">Belum punya akun?</span>
                         <a href="{{ route('register') }}" class="inline-flex items-center gap-1 font-bold text-club-terra hover:text-club-brown underline-offset-4 hover:underline">
-                            Daftar membership
+                            Daftar Akun
                             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" /></svg>
                         </a>
                     </div>
