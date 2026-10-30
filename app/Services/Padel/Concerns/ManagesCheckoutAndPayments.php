@@ -33,7 +33,7 @@ trait ManagesCheckoutAndPayments
     ): array {
         // 100% Cashless: pembayaran tunai tidak diperbolehkan sama sekali di jalur checkout online.
         if (in_array(strtoupper($paymentMethod), ['CASH', 'TUNAI'])) {
-            throw new HttpException(422, 'Pembayaran tunai (CASH) tidak diperbolehkan. Venue Club 61 beroperasi 100% Cashless.');
+            throw new HttpException(422, \App\Support\SiteLocale::text('checkout.cash_not_allowed'));
         }
 
         // Diikat ke akun: kunci yang sama dari akun lain tidak pernah mendapat respons checkout orang lain.
@@ -63,7 +63,7 @@ trait ManagesCheckoutAndPayments
             // Hold yang waktunya sudah habis tapi belum sempat dibersihkan tidak boleh di-checkout — slotnya sedang/akan
             // dilepas pembersih otomatis (dulu bisa balapan: checkout menang lalu bookingnya tetap ditimpa EXPIRED).
             if ($bookings->count() !== count($bookingIds) || $holdExpired) {
-                throw new HttpException(422, 'Satu atau lebih slot booking tidak valid atau masa kuncian ('.$bookingTimes->holdMinutes().' menit) telah kedaluwarsa. Silakan pilih slot lagi.');
+                throw new HttpException(422, \App\Support\SiteLocale::text('checkout.hold_invalid_minutes', ['minutes' => $bookingTimes->holdMinutes()]));
             }
 
             // Terapkan kuota atau diskon membership jika ada
@@ -103,7 +103,7 @@ trait ManagesCheckoutAndPayments
                     $isConsumable = strtoupper($eq->type) === 'BALL';
                     if ($isConsumable) {
                         if ((int) $eq->stock_quantity < $qty) {
-                            throw new HttpException(422, "Stok {$eq->name} tidak cukup (sisa {$eq->stock_quantity}, diminta {$qty}).");
+                            throw new HttpException(422, \App\Support\SiteLocale::text('checkout.stock_insufficient', ['item' => $eq->name, 'left' => $eq->stock_quantity, 'qty' => $qty]));
                         }
                         $eq->decrement('stock_quantity', $qty);
                     }
@@ -397,8 +397,8 @@ trait ManagesCheckoutAndPayments
             $response = [
                 'success' => true,
                 'message' => $isConfirmed
-                    ? 'Pembayaran berhasil dikonfirmasi. E-Tiket aktif.'
-                    : 'Sesi transaksi pembayaran berhasil dibuat. Silakan selesaikan pembayaran.',
+                    ? \App\Support\SiteLocale::text('checkout.confirmed')
+                    : \App\Support\SiteLocale::text('checkout.session_created'),
                 'data' => [
                     'driver' => $paymentResult['driver'] ?? app(\App\Services\Payment\PaymentManager::class)->getDefaultDriver(),
                     'order_id' => $orderNumber,
@@ -447,7 +447,7 @@ trait ManagesCheckoutAndPayments
     {
         // 100% Cashless: pembayaran tunai tidak diperbolehkan sama sekali di jalur retry pembayaran.
         if (in_array(strtoupper($paymentMethod), ['CASH', 'TUNAI'])) {
-            throw new HttpException(422, 'Pembayaran tunai (CASH) tidak diperbolehkan. Venue Club 61 beroperasi 100% Cashless.');
+            throw new HttpException(422, \App\Support\SiteLocale::text('checkout.cash_not_allowed'));
         }
 
         return DB::transaction(function () use ($bookingId, $paymentMethod, $user) {
@@ -478,7 +478,7 @@ trait ManagesCheckoutAndPayments
             }
 
             if (! in_array($booking->status, ['PENDING_PAYMENT', 'LOCKED', 'PENDING'])) {
-                throw new HttpException(400, "Booking dengan status {$booking->status} tidak dapat diproses ulang pembayarannya.");
+                throw new HttpException(400, \App\Support\SiteLocale::text('payment.status_not_retryable', ['status' => $booking->status]));
             }
 
             $order = $this->ensureBookingOrder($booking);
@@ -509,7 +509,7 @@ trait ManagesCheckoutAndPayments
             if ($totalPaid > 0 && ! $pendingSupplementalPayment) {
                 $remaining = round((float) $order->grand_total - $totalPaid, 2);
                 if ($remaining <= 0) {
-                    throw new HttpException(422, 'Pesanan ini sudah lunas, tidak ada tagihan yang perlu dibayar.');
+                    throw new HttpException(422, \App\Support\SiteLocale::text('payment.already_paid'));
                 }
 
                 $pendingSupplementalPayment = Payment::create([
@@ -614,7 +614,7 @@ trait ManagesCheckoutAndPayments
                     'grand_total' => $chargeTotal,
                     'gateway_fee' => $newGatewayFee,
                     'payment_method' => $paymentMethod,
-                    'message' => 'Token pembayaran tagihan sisa berhasil dibuat.',
+                    'message' => \App\Support\SiteLocale::text('payment.supplemental_token_created'),
                 ];
             }
 
@@ -631,7 +631,7 @@ trait ManagesCheckoutAndPayments
                 $holdExpired = $unpaidBookings->contains(fn (PadelBooking $b) => $b->status === 'LOCKED'
                     && ($b->expires_at ?? $b->created_at->copy()->addMinutes($bookingTimes->holdMinutes()))->isPast());
                 if ($holdExpired) {
-                    throw new HttpException(422, 'Masa kuncian slot ('.$bookingTimes->holdMinutes().' menit) telah kedaluwarsa. Silakan pilih slot lagi.');
+                    throw new HttpException(422, \App\Support\SiteLocale::text('payment.hold_expired', ['minutes' => $bookingTimes->holdMinutes()]));
                 }
                 $paymentDeadline = $bookingTimes->paymentExpiresAt();
                 foreach ($unpaidBookings as $b) {
@@ -642,7 +642,7 @@ trait ManagesCheckoutAndPayments
             }
             $expiryMinutes = $bookingTimes->remainingPaymentMinutes($paymentDeadline);
             if ($expiryMinutes === null) {
-                throw new HttpException(422, 'Batas waktu pembayaran booking ini sudah habis, slot akan dilepas. Silakan buat booking baru.');
+                throw new HttpException(422, \App\Support\SiteLocale::text('payment.deadline_passed'));
             }
 
             $courtTotal = $bookings->sum('court_fee');
@@ -706,7 +706,7 @@ trait ManagesCheckoutAndPayments
                     'redirect_url' => null,
                     'grand_total' => 0.0,
                     'payment_method' => $coveredBy,
-                    'message' => 'Tagihan Rp0 sudah ditanggung benefit — booking langsung lunas.',
+                    'message' => \App\Support\SiteLocale::text('payment.zero_bill_covered'),
                 ];
             }
 
@@ -872,7 +872,7 @@ trait ManagesCheckoutAndPayments
                 'service_charge' => $totalServiceCharge,
                 'gateway_fee' => $totalServiceCharge,
                 'payment_method' => $paymentMethod,
-                'message' => 'Token pembayaran baru berhasil dibuat.',
+                'message' => \App\Support\SiteLocale::text('payment.new_token_created'),
             ];
         });
     }
@@ -889,7 +889,7 @@ trait ManagesCheckoutAndPayments
             'order_id' => $order->order_number,
             'snap_token' => null,
             'redirect_url' => null,
-            'message' => 'Pembayaran sebelumnya sudah kami terima — tidak perlu membayar lagi. Tiket Anda segera aktif.',
+            'message' => \App\Support\SiteLocale::text('payment.previous_payment_received'),
         ];
     }
 
@@ -911,7 +911,7 @@ trait ManagesCheckoutAndPayments
             'grand_total' => $amount,
             'payment_method' => $paymentMethod,
             'reused_session' => true,
-            'message' => 'Melanjutkan sesi pembayaran yang sama.',
+            'message' => \App\Support\SiteLocale::text('payment.reusing_session'),
         ], $extra);
     }
 
@@ -1611,8 +1611,8 @@ trait ManagesCheckoutAndPayments
         if ($rejectedReason) {
             if ($commit && ! $autoDetected) {
                 throw new HttpException(422, $rejectedReason === 'OUTSIDE_TIME_WINDOW'
-                    ? 'Jam ini di luar ketentuan paket member (berlaku: '.\App\Services\Membership\PadelAccessRule::label($balance).'). Kuota tidak bisa dipakai untuk jam ini.'
-                    : 'Masa aktif membership berakhir '.$membership->end_date->translatedFormat('d M Y').' — booking setelah tanggal itu tidak bisa memakai benefit member. Matikan benefit member atau pilih tanggal sampai '.$membership->end_date->translatedFormat('d M Y').'.');
+                    ? \App\Support\SiteLocale::text('checkout.membership_outside_access', ['rule' => \App\Support\SiteLocale::isEnglish() ? \App\Services\Membership\PadelAccessRule::labelEn($balance) : \App\Services\Membership\PadelAccessRule::label($balance)])
+                    : \App\Support\SiteLocale::text('checkout.membership_ends', ['date' => $membership->end_date->translatedFormat('d M Y')]));
             }
 
             return array_merge($noBenefit, [
@@ -1730,7 +1730,7 @@ trait ManagesCheckoutAndPayments
     private function assertOneVoucherPerTransaction(array $sponsorBenefitResult, ?\App\Models\Pos\Voucher $voucher): void
     {
         if (($sponsorBenefitResult['benefit_type'] ?? 'NONE') !== 'NONE' && $voucher && ! $voucher->isCredit()) {
-            throw new HttpException(422, 'Voucher jam corporate tidak bisa digabung dengan kode promo. Pilih salah satu: matikan voucher corporate, atau hapus kode promonya.');
+            throw new HttpException(422, \App\Support\SiteLocale::text('checkout.corporate_voucher_with_promo'));
         }
     }
 
@@ -2088,7 +2088,7 @@ trait ManagesCheckoutAndPayments
             ->get();
 
         if ($bookings->isEmpty()) {
-            throw new HttpException(422, 'Satu atau lebih slot booking tidak valid atau masa kuncian telah kedaluwarsa.');
+            throw new HttpException(422, \App\Support\SiteLocale::text('checkout.hold_invalid'));
         }
 
         $result = $this->applyMembershipBenefitToCourtBookings($bookings, $user, $membershipBalanceId, commit: false);

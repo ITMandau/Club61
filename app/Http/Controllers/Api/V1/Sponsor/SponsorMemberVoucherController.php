@@ -25,7 +25,7 @@ class SponsorMemberVoucherController extends Controller
             ->first();
 
         if (! $voucherModel) {
-            abort(404, 'Voucher tidak ditemukan.');
+            abort(404, \App\Support\SiteLocale::text('corporate.voucher_not_found'));
         }
 
         if (! $voucherModel->isAcknowledged()) {
@@ -34,7 +34,7 @@ class SponsorMemberVoucherController extends Controller
 
         return response()->json([
             'success' => true,
-            'message' => 'Voucher berhasil diklaim.',
+            'message' => \App\Support\SiteLocale::text('corporate.voucher_acknowledged'),
             'data' => $voucherModel,
         ]);
     }

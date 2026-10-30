@@ -69,7 +69,7 @@ class ScheduleOverview
     {
         return PadelCourt::where('is_active', true)
             ->when($court !== 'all', fn ($q) => $q->whereKey($court))
-            ->orderBy('name')->get();
+            ->ordered()->get();
     }
 
     /** @return array{0: int, 1: int} jam buka paling awal & tutup paling akhir (sama dengan grid harian) */

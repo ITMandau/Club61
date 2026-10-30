@@ -7,18 +7,18 @@
             {{-- Header --}}
             <div class="flex items-center justify-between gap-3">
                 <div class="flex items-center gap-3 min-w-0">
-                    <a href="{{ route('customer.cart') }}" title="Back to Cart"
+                    <a href="{{ route('customer.cart') }}" title="{{ __('checkout.back_to_cart') }}"
                        class="bk-tap w-10 h-10 shrink-0 flex items-center justify-center rounded-lg bg-white/90 border border-[#E6DAC0] text-[#662721] hover:bg-[#F7F0DB] transition-colors">
                         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M15 19l-7-7 7-7" /></svg>
                     </a>
                     <div class="min-w-0">
-                        <h1 class="font-display font-black text-xl sm:text-2xl leading-tight">Checkout</h1>
-                        <p class="hidden sm:block text-xs text-[#7A5A52] mt-0.5">Add equipment, apply a voucher and choose how to pay.</p>
+                        <h1 class="font-display font-black text-xl sm:text-2xl leading-tight">{{ __('checkout.title') }}</h1>
+                        <p class="hidden sm:block text-xs text-[#7A5A52] mt-0.5">{{ __('checkout.subtitle') }}</p>
                     </div>
                 </div>
                 <div x-show="bookingItems.length > 0 && !paymentStarted" style="display: none;"
                      :class="remainingMs > 0 && remainingMs < 120000 ? 'bg-rose-50 border-rose-200 text-rose-700' : 'bg-white/90 border-[#E6DAC0] text-[#662721]'"
-                     class="shrink-0 flex items-center gap-1.5 h-9 px-3 rounded-lg border whitespace-nowrap" title="Time left to finish checkout">
+                     class="shrink-0 flex items-center gap-1.5 h-9 px-3 rounded-lg border whitespace-nowrap" title="{{ __('checkout.time_left') }}">
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
                     <span class="font-black text-sm tabular-nums" x-text="timerDisplay">--:--</span>
                 </div>
@@ -29,11 +29,11 @@
                 <div class="w-16 h-16 mx-auto rounded-lg bg-[#F7F0DB] border border-[#E6DAC0] flex items-center justify-center text-[#662721]">
                     <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
                 </div>
-                <h3 class="font-display font-black text-lg">Nothing to check out</h3>
-                <p class="text-xs text-[#7A5A52] max-w-xs mx-auto">Your held slots were released or already paid. Pick a new time to continue.</p>
+                <h3 class="font-display font-black text-lg">{{ __('checkout.empty_title') }}</h3>
+                <p class="text-xs text-[#7A5A52] max-w-xs mx-auto">{{ __('checkout.empty_text') }}</p>
                 <a href="{{ route('customer.booking') }}"
                    class="bk-tap inline-flex items-center gap-2 h-11 px-6 rounded-lg bg-[#662721] hover:bg-[#511D18] text-[#F7F0DB] text-xs font-black uppercase tracking-wider shadow-[0_8px_20px_rgba(79,47,42,0.18)] active:scale-95 transition-transform">
-                    Book a Court
+                    {{ __('checkout.book_court') }}
                 </a>
             </div>
 
@@ -45,11 +45,11 @@
                     <section class="bg-white/90 rounded-xl border border-[#E6DAC0] shadow-[0_8px_30px_rgba(79,47,42,0.08)] p-4 sm:p-5">
                         <div class="flex items-center justify-between gap-3 mb-1">
                             <div class="min-w-0">
-                                <div class="text-[11px] font-extrabold uppercase tracking-wider text-[#662721]">Your booking</div>
+                                <div class="text-[11px] font-extrabold uppercase tracking-wider text-[#662721]">{{ __('checkout.your_booking') }}</div>
                                 <div class="text-sm font-bold truncate" x-text="bookingDateFormatted"></div>
                             </div>
                             <span class="shrink-0 whitespace-nowrap px-2.5 py-1 rounded-full text-[11px] font-bold bg-[#F7F0DB] text-[#662721] border border-[#E6DAC0]"
-                                  x-text="bookingItems.length + (bookingItems.length === 1 ? ' session' : ' sessions')"></span>
+                                  x-text="plural('sessions', bookingItems.length)"></span>
                         </div>
                         <div class="divide-y divide-[#E6DAC0]">
                             <template x-for="(item, idx) in bookingItems" :key="idx">
@@ -58,11 +58,11 @@
                                         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><rect x="4" y="3" width="16" height="18" rx="2" stroke-width="1.8" /><path stroke-width="1.8" stroke-linecap="round" d="M4 12h16M12 3v18" /></svg>
                                     </div>
                                     <div class="flex-1 min-w-0">
-                                        <div class="font-extrabold text-sm leading-snug line-clamp-2" x-text="item.court || 'Court'"></div>
+                                        <div class="font-extrabold text-sm leading-snug line-clamp-2" x-text="item.court || i18n.court"></div>
                                         <div class="mt-0.5 flex items-center gap-1.5 text-[11px] text-[#7A5A52] whitespace-nowrap">
                                             <span class="font-semibold tabular-nums" x-text="timeRange(item)"></span>
                                             <span x-show="item.duration_hours" class="px-1.5 py-px rounded-md bg-[#F7F0DB] border border-[#E6DAC0] font-bold text-[10px] text-[#662721]"
-                                                  x-text="item.duration_hours + (item.duration_hours === 1 ? ' hr' : ' hrs')"></span>
+                                                  x-text="plural('hrs', item.duration_hours)"></span>
                                         </div>
                                     </div>
                                     <div class="shrink-0 font-black text-sm tabular-nums whitespace-nowrap" x-text="'Rp ' + formatNumber(item.price)"></div>
@@ -75,8 +75,8 @@
                     <section class="bg-white/90 rounded-xl border border-[#E6DAC0] shadow-[0_8px_30px_rgba(79,47,42,0.08)] p-4 sm:p-5">
                         <div class="flex items-center justify-between gap-3 mb-1">
                             <div class="min-w-0">
-                                <div class="text-[11px] font-extrabold uppercase tracking-wider text-[#662721]">Equipment Rental &amp; Add-ons</div>
-                                <div class="text-[11px] text-[#7A5A52]">Optional — price is per session.</div>
+                                <div class="text-[11px] font-extrabold uppercase tracking-wider text-[#662721]">{{ __('checkout.addons_title') }}</div>
+                                <div class="text-[11px] text-[#7A5A52]">{{ __('checkout.addons_hint') }}</div>
                             </div>
                             <span x-show="addonsTotal > 0" class="shrink-0 whitespace-nowrap px-2.5 py-1 rounded-full text-[11px] font-bold bg-[#662721] text-[#F7F0DB] tabular-nums"
                                   x-text="'+ Rp ' + formatNumber(addonsTotal)"></span>
@@ -89,7 +89,7 @@
                         </template>
 
                         <div x-show="!isLoadingAddOns && availableAddOns.length === 0" class="py-4 text-center text-xs text-[#7A5A52]">
-                            No equipment available for rent right now.
+                            {{ __('checkout.addons_empty') }}
                         </div>
 
                         <div x-show="!isLoadingAddOns" class="divide-y divide-[#E6DAC0]">
@@ -100,28 +100,28 @@
                                         <div class="mt-0.5 flex items-center gap-1.5 text-[11px] whitespace-nowrap">
                                             <span class="font-bold tabular-nums text-[#662721]" x-text="'Rp ' + formatNumber(addon.price)"></span>
                                             <span class="text-[#A08F86]">•</span>
-                                            <span class="text-[#7A5A52]" x-text="addon.stock + ' in stock'"></span>
+                                            <span class="text-[#7A5A52]" x-text="t('in_stock', { count: addon.stock })"></span>
                                         </div>
                                     </div>
 
                                     <template x-if="!isAddOnSelected(addon.id)">
                                         <button type="button" @click="toggleAddOn(addon)"
                                                 class="bk-tap shrink-0 h-9 px-4 rounded-xl border border-[#E6DAC0] bg-[#F7F0DB] hover:bg-[#F7F0DB] text-[#662721] text-xs font-bold whitespace-nowrap active:scale-95 transition-all">
-                                            + Add
+                                            {{ __('checkout.add') }}
                                         </button>
                                     </template>
 
                                     <template x-if="isAddOnSelected(addon.id)">
                                         <div class="bk-pop shrink-0 flex items-center rounded-xl border border-[#662721] bg-white p-0.5 shadow-sm">
                                             <button type="button" @click="decrementOrRemoveById(addon.id)"
-                                                    :title="getAddOnQuantity(addon.id) <= 1 ? 'Remove' : 'Less'"
+                                                    :title="getAddOnQuantity(addon.id) <= 1 ? i18n.remove : i18n.less"
                                                     class="bk-tap w-8 h-8 rounded-lg flex items-center justify-center hover:bg-[#F7F0DB] transition-colors"
                                                     :class="getAddOnQuantity(addon.id) <= 1 ? 'text-rose-500' : 'text-[#662721]'">
                                                 <svg x-show="getAddOnQuantity(addon.id) <= 1" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
                                                 <svg x-show="getAddOnQuantity(addon.id) > 1" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-width="2.5" d="M5 12h14" /></svg>
                                             </button>
                                             <span class="w-8 text-center font-black text-sm tabular-nums" x-text="getAddOnQuantity(addon.id)"></span>
-                                            <button type="button" @click="incrementAddonById(addon.id)" :disabled="getAddOnQuantity(addon.id) >= addon.stock" title="More"
+                                            <button type="button" @click="incrementAddonById(addon.id)" :disabled="getAddOnQuantity(addon.id) >= addon.stock" title="{{ __('checkout.more') }}"
                                                     class="bk-tap w-8 h-8 rounded-lg flex items-center justify-center text-[#662721] hover:bg-[#F7F0DB] transition-colors disabled:opacity-30 disabled:cursor-not-allowed">
                                                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-width="2.5" d="M12 5v14M5 12h14" /></svg>
                                             </button>
@@ -133,26 +133,26 @@
 
                         <button type="button" x-show="!isLoadingAddOns && availableAddOns.length > addOnPreviewCount" @click="showAllAddOns = !showAllAddOns"
                                 class="bk-tap mt-1 w-full h-10 rounded-lg text-xs font-bold text-[#662721] hover:bg-[#F7F0DB] transition-colors"
-                                x-text="showAllAddOns ? 'Show less' : 'Show all equipment (' + availableAddOns.length + ')'"></button>
+                                x-text="showAllAddOns ? i18n.show_less : t('show_all_equipment', { count: availableAddOns.length })"></button>
                     </section>
 
                     {{-- 3. Metode pembayaran --}}
                     <section class="bg-white/90 rounded-xl border border-[#E6DAC0] shadow-[0_8px_30px_rgba(79,47,42,0.08)] p-4 sm:p-5">
                         <div class="mb-3">
-                            <div class="text-[11px] font-extrabold uppercase tracking-wider text-[#662721]">Payment method</div>
-                            <div class="text-[11px] text-[#7A5A52]">Paid online — confirmed automatically.</div>
+                            <div class="text-[11px] font-extrabold uppercase tracking-wider text-[#662721]">{{ __('checkout.payment_method') }}</div>
+                            <div class="text-[11px] text-[#7A5A52]">{{ __('checkout.payment_method_hint') }}</div>
                         </div>
 
                         <div x-show="grandTotal <= 0" class="flex items-center gap-3 p-3.5 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-900">
                             <svg class="w-5 h-5 shrink-0 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7" /></svg>
-                            <div class="text-xs font-semibold">Fully covered — no payment needed.</div>
+                            <div class="text-xs font-semibold">{{ __('checkout.fully_covered_no_payment') }}</div>
                         </div>
 
                         <div x-show="grandTotal > 0 && availableMethods.length === 0" class="p-3.5 rounded-lg bg-rose-50 border border-rose-200 text-xs text-rose-800">
-                            No online payment method is available for this total. Please contact the front desk.
+                            {{ __('checkout.no_method') }}
                         </div>
 
-                        <div x-show="grandTotal > 0" class="space-y-2" role="radiogroup" aria-label="Payment method">
+                        <div x-show="grandTotal > 0" class="space-y-2" role="radiogroup" aria-label="{{ __('checkout.payment_method') }}">
                             <template x-for="m in visibleMethods" :key="m.code">
                                 <button type="button" role="radio" :aria-checked="selectedMethod.code === m.code" @click="selectPaymentMethod(m)"
                                         :class="selectedMethod.code === m.code ? 'border-[#662721] bg-[#F7F0DB] shadow-[0_6px_18px_rgba(79,47,42,0.14)]' : 'border-[#E6DAC0] bg-white hover:border-[#E6DAC0]'"
@@ -170,14 +170,14 @@
                             </template>
                             <button type="button" x-show="availableMethods.length > methodPreviewCount" @click="showAllMethods = !showAllMethods"
                                     class="bk-tap w-full h-10 rounded-lg text-xs font-bold text-[#662721] hover:bg-[#F7F0DB] transition-colors"
-                                    x-text="showAllMethods ? 'Show fewer methods' : 'Show all payment methods (' + availableMethods.length + ')'"></button>
+                                    x-text="showAllMethods ? i18n.show_fewer_methods : t('show_all_methods', { count: availableMethods.length })"></button>
                         </div>
                     </section>
                 </div>
 
                 {{-- Ringkasan pembayaran --}}
                 <aside class="lg:col-span-5 xl:col-span-4 lg:sticky lg:top-24 bg-white/90 rounded-xl border border-[#E6DAC0] shadow-[0_8px_30px_rgba(79,47,42,0.10)] p-4 sm:p-5 space-y-4">
-                    <div class="text-[11px] font-extrabold uppercase tracking-wider text-[#662721]">Payment Summary</div>
+                    <div class="text-[11px] font-extrabold uppercase tracking-wider text-[#662721]">{{ __('checkout.payment_summary') }}</div>
 
                     <template x-if="isLoadingMembershipPreview">
                         <div class="bk-skeleton h-14 rounded-lg"></div>
@@ -189,10 +189,10 @@
                              :class="useMembershipBenefit ? 'bg-[#F7F0DB] border-[#662721]' : 'bg-[#F7F0DB] border-[#E6DAC0]'">
                             <div class="flex items-center gap-2.5">
                                 <span class="shrink-0 px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider"
-                                      :class="useMembershipBenefit ? 'bg-emerald-100 text-emerald-800 border border-emerald-300' : 'bg-[#E6DAC0] text-[#7A5A52] border border-[#E6DAC0]'">Member</span>
+                                      :class="useMembershipBenefit ? 'bg-emerald-100 text-emerald-800 border border-emerald-300' : 'bg-[#E6DAC0] text-[#7A5A52] border border-[#E6DAC0]'">{{ __('checkout.member_badge') }}</span>
                                 <span class="flex-1 min-w-0 text-xs font-bold truncate" x-text="membershipBenefit.plan_name"></span>
                                 <button type="button" role="switch" :aria-checked="useMembershipBenefit" @click="toggleMembershipBenefit()"
-                                        :title="useMembershipBenefit ? 'Turn off membership benefit' : 'Use membership benefit'"
+                                        :title="useMembershipBenefit ? i18n.membership_turn_off : i18n.membership_turn_on"
                                         :class="useMembershipBenefit ? 'bg-[#662721]' : 'bg-[#A08F86]'"
                                         class="bk-tap relative shrink-0 w-11 h-6 rounded-full transition-colors">
                                     <span class="absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform duration-200" :class="useMembershipBenefit ? 'translate-x-5' : ''"></span>
@@ -200,13 +200,13 @@
                             </div>
                             <div x-show="useMembershipBenefit" class="text-[11px] leading-relaxed text-[#7A5A52]">
                                 <template x-if="membershipBenefit.benefit_type === 'HOURS'">
-                                    <span>Uses <b class="text-[#662721]" x-text="membershipBenefit.hours_to_consume + ' hr'"></b> of your quota — <b x-text="membershipBenefit.remaining_quota_after + ' hr'"></b> left after.</span>
+                                    <span>{!! __('checkout.member_hours_html', ['hours' => '<b class="text-[#662721]" x-text="t(\'hr\', { count: membershipBenefit.hours_to_consume })"></b>', 'left' => '<b x-text="t(\'hr\', { count: membershipBenefit.remaining_quota_after })"></b>']) !!}</span>
                                 </template>
                                 <template x-if="membershipBenefit.benefit_type === 'DISCOUNT_PERCENT'">
-                                    <span>Member discount <b class="text-[#662721]" x-text="membershipBenefit.discount_percent + '%'"></b> on this court rental.</span>
+                                    <span>{!! __('checkout.member_discount_html', ['percent' => '<b class="text-[#662721]" x-text="membershipBenefit.discount_percent + \'%\'"></b>']) !!}</span>
                                 </template>
                             </div>
-                            <div x-show="!useMembershipBenefit" class="text-[11px] leading-relaxed text-[#7A5A52]">Benefit off for this booking — your quota stays untouched.</div>
+                            <div x-show="!useMembershipBenefit" class="text-[11px] leading-relaxed text-[#7A5A52]">{{ __('checkout.member_off') }}</div>
                         </div>
                     </template>
                     <template x-if="!isLoadingMembershipPreview && !membershipBenefit && membershipNotice">
@@ -219,44 +219,44 @@
                              :class="useSponsorVoucherBenefit ? 'bg-[#F0F7F2] border-[#4F2F2A]' : 'bg-[#F7F0DB] border-[#E6DAC0]'">
                             <div class="flex items-center gap-2.5">
                                 <span class="shrink-0 px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider"
-                                      :class="useSponsorVoucherBenefit ? 'bg-[#4F2F2A] text-[#F7F0DB]' : 'bg-[#E6DAC0] text-[#7A5A52] border border-[#E6DAC0]'">Corporate</span>
+                                      :class="useSponsorVoucherBenefit ? 'bg-[#4F2F2A] text-[#F7F0DB]' : 'bg-[#E6DAC0] text-[#7A5A52] border border-[#E6DAC0]'">{{ __('checkout.corporate_badge') }}</span>
                                 <span class="flex-1 min-w-0 text-xs font-bold truncate" x-text="sponsorVoucherBenefit.plan_name || sponsorVoucherBenefit.organization_name"></span>
                                 <button type="button" role="switch" :aria-checked="useSponsorVoucherBenefit" @click="toggleSponsorVoucherBenefit()"
-                                        :title="useSponsorVoucherBenefit ? 'Turn off corporate voucher' : 'Use corporate voucher'"
+                                        :title="useSponsorVoucherBenefit ? i18n.corporate_turn_off : i18n.corporate_turn_on"
                                         :class="useSponsorVoucherBenefit ? 'bg-[#4F2F2A]' : 'bg-[#A08F86]'"
                                         class="bk-tap relative shrink-0 w-11 h-6 rounded-full transition-colors">
                                     <span class="absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform duration-200" :class="useSponsorVoucherBenefit ? 'translate-x-5' : ''"></span>
                                 </button>
                             </div>
                             <div x-show="useSponsorVoucherBenefit" class="text-[11px] leading-relaxed text-[#7A5A52]">
-                                Uses <b class="text-[#4F2F2A]" x-text="sponsorVoucherBenefit.hours_to_consume + ' hr'"></b> of free company hours — <b x-text="sponsorVoucherBenefit.remaining_hours_after + ' hr'"></b> left after.
+                                {!! __('checkout.corporate_hours_html', ['hours' => '<b class="text-[#4F2F2A]" x-text="t(\'hr\', { count: sponsorVoucherBenefit.hours_to_consume })"></b>', 'left' => '<b x-text="t(\'hr\', { count: sponsorVoucherBenefit.remaining_hours_after })"></b>']) !!}
                             </div>
-                            <div x-show="!useSponsorVoucherBenefit" class="text-[11px] leading-relaxed text-[#7A5A52]">Corporate voucher off for this booking — your hours stay untouched.</div>
+                            <div x-show="!useSponsorVoucherBenefit" class="text-[11px] leading-relaxed text-[#7A5A52]">{{ __('checkout.corporate_off') }}</div>
                         </div>
                     </template>
 
                     {{-- Voucher / promo --}}
                     <div class="space-y-2">
-                        <label for="voucher-code" class="block text-[11px] font-bold text-[#662721]">Voucher / promo code</label>
+                        <label for="voucher-code" class="block text-[11px] font-bold text-[#662721]">{{ __('checkout.voucher_label') }}</label>
                         <div class="flex gap-2">
                             <input id="voucher-code" type="text" x-model="promoCode" :disabled="promoApplied" autocomplete="off" autocapitalize="characters"
-                                   placeholder="Enter code" maxlength="30" @keydown.enter.prevent="applyPromo()"
+                                   placeholder="{{ __('checkout.voucher_placeholder') }}" maxlength="30" @keydown.enter.prevent="applyPromo()"
                                    class="flex-1 min-w-0 h-11 px-3.5 rounded-xl border border-[#E6DAC0] bg-white text-sm font-semibold uppercase tracking-wide placeholder:normal-case placeholder:tracking-normal placeholder:font-normal focus:ring-1 focus:ring-[#662721] focus:border-[#662721] focus:outline-none disabled:bg-[#F7F0DB]">
                             <button type="button" x-show="!promoApplied" @click="applyPromo()" :disabled="isCheckingPromo || !promoCode.trim()"
                                     class="bk-tap shrink-0 h-11 px-4 rounded-xl bg-[#662721] text-[#F7F0DB] text-xs font-bold whitespace-nowrap active:scale-95 transition-all disabled:opacity-40">
-                                <span x-text="isCheckingPromo ? '…' : 'Apply'"></span>
+                                <span x-text="isCheckingPromo ? '…' : i18n.apply"></span>
                             </button>
                             <button type="button" x-show="promoApplied" @click="removePromo()"
                                     class="bk-tap shrink-0 h-11 px-4 rounded-xl bg-rose-50 text-rose-600 border border-rose-200 text-xs font-bold whitespace-nowrap">
-                                Remove
+                                {{ __('checkout.remove') }}
                             </button>
                         </div>
                         <div x-show="corporateVoucherOn && !promoApplied" class="text-[11px] leading-snug text-[#7A5A52]">
-                            Corporate voucher is on — promo codes can't be combined with it (credit vouchers still work).
+                            {{ __('checkout.corporate_on_hint') }}
                         </div>
                         <div x-show="promoApplied" class="text-[11px] font-bold leading-snug" :class="promoDiscount > 0 ? 'text-emerald-700' : 'text-rose-600'">
-                            <span x-show="promoDiscount > 0" x-text="(promoVoucher ? promoVoucher.code : '') + ' applied — you save Rp ' + formatNumber(promoDiscount)"></span>
-                            <span x-show="promoDiscount <= 0">This voucher does not apply to the current total.</span>
+                            <span x-show="promoDiscount > 0" x-text="t('promo_applied', { code: promoVoucher ? promoVoucher.code : '', amount: formatNumber(promoDiscount) })"></span>
+                            <span x-show="promoDiscount <= 0">{{ __('checkout.voucher_not_apply') }}</span>
                         </div>
                         <template x-if="promoApplied && promoTerms">
                             <div data-voucher-terms class="px-3 py-2 rounded-xl bg-emerald-50 border border-emerald-200 text-[11px] leading-relaxed text-emerald-900">
@@ -269,15 +269,15 @@
                         {{-- Promo yang sudah diklaim customer (cara sebar C) — aturan tetap dicek server saat "Use" --}}
                         <template x-if="myPromos.length > 0 && !promoApplied">
                             <div class="space-y-1.5 pt-1" data-claimed-promos>
-                                <div class="text-[10px] font-bold uppercase tracking-wider text-[#662721]">Your claimed promos</div>
+                                <div class="text-[10px] font-bold uppercase tracking-wider text-[#662721]">{{ __('checkout.claimed_promos') }}</div>
                                 <template x-for="p in myPromos" :key="p.code">
                                     <div class="flex items-center gap-2 px-3 py-2 rounded-xl bg-rose-50 border border-rose-200">
                                         <div class="flex-1 min-w-0">
                                             <div class="text-xs font-bold text-rose-900 truncate" x-text="p.name || p.code"></div>
-                                            <div class="text-[10px] text-rose-800 truncate" x-text="p.headline + (p.valid_until ? ' · until ' + p.valid_until : '')"></div>
+                                            <div class="text-[10px] text-rose-800 truncate" x-text="p.headline + (p.valid_until ? ' · ' + t('until', { date: p.valid_until }) : '')"></div>
                                         </div>
                                         <button type="button" @click="promoCode = p.code; applyPromo()" :disabled="isCheckingPromo"
-                                                class="bk-tap shrink-0 h-8 px-3 rounded-lg bg-[#B91C1C] text-white text-[11px] font-bold disabled:opacity-50">Use</button>
+                                                class="bk-tap shrink-0 h-8 px-3 rounded-lg bg-[#B91C1C] text-white text-[11px] font-bold disabled:opacity-50">{{ __('checkout.use') }}</button>
                                     </div>
                                 </template>
                             </div>
@@ -286,15 +286,15 @@
                         {{-- Voucher saldo milik customer (refund yang dijadikan voucher) --}}
                         <template x-if="myVouchers.length > 0 && !promoApplied">
                             <div class="space-y-1.5 pt-1">
-                                <div class="text-[10px] font-bold uppercase tracking-wider text-[#662721]">Your credit vouchers</div>
+                                <div class="text-[10px] font-bold uppercase tracking-wider text-[#662721]">{{ __('checkout.credit_vouchers') }}</div>
                                 <template x-for="v in myVouchers" :key="v.code">
                                     <div class="flex items-center gap-2 px-3 py-2 rounded-xl bg-emerald-50 border border-emerald-200">
                                         <div class="flex-1 min-w-0">
                                             <div class="text-xs font-bold text-emerald-900 truncate" x-text="v.code"></div>
-                                            <div class="text-[10px] text-emerald-800 truncate" x-text="'Rp ' + formatNumber(Math.round(v.available)) + (v.valid_until ? ' · until ' + v.valid_until : '')"></div>
+                                            <div class="text-[10px] text-emerald-800 truncate" x-text="'Rp ' + formatNumber(Math.round(v.available)) + (v.valid_until ? ' · ' + t('until', { date: v.valid_until }) : '')"></div>
                                         </div>
                                         <button type="button" @click="promoCode = v.code; applyPromo()" :disabled="isCheckingPromo || v.available <= 0"
-                                                class="bk-tap shrink-0 h-8 px-3 rounded-lg bg-emerald-600 text-white text-[11px] font-bold disabled:opacity-50">Use</button>
+                                                class="bk-tap shrink-0 h-8 px-3 rounded-lg bg-emerald-600 text-white text-[11px] font-bold disabled:opacity-50">{{ __('checkout.use') }}</button>
                                     </div>
                                 </template>
                             </div>
@@ -304,7 +304,7 @@
                     {{-- Rincian harga --}}
                     <div class="space-y-2 text-xs text-[#662721] border-t border-[#E6DAC0] pt-3">
                         <div class="flex items-start justify-between gap-3">
-                            <span class="min-w-0">Court rental</span>
+                            <span class="min-w-0">{{ __('checkout.court_rental') }}</span>
                             <span class="shrink-0 font-bold tabular-nums whitespace-nowrap" x-text="'Rp ' + formatNumber(subtotal)"></span>
                         </div>
                         {{-- Paket / voucher ada tapi jam ini di luar ketentuannya (penjelasan lengkap di pop-up sekali). --}}
@@ -313,7 +313,7 @@
                             <span x-text="accessNotice ? accessNotice.short : ''"></span>
                         </div>
                         <div x-show="addonsTotal > 0" class="flex items-start justify-between gap-3">
-                            <span class="min-w-0">Equipment add-ons</span>
+                            <span class="min-w-0">{{ __('checkout.equipment_addons') }}</span>
                             <span class="shrink-0 font-bold tabular-nums whitespace-nowrap" x-text="'Rp ' + formatNumber(addonsTotal)"></span>
                         </div>
                         <div x-show="membershipDiscountAmount > 0" class="flex items-start justify-between gap-3 font-bold text-[#662721]">
@@ -321,24 +321,24 @@
                             <span class="shrink-0 tabular-nums whitespace-nowrap" x-text="'- Rp ' + formatNumber(membershipDiscountAmount)"></span>
                         </div>
                         <div x-show="sponsorVoucherDiscountAmount > 0" class="flex items-start justify-between gap-3 font-bold text-[#4F2F2A]">
-                            <span class="min-w-0">Corporate voucher</span>
+                            <span class="min-w-0">{{ __('checkout.corporate_voucher') }}</span>
                             <span class="shrink-0 tabular-nums whitespace-nowrap" x-text="'- Rp ' + formatNumber(sponsorVoucherDiscountAmount)"></span>
                         </div>
                         <div x-show="promoApplied && promoDiscount > 0" class="flex items-start justify-between gap-3 font-bold text-emerald-700">
-                            <span class="min-w-0" x-text="'Voucher discount' + (promoVoucher && promoVoucher.type === 'PERCENT' ? ' (' + formatPercent(promoVoucher.value) + ')' : '')"></span>
+                            <span class="min-w-0" x-text="i18n.voucher_discount + (promoVoucher && promoVoucher.type === 'PERCENT' ? ' (' + formatPercent(promoVoucher.value) + ')' : '')"></span>
                             <span class="shrink-0 tabular-nums whitespace-nowrap" x-text="'- Rp ' + formatNumber(promoDiscount)"></span>
                         </div>
                         {{-- Biaya layanan / admin & pajak dari panel admin --}}
                         <div x-show="isAdminFeeApplicable && calculatedAdminFee > 0" class="flex items-start justify-between gap-3">
-                            <span class="min-w-0" x-text="financeSettings.admin_fee_name || 'Service fee'"></span>
+                            <span class="min-w-0" x-text="financeSettings.admin_fee_name || i18n.service_fee"></span>
                             <span class="shrink-0 font-bold tabular-nums whitespace-nowrap" x-text="'Rp ' + formatNumber(calculatedAdminFee)"></span>
                         </div>
                         <div x-show="isTaxApplicable && calculatedTax > 0" class="flex items-start justify-between gap-3">
-                            <span class="min-w-0" x-text="(financeSettings.tax_name || 'Tax') + (financeSettings.tax_type === 'PERCENTAGE' ? ' (' + financeSettings.tax_rate + '%)' : '')"></span>
+                            <span class="min-w-0" x-text="(financeSettings.tax_name || i18n.tax) + (financeSettings.tax_type === 'PERCENTAGE' ? ' (' + financeSettings.tax_rate + '%)' : '')"></span>
                             <span class="shrink-0 font-bold tabular-nums whitespace-nowrap" x-text="'Rp ' + formatNumber(calculatedTax)"></span>
                         </div>
                         <div class="pt-3 border-t border-[#E6DAC0] flex items-center justify-between gap-3">
-                            <span class="font-bold text-sm text-[#4F2F2A]">Grand total</span>
+                            <span class="font-bold text-sm text-[#4F2F2A]">{{ __('checkout.grand_total') }}</span>
                             <span class="shrink-0 font-black text-xl tabular-nums whitespace-nowrap text-[#4F2F2A]" x-text="'Rp ' + formatNumber(grandTotal)"></span>
                         </div>
                     </div>
@@ -353,13 +353,13 @@
                     <template x-if="canCancelBooking">
                         <button type="button" @click="cancelCheckout()"
                                 class="bk-tap w-full h-10 rounded-lg text-xs font-bold text-[#7A5A52] hover:text-rose-600 hover:bg-rose-50 transition-colors">
-                            Cancel &amp; pick another time
+                            {{ __('checkout.cancel_pick_another') }}
                         </button>
                     </template>
 
                     <div class="flex items-center justify-center gap-1.5 text-[10px] text-[#7A5A52]">
                         <svg class="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" /></svg>
-                        <span>Secure online payment</span>
+                        <span>{{ __('checkout.secure_payment') }}</span>
                     </div>
                 </aside>
             </div>
@@ -369,13 +369,13 @@
         <div x-show="bookingItems.length > 0" style="display: none;" class="bk-bar bk-bar-compact-only fixed inset-x-0 z-30 px-3 sm:px-8 lg:px-12 2xl:px-16 pointer-events-none">
             <div x-ref="bar" class="w-full pointer-events-auto bg-white/95 rounded-xl border border-[#E6DAC0] shadow-[0_18px_44px_rgba(79,47,42,0.22)] p-3 sm:p-4 flex items-center gap-3">
                 <div class="flex-1 min-w-0">
-                    <div class="text-[11px] font-bold text-[#7A5A52] truncate" x-text="grandTotal > 0 ? (selectedMethod.name || 'Choose a payment method') : 'Fully covered'"></div>
+                    <div class="text-[11px] font-bold text-[#7A5A52] truncate" x-text="grandTotal > 0 ? (selectedMethod.name || i18n.choose_method) : i18n.fully_covered"></div>
                     <div class="font-black text-lg sm:text-xl leading-tight tabular-nums whitespace-nowrap" x-text="'Rp ' + formatNumber(grandTotal)"></div>
                 </div>
                 <button type="button" :disabled="isSubmitting || isExpired" @click="openPayConfirm()"
                         class="bk-tap shrink-0 h-12 px-5 sm:px-7 rounded-lg flex items-center gap-2 text-xs sm:text-sm font-black uppercase tracking-wider whitespace-nowrap bg-[#662721] hover:bg-[#511D18] text-[#F7F0DB] shadow-[0_8px_20px_rgba(79,47,42,0.18)] active:scale-95 transition-transform disabled:opacity-60">
                     <span x-show="isSubmitting" class="w-4 h-4 border-2 border-[#4F2F2A] border-t-transparent rounded-full animate-spin"></span>
-                    <span x-text="isSubmitting ? 'Processing…' : (grandTotal > 0 ? 'Pay Now' : 'Confirm')"></span>
+                    <span x-text="isSubmitting ? i18n.processing : (grandTotal > 0 ? i18n.pay_now : i18n.confirm)"></span>
                 </button>
             </div>
         </div>
@@ -391,17 +391,17 @@
                  class="relative w-full sm:max-w-lg max-h-[92vh] overflow-y-auto bg-white rounded-t-xl sm:rounded-xl border-t-2 sm:border-2 border-[#662721] shadow-2xl p-5 sm:p-6 pb-[calc(1.25rem+env(safe-area-inset-bottom,0px))] sm:pb-6 space-y-4">
                 <div class="sm:hidden mx-auto w-10 h-1.5 rounded-full bg-[#E6DAC0]"></div>
                 <div>
-                    <h3 id="co-confirm-title" class="font-display font-black text-lg">Check your booking</h3>
-                    <p class="text-xs text-[#7A5A52] mt-0.5">Make sure the date, court and time are right before you pay.</p>
+                    <h3 id="co-confirm-title" class="font-display font-black text-lg">{{ __('checkout.confirm_title') }}</h3>
+                    <p class="text-xs text-[#7A5A52] mt-0.5">{{ __('checkout.confirm_text') }}</p>
                 </div>
 
                 <div class="rounded-lg border border-[#E6DAC0] divide-y divide-[#E6DAC0]">
                     <template x-for="(item, idx) in bookingItems" :key="idx">
                         <div class="flex items-start justify-between gap-3 px-4 py-3">
                             <div class="min-w-0">
-                                <div class="text-sm font-extrabold truncate" x-text="item.court || 'Court'"></div>
+                                <div class="text-sm font-extrabold truncate" x-text="item.court || i18n.court"></div>
                                 <div class="text-xs text-[#7A5A52]" x-text="formatDate(item.booking_date) + ' · ' + timeRange(item) + ' WIB'"></div>
-                                <div x-show="item.duration_hours" class="text-[11px] text-[#662721] font-semibold" x-text="item.duration_hours + (item.duration_hours === 1 ? ' hour' : ' hours')"></div>
+                                <div x-show="item.duration_hours" class="text-[11px] text-[#662721] font-semibold" x-text="plural('hours', item.duration_hours)"></div>
                             </div>
                             <div class="text-sm font-black tabular-nums shrink-0" x-text="'Rp ' + formatNumber(item.price)"></div>
                         </div>
@@ -410,7 +410,7 @@
                     <div x-show="addonsTotal > 0 || membershipDiscountAmount > 0 || sponsorVoucherDiscountAmount > 0 || promoDiscount > 0 || (isAdminFeeApplicable && calculatedAdminFee > 0) || (isTaxApplicable && calculatedTax > 0)"
                          data-confirm-breakdown class="px-4 py-3 space-y-1.5 text-xs text-[#662721]">
                         <div x-show="addonsTotal > 0" class="flex items-start justify-between gap-3">
-                            <span class="min-w-0">Equipment add-ons</span>
+                            <span class="min-w-0">{{ __('checkout.equipment_addons') }}</span>
                             <span class="shrink-0 font-bold tabular-nums whitespace-nowrap" x-text="'Rp ' + formatNumber(addonsTotal)"></span>
                         </div>
                         <div x-show="membershipDiscountAmount > 0" class="flex items-start justify-between gap-3 font-bold">
@@ -418,7 +418,7 @@
                             <span class="shrink-0 tabular-nums whitespace-nowrap" x-text="'- Rp ' + formatNumber(membershipDiscountAmount)"></span>
                         </div>
                         <div x-show="sponsorVoucherDiscountAmount > 0" class="flex items-start justify-between gap-3 font-bold">
-                            <span class="min-w-0">Corporate voucher</span>
+                            <span class="min-w-0">{{ __('checkout.corporate_voucher') }}</span>
                             <span class="shrink-0 tabular-nums whitespace-nowrap" x-text="'- Rp ' + formatNumber(sponsorVoucherDiscountAmount)"></span>
                         </div>
                         <div x-show="promoApplied && promoDiscount > 0" class="flex items-start justify-between gap-3 font-bold text-emerald-700">
@@ -429,44 +429,44 @@
                             <span class="shrink-0 tabular-nums whitespace-nowrap" x-text="'- Rp ' + formatNumber(promoDiscount)"></span>
                         </div>
                         <div x-show="isAdminFeeApplicable && calculatedAdminFee > 0" class="flex items-start justify-between gap-3">
-                            <span class="min-w-0" x-text="financeSettings.admin_fee_name || 'Service fee'"></span>
+                            <span class="min-w-0" x-text="financeSettings.admin_fee_name || i18n.service_fee"></span>
                             <span class="shrink-0 font-bold tabular-nums whitespace-nowrap" x-text="'Rp ' + formatNumber(calculatedAdminFee)"></span>
                         </div>
                         <div x-show="isTaxApplicable && calculatedTax > 0" class="flex items-start justify-between gap-3">
-                            <span class="min-w-0" x-text="financeSettings.tax_name || 'Tax'"></span>
+                            <span class="min-w-0" x-text="financeSettings.tax_name || i18n.tax"></span>
                             <span class="shrink-0 font-bold tabular-nums whitespace-nowrap" x-text="'Rp ' + formatNumber(calculatedTax)"></span>
                         </div>
                     </div>
                     <div class="flex items-center justify-between gap-3 px-4 py-3 bg-[#F7F0DB] rounded-b-lg">
                         <div class="min-w-0">
-                            <div class="text-xs font-bold text-[#7A5A52]">Total to pay</div>
-                            <div class="text-[11px] text-[#7A5A52] truncate" x-text="grandTotal > 0 ? ('via ' + selectedMethod.name) : 'Fully covered — no payment needed'"></div>
+                            <div class="text-xs font-bold text-[#7A5A52]">{{ __('checkout.total_to_pay') }}</div>
+                            <div class="text-[11px] text-[#7A5A52] truncate" x-text="grandTotal > 0 ? t('via', { method: selectedMethod.name }) : i18n.fully_covered_no_payment"></div>
                         </div>
                         <span class="text-base font-black tabular-nums shrink-0" x-text="'Rp ' + formatNumber(grandTotal)"></span>
                     </div>
                 </div>
 
                 <div class="rounded-lg bg-amber-50 border border-amber-200 p-4 space-y-2 text-xs text-amber-900">
-                    <div class="font-extrabold uppercase tracking-wider text-[11px]">Booking policy</div>
+                    <div class="font-extrabold uppercase tracking-wider text-[11px]">{{ __('checkout.policy_title') }}</div>
                     <ul class="space-y-1.5 list-disc pl-4 leading-relaxed">
-                        <li>Rescheduling is only possible up to <strong>H-3</strong> (3 days before your play time).</li>
-                        <li><strong>No refunds</strong> once the booking is paid.</li>
-                        <li>Mistakes in the chosen date, court or time are the <strong>booker's responsibility</strong>.</li>
+                        <li>{!! __('checkout.policy_reschedule_html') !!}</li>
+                        <li>{!! __('checkout.policy_no_refund_html') !!}</li>
+                        <li>{!! __('checkout.policy_responsibility_html') !!}</li>
                     </ul>
                 </div>
 
                 <label class="flex items-start gap-3 cursor-pointer select-none">
                     <input type="checkbox" x-model="payConfirm.agreed" class="mt-0.5 w-5 h-5 rounded border-[#CDBB9C] text-[#662721] focus:ring-[#662721]">
-                    <span class="text-sm text-[#4F2F2A]">I have checked my booking and agree to the booking policy.</span>
+                    <span class="text-sm text-[#4F2F2A]">{{ __('checkout.agree') }}</span>
                 </label>
 
                 <div class="flex gap-2.5">
                     <button type="button" @click="payConfirm.show = false"
-                            class="bk-tap flex-1 h-12 rounded-lg border border-[#E6DAC0] text-sm font-bold text-[#7A5A52] hover:bg-[#F7F0DB] transition-colors">Check again</button>
+                            class="bk-tap flex-1 h-12 rounded-lg border border-[#E6DAC0] text-sm font-bold text-[#7A5A52] hover:bg-[#F7F0DB] transition-colors">{{ __('checkout.check_again') }}</button>
                     <button type="button" :disabled="!payConfirm.agreed || isSubmitting || isExpired" @click="confirmAndPay()"
                             :class="payConfirm.agreed ? 'bg-[#662721] hover:bg-[#511D18] text-[#F7F0DB] active:scale-[0.98]' : 'bg-[#EEE5D3] text-[#A08F86] cursor-not-allowed'"
                             class="bk-tap flex-[1.4] h-12 rounded-lg text-sm font-black uppercase tracking-wider transition-all"
-                            x-text="grandTotal > 0 ? 'Yes, pay now' : 'Yes, confirm'"></button>
+                            x-text="grandTotal > 0 ? i18n.yes_pay_now : i18n.yes_confirm"></button>
                 </div>
             </div>
         </div>
@@ -480,26 +480,26 @@
                     <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7" /></svg>
                 </div>
                 <div class="space-y-1.5">
-                    <h3 class="font-display font-black text-xl">Booking confirmed</h3>
-                    <p class="text-xs text-[#7A5A52] leading-relaxed">Payment is settled and your court is locked in — no further action needed.</p>
+                    <h3 class="font-display font-black text-xl">{{ __('checkout.success_title') }}</h3>
+                    <p class="text-xs text-[#7A5A52] leading-relaxed">{{ __('checkout.success_text') }}</p>
                 </div>
                 <div class="rounded-lg bg-[#F7F0DB] border border-[#E6DAC0] p-3.5 text-xs space-y-2 text-left">
                     <div class="flex items-center justify-between gap-3">
-                        <span class="text-[#7A5A52] shrink-0">Paid with</span>
-                        <span class="font-bold text-right min-w-0 truncate" x-text="grandTotal <= 0 ? 'Fully covered' : (selectedMethod.name || 'Online payment')"></span>
+                        <span class="text-[#7A5A52] shrink-0">{{ __('checkout.paid_with') }}</span>
+                        <span class="font-bold text-right min-w-0 truncate" x-text="grandTotal <= 0 ? i18n.fully_covered : (selectedMethod.name || i18n.online_payment)"></span>
                     </div>
                     <div class="flex items-center justify-between gap-3">
-                        <span class="text-[#7A5A52]">Status</span>
-                        <span class="px-2 py-0.5 rounded-md text-[10px] font-black bg-emerald-100 text-emerald-800 border border-emerald-200">PAID</span>
+                        <span class="text-[#7A5A52]">{{ __('checkout.status') }}</span>
+                        <span class="px-2 py-0.5 rounded-md text-[10px] font-black bg-emerald-100 text-emerald-800 border border-emerald-200">{{ __('checkout.paid_badge') }}</span>
                     </div>
                     <div class="pt-2 border-t border-[#E6DAC0] flex items-center justify-between gap-3">
-                        <span class="font-bold">Total</span>
+                        <span class="font-bold">{{ __('checkout.total') }}</span>
                         <span class="font-black text-lg tabular-nums whitespace-nowrap text-[#662721]" x-text="'Rp ' + formatNumber(grandTotal)"></span>
                     </div>
                 </div>
                 <button type="button" @click="completePaymentAndRedirect()"
                         class="bk-tap w-full h-12 rounded-lg flex items-center justify-center gap-2 text-xs font-black uppercase tracking-wider bg-[#662721] hover:bg-[#511D18] text-[#F7F0DB] shadow-md active:scale-[0.98] transition-transform">
-                    View My E-Ticket
+                    {{ __('checkout.view_eticket') }}
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M13 7l5 5m0 0l-5 5m5-5H6" /></svg>
                 </button>
             </div>
@@ -514,25 +514,25 @@
                     <svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
                 </div>
                 <div class="space-y-1.5">
-                    <h3 class="font-display font-black text-xl">Cancel checkout?</h3>
-                    <p class="text-xs text-[#7A5A52] leading-relaxed">Your held slots will be released right away so other players can book them.</p>
+                    <h3 class="font-display font-black text-xl">{{ __('checkout.cancel_title') }}</h3>
+                    <p class="text-xs text-[#7A5A52] leading-relaxed">{{ __('checkout.cancel_text') }}</p>
                 </div>
                 <template x-if="bookingItems && bookingItems.length > 0">
                     <div class="rounded-lg bg-[#F7F0DB] border border-[#E6DAC0] p-3 text-xs space-y-1.5 text-left">
-                        <div class="flex justify-between gap-3"><span class="text-[#7A5A52] shrink-0">Court</span><span class="font-bold text-right min-w-0 truncate" x-text="bookingItems[0].court || 'Court'"></span></div>
-                        <div class="flex justify-between gap-3"><span class="text-[#7A5A52] shrink-0">Schedule</span><span class="font-bold text-right min-w-0 truncate" x-text="formatDate(bookingItems[0].booking_date) + ' · ' + timeRange(bookingItems[0])"></span></div>
-                        <div x-show="bookingItems.length > 1" class="flex justify-between gap-3"><span class="text-[#7A5A52]">Sessions</span><span class="font-bold" x-text="bookingItems.length"></span></div>
+                        <div class="flex justify-between gap-3"><span class="text-[#7A5A52] shrink-0">{{ __('checkout.court') }}</span><span class="font-bold text-right min-w-0 truncate" x-text="bookingItems[0].court || i18n.court"></span></div>
+                        <div class="flex justify-between gap-3"><span class="text-[#7A5A52] shrink-0">{{ __('checkout.schedule') }}</span><span class="font-bold text-right min-w-0 truncate" x-text="formatDate(bookingItems[0].booking_date) + ' · ' + timeRange(bookingItems[0])"></span></div>
+                        <div x-show="bookingItems.length > 1" class="flex justify-between gap-3"><span class="text-[#7A5A52]">{{ __('checkout.sessions') }}</span><span class="font-bold" x-text="bookingItems.length"></span></div>
                     </div>
                 </template>
                 <div class="grid grid-cols-2 gap-2">
                     <button type="button" @click="showCancelModal = false" :disabled="isCancellingCheckout"
                             class="bk-tap h-12 rounded-lg border border-[#E6DAC0] bg-[#F7F0DB] text-[#662721] text-xs font-bold disabled:opacity-50">
-                        Keep paying
+                        {{ __('checkout.keep_paying') }}
                     </button>
                     <button type="button" @click="confirmCancelCheckout()" :disabled="isCancellingCheckout"
                             class="bk-tap h-12 rounded-lg bg-rose-600 hover:bg-rose-700 text-white text-xs font-black uppercase tracking-wider flex items-center justify-center gap-2 disabled:opacity-60 transition-colors">
                         <span x-show="isCancellingCheckout" class="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
-                        <span x-text="isCancellingCheckout ? 'Releasing…' : 'Yes, cancel'"></span>
+                        <span x-text="isCancellingCheckout ? i18n.releasing : i18n.yes_cancel"></span>
                     </button>
                 </div>
             </div>
@@ -547,12 +547,12 @@
                     <svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
                 </div>
                 <div class="space-y-1.5">
-                    <h3 class="font-display font-black text-xl">Time's up</h3>
-                    <p class="text-xs text-[#7A5A52] leading-relaxed">The {{ app(\App\Services\Padel\BookingTimeService::class)->holdMinutes() }}-minute hold has ended and your slots are back on the public schedule.</p>
+                    <h3 class="font-display font-black text-xl">{{ __('checkout.expired_title') }}</h3>
+                    <p class="text-xs text-[#7A5A52] leading-relaxed">{{ __('checkout.expired_text', ['minutes' => app(\App\Services\Padel\BookingTimeService::class)->holdMinutes()]) }}</p>
                 </div>
                 <a href="{{ route('customer.booking') }}"
                    class="bk-tap flex items-center justify-center w-full h-12 rounded-lg text-xs font-black uppercase tracking-wider bg-[#662721] hover:bg-[#511D18] text-[#F7F0DB] shadow-md active:scale-[0.98] transition-transform">
-                    Pick a new time
+                    {{ __('checkout.pick_new_time') }}
                 </a>
             </div>
         </div>
@@ -572,7 +572,7 @@
                 </div>
                 <button type="button" @click="handleNoticeClose()"
                         class="bk-tap w-full h-12 rounded-lg text-xs font-black uppercase tracking-wider bg-[#662721] hover:bg-[#511D18] text-[#F7F0DB] shadow-md active:scale-[0.98] transition-transform">
-                    <span x-text="noticeModal.buttonText || 'OK, Understood'"></span>
+                    <span x-text="noticeModal.buttonText || i18n.ok_understood"></span>
                 </button>
             </div>
         </div>
@@ -582,6 +582,10 @@
     <script>
         function checkoutApp() {
             return {
+                // Teks yang disusun di JS (lang/{id,en}/checkout.php → "js"); :x diganti lewat t().
+                i18n: @js(__('checkout.js')),
+                locale: @js(app()->getLocale()),
+                dateLocale: @js(app()->getLocale() === 'id' ? 'id-ID' : 'en-US'),
                 canCancelBooking: @json(Auth::check() && Auth::user()->canCancelBooking()),
                 financeSettings: @json($clubFinanceSettings ?? \App\Models\Pos\ClubFinanceSetting::getSettings()),
                 noticeModal: {
@@ -589,11 +593,21 @@
                     title: '',
                     message: '',
                     type: 'info',
-                    buttonText: 'OK, Understood',
+                    buttonText: @js(__('checkout.js.ok_understood')),
                     onClose: null,
                 },
 
-                showNotice(title, message, type = 'info', buttonText = 'OK, Understood', onClose = null) {
+                t(key, params = {}) {
+                    let s = (this.i18n && this.i18n[key]) || key;
+                    Object.keys(params).forEach(k => { s = s.split(':' + k).join(params[k]); });
+                    return s;
+                },
+
+                plural(key, count) {
+                    return this.t(key + (Number(count) === 1 ? '_one' : '_other'), { count });
+                },
+
+                showNotice(title, message, type = 'info', buttonText = this.i18n.ok_understood, onClose = null) {
                     this.noticeModal = {
                         show: true,
                         title,
@@ -614,7 +628,7 @@
                 },
 
                 bookingItems: [],
-                bookingDateFormatted: 'Today',
+                bookingDateFormatted: @js(__('checkout.js.today')),
                 membershipBenefit: null,
                 membershipNotice: null,
                 useMembershipBenefit: true,
@@ -657,7 +671,7 @@
                 // Daftar metode dari menu "Metode Pembayaran Online" (OnlinePaymentMethodService) — sama dengan yang
                 // divalidasi server. Metode di luar batas nominal (mis. QRIS maks Rp10 juta) disembunyikan otomatis.
                 paymentMethods: @js(app(\App\Services\Payment\OnlinePaymentMethodService::class)->forFrontend()),
-                selectedMethod: (@js(app(\App\Services\Payment\OnlinePaymentMethodService::class)->forFrontend())[0]) || { id: '', code: '', name: 'Tidak ada metode tersedia', badge: '-', fee: 0, note: '' },
+                selectedMethod: (@js(app(\App\Services\Payment\OnlinePaymentMethodService::class)->forFrontend())[0]) || { id: '', code: '', name: @js(__('checkout.js.no_method_available')), badge: '-', fee: 0, note: '' },
 
                 get availableMethods() {
                     const total = this.grandTotal;
@@ -678,8 +692,8 @@
                 },
 
                 get payButtonLabel() {
-                    if (this.isSubmitting) return 'Processing…';
-                    return this.grandTotal > 0 ? 'Pay Now' : 'Confirm Booking';
+                    if (this.isSubmitting) return this.i18n.processing;
+                    return this.grandTotal > 0 ? this.i18n.pay_now : this.i18n.confirm_booking;
                 },
 
                 ensureSelectedMethodAvailable() {
@@ -782,8 +796,10 @@
                         }
                         // Kartu member ada tapi tidak berlaku untuk jadwal ini → jelaskan kenapa harga normal.
                         this.membershipNotice = (json.success && json.data && !json.data.has_benefit) ? ({
-                            MEMBERSHIP_ENDS_BEFORE_PLAY_DATE: 'Your membership' + (json.data.plan_name ? ' (' + json.data.plan_name + ')' : '') + ' ends'
-                                + (json.data.membership_end_date ? ' on ' + this.formatDate(json.data.membership_end_date) : '') + ', before this play date — normal price applies.',
+                            MEMBERSHIP_ENDS_BEFORE_PLAY_DATE: this.t('membership_ends', {
+                                plan: json.data.plan_name ? this.t('membership_ends_plan', { name: json.data.plan_name }) : '',
+                                date: json.data.membership_end_date ? this.t('membership_ends_date', { date: this.formatDate(json.data.membership_end_date) }) : '',
+                            }),
                         }[json.data.rejected_reason] || null) : null;
                         if (json.success && json.data && json.data.sponsor_voucher_benefit && json.data.sponsor_voucher_benefit.has_benefit) {
                             this.sponsorVoucherBenefit = json.data.sponsor_voucher_benefit;
@@ -813,13 +829,15 @@
                     const voucher = outside(data.sponsor_voucher_benefit);
                     if (!member && !voucher) return null;
 
-                    const what = member && voucher ? 'Your membership & voucher' : (member ? 'Your membership' : 'Your voucher');
-                    const rules = [...new Set([member ? data.access_rule_en : null, voucher ? data.sponsor_voucher_benefit.access_rule_en : null].filter(Boolean))];
+                    const which = member && voucher ? 'both' : (member ? 'member' : 'voucher');
+                    // Label aturan dari server: access_rule (Indonesia) / access_rule_en (Inggris).
+                    const ruleKey = this.locale === 'id' ? 'access_rule' : 'access_rule_en';
+                    const rules = [...new Set([member ? data[ruleKey] : null, voucher ? data.sponsor_voucher_benefit[ruleKey] : null].filter(Boolean))];
 
                     return {
-                        title: what + " can't be used at this time",
-                        message: (rules.length ? 'Valid only ' + rules.join(' / ') + '. ' : '') + 'Normal price applies to this booking.',
-                        short: (member && voucher ? 'Membership & voucher' : (member ? 'Membership' : 'Voucher')) + ' not valid at this time',
+                        title: this.t('access_title_' + which),
+                        message: rules.length ? this.t('access_message_rules', { rules: rules.join(' / ') }) : this.i18n.access_message,
+                        short: this.t('access_short_' + which),
                     };
                 },
 
@@ -830,7 +848,7 @@
                         if (sessionStorage.getItem(key)) return;
                         sessionStorage.setItem(key, '1');
                     } catch (e) { /* storage diblokir → tetap tampilkan */ }
-                    this.showNotice(this.accessNotice.title, this.accessNotice.message, 'info', 'OK');
+                    this.showNotice(this.accessNotice.title, this.accessNotice.message, 'info', this.i18n.ok);
                 },
 
                 toggleMembershipBenefit() {
@@ -839,7 +857,7 @@
                     if (this.useMembershipBenefit && this.membershipDiscountAmount > 0 && this.promoIsDiscount && !this.promoVoucher.stack_with_membership) {
                         const code = this.promoVoucher.code;
                         this.removePromo();
-                        this.showNotice('Promo Code Removed', `${code} can't be combined with your membership benefit. Turn the membership benefit off if you'd rather use the promo code.`, 'info', 'Got It');
+                        this.showNotice(this.i18n.promo_removed_title, this.t('promo_removed_membership', { code }), 'info', this.i18n.got_it);
                     }
                 },
 
@@ -849,7 +867,7 @@
                     if (this.useSponsorVoucherBenefit && this.promoIsDiscount) {
                         const code = this.promoVoucher.code;
                         this.removePromo();
-                        this.showNotice('Promo Code Removed', `${code} was removed — a promo code can't be combined with your corporate voucher. Turn the corporate voucher off if you'd rather use the promo code.`, 'info', 'Got It');
+                        this.showNotice(this.i18n.promo_removed_title, this.t('promo_removed_corporate', { code }), 'info', this.i18n.got_it);
                     }
                 },
 
@@ -1015,29 +1033,31 @@
                 },
 
                 formatPercent(value) {
-                    return Number(value || 0).toLocaleString('id-ID', { maximumFractionDigits: 2 }) + '%';
+                    return Number(value || 0).toLocaleString(this.dateLocale, { maximumFractionDigits: 2 }) + '%';
                 },
 
                 /** Rincian aturan voucher yang terpasang — sama dengan yang dicek server saat cek kode & checkout. */
                 get promoTerms() {
                     const v = this.promoVoucher;
                     if (!v) return null;
-                    const until = v.valid_until ? 'Valid until ' + v.valid_until : null;
+                    const until = v.valid_until ? this.t('valid_until', { date: v.valid_until }) : null;
                     if (v.type === 'CREDIT') {
-                        return { name: null, headline: 'Credit voucher · Rp ' + this.formatNumber(Math.round(v.available_balance || 0)) + ' available', rules: [until].filter(Boolean) };
+                        return { name: null, headline: this.t('credit_headline', { amount: this.formatNumber(Math.round(v.available_balance || 0)) }), rules: [until].filter(Boolean) };
                     }
                     const headline = v.type === 'PERCENT'
-                        ? this.formatPercent(v.value) + ' off court rental' + (v.max_discount ? ' (max Rp ' + this.formatNumber(v.max_discount) + ')' : '')
-                        : 'Rp ' + this.formatNumber(v.value) + ' off court rental';
+                        ? (v.max_discount
+                            ? this.t('percent_off_max', { percent: this.formatPercent(v.value), max: this.formatNumber(v.max_discount) })
+                            : this.t('percent_off', { percent: this.formatPercent(v.value) }))
+                        : this.t('amount_off', { amount: this.formatNumber(v.value) });
                     return {
                         name: v.name || null,
                         headline,
                         rules: [
-                            v.min_order > 0 ? 'Min. court rental Rp ' + this.formatNumber(v.min_order) : null,
+                            v.min_order > 0 ? this.t('min_court_rental', { amount: this.formatNumber(v.min_order) }) : null,
                             until,
-                            v.channel === 'ONLINE' ? 'Online booking only' : null,
-                            v.stack_with_membership ? 'Can be combined with membership' : 'Not combinable with membership',
-                            'Once per account',
+                            v.channel === 'ONLINE' ? this.i18n.online_only : null,
+                            v.stack_with_membership ? this.i18n.combinable : this.i18n.not_combinable,
+                            this.i18n.once_per_account,
                         ].filter(Boolean),
                     };
                 },
@@ -1157,16 +1177,16 @@
                         });
                         const json = await res.json().catch(() => ({}));
                         if (res.ok && json.success && this.corporateVoucherOn && json.data.type !== 'CREDIT') {
-                            this.showNotice('One Voucher Per Booking', 'Your corporate voucher is already on. A promo code can\'t be combined with it — turn off the corporate voucher first if you\'d rather use this promo code.', 'info', 'Got It');
+                            this.showNotice(this.i18n.one_voucher_title, this.i18n.one_voucher_apply, 'info', this.i18n.got_it);
                         } else if (res.ok && json.success) {
                             this.promoCode = json.data.code;
                             this.promoVoucher = json.data;
                             this.promoApplied = true;
                         } else {
-                            this.showNotice('Voucher Not Applied', json.message || 'The voucher code is invalid or cannot be used for this booking.', 'error', 'Close');
+                            this.showNotice(this.i18n.voucher_not_applied_title, json.message || this.i18n.voucher_invalid, 'error', this.i18n.close);
                         }
                     } catch (e) {
-                        this.showNotice('Voucher Check Failed', 'Could not check the voucher right now. Please try again.', 'error', 'Close');
+                        this.showNotice(this.i18n.voucher_check_failed_title, this.i18n.voucher_check_failed, 'error', this.i18n.close);
                     } finally {
                         this.isCheckingPromo = false;
                     }
@@ -1189,15 +1209,13 @@
                     return Math.round(Number(val)).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ".");
                 },
 
-                // "2026-10-05" → "Mon, 5 Oct 2026" (diurai manual supaya tidak bergeser zona waktu).
+                // "2026-10-05" → "Sen, 5 Okt 2026" / "Mon, Oct 5, 2026" (diurai manual supaya tidak bergeser zona waktu).
                 formatDate(val) {
                     if (!val) return '-';
                     const m = String(val).match(/^(\d{4})-(\d{2})-(\d{2})/);
                     if (!m) return String(val).substring(0, 10);
                     const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
-                    const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-                    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-                    return `${days[d.getDay()]}, ${d.getDate()} ${months[d.getMonth()]} ${d.getFullYear()}`;
+                    return d.toLocaleDateString(this.dateLocale, { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
                 },
 
                 get heldBookingIds() {
@@ -1213,16 +1231,16 @@
 
                     // Server juga menolaknya; dicegah di sini supaya customer tidak sampai menyetujui ketentuan dulu.
                     if (this.corporateVoucherOn && this.promoIsDiscount) {
-                        this.showNotice('One Voucher Per Booking', 'A promo code can\'t be combined with your corporate voucher. Remove the promo code or turn off the corporate voucher.', 'info', 'Got It');
+                        this.showNotice(this.i18n.one_voucher_title, this.i18n.one_voucher_precheck, 'info', this.i18n.got_it);
                         return false;
                     }
 
                     if (this.heldBookingIds.length === 0) {
                         this.showNotice(
-                            'Slot Reservation Not Found',
-                            'Court slot reservation data was not found. Please reselect your match schedule.',
+                            this.i18n.slot_not_found_title,
+                            this.i18n.slot_not_found,
                             'error',
-                            'Select Schedule',
+                            this.i18n.select_schedule,
                             () => {
                                 window.location.href = "{{ route('customer.booking') }}";
                             }
@@ -1233,14 +1251,14 @@
                     // Total bisa berubah (voucher, add-on) setelah metode dipilih — pastikan metodenya masih berlaku.
                     if (this.grandTotal > 0) {
                         if (! this.availableMethods.length) {
-                            this.showNotice('Pembayaran Online Tidak Tersedia', 'Belum ada metode pembayaran online yang bisa dipakai untuk total tagihan ini. Silakan hubungi frontdesk.', 'error', 'Tutup');
+                            this.showNotice(this.i18n.online_unavailable_title, this.i18n.online_unavailable, 'error', this.i18n.close);
                             return false;
                         }
                         // Jangan diam-diam membayar dengan metode lain — beri tahu customer dulu, biar dia yang lanjutkan.
                         if (! this.availableMethods.some(m => m.code === this.selectedMethod.code)) {
                             const previous = this.selectedMethod.name;
                             this.ensureSelectedMethodAvailable();
-                            this.showNotice('Metode Pembayaran Diganti', `${previous} tidak bisa dipakai untuk total tagihan ini. Metode diganti ke ${this.selectedMethod.name}. Periksa lagi lalu tekan bayar.`, 'info', 'Oke');
+                            this.showNotice(this.i18n.method_changed_title, this.t('method_changed', { previous, current: this.selectedMethod.name }), 'info', this.i18n.ok);
                             return false;
                         }
                     }
@@ -1335,18 +1353,18 @@
                                     },
                                     onError: (result) => {
                                         this.showNotice(
-                                            'Payment Declined',
-                                            'Payment was declined or failed to process. Please try again.',
+                                            this.i18n.payment_declined_title,
+                                            this.i18n.payment_declined,
                                             'error',
-                                            'Try Again'
+                                            this.i18n.try_again
                                         );
                                     },
                                     onClose: () => {
                                         this.showNotice(
-                                            'Payment Window Closed',
-                                            'The payment session window was closed. You can view transaction status or complete payment on the Invoice page.',
+                                            this.i18n.payment_closed_title,
+                                            this.i18n.payment_closed,
                                             'info',
-                                            'View Invoice Page',
+                                            this.i18n.view_invoice,
                                             () => {
                                                 this.clearSessionAndRedirect(this.createdBookingId, this
                                                     .createdOrderId);
@@ -1364,7 +1382,7 @@
                                 if (data.payment_url) {
                                     window.location.href = data.payment_url;
                                 } else {
-                                    this.showNotice('Payment Not Started', 'The payment page could not be opened. Continue payment from the Invoice page.', 'error', 'View Invoice Page', () => {
+                                    this.showNotice(this.i18n.payment_not_started_title, this.i18n.payment_page_failed, 'error', this.i18n.view_invoice, () => {
                                         this.clearSessionAndRedirect(this.createdBookingId, this.createdOrderId);
                                     });
                                 }
@@ -1376,18 +1394,18 @@
                                 // Dulu jatuh ke cabang simulator di atas: customer melihat "pembayaran berhasil" padahal belum bayar.
                                 window.location.href = data.redirect_url || data.payment_url;
                             } else {
-                                this.showNotice('Payment Not Started', 'The payment window could not be opened. Continue payment from the Invoice page.', 'error', 'View Invoice Page', () => {
+                                this.showNotice(this.i18n.payment_not_started_title, this.i18n.payment_window_failed, 'error', this.i18n.view_invoice, () => {
                                     this.clearSessionAndRedirect(this.createdBookingId, this.createdOrderId);
                                 });
                             }
                         } else {
-                            this.showNotice('Payment Failed', json.message || 'Failed to process payment.',
-                                'error', 'Close');
+                            this.showNotice(this.i18n.payment_failed_title, json.message || this.i18n.payment_failed,
+                                'error', this.i18n.close);
                         }
                     } catch (e) {
                         this.isSubmitting = false;
-                        this.showNotice('System Error', 'An unexpected error occurred while processing checkout.', 'error',
-                            'Close');
+                        this.showNotice(this.i18n.system_error_title, this.i18n.system_error, 'error',
+                            this.i18n.close);
                     }
                 },
 
@@ -1407,8 +1425,8 @@
 
                 cancelCheckout() {
                     if (!this.canCancelBooking) {
-                        this.showNotice('Access Denied', 'You do not have permission to cancel this booking.', 'error',
-                            'Close');
+                        this.showNotice(this.i18n.access_denied_title, this.i18n.access_denied, 'error',
+                            this.i18n.close);
                         return;
                     }
                     this.showCancelModal = true;
@@ -1416,8 +1434,8 @@
 
                 async confirmCancelCheckout() {
                     if (!this.canCancelBooking) {
-                        this.showNotice('Access Denied', 'You do not have permission to cancel this booking.',
-                            'error', 'Close');
+                        this.showNotice(this.i18n.access_denied_title, this.i18n.access_denied,
+                            'error', this.i18n.close);
                         return;
                     }
                     this.isCancellingCheckout = true;

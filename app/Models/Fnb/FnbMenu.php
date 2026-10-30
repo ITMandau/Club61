@@ -18,6 +18,9 @@ class FnbMenu extends Model
         'description',
         'image_url',
         'base_price',
+        'hpp',
+        'track_stock',
+        'min_stock',
         'station_id',
         'is_available',
     ];
@@ -26,8 +29,24 @@ class FnbMenu extends Model
     {
         return [
             'base_price' => 'decimal:2',
+            'hpp' => 'decimal:2',
+            'track_stock' => 'boolean',
+            'stock_qty' => 'integer',
+            'min_stock' => 'integer',
             'is_available' => 'boolean',
         ];
+    }
+
+    /** Stok hanya berlaku untuk menu yang dilacak; null = tidak dilacak. */
+    public function stockStatus(): ?string
+    {
+        return match (true) {
+            ! $this->track_stock => null,
+            $this->stock_qty < 0 => 'MINUS',
+            $this->stock_qty === 0 => 'EMPTY',
+            $this->min_stock !== null && $this->stock_qty <= $this->min_stock => 'LOW',
+            default => 'OK',
+        };
     }
 
     /**
@@ -69,6 +88,11 @@ class FnbMenu extends Model
     public function recipes()
     {
         return $this->hasMany(RecipeBom::class, 'menu_id');
+    }
+
+    public function stockMovements()
+    {
+        return $this->hasMany(FnbStockMovement::class, 'menu_id');
     }
 
     public function modifierGroups(): BelongsToMany

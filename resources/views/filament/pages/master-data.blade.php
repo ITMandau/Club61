@@ -194,19 +194,15 @@
                                 <td>
                                     <div class="md-name">{{ $court->name }}</div>
                                     <div class="md-desc">
-                                        {{ $court->description ?: ($court->type === 'INDOOR' ? 'Indoor' : 'Outdoor') }}
+                                        {{ $court->description ?: 'Indoor' }}
                                     </div>
                                     <span class="md-hours">
                                         Jam Operasional: {{ $court->open_time ?: '06:00' }} - {{ $court->close_time ?: '23:00' }} WIB
                                     </span>
-                                    <div class="md-id">ID: {{ $court->id }}</div>
+                                    <div class="md-id">Urutan: {{ $court->sort_order }} · ID: {{ $court->id }}</div>
                                 </td>
                                 <td>
-                                    @if(strtoupper($court->type) === 'INDOOR')
-                                        <span class="c61-pill c61-pill-terra">Indoor Court</span>
-                                    @else
-                                        <span class="c61-pill c61-pill-ok">Outdoor Court</span>
-                                    @endif
+                                    <span class="c61-pill c61-pill-terra">Indoor Court</span>
                                 </td>
                                 <td>
                                     <div class="md-price">
@@ -618,26 +614,26 @@
                 </div>
 
                 <div class="c61-modal-body">
-                    <div class="md-field">
-                        <label class="c61-label">Nama Lapangan</label>
-                        <input type="text" wire:model="courtName" class="c61-input" placeholder="Contoh: Court BCA">
-                        @error('courtName') <span class="md-err">{{ $message }}</span> @enderror
+                    <div class="md-grid-2">
+                        <div class="md-field">
+                            <label class="c61-label">Nama Lapangan</label>
+                            <input type="text" wire:model="courtName" class="c61-input" placeholder="Contoh: Court BCA">
+                            @error('courtName') <span class="md-err">{{ $message }}</span> @enderror
+                        </div>
+
+                        <div class="md-field">
+                            <label class="c61-label">Urutan Tampil</label>
+                            <input type="number" min="0" max="999" step="1" wire:model="courtSortOrder" class="c61-input" placeholder="1">
+                            <span class="c61-hint">Angka kecil tampil lebih dulu di jadwal, kasir &amp; halaman booking.</span>
+                            @error('courtSortOrder') <span class="md-err">{{ $message }}</span> @enderror
+                        </div>
                     </div>
 
                     <div class="md-field">
                         <label class="c61-label">Jenis &amp; Keterangan Fasilitas</label>
-                        <input type="text" wire:model="courtDescription" class="c61-input" placeholder="Contoh: Indoor atau Outdoor">
+                        <input type="text" wire:model="courtDescription" class="c61-input" placeholder="Contoh: Indoor, lantai kaca">
                         <span class="c61-hint">Teks ini ditampilkan pada sub-judul kartu lapangan di halaman booking pelanggan.</span>
                         @error('courtDescription') <span class="md-err">{{ $message }}</span> @enderror
-                    </div>
-
-                    <div class="md-field">
-                        <label class="c61-label">Tipe Lapangan</label>
-                        <select wire:model="courtType" class="c61-select">
-                            <option value="INDOOR">INDOOR</option>
-                            <option value="OUTDOOR">OUTDOOR</option>
-                        </select>
-                        @error('courtType') <span class="md-err">{{ $message }}</span> @enderror
                     </div>
 
                     <div class="md-grid-2">

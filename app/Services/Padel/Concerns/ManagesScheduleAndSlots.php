@@ -35,7 +35,7 @@ trait ManagesScheduleAndSlots
         $todayStr = $nowLocal->format('Y-m-d');
         $currentHour = (int) $nowLocal->format('H');
 
-        $courts = PadelCourt::where('is_active', true)->orderBy('name')->get();
+        $courts = PadelCourt::where('is_active', true)->ordered()->get();
 
         // Semua booking yang masih aktif setelah GC di atas berjalan. JANGAN disaring pakai umur
         // created_at: booking hasil reschedule dengan tagihan selisih (LOCKED, reschedule_count > 0)
@@ -143,7 +143,7 @@ trait ManagesScheduleAndSlots
                 'court_id' => $court->id,
                 'court_name' => $court->name,
                 'type' => $court->type,
-                'description' => $court->description ?: ($court->type === 'INDOOR' ? 'Indoor' : 'Outdoor'),
+                'description' => $court->description ?: 'Indoor',
                 'open_time' => $court->open_time ?: '06:00',
                 'close_time' => $court->close_time ?: '23:00',
                 'slots' => $slots,
@@ -186,7 +186,7 @@ trait ManagesScheduleAndSlots
 
         $requested = $hours($slots);
         if ($requested > self::MAX_HOLD_HOURS_PER_REQUEST) {
-            throw new HttpException(422, 'Maksimal '.self::MAX_HOLD_HOURS_PER_REQUEST.' jam dalam satu pemesanan.');
+            throw new HttpException(422, \App\Support\SiteLocale::text('booking.max_hours_per_booking', ['hours' => self::MAX_HOLD_HOURS_PER_REQUEST]));
         }
 
         try {
@@ -202,14 +202,13 @@ trait ManagesScheduleAndSlots
                     ->map(fn (PadelBooking $b) => ['start_time' => $b->start_time, 'end_time' => $b->end_time]));
 
                 if ($unpaid + $requested > self::MAX_UNPAID_HOURS_PER_USER) {
-                    throw new HttpException(422, 'Masih ada '.$unpaid.' jam yang belum dibayar. Maksimal '.self::MAX_UNPAID_HOURS_PER_USER
-                        .' jam tertahan per akun — selesaikan pembayaran atau tunggu batas waktunya habis dulu.');
+                    throw new HttpException(422, \App\Support\SiteLocale::text('booking.unpaid_hours_limit', ['unpaid' => $unpaid, 'max' => self::MAX_UNPAID_HOURS_PER_USER]));
                 }
 
                 return $this->holdBatchSlots($slots, $bookingDate, $user, $coachId);
             });
         } catch (\Illuminate\Contracts\Cache\LockTimeoutException $e) {
-            throw new HttpException(429, 'Permintaan sebelumnya masih diproses. Coba lagi sebentar.');
+            throw new HttpException(429, \App\Support\SiteLocale::text('booking.request_in_progress'));
         }
     }
 
@@ -225,12 +224,12 @@ trait ManagesScheduleAndSlots
     public function holdBatchSlots(array $slots, string $bookingDate, User $user, ?string $coachId = null): array
     {
         if (empty($slots)) {
-            throw new HttpException(422, 'Daftar slot tidak boleh kosong.');
+            throw new HttpException(422, \App\Support\SiteLocale::text('booking.slots_empty'));
         }
 
         $bookingDateParsed = Carbon::parse($bookingDate)->startOfDay();
         if ($bookingDateParsed->isPast() && ! $bookingDateParsed->isToday()) {
-            throw new HttpException(422, 'Tanggal booking tidak boleh di masa lampau.');
+            throw new HttpException(422, \App\Support\SiteLocale::text('booking.date_in_past'));
         }
 
         // 1. SORTING ARRAY SECARA KRONOLOGIS (Anti-Deadlock pada Concurrent Transactions)
@@ -263,18 +262,18 @@ trait ManagesScheduleAndSlots
             // kunci cache yang berbeda dari slot 19:00 — bentrok baru ketahuan di lapisan database.
             if (! preg_match('/^([01]\d|2[0-3]):00(:00)?$/', (string) $slot['start_time'])
                 || ! preg_match('/^(([01]\d|2[0-3]):00|24:00)(:00)?$/', (string) $slot['end_time'])) {
-                throw new HttpException(422, 'Jam booking harus jam bulat (contoh 19:00 - 20:00). Pilih slot dari jadwal.');
+                throw new HttpException(422, \App\Support\SiteLocale::text('booking.whole_hours_only'));
             }
 
             $start = Carbon::parse("{$bookingDate} {$slot['start_time']}");
             $end = Carbon::parse("{$bookingDate} {$slot['end_time']}");
             if ($end->lessThanOrEqualTo($start)) {
-                throw new HttpException(422, "Waktu selesai ({$slot['end_time']}) harus lebih besar dari waktu mulai ({$slot['start_time']}).");
+                throw new HttpException(422, \App\Support\SiteLocale::text('booking.end_after_start', ['end' => $slot['end_time'], 'start' => $slot['start_time']]));
             }
 
             // Sama dengan grid: jam yang sudah lewat hari ini tidak bisa dipesan (jam berjalan masih boleh).
             if ($start->copy()->startOfHour()->lt(now()->startOfHour())) {
-                throw new HttpException(422, "Jam {$slot['start_time']} sudah lewat. Silakan pilih jam lain.");
+                throw new HttpException(422, \App\Support\SiteLocale::text('booking.time_passed', ['time' => $slot['start_time']]));
             }
         }
 
@@ -295,7 +294,7 @@ trait ManagesScheduleAndSlots
 
                     if (! $lock->get()) {
                         throw new SlotConflictException(
-                            "Slot lapangan pada jam {$currLock->format('H:i')} sedang di-hold pemain lain. Transaksi multi-slot dibatalkan penuh.",
+                            \App\Support\SiteLocale::text('booking.slot_held_by_other', ['time' => $currLock->format('H:i')]),
                             $slot['court_id'],
                             "{$slot['start_time']} - {$slot['end_time']}"
                         );
@@ -321,7 +320,7 @@ trait ManagesScheduleAndSlots
                     // isolasi database. Slot sudah diurutkan per court_id → urutan kunci konsisten (anti-deadlock).
                     $court = PadelCourt::where('id', $slot['court_id'])->where('is_active', true)->lockForUpdate()->first();
                     if (! $court) {
-                        throw new HttpException(404, "Lapangan ID {$slot['court_id']} tidak ditemukan.");
+                        throw new HttpException(404, \App\Support\SiteLocale::text('booking.court_not_found', ['court' => $slot['court_id']]));
                     }
 
                     $startDt = Carbon::parse("{$bookingDate} {$slot['start_time']}");
@@ -336,7 +335,7 @@ trait ManagesScheduleAndSlots
                     $slotEndH = ($endDt->format('H:i') === '00:00' && $endDt->isNextDay($startDt)) ? 24 : (int) $endDt->format('H');
 
                     if ($slotStartH < $courtOpen || $slotEndH > $courtClose) {
-                        throw new HttpException(422, "Slot {$court->name} pada jam {$slot['start_time']} - {$slot['end_time']} berada di luar jam operasional ({$court->open_time} - {$court->close_time} WIB).");
+                        throw new HttpException(422, \App\Support\SiteLocale::text('booking.outside_operating_hours', ['court' => $court->name, 'start' => $slot['start_time'], 'end' => $slot['end_time'], 'open' => $court->open_time, 'close' => $court->close_time]));
                     }
 
                     // RUMUS OVERLAP MATEMATIS KETAT: (< dan >) dengan proteksi anti-stale locks
@@ -352,7 +351,7 @@ trait ManagesScheduleAndSlots
 
                     if ($hasConflict) {
                         throw new SlotConflictException(
-                            "Slot {$court->name} pada jam {$slot['start_time']} - {$slot['end_time']} sudah terisi atau terkunci. Transaksi multi-slot di-rollback.",
+                            \App\Support\SiteLocale::text('booking.slot_taken', ['court' => $court->name, 'start' => $slot['start_time'], 'end' => $slot['end_time']]),
                             $court->name,
                             "{$slot['start_time']} - {$slot['end_time']}"
                         );

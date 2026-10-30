@@ -62,13 +62,13 @@ class CustomerPortalTest extends TestCase
 
         $available = $this->actingAs($this->customer)->get('/profile/vouchers')->assertOk();
         $available->assertSeeInOrder(['KR-SOON0001', 'KR-USABLE01'])  // paling cepat berakhir dulu
-            ->assertSee('Ends in 3 days')
+            ->assertSee('Berakhir dalam 3 hari')
             ->assertDontSee('KR-USEDUP01')->assertDontSee('KR-OTHER001');
 
         $history = $this->get('/profile/vouchers?tab=history')->assertOk();
-        $history->assertSee('KR-USEDUP01')->assertSee('Used up')
-            ->assertSee('KR-EXPIRED1')->assertSee('Expired')
-            ->assertSee('KR-OFF00001')->assertSee('Deactivated')
+        $history->assertSee('KR-USEDUP01')->assertSee('Sudah habis')
+            ->assertSee('KR-EXPIRED1')->assertSee('Kedaluwarsa')
+            ->assertSee('KR-OFF00001')->assertSee('Dinonaktifkan')
             ->assertDontSee('KR-USABLE01')->assertDontSee('KR-OTHER001');
 
         $this->assertSame(2, app(CustomerAccountService::class)->availableVoucherCount($this->customer));
@@ -78,7 +78,7 @@ class CustomerPortalTest extends TestCase
     public function test_empty_voucher_page_offers_booking(): void
     {
         $this->actingAs($this->customer)->get('/profile/vouchers')->assertOk()
-            ->assertSee('No vouchers yet')->assertSee(route('customer.booking'), false);
+            ->assertSee('Belum ada voucher')->assertSee(route('customer.booking'), false);
     }
 
     public function test_profile_shows_member_pass_and_voucher_count(): void
@@ -87,16 +87,16 @@ class CustomerPortalTest extends TestCase
         $this->credit([]);
 
         $this->actingAs($this->customer)->get('/profile')->assertOk()
-            ->assertSee('Digital Member Pass')->assertSee('MBR-0001')
+            ->assertSee('Member Pass Digital')->assertSee('MBR-0001')
             ->assertSee('data-member-qr="'.str_repeat('a', 64).'"', false)
-            ->assertSee('1 available')
+            ->assertSee('1 tersedia')
             ->assertSee(route('profile.vouchers'), false);
     }
 
     public function test_profile_invites_non_members_to_join(): void
     {
         $this->actingAs($this->customer)->get('/profile')->assertOk()
-            ->assertSee('Become a Club 61 member')->assertDontSee('Digital Member Pass');
+            ->assertSee('Jadi member Club 61')->assertDontSee('Member Pass Digital');
     }
 
     public function test_navigation_has_membership_tab_and_account_dropdown(): void
@@ -106,8 +106,8 @@ class CustomerPortalTest extends TestCase
 
         // Navigasi bawah HP: Membership menggantikan Profile; dropdown akun berisi Profile, Voucher Saya (angka), Logout.
         $page->assertSee(route('customer.membership'), false)
-            ->assertSee('My Vouchers')->assertSee('Log Out')
-            ->assertSee('Not a member yet');
+            ->assertSee('Voucher Saya')->assertSee('Keluar')
+            ->assertSee('Belum menjadi member');
     }
 
     public function test_my_club_only_shows_a_membership_status_line(): void
@@ -116,8 +116,8 @@ class CustomerPortalTest extends TestCase
         $this->credit(['code' => 'KR-NOTHERE1']);
 
         $this->actingAs($this->customer)->get('/my-club')->assertOk()
-            ->assertSee('member')->assertSee('View in Profile')
-            ->assertDontSee('Digital Member Pass')
+            ->assertSee('member')->assertSee('Lihat di Profil')
+            ->assertDontSee('Member Pass Digital')
             ->assertDontSee('KR-NOTHERE1')
             ->assertDontSee('My Credit Vouchers');
     }
@@ -129,6 +129,6 @@ class CustomerPortalTest extends TestCase
             $page = $this->actingAs($this->customer)->get($url)->assertOk();
             $this->assertStringNotContainsStringIgnoringCase('sauna', $page->getContent(), $url);
         }
-        $this->actingAs($this->customer)->get('/my-club')->assertSee('Wellness Protocol');
+        $this->actingAs($this->customer)->get('/my-club')->assertSee('Protokol Wellness');
     }
 }

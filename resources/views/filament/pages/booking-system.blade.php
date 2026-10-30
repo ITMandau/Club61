@@ -351,7 +351,7 @@
                                         </div>
                                     </div>
                                     <span class="c61-pill c61-pill-cream cmd-court-type-pill" style="height: 20px; font-size: 0.5625rem; padding: 0 0.45rem;">
-                                        {{ $court->type === 'INDOOR' ? 'INDOOR' : 'OUTDOOR' }}
+                                        INDOOR
                                     </span>
                                 </div>
                             </td>

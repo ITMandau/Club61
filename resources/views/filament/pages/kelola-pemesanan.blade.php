@@ -702,7 +702,7 @@
                 <div class="c61-modal-foot">
                     <button type="button" wire:click="$set('showCancelRefundModal', false)" class="c61-btn c61-btn-ghost">Tutup</button>
                     <button type="button" wire:click="executeCancelRefund" wire:loading.attr="disabled" class="c61-btn c61-btn-danger">
-                        <span wire:loading.remove wire:target="executeCancelRefund">Batalkan &amp; Ajukan</span>
+                        <span wire:loading.remove wire:target="executeCancelRefund">Batalkan &amp; Ajukan Refund</span>
                         <span wire:loading wire:target="executeCancelRefund">Membatalkan...</span>
                     </button>
                 </div>

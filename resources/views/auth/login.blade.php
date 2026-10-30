@@ -16,7 +16,7 @@
                 @endif
             </svg>
             <p class="flex-1 text-sm font-medium leading-snug">{{ $loginError ?: $loginStatus }}</p>
-            <button type="button" onclick="document.getElementById('login-alert').remove()" aria-label="Tutup pesan"
+            <button type="button" onclick="document.getElementById('login-alert').remove()" aria-label="{{ __('account.login.close_alert') }}"
                     class="shrink-0 -m-1 p-1 rounded opacity-70 hover:opacity-100 cursor-pointer">
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
             </button>
@@ -35,14 +35,14 @@
                     <img src="{{ asset('images/identity/logo-cream.png').'?v=2' }}" alt="Club 61 Padel & Wellness" class="h-[90px] sm:h-24 w-auto">
                     <span class="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-club-cream/30 bg-[rgba(30,18,15,0.55)] text-[11px] font-bold uppercase tracking-wider text-club-cream">
                         <span class="w-2 h-2 rounded-full bg-emerald-400 motion-safe:animate-pulse"></span>
-                        Venue live &bull; {{ $companyProfile->court_count }} COURTS OPEN
+                        {{ __('account.login.venue_live') }} &bull; {{ __('account.login.courts_open', ['count' => $companyProfile->court_count]) }}
                     </span>
                 </div>
 
                 <div class="relative z-10 px-6 sm:px-8 mt-auto pb-6">
-                    <div class="text-[11px] font-bold uppercase tracking-[0.18em] text-club-cream/80 mb-3">Exclusive member sanctuary</div>
+                    <div class="text-[11px] font-bold uppercase tracking-[0.18em] text-club-cream/80 mb-3">{{ __('account.login.kicker') }}</div>
                     <h2 class="font-display font-semibold text-3xl sm:text-4xl lg:text-[2.75rem] leading-[1.1]">
-                        Where competition meets <span class="italic text-club-cream/75">refined luxury.</span>
+                        {{ __('account.login.headline') }} <span class="italic text-club-cream/75">{{ __('account.login.headline_em') }}</span>
                     </h2>
 
                     {{-- Kartu fasilitas: sumber datanya sama dengan halaman depan (welcome.blade.php), diedit lewat Filament "Konten Website". --}}
@@ -72,15 +72,19 @@
 
             {{-- ============ FORM MASUK ============ --}}
             <div class="order-1 lg:order-2 lg:col-span-5 rounded-xl bg-club-paper border border-club-line shadow-[0_24px_60px_-28px_rgba(79,47,42,0.45)] p-6 sm:p-9 flex flex-col">
-                <a href="{{ url('/') }}" class="self-start inline-flex items-center gap-1 -mt-1 mb-5 text-xs font-semibold text-club-muted hover:text-club-terra focus-visible:outline-none focus-visible:underline transition-colors">
-                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7"/></svg>
-                    Kembali ke beranda
-                </a>
+                {{-- Baris atas kartu: kembali ke beranda (kiri) + tombol bahasa ID / EN (kanan). --}}
+                <div class="flex items-center justify-between gap-3 -mt-1 mb-5">
+                    <a href="{{ url('/') }}" class="inline-flex items-center gap-1 text-xs font-semibold text-club-muted hover:text-club-terra focus-visible:outline-none focus-visible:underline transition-colors">
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7"/></svg>
+                        {{ __('account.login.back_home') }}
+                    </a>
+                    <x-lang-switch variant="light" />
+                </div>
 
                 <div class="mb-7">
                     <img src="{{ asset('images/identity/monogram-terracotta.png') }}" alt="" class="h-14 w-auto mb-5">
-                    <h1 class="font-display font-semibold text-3xl sm:text-[2.1rem] leading-tight text-club-brown">Masuk ke Club 61</h1>
-                    <p class="text-sm text-club-muted mt-1.5 leading-relaxed">Booking lapangan, kelola membership, dan lihat e-ticket Anda.</p>
+                    <h1 class="font-display font-semibold text-3xl sm:text-[2.1rem] leading-tight text-club-brown">{{ __('account.login.title') }}</h1>
+                    <p class="text-sm text-club-muted mt-1.5 leading-relaxed">{{ __('account.login.subtitle') }}</p>
                 </div>
 
                 @if(app()->isLocal())
@@ -120,14 +124,14 @@
 
                     <div>
                         <label for="email" class="block text-sm font-semibold text-club-brown mb-1.5">
-                            Email atau nomor WhatsApp / HP <span class="font-normal text-club-muted">(atau ketik: <span class="font-mono text-club-terra">admin</span>)</span>
+                            {{ __('account.login.identifier') }} <span class="font-normal text-club-muted">({{ __('account.login.identifier_hint') }} <span class="font-mono text-club-terra">admin</span>)</span>
                         </label>
                         <div class="relative">
                             <span class="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-club-muted">
                                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 12a4 4 0 10-8 0 4 4 0 008 0zm0 0v1.5a2.5 2.5 0 005 0V12a9 9 0 10-9 9m4.5-1.206a8.959 8.959 0 01-4.5 1.206" /></svg>
                             </span>
                             <input id="email" type="text" name="email" value="{{ old('email') }}" required autofocus autocomplete="username"
-                                   placeholder="nama@email.com atau 0812xxxxxxxx"
+                                   placeholder="{{ __('account.login.identifier_placeholder') }}"
                                    @if($errors->has('email')) aria-invalid="true" aria-describedby="login-alert" @endif
                                    class="w-full h-12 pl-10 pr-4 rounded-md bg-white border {{ $errors->has('email') ? 'border-rose-400 focus:border-rose-500 focus:ring-rose-200' : 'border-club-line focus:border-club-terra focus:ring-club-terra/20' }} text-club-brown placeholder-club-muted/70 text-[15px] focus:ring-2 outline-none transition">
                         </div>
@@ -135,9 +139,9 @@
 
                     <div>
                         <div class="flex items-center justify-between mb-1.5">
-                            <label for="password" class="block text-sm font-semibold text-club-brown">Kata sandi</label>
+                            <label for="password" class="block text-sm font-semibold text-club-brown">{{ __('account.login.password') }}</label>
                             @if (Route::has('password.request'))
-                                <a href="{{ route('password.request') }}" class="text-sm font-semibold text-club-terra hover:text-club-brown underline-offset-4 hover:underline">Lupa kata sandi?</a>
+                                <a href="{{ route('password.request') }}" class="text-sm font-semibold text-club-terra hover:text-club-brown underline-offset-4 hover:underline">{{ __('account.login.forgot') }}</a>
                             @endif
                         </div>
                         <div class="relative">
@@ -147,7 +151,7 @@
                             <input id="password" type="password" name="password" required autocomplete="current-password" placeholder="••••••••••"
                                    @if($errors->has('password')) aria-invalid="true" aria-describedby="login-alert" @endif
                                    class="w-full h-12 pl-10 pr-12 rounded-md bg-white border {{ $errors->has('password') ? 'border-rose-400 focus:border-rose-500 focus:ring-rose-200' : 'border-club-line focus:border-club-terra focus:ring-club-terra/20' }} text-club-brown placeholder-club-muted/70 text-[15px] focus:ring-2 outline-none transition">
-                            <button type="button" onclick="togglePasswordVisibility()" aria-label="Lihat atau sembunyikan kata sandi"
+                            <button type="button" onclick="togglePasswordVisibility()" aria-label="{{ __('account.login.toggle_password') }}"
                                     class="absolute inset-y-0 right-0 w-12 flex items-center justify-center text-club-muted hover:text-club-terra transition-colors cursor-pointer">
                                 <svg id="eye-icon" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
@@ -160,28 +164,28 @@
                     <label for="remember_me" class="inline-flex items-center gap-2.5 cursor-pointer select-none">
                         <input id="remember_me" type="checkbox" name="remember"
                                class="w-[18px] h-[18px] rounded border-club-line text-club-terra focus:ring-club-terra/30">
-                        <span class="text-sm text-club-brown">{{ __('Ingat sesi masuk saya') }}</span>
+                        <span class="text-sm text-club-brown">{{ __('account.login.remember') }}</span>
                     </label>
 
                     <button type="submit"
                             class="w-full h-12 rounded-md bg-club-terra text-club-cream font-bold text-[15px] tracking-wide hover:bg-club-terra-dark active:scale-[0.99] transition flex items-center justify-center gap-2 cursor-pointer">
-                        <span>Masuk ke Club</span>
+                        <span>{{ __('account.login.submit') }}</span>
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.25" d="M14 5l7 7m0 0l-7 7m7-7H3" /></svg>
                     </button>
                 </form>
 
                 <div class="mt-auto pt-7">
                     <div class="flex flex-col sm:flex-row items-center justify-between gap-2 py-4 border-t border-club-line text-sm">
-                        <span class="text-club-muted">Belum punya akun?</span>
+                        <span class="text-club-muted">{{ __('account.login.no_account') }}</span>
                         <a href="{{ route('register') }}" class="inline-flex items-center gap-1 font-bold text-club-terra hover:text-club-brown underline-offset-4 hover:underline">
-                            Daftar Akun
+                            {{ __('account.login.register') }}
                             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" /></svg>
                         </a>
                     </div>
                     <div class="flex items-center justify-between pt-3 border-t border-club-line text-xs text-club-muted">
                         <span class="flex items-center gap-1.5">
                             <svg class="w-3.5 h-3.5 text-club-terra" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" /></svg>
-                            Club 61 Verified Security
+                            {{ __('account.login.secure') }}
                         </span>
                         <span>&copy; {{ date('Y') }} Club 61</span>
                     </div>

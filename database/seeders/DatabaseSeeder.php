@@ -196,9 +196,9 @@ class DatabaseSeeder extends Seeder
         // 2. SEED PADEL COURTS & EQUIPMENTS
         // Sama dengan data venue di sandbox (3 lapangan, buka 06:00–23:00).
         $courts = [
-            ['name' => 'Court BCA', 'type' => 'INDOOR', 'hourly_rate_regular' => 200000.00, 'hourly_rate_prime' => 300000.00, 'open_time' => '06:00', 'close_time' => '23:00'],
-            ['name' => 'Court Indosat', 'type' => 'INDOOR', 'hourly_rate_regular' => 200000.00, 'hourly_rate_prime' => 300000.00, 'open_time' => '06:00', 'close_time' => '23:00'],
-            ['name' => 'Court Iforte', 'type' => 'OUTDOOR', 'hourly_rate_regular' => 200000.00, 'hourly_rate_prime' => 300000.00, 'open_time' => '06:00', 'close_time' => '23:00'],
+            ['name' => 'Court BCA', 'type' => 'INDOOR', 'hourly_rate_regular' => 200000.00, 'hourly_rate_prime' => 300000.00, 'open_time' => '06:00', 'close_time' => '23:00', 'sort_order' => 1],
+            ['name' => 'Court Protelindo', 'type' => 'INDOOR', 'hourly_rate_regular' => 200000.00, 'hourly_rate_prime' => 300000.00, 'open_time' => '06:00', 'close_time' => '23:00', 'sort_order' => 2],
+            ['name' => 'Court IM3 Platinum', 'type' => 'INDOOR', 'hourly_rate_regular' => 200000.00, 'hourly_rate_prime' => 300000.00, 'open_time' => '06:00', 'close_time' => '23:00', 'sort_order' => 3],
         ];
         foreach ($courts as $c) {
             PadelCourt::create($c);

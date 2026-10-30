@@ -359,7 +359,7 @@ class BookingSystem extends Page
     {
         app(PadelBookingService::class)->syncExpiredAndCompletedBookings();
 
-        $courtOptions = PadelCourt::where('is_active', true)->orderBy('name')->pluck('name', 'id');
+        $courtOptions = PadelCourt::where('is_active', true)->ordered()->pluck('name', 'id');
         if ($this->viewMode !== 'day') {
             return ['courtOptions' => $courtOptions] + $this->overviewData();
         }
@@ -374,7 +374,7 @@ class BookingSystem extends Page
         if ($this->courtFilter !== 'all') {
             $courtQuery->whereKey($this->courtFilter);
         }
-        $courts = $courtQuery->orderBy('name')->get();
+        $courts = $courtQuery->ordered()->get();
 
         // Jam Operasional Dinamis (Mengikuti konfigurasi lapangan di Master Data)
         $minOpenHour = 6;

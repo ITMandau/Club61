@@ -122,20 +122,19 @@ class OnlinePaymentMethodService
         $gateway ??= app(OnlineGatewayRouter::class)->onlineGateway();
 
         if ($method === null) {
-            throw new HttpException(422, 'Metode pembayaran tidak dikenali. Pilih salah satu metode yang tersedia.');
+            throw new HttpException(422, \App\Support\SiteLocale::text('payment.method_unknown'));
         }
 
         if (! $method['is_active'] || ! $this->supportsGateway($method, $gateway)) {
-            throw new HttpException(422, "Metode pembayaran {$method['label']} sedang tidak tersedia. Silakan pilih metode lain.");
+            throw new HttpException(422, \App\Support\SiteLocale::text('payment.method_unavailable', ['method' => $method['label']]));
         }
 
         if (! $this->withinLimits($method, $amount)) {
             $limit = $method['max_amount'] !== null && $amount > $method['max_amount']
-                ? 'maksimal Rp '.number_format($method['max_amount'], 0, ',', '.')
-                : 'minimal Rp '.number_format((float) $method['min_amount'], 0, ',', '.');
+                ? \App\Support\SiteLocale::text('payment.limit_max', ['amount' => number_format($method['max_amount'], 0, ',', '.')])
+                : \App\Support\SiteLocale::text('payment.limit_min', ['amount' => number_format((float) $method['min_amount'], 0, ',', '.')]);
 
-            throw new HttpException(422, "{$method['label']} hanya bisa dipakai untuk transaksi {$limit}. Total tagihan Anda Rp "
-                .number_format($amount, 0, ',', '.').' — silakan pilih metode lain.');
+            throw new HttpException(422, \App\Support\SiteLocale::text('payment.method_limit', ['method' => $method['label'], 'limit' => $limit, 'total' => number_format($amount, 0, ',', '.')]));
         }
 
         return $code;

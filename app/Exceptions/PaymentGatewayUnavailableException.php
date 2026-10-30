@@ -11,8 +11,9 @@ use Symfony\Component\HttpKernel\Exception\HttpException;
  */
 class PaymentGatewayUnavailableException extends HttpException
 {
-    public function __construct(string $message = 'Gateway pembayaran sedang tidak dapat dihubungi. Belum ada tagihan yang dibuat, silakan coba lagi beberapa saat lagi.', ?\Throwable $previous = null)
+    public function __construct(?string $message = null, ?\Throwable $previous = null)
     {
-        parent::__construct(503, $message, $previous);
+        // Tanpa pesan khusus: teks standar lang/{id,en}/messages.php (payment.gateway_unavailable).
+        parent::__construct(503, $message ?? \App\Support\SiteLocale::text('payment.gateway_unavailable'), $previous);
     }
 }

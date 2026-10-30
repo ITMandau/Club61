@@ -91,6 +91,6 @@ class PastSlotProtectionTest extends TestCase
             ->assertOk()
             ->assertSee("status === 'PAST'", false)
             // Jam yang sudah lewat tidak bisa dipilih: disembunyikan & diganti catatan.
-            ->assertSee('today have passed');
+            ->assertSee('hari ini sudah lewat');
     }
 }

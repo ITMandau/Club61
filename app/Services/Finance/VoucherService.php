@@ -8,6 +8,7 @@ use App\Models\Pos\Voucher;
 use App\Models\Pos\VoucherClaim;
 use App\Models\User;
 use App\Services\Audit\ActivityLogger;
+use App\Support\SiteLocale;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Str;
 
@@ -57,22 +58,22 @@ class VoucherService
 
         // Baris kampanye kode unik (B) hanya wadah aturan — kodenya sendiri tidak bisa dipakai.
         if (! $voucher || ! $voucher->is_active || $voucher->isCampaign()) {
-            return $fail('Kode voucher tidak ditemukan atau sudah tidak aktif.');
+            return $fail(SiteLocale::text('voucher.not_found_or_inactive'));
         }
         if ($voucher->valid_until && $voucher->valid_until->lt(now())) {
-            return $fail('Voucher sudah kedaluwarsa ('.$voucher->valid_until->timezone(LedgerReport::TIMEZONE)->format('d M Y').').');
+            return $fail(SiteLocale::text('voucher.expired', ['date' => $voucher->valid_until->timezone(LedgerReport::TIMEZONE)->format('d M Y')]));
         }
         if ($voucher->user_id && $voucher->user_id !== $customer?->id) {
-            return $fail('Voucher ini milik akun customer lain.');
+            return $fail(SiteLocale::text('voucher.other_account'));
         }
         if ($orderAmount <= 0) {
-            return $fail('Tidak ada tagihan yang bisa dipotong voucher.');
+            return $fail(SiteLocale::text('voucher.nothing_to_discount'));
         }
 
         if ($voucher->isCredit()) {
             $available = $this->availableBalance($voucher, $lock);
             if ($available < 1) {
-                return $fail('Saldo voucher sudah habis atau sedang dipakai di pesanan lain yang belum dibayar.');
+                return $fail(SiteLocale::text('voucher.credit_empty'));
             }
 
             return ['voucher' => $voucher, 'discount' => round(min($available, $orderAmount), 2), 'error' => null];
@@ -83,46 +84,46 @@ class VoucherService
         if ($voucher->isUniqueCode()) {
             $campaign = $this->freshRead(Voucher::whereKey($voucher->campaign_id), $lock)->first();
             if (! $campaign || ! $campaign->is_active) {
-                return $fail('Kode voucher tidak ditemukan atau sudah tidak aktif.');
+                return $fail(SiteLocale::text('voucher.not_found_or_inactive'));
             }
         }
 
         if ($voucher->valid_from && $voucher->valid_from->gt(now())) {
-            return $fail('Promo ini baru berlaku mulai '.$voucher->valid_from->timezone(LedgerReport::TIMEZONE)->format('d M Y').'.');
+            return $fail(SiteLocale::text('voucher.not_started', ['date' => $voucher->valid_from->timezone(LedgerReport::TIMEZONE)->format('d M Y')]));
         }
 
         $channel = $context['channel'] ?? null;
         if ($channel && $voucher->channel === Voucher::CHANNEL_ONLINE && $channel !== Voucher::CHANNEL_ONLINE) {
-            return $fail('Promo ini hanya berlaku untuk booking online.');
+            return $fail(SiteLocale::text('voucher.online_only'));
         }
         if ($channel && $voucher->channel === Voucher::CHANNEL_POS && $channel !== Voucher::CHANNEL_POS) {
-            return $fail('Promo ini hanya berlaku untuk transaksi di kasir.');
+            return $fail(SiteLocale::text('voucher.cashier_only'));
         }
 
         if (! empty($context['membership_applied']) && ! $voucher->stack_with_membership) {
-            return $fail('Promo ini tidak bisa digabung dengan benefit member. Matikan benefit member untuk memakai promo.');
+            return $fail(SiteLocale::text('voucher.no_stack_membership'));
         }
 
         // Nilai yang boleh dipotong = jumlah kategori yang dicentang di promo (PADEL = sewa lapangan, tanpa add-on).
         $amounts = $context['amounts'] ?? ['PADEL' => $orderAmount];
         $base = round((float) collect($voucher->promoCategories())->sum(fn (string $category) => (float) ($amounts[$category] ?? 0)), 2);
         if ($base <= 0) {
-            return $fail('Promo ini tidak berlaku untuk item di transaksi ini.');
+            return $fail(SiteLocale::text('voucher.not_applicable_items'));
         }
 
         // T3 — 1x per akun per promo (pembagian merata). Dihitung dari order lunas + yang masih menunggu bayar milik akun
         // ini; order yang kedaluwarsa / batal tidak dihitung lagi, jadi jatahnya kembali (T2).
         if (! $customer) {
-            return $fail('Promo ini butuh akun customer.');
+            return $fail(SiteLocale::text('voucher.account_required'));
         }
         // C — klaim ke akun: hanya akun yang sudah klaim (kuota dihitung saat klaim).
         if ($voucher->isClaim() && ! VoucherClaim::where('voucher_id', $voucher->id)->where('user_id', $customer->id)->exists()) {
-            return $fail('Promo ini harus diklaim dulu di halaman promo sebelum dipakai.');
+            return $fail(SiteLocale::text('voucher.claim_first'));
         }
         if ($this->promoUsedBy($voucher, $customer, $lock)) {
             return $fail($voucher->isUniqueCode()
-                ? 'Kamu sudah memakai satu kode dari kampanye ini — satu akun hanya bisa memakai satu kode.'
-                : 'Promo ini sudah pernah kamu pakai — satu akun hanya bisa memakai promo yang sama sekali.');
+                ? SiteLocale::text('voucher.campaign_code_used')
+                : SiteLocale::text('voucher.promo_used'));
         }
 
         // Kuota dipotong permanen saat lunas (consume), jadi order yang sudah mengklaim kode ini tapi belum
@@ -132,13 +133,17 @@ class VoucherService
                 ->whereIn('payment_status', ['UNPAID', 'PENDING_PAYMENT', 'PARTIALLY_PAID']), $lock)
                 ->count();
             if ($voucher->quota - $reservedInFlight <= 0) {
-                return $fail($voucher->isUniqueCode() ? 'Kode ini sudah dipakai.' : 'Kuota voucher sudah habis.');
+                return $fail($voucher->isUniqueCode() ? SiteLocale::text('voucher.code_used') : SiteLocale::text('voucher.quota_exhausted'));
             }
         }
 
         $minOrder = (float) ($voucher->min_order_amount ?? 0);
         if ($base < $minOrder) {
-            return $fail('Minimal transaksi untuk voucher ini Rp '.number_format($minOrder, 0, ',', '.').' (dihitung dari '.strtolower(implode(' + ', array_map(fn ($c) => Voucher::PROMO_CATEGORIES[$c], $voucher->promoCategories()))).').');
+            return $fail(SiteLocale::text('voucher.min_order', [
+                'amount' => number_format($minOrder, 0, ',', '.'),
+                // Label kategori: Bahasa Indonesia dari Voucher::PROMO_CATEGORIES (sama dengan sebelumnya); Inggris dari lang/en.
+                'categories' => strtolower(implode(' + ', array_map(fn ($c) => (SiteLocale::isEnglish() ? SiteLocale::textOrNull("voucher.categories.{$c}") : null) ?? Voucher::PROMO_CATEGORIES[$c], $voucher->promoCategories()))),
+            ]));
         }
 
         if ($voucher->discount_type === Voucher::TYPE_PERCENT) {

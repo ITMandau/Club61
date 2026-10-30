@@ -123,6 +123,12 @@
                         </div>
 
                         <div class="font-bold text-sm text-[#4F2F2A] line-clamp-1">{{ $menu->name }}</div>
+                        {{-- Modul 29: info stok saja, penjualan tidak pernah diblok (stok boleh minus). --}}
+                        @if (in_array($menu->stockStatus(), ['LOW', 'EMPTY', 'MINUS'], true))
+                            <span data-stock-badge style="align-self: flex-start; margin-top: 2px; padding: 1px 6px; border-radius: 6px; font-size: 10px; font-weight: 800; {{ $menu->stock_qty > 0 ? 'background:#FEF3C7; color:#92400E;' : 'background:#FEE2E2; color:#B42318;' }}">
+                                {{ $menu->stock_qty < 0 ? 'Stok minus ('.$menu->stock_qty.')' : 'Sisa '.$menu->stock_qty }}
+                            </span>
+                        @endif
                         <div class="text-[11px] text-[#7A5A52] mt-0.5 line-clamp-2">{{ $menu->description }}</div>
 
                         <div class="mt-auto pt-2 border-t border-[#E6DAC0]/50 flex items-center justify-between font-mono">

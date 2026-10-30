@@ -66,7 +66,7 @@ class CorporateDashboardPageTest extends TestCase
         $response = $this->actingAs($user)->get('/corporate');
 
         $response->assertStatus(200)
-            ->assertSee('You are not registered as the PIC of any corporate account.');
+            ->assertSee('Anda belum terdaftar sebagai PIC akun corporate mana pun.');
     }
 
     public function test_pic_sees_organization_summary_roster_and_schedule(): void
@@ -103,8 +103,8 @@ class CorporateDashboardPageTest extends TestCase
             ->assertSee('PT Dashboard Test')
             ->assertSee('Budi Karyawan')
             ->assertSee('081234500001')
-            ->assertSee('5.0 hrs') // 8 granted - 3 used
-            ->assertSee('Max 1 court(s) at once');
+            ->assertSee('5.0 jam') // 8 granted - 3 used
+            ->assertSee('Maks. 1 lapangan sekaligus');
     }
 
     public function test_bulk_release_modal_lists_active_members_and_excludes_revoked(): void
@@ -124,7 +124,7 @@ class CorporateDashboardPageTest extends TestCase
         $response = $this->actingAs($pic)->get('/corporate');
 
         $response->assertStatus(200)
-            ->assertSee('Give Hours to Multiple Members')
+            ->assertSee('Beri Jam ke Beberapa Karyawan')
             ->assertSee('bulk-hours-'.$activeMember->id, false)
             ->assertDontSee('bulk-hours-'.$revokedMember->id, false);
     }
@@ -147,7 +147,7 @@ class CorporateDashboardPageTest extends TestCase
 
         $response = $this->actingAs($pic)->get('/corporate');
 
-        $response->assertStatus(200)->assertSee('data-recent-release="5.0 hrs at', false);
+        $response->assertStatus(200)->assertSee('data-recent-release="5.0 jam pukul', false);
     }
 
     public function test_dashboard_shows_contract_quota_breakdown_when_quota_is_set(): void
@@ -176,11 +176,11 @@ class CorporateDashboardPageTest extends TestCase
         $response = $this->actingAs($pic)->get('/corporate');
 
         $response->assertStatus(200)
-            ->assertSee('Contract Quota')
+            ->assertSee('Kuota Kontrak')
             ->assertSee('200.0')
-            ->assertSee('Quota Remaining')
+            ->assertSee('Sisa Kuota')
             ->assertSee('159.0')
-            ->assertSee('Hours Released')
+            ->assertSee('Jam Diberikan')
             ->assertSee('41.0');
     }
 
@@ -192,8 +192,8 @@ class CorporateDashboardPageTest extends TestCase
         $response = $this->actingAs($pic)->get('/corporate');
 
         // Dulu tertulis "Unlimited" — sekarang paket tanpa kuota jam tidak bisa merilis jam sama sekali.
-        $response->assertStatus(200)->assertSeeInOrder(['Contract Quota', 'No hour quota'])
-            ->assertSee("hours can't be released", false)->assertDontSee('Unlimited');
+        $response->assertStatus(200)->assertSeeInOrder(['Kuota Kontrak', 'Tanpa kuota jam'])
+            ->assertSee('jam belum bisa diberikan', false)->assertDontSee('Unlimited');
     }
 
     public function test_roster_is_paginated_when_team_is_large(): void
@@ -210,8 +210,8 @@ class CorporateDashboardPageTest extends TestCase
 
         $page1 = $this->actingAs($pic)->get('/corporate');
         $page1->assertStatus(200)
-            ->assertSee('Page 1 of 2', false)
-            ->assertSee('Showing 1&ndash;10 of 15 member(s)', false);
+            ->assertSee('Halaman 1 dari 2', false)
+            ->assertSee('Menampilkan 1–10 dari 15 karyawan', false);
 
         $page2 = $this->actingAs($pic)->get('/corporate?page=2');
         $page2->assertStatus(200)->assertSee('Employee 14');
@@ -236,7 +236,7 @@ class CorporateDashboardPageTest extends TestCase
             ->assertSee('Rifki Ganteng')
             ->assertSee('081700112235')
             ->assertDontSee('081700112236')
-            ->assertSee('1 member(s) found', false)
+            ->assertSee('1 karyawan ditemukan', false)
             // Summary card / bulk modal must still count the WHOLE active roster, not just the filtered page.
             ->assertSee('bulk-hours-'.$org->members()->where('user_id', $rudito->id)->first()->id, false);
     }
@@ -247,8 +247,8 @@ class CorporateDashboardPageTest extends TestCase
         $this->makeOrganization($pic);
         $regular = User::factory()->create();
 
-        $this->actingAs($pic)->get('/dashboard')->assertSee('Sponsor Team');
-        $this->actingAs($regular)->get('/dashboard')->assertDontSee('Sponsor Team');
+        $this->actingAs($pic)->get('/dashboard')->assertSee('Tim Sponsor');
+        $this->actingAs($regular)->get('/dashboard')->assertDontSee('Tim Sponsor');
     }
 
     public function test_sample_csv_can_be_downloaded(): void

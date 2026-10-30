@@ -746,7 +746,7 @@ class KelolaPemesanan extends Page
         })();
 
         $courts = Cache::remember('active_padel_courts_list', 120, function () {
-            return PadelCourt::where('is_active', true)->orderBy('name')->get();
+            return PadelCourt::where('is_active', true)->ordered()->get();
         });
 
         return [

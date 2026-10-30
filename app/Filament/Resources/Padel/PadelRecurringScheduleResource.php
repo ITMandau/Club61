@@ -95,7 +95,7 @@ class PadelRecurringScheduleResource extends Resource
                         ->helperText('Corporate atau member individu yang punya kuota jam Padel. Booking dibuat atas nama pemilik membership.'),
                     Select::make('day_of_week')->label('Hari')->options(PadelRecurringSchedule::DAYS)->required()->native(false),
                     Select::make('court_ids')->label('Lapangan')->multiple()->required()->native(false)
-                        ->options(fn () => PadelCourt::where('is_active', true)->orderBy('name')->pluck('name', 'id')->all()),
+                        ->options(fn () => PadelCourt::where('is_active', true)->ordered()->pluck('name', 'id')->all()),
                     Select::make('start_time')->label('Jam mulai')->options($hours(6, 23))->required()->native(false),
                     Select::make('end_time')->label('Jam selesai')->options($hours(7, 24))->required()->native(false),
                     DatePicker::make('starts_on')->label('Mulai tanggal')->required()->native(false)->displayFormat('d M Y'),

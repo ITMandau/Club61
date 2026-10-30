@@ -11,7 +11,7 @@ class PadelCourtController extends Controller
 {
     public function index(): JsonResponse
     {
-        $courts = PadelCourt::where('is_active', true)->get();
+        $courts = PadelCourt::where('is_active', true)->ordered()->get();
         $equipments = CourtEquipment::where('is_active', true)->get();
 
         return response()->json([

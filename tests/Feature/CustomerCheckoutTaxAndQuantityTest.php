@@ -105,8 +105,8 @@ class CustomerCheckoutTaxAndQuantityTest extends TestCase
 
         $response->assertStatus(200);
         $response->assertViewHas('clubFinanceSettings');
-        $response->assertSee('Equipment Rental &amp; Add-ons', false);
-        $response->assertSee('Payment Summary', false);
+        $response->assertSee('Sewa Alat &amp; Tambahan', false);
+        $response->assertSee('Ringkasan Pembayaran', false);
         // Pastikan 11% VAT hardcoded sudah tidak ada lagi
         $response->assertDontSee('11% VAT (Included)');
         // Katalog alat hanya dari database: id contoh bawaan dulu ikut terkirim ke checkout kalau API alat gagal.

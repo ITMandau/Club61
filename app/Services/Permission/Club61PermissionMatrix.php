@@ -221,6 +221,25 @@ class Club61PermissionMatrix
                             'manage_fnb_menu' => 'Kelola Menu, Varian & Harga Jual',
                             'manage_recipe_bom' => 'Kelola Formula Resep & Bill of Materials',
                             'manage_raw_materials' => 'Kelola Stok Bahan Baku & Inventaris Dapur',
+                            // Modul 29: HPP = dasar perhitungan laba F&B.
+                            'manage_fnb_hpp' => 'Kelola HPP, Lacak Stok & Stok Minimum Menu',
+                        ],
+                    ],
+                    'fnb_stock' => [
+                        'label' => 'Stok F&B (Mini Inventory)',
+                        'actions' => [
+                            'View:StokFnb' => 'Akses Halaman Stok F&B & Kartu Stok',
+                            'restock_fnb_stock' => 'Catat Penerimaan Barang F&B (Input Manual & Impor Excel)',
+                            'adjust_fnb_stock' => 'Penyesuaian Stok F&B & Batalkan Penerimaan Barang',
+                            'opname_fnb_stock' => 'Simpan Hasil Stok Opname F&B',
+                        ],
+                    ],
+                    'fnb_finance' => [
+                        'label' => 'Pengeluaran & Laporan Keuangan F&B',
+                        'actions' => [
+                            'View:BukuKasFnb' => 'Akses Halaman Pengeluaran F&B',
+                            'manage_fnb_cashbook' => 'Catat & Batalkan Pengeluaran F&B, Kelola Kategori',
+                            'View:LaporanFnb' => 'Akses Halaman Laporan Keuangan F&B (Laba, Arus Kas, Dashboard)',
                         ],
                     ],
                 ],

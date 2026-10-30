@@ -115,7 +115,7 @@ class DokuSessionGuard
 
         // Batas dicek SEBELUM menutup apa pun: customer yang kena batas tetap bisa membayar sesi terakhirnya.
         if (count($sessions) >= self::MAX_SESSIONS) {
-            throw new HttpException(429, 'Metode pembayaran sudah diganti terlalu sering untuk tagihan ini. Selesaikan dengan metode terakhir, atau hubungi front desk Club 61.');
+            throw new HttpException(429, \App\Support\SiteLocale::text('payment.too_many_switches'));
         }
 
         return $this->closeAll($bill, $log, $sessions);

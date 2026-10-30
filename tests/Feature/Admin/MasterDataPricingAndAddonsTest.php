@@ -89,8 +89,7 @@ class MasterDataPricingAndAddonsTest extends TestCase
         Livewire::test(MasterData::class)
             ->call('openCreateCourtModal')
             ->set('courtName', 'Court 4 - Center Stadium')
-            ->set('courtType', 'OUTDOOR')
-            ->set('courtDescription', 'Outdoor • Championship Stadium')
+            ->set('courtDescription', 'Indoor • Championship Stadium')
             ->set('hourlyRateRegular', 280000)
             ->set('hourlyRatePrime', 420000)
             ->set('courtIsActive', true)
@@ -99,12 +98,59 @@ class MasterDataPricingAndAddonsTest extends TestCase
 
         $this->assertDatabaseHas('padel_courts', [
             'name' => 'Court 4 - Center Stadium',
-            'type' => 'OUTDOOR',
-            'description' => 'Outdoor • Championship Stadium',
+            'type' => 'INDOOR',
+            'description' => 'Indoor • Championship Stadium',
             'hourly_rate_regular' => 280000.00,
             'hourly_rate_prime' => 420000.00,
             'is_active' => true,
         ]);
+    }
+
+    public function test_outdoor_is_no_longer_offered_and_old_outdoor_court_becomes_indoor_on_save(): void
+    {
+        $this->actingAs($this->adminUser);
+        $old = PadelCourt::create(['name' => 'Court Iforte', 'type' => 'OUTDOOR', 'hourly_rate_regular' => 200000, 'hourly_rate_prime' => 300000, 'is_active' => true]);
+
+        Livewire::test(MasterData::class)
+            ->assertDontSee('Outdoor Court')
+            ->call('openEditCourtModal', $old->id)
+            ->assertSet('courtType', 'INDOOR')
+            ->set('courtName', 'Court Protelindo')
+            ->call('saveCourt')
+            ->assertHasNoErrors();
+        $this->assertSame(['Court Protelindo', 'INDOOR'], [$old->fresh()->name, $old->fresh()->type]);
+
+        Livewire::test(MasterData::class)->call('openCreateCourtModal')->set('courtName', 'X')->set('courtType', 'OUTDOOR')
+            ->call('saveCourt')->assertHasErrors(['courtType']);
+    }
+
+    public function test_court_display_order_follows_sort_order_then_name(): void
+    {
+        $this->actingAs($this->adminUser);
+        $this->court->delete();
+        $bca = PadelCourt::create(['name' => 'Court BCA', 'type' => 'INDOOR', 'hourly_rate_regular' => 200000, 'hourly_rate_prime' => 300000, 'is_active' => true]);
+        $im3 = PadelCourt::create(['name' => 'Court IM3 Platinum', 'type' => 'INDOOR', 'hourly_rate_regular' => 200000, 'hourly_rate_prime' => 300000, 'is_active' => true]);
+        $pro = PadelCourt::create(['name' => 'Court Protelindo', 'type' => 'INDOOR', 'hourly_rate_regular' => 200000, 'hourly_rate_prime' => 300000, 'is_active' => true]);
+        $names = fn () => collect(app(PadelBookingService::class)->getScheduleMatrix(now('Asia/Jakarta')->addDay()->toDateString())['courts'])->pluck('court_name')->all();
+
+        // Belum diatur (semua 0) → tetap abjad seperti sebelumnya.
+        $this->assertSame(['Court BCA', 'Court IM3 Platinum', 'Court Protelindo'], $names());
+
+        foreach ([[$bca, 1], [$pro, 2], [$im3, 3]] as [$court, $order]) {
+            Livewire::test(MasterData::class)
+                ->call('openEditCourtModal', $court->id)
+                ->assertSet('courtSortOrder', 0)
+                ->set('courtSortOrder', $order)
+                ->call('saveCourt')
+                ->assertHasNoErrors();
+        }
+
+        $this->assertSame(['Court BCA', 'Court Protelindo', 'Court IM3 Platinum'], $names());
+        $this->assertSame(['Court BCA', 'Court Protelindo', 'Court IM3 Platinum'], PadelCourt::ordered()->pluck('name')->all());
+
+        // Lapangan baru otomatis di urutan terakhir; angka tidak valid ditolak.
+        Livewire::test(MasterData::class)->call('openCreateCourtModal')->assertSet('courtSortOrder', 4)
+            ->set('courtSortOrder', -1)->set('courtName', 'X')->call('saveCourt')->assertHasErrors(['courtSortOrder']);
     }
 
     public function test_admin_can_toggle_court_status(): void

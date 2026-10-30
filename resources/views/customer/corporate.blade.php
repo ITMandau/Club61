@@ -6,29 +6,29 @@
             <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white/95 p-5 rounded-xl border border-[#E6DAC0] shadow-sm">
                 <div class="flex items-center gap-3.5">
                     @if(empty($previewMode))
-                    <a href="{{ route('dashboard') }}" class="p-2.5 rounded-lg bg-[#F7F0DB] hover:bg-[#F7F0DB] border border-[#E6DAC0] text-[#662721] transition-colors" title="Back to Home">
+                    <a href="{{ route('dashboard') }}" class="p-2.5 rounded-lg bg-[#F7F0DB] hover:bg-[#F7F0DB] border border-[#E6DAC0] text-[#662721] transition-colors" title="{{ __('corporate.back_home') }}">
                         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M15 19l-7-7 7-7" />
                         </svg>
                     </a>
                     @endif
                     <div>
-                        <h1 class="font-display font-black text-xl sm:text-2xl text-[#4F2F2A]">Manage Corporate Sponsor Team</h1>
-                        <p class="text-xs text-[#7A5A52] mt-0.5">Manage your team's employee roster &amp; play-hour vouchers at Club 61</p>
+                        <h1 class="font-display font-black text-xl sm:text-2xl text-[#4F2F2A]">{{ __('corporate.title') }}</h1>
+                        <p class="text-xs text-[#7A5A52] mt-0.5">{{ __('corporate.subtitle') }}</p>
                     </div>
                 </div>
             </div>
 
             @if(! empty($previewMode) && $organization)
                 <div class="p-4 rounded-lg border-2 border-amber-300 bg-amber-50 text-amber-900 text-xs font-bold flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-                    <span>MODE PRATINJAU STAF — Anda melihat dashboard PIC <strong>{{ $organization->sponsorAdmin?->name ?? '-' }}</strong> ({{ $organization->name }}). Semua aksi dinonaktifkan.</span>
+                    <span>{!! __('corporate.preview_banner', ['pic' => '<strong>'.e($organization->sponsorAdmin?->name ?? '-').'</strong>', 'org' => e($organization->name)]) !!}</span>
                 </div>
             @endif
 
             @if(! $organization)
                 <div class="p-8 rounded-xl bg-white/95 border border-[#E6DAC0] shadow-sm text-center">
-                    <p class="text-sm font-bold text-[#4F2F2A]">You are not registered as the PIC of any corporate account.</p>
-                    <p class="text-xs text-[#7A5A52] mt-1.5">Contact Club 61 Concierge if your company already subscribes to a corporate package but this menu hasn't appeared yet.</p>
+                    <p class="text-sm font-bold text-[#4F2F2A]">{{ __('corporate.not_pic') }}</p>
+                    <p class="text-xs text-[#7A5A52] mt-1.5">{{ __('corporate.not_pic_hint') }}</p>
                 </div>
             @else
                 <div @if(! empty($previewMode)) inert @endif class="space-y-6">
@@ -36,7 +36,7 @@
 
                 @if($organization->isSuspended())
                     <div data-org-suspended class="p-4 rounded-lg bg-amber-50 border border-amber-300 text-xs text-amber-900 leading-relaxed">
-                        <strong>This corporate account is suspended.</strong> Releasing hours is paused and your team's vouchers can't be used for bookings until Club 61 reactivates the account. Please contact Club 61.
+                        <strong>{{ __('corporate.suspended_title') }}</strong> {{ __('corporate.suspended_body') }}
                     </div>
                 @endif
 
@@ -47,73 +47,73 @@
                         <div>
                             <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full text-[10px] font-extrabold uppercase bg-[#F7F0DB] text-[#662721] border border-[#E6DAC0]">
                                 <span class="w-2 h-2 rounded-full {{ $organization->isSuspended() ? 'bg-amber-500' : 'bg-emerald-500 animate-pulse' }}"></span>
-                                <span>{{ $organization->isSuspended() ? 'Suspended Corporate Account' : 'Active Corporate Account' }}</span>
+                                <span>{{ $organization->isSuspended() ? __('corporate.account_suspended') : __('corporate.account_active') }}</span>
                             </div>
                             <div class="font-display font-black text-2xl sm:text-3xl text-[#4F2F2A] mt-2">{{ $organization->name }}</div>
                             <div class="text-xs text-[#7A5A52] mt-1">
-                                Plan: <strong>{{ $organization->userMembership->plan->name ?? '-' }}</strong>
+                                {{ __('corporate.plan') }} <strong>{{ $organization->userMembership->plan->name ?? '-' }}</strong>
                                 @if($organization->userMembership && $organization->userMembership->end_date)
-                                    &bull; Contract until <strong>{{ \Carbon\Carbon::parse($organization->userMembership->end_date)->format('d M Y') }}</strong>
+                                    &bull; {{ __('corporate.contract_until') }} <strong>{{ \Carbon\Carbon::parse($organization->userMembership->end_date)->translatedFormat('d M Y') }}</strong>
                                 @endif
                             </div>
                         </div>
                         <div class="grid grid-cols-2 sm:grid-cols-3 gap-3 min-w-[240px] sm:min-w-[380px]">
                             <div class="p-4 rounded-lg bg-white border border-[#E6DAC0] shadow-sm text-center">
-                                <div class="text-[10px] font-extrabold uppercase tracking-wider text-[#662721]">Active Members</div>
+                                <div class="text-[10px] font-extrabold uppercase tracking-wider text-[#662721]">{{ __('corporate.active_members') }}</div>
                                 <div class="font-display font-black text-xl text-[#4F2F2A] mt-1">{{ $activeMemberCount }}</div>
                             </div>
                             <div class="p-4 rounded-lg bg-white border border-[#E6DAC0] shadow-sm text-center">
-                                <div class="text-[10px] font-extrabold uppercase tracking-wider text-[#662721]">Contract Quota</div>
+                                <div class="text-[10px] font-extrabold uppercase tracking-wider text-[#662721]">{{ __('corporate.contract_quota') }}</div>
                                 <div class="font-display font-black text-xl text-[#4F2F2A] mt-1">
-                                    {{ $totalQuota !== null ? number_format($totalQuota, 1) : 'No hour quota' }}
+                                    {{ $totalQuota !== null ? number_format($totalQuota, 1) : __('corporate.no_hour_quota') }}
                                 </div>
                             </div>
                             <div class="p-4 rounded-lg bg-white border border-[#E6DAC0] shadow-sm text-center">
-                                <div class="text-[10px] font-extrabold uppercase tracking-wider text-[#662721]">Quota Remaining</div>
+                                <div class="text-[10px] font-extrabold uppercase tracking-wider text-[#662721]">{{ __('corporate.quota_remaining') }}</div>
                                 <div class="font-display font-black text-xl text-[#4F2F2A] mt-1">
-                                    {{ $quotaRemaining !== null ? number_format($quotaRemaining, 1) : 'No hour quota' }}
+                                    {{ $quotaRemaining !== null ? number_format($quotaRemaining, 1) : __('corporate.no_hour_quota') }}
                                 </div>
                             </div>
                             <div class="p-4 rounded-lg bg-white border border-[#E6DAC0] shadow-sm text-center">
-                                <div class="text-[10px] font-extrabold uppercase tracking-wider text-[#662721]">Hours Released</div>
+                                <div class="text-[10px] font-extrabold uppercase tracking-wider text-[#662721]">{{ __('corporate.hours_released') }}</div>
                                 <div class="font-display font-black text-xl text-[#4F2F2A] mt-1">{{ number_format($totalHoursReleased, 1) }}</div>
                             </div>
                             <div class="p-4 rounded-lg bg-white border border-[#E6DAC0] shadow-sm text-center">
-                                <div class="text-[10px] font-extrabold uppercase tracking-wider text-[#662721]">Hours Used</div>
+                                <div class="text-[10px] font-extrabold uppercase tracking-wider text-[#662721]">{{ __('corporate.hours_used') }}</div>
                                 <div class="font-display font-black text-xl text-[#4F2F2A] mt-1">{{ number_format($totalHoursUsed, 1) }}</div>
                             </div>
                         </div>
                     </div>
                     <p class="text-[10px] text-[#7A5A52] mt-4 italic">
                         @if($totalQuota !== null)
-                            Contract quota of {{ number_format($totalQuota, 1) }} hrs &mdash; {{ number_format($totalHoursReleased, 1) }} hrs already released to {{ $activeMemberCount }} active member(s), {{ number_format($quotaRemaining, 1) }} hrs still available to release. {{ number_format($totalHoursUsed, 1) }} hrs actually used so far.
+                            {{ __('corporate.quota_summary', ['quota' => number_format($totalQuota, 1), 'released' => number_format($totalHoursReleased, 1), 'members' => $activeMemberCount, 'remaining' => number_format($quotaRemaining, 1), 'used' => number_format($totalHoursUsed, 1)]) }}
                         @else
-                            This plan has no padel hour quota, so hours can't be released &mdash; contact Club 61 to update the contract. {{ number_format($totalHoursReleased, 1) }} hrs released so far to {{ $activeMemberCount }} active member(s), {{ number_format($totalHoursUsed, 1) }} hrs actually used.
+                            {{ __('corporate.no_quota_summary', ['released' => number_format($totalHoursReleased, 1), 'members' => $activeMemberCount, 'used' => number_format($totalHoursUsed, 1)]) }}
                         @endif
                     </p>
                 </div>
 
                 <!-- Access Schedule (Read-Only, set by venue staff) -->
                 <div class="p-6 rounded-xl bg-white/95 border border-[#E6DAC0] shadow-sm">
-                    <h3 class="font-display font-extrabold text-base text-[#4F2F2A]">Team Play Access Schedule</h3>
-                    <p class="text-xs text-[#7A5A52] mt-0.5 mb-4">Allowed hours &amp; days are set by Club 61 (to balance court availability with other sponsors). Contact Concierge for adjustments.</p>
+                    <h3 class="font-display font-extrabold text-base text-[#4F2F2A]">{{ __('corporate.schedule_title') }}</h3>
+                    <p class="text-xs text-[#7A5A52] mt-0.5 mb-4">{{ __('corporate.schedule_hint') }}</p>
                     @if($organization->accessSchedules->isEmpty())
-                        <p class="text-xs text-[#7A5A52] italic">No access schedule has been set for your team yet.</p>
+                        <p class="text-xs text-[#7A5A52] italic">{{ __('corporate.schedule_empty') }}</p>
                     @else
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
                             @foreach($organization->accessSchedules as $sch)
                                 <div class="p-4 rounded-lg bg-[#FCF8EE] border border-[#E6DAC0]/60 text-xs">
-                                    <div class="font-bold text-[#4F2F2A]">{{ \Carbon\Carbon::parse($sch->valid_from)->format('d M Y') }} &ndash; {{ \Carbon\Carbon::parse($sch->valid_until)->format('d M Y') }}</div>
+                                    <div class="font-bold text-[#4F2F2A]">{{ \Carbon\Carbon::parse($sch->valid_from)->translatedFormat('d M Y') }} &ndash; {{ \Carbon\Carbon::parse($sch->valid_until)->translatedFormat('d M Y') }}</div>
                                     <div class="text-[#7A5A52] mt-1">
-                                        Hours: <strong>{{ $sch->time_start }} - {{ $sch->time_end }}</strong>
+                                        {{ __('corporate.hours_label') }} <strong>{{ $sch->time_start }} - {{ $sch->time_end }}</strong>
                                         @if($sch->days_of_week)
-                                            &bull; Days: {{ collect($sch->days_of_week)->map(fn($d) => [1=>'Mon',2=>'Tue',3=>'Wed',4=>'Thu',5=>'Fri',6=>'Sat',7=>'Sun'][$d] ?? $d)->implode(', ') }}
+                                            &bull; {{ __('corporate.days_label') }} {{ collect($sch->days_of_week)->map(fn($d) => __('corporate.days')[$d] ?? $d)->implode(', ') }}
                                         @else
-                                            &bull; All Days
+                                            &bull; {{ __('corporate.all_days') }}
                                         @endif
                                     </div>
                                     @if($sch->max_concurrent_courts)
-                                        <div class="text-[#7A5A52] mt-1">Max {{ $sch->max_concurrent_courts }} court(s) at once</div>
+                                        <div class="text-[#7A5A52] mt-1">{{ __('corporate.max_courts', ['count' => $sch->max_concurrent_courts]) }}</div>
                                     @endif
                                 </div>
                             @endforeach
@@ -124,15 +124,15 @@
                 <!-- Add Member & CSV Import -->
                 <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
                     <div class="p-6 rounded-xl bg-white/95 border border-[#E6DAC0] shadow-sm">
-                        <h3 class="font-display font-extrabold text-base text-[#4F2F2A] mb-1">Add One Member</h3>
-                        <p class="text-[11px] text-[#7A5A52] mb-4">Adding just one employee? Fill this in. Adding many at once? Use CSV import on the right instead.</p>
+                        <h3 class="font-display font-extrabold text-base text-[#4F2F2A] mb-1">{{ __('corporate.add_one_title') }}</h3>
+                        <p class="text-[11px] text-[#7A5A52] mb-4">{{ __('corporate.add_one_hint') }}</p>
                         <form id="add-member-form" class="space-y-3">
-                            <input type="text" name="name" placeholder="Employee Name" required
+                            <input type="text" name="name" placeholder="{{ __('corporate.employee_name') }}" required
                                    class="w-full px-4 py-2.5 rounded-xl border border-[#E6DAC0] text-sm focus:outline-none focus:border-[#662721]">
-                            <input type="text" name="phone" placeholder="Phone Number (e.g. 081234567890)" required
+                            <input type="text" name="phone" placeholder="{{ __('corporate.phone_placeholder') }}" required
                                    class="w-full px-4 py-2.5 rounded-xl border border-[#E6DAC0] text-sm focus:outline-none focus:border-[#662721]">
                             <div>
-                                <label class="text-[11px] font-bold text-[#7A5A52] mb-1 block">Starting play hours (optional)</label>
+                                <label class="text-[11px] font-bold text-[#7A5A52] mb-1 block">{{ __('corporate.starting_hours') }}</label>
                                 <div class="flex items-center gap-2">
                                     <button type="button" onclick="stepValue('initial_hours_input', -0.5, 0)"
                                             class="w-10 h-10 rounded-xl border border-[#E6DAC0] bg-white hover:bg-[#F7F0DB] text-[#662721] font-black text-base shrink-0">&minus;</button>
@@ -140,25 +140,25 @@
                                            class="w-full text-center px-2 py-2.5 rounded-xl border border-[#E6DAC0] text-sm focus:outline-none focus:border-[#662721]">
                                     <button type="button" onclick="stepValue('initial_hours_input', 0.5, 0)"
                                             class="w-10 h-10 rounded-xl border border-[#E6DAC0] bg-white hover:bg-[#F7F0DB] text-[#662721] font-black text-base shrink-0">+</button>
-                                    <span class="text-xs font-bold text-[#7A5A52] shrink-0 w-8">hrs</span>
+                                    <span class="text-xs font-bold text-[#7A5A52] shrink-0 w-8">{{ __('corporate.hrs') }}</span>
                                 </div>
                             </div>
                             <button type="submit"
                                     class="w-full py-2.5 rounded-xl bg-[#662721] hover:bg-[#511D18] text-[#F7F0DB] text-xs font-black uppercase tracking-wider shadow-md  active:scale-95 transition-all">
-                                Add Member
+                                {{ __('corporate.add_member') }}
                             </button>
                         </form>
                     </div>
 
                     <div class="p-6 rounded-xl bg-white/95 border border-[#E6DAC0] shadow-sm">
                         <div class="flex items-center justify-between mb-2">
-                            <h3 class="font-display font-extrabold text-base text-[#4F2F2A]">Import Roster + Voucher (CSV)</h3>
+                            <h3 class="font-display font-extrabold text-base text-[#4F2F2A]">{{ __('corporate.import_title') }}</h3>
                             <a href="{{ route('customer.corporate.sample-csv') }}"
                                class="text-[10px] font-bold text-[#662721] hover:text-[#4F2F2A] underline underline-offset-2 shrink-0">
-                                Download Sample CSV
+                                {{ __('corporate.download_sample') }}
                             </a>
                         </div>
-                        <p class="text-xs text-[#7A5A52] mb-2">Column format: <code class="bg-[#F7F0DB] px-1 rounded">name, phone, hours</code>. Re-upload every month to release new voucher hours to your team.</p>
+                        <p class="text-xs text-[#7A5A52] mb-2">{{ __('corporate.column_format') }} <code class="bg-[#F7F0DB] px-1 rounded">name, phone, hours</code>. {{ __('corporate.import_hint') }}</p>
                         <pre class="text-[10px] bg-[#FCF8EE] border border-[#E6DAC0]/60 rounded-xl p-3 mb-3 overflow-x-auto text-[#4F2F2A]">name,phone,hours
 Budi Santoso,081234567890,10
 Siti Rahma,081399887766,5</pre>
@@ -167,7 +167,7 @@ Siti Rahma,081399887766,5</pre>
                                    class="w-full text-xs text-[#7A5A52] file:mr-3 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-[#F7F0DB] file:text-[#662721] hover:file:bg-[#F7F0DB]">
                             <button type="submit"
                                     class="w-full py-2.5 rounded-xl bg-[#662721] hover:bg-[#511D18] text-[#F7F0DB] text-xs font-black uppercase tracking-wider shadow-md  active:scale-95 transition-all">
-                                Upload &amp; Process CSV
+                                {{ __('corporate.upload_csv') }}
                             </button>
                         </form>
                     </div>
@@ -176,14 +176,14 @@ Siti Rahma,081399887766,5</pre>
                 <!-- Team Roster -->
                 <div class="p-6 rounded-xl bg-white/95 border border-[#E6DAC0] shadow-sm">
                     <div class="flex items-start justify-between gap-3 flex-wrap mb-1">
-                        <h3 class="font-display font-extrabold text-base text-[#4F2F2A]">Team Member Roster</h3>
+                        <h3 class="font-display font-extrabold text-base text-[#4F2F2A]">{{ __('corporate.roster_title') }}</h3>
                         <button type="button" onclick="openBulkModal()"
                                 class="px-3.5 py-2 rounded-xl bg-[#662721] hover:bg-[#511D18] text-[#F7F0DB] text-[11px] font-bold shrink-0">
-                            🎟️ Give Hours to Multiple Members
+                            {{ __('corporate.give_bulk') }}
                         </button>
                     </div>
                     <p class="text-[11px] text-[#7A5A52] mb-4">
-                        Members log in at <a href="{{ route('login') }}" class="underline font-bold">/login</a> using their <strong>Phone Number</strong> (not their name) &bull; default password is the <strong>last 6 digits of their phone number</strong>.
+                        {!! __('corporate.login_hint', ['link' => '<a href="'.e(route('login')).'" class="underline font-bold">/login</a>']) !!}
                     </p>
 
                     <!-- Search: filters the roster below by name or phone number -->
@@ -192,22 +192,22 @@ Siti Rahma,081399887766,5</pre>
                             <svg class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-[#A08F86]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-4.35-4.35M17 10.5a6.5 6.5 0 11-13 0 6.5 6.5 0 0113 0z" />
                             </svg>
-                            <input type="text" name="search" value="{{ $search }}" placeholder="Search by name or phone number..."
+                            <input type="text" name="search" value="{{ $search }}" placeholder="{{ __('corporate.search_placeholder') }}"
                                    class="w-full pl-9 pr-3 py-2 rounded-xl border border-[#E6DAC0] text-xs focus:outline-none focus:border-[#662721]">
                         </div>
                         <button type="submit"
                                 class="px-3.5 py-2 rounded-xl bg-white hover:bg-[#F7F0DB] border border-[#E6DAC0] text-[#662721] text-[11px] font-bold shrink-0">
-                            Search
+                            {{ __('corporate.search') }}
                         </button>
                         @if($search !== '')
                             <a href="{{ route('customer.corporate') }}"
                                class="px-3.5 py-2 rounded-xl bg-white hover:bg-[#F7F0DB] border border-[#E6DAC0] text-[#7A5A52] text-[11px] font-bold shrink-0">
-                                Clear
+                                {{ __('corporate.clear') }}
                             </a>
                         @endif
                     </form>
                     @if($search !== '')
-                        <p class="text-[11px] text-[#7A5A52] mb-3">Showing results for <strong>&ldquo;{{ $search }}&rdquo;</strong> &bull; {{ $members->total() }} member(s) found.</p>
+                        <p class="text-[11px] text-[#7A5A52] mb-3">{!! __('corporate.search_results', ['query' => '<strong>&ldquo;'.e($search).'&rdquo;</strong>', 'count' => $members->total()]) !!}</p>
                     @endif
 
                     <!-- Table view: tablet & desktop only (mobile uses the card list below instead of side-scrolling) -->
@@ -215,11 +215,11 @@ Siti Rahma,081399887766,5</pre>
                     <table class="w-full text-xs">
                         <thead>
                             <tr class="text-left text-[10px] uppercase font-extrabold text-[#662721] border-b border-[#E6DAC0]">
-                                <th class="py-2 pr-3">Name</th>
-                                <th class="py-2 pr-3">Phone</th>
-                                <th class="py-2 pr-3">Status</th>
-                                <th class="py-2 pr-3">Active Hours</th>
-                                <th class="py-2 pr-3">Action</th>
+                                <th class="py-2 pr-3">{{ __('corporate.th_name') }}</th>
+                                <th class="py-2 pr-3">{{ __('corporate.th_phone') }}</th>
+                                <th class="py-2 pr-3">{{ __('corporate.th_status') }}</th>
+                                <th class="py-2 pr-3">{{ __('corporate.th_active_hours') }}</th>
+                                <th class="py-2 pr-3">{{ __('corporate.th_action') }}</th>
                             </tr>
                         </thead>
                         <tbody id="roster-tbody">
@@ -232,30 +232,30 @@ Siti Rahma,081399887766,5</pre>
                                         ->first();
                                 @endphp
                                 <tr class="border-b border-[#F7F0DB]" data-member-id="{{ $m->id }}"
-                                    data-recent-release="{{ $recentRelease ? number_format((float) $recentRelease->hours_granted, 1).' hrs at '.$recentRelease->issued_at->format('H:i') : '' }}">
+                                    data-recent-release="{{ $recentRelease ? __('corporate.recent_release', ['hours' => number_format((float) $recentRelease->hours_granted, 1), 'time' => $recentRelease->issued_at->format('H:i')]) : '' }}">
                                     <td class="py-2.5 pr-3 font-bold text-[#4F2F2A]">{{ $m->user->name ?? '-' }}</td>
                                     <td class="py-2.5 pr-3 text-[#7A5A52]">{{ $m->user->phone ?? '-' }}</td>
                                     <td class="py-2.5 pr-3">
                                         <span class="px-2 py-0.5 rounded-full text-[10px] font-bold {{ $m->status === 'ACTIVE' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-rose-50 text-rose-700 border border-rose-200' }}">
-                                            {{ $m->status }}
+                                            {{ __('corporate.statuses')[$m->status] ?? $m->status }}
                                         </span>
                                     </td>
-                                    <td class="py-2.5 pr-3 font-bold text-[#4F2F2A]">{{ number_format($m->totalRemainingHours(), 1) }} hrs</td>
+                                    <td class="py-2.5 pr-3 font-bold text-[#4F2F2A]">{{ __('corporate.hours_value', ['value' => number_format($m->totalRemainingHours(), 1)]) }}</td>
                                     <td class="py-2.5 pr-3">
                                         <div class="flex items-center gap-1.5 flex-wrap">
                                             <button type="button" onclick="toggleVouchers('{{ $m->id }}')"
                                                     class="px-2.5 py-1 rounded-lg bg-white hover:bg-[#F7F0DB] border border-[#E6DAC0] text-[#662721] text-[10px] font-bold">
-                                                Vouchers ({{ $m->vouchers->count() }})
+                                                {{ __('corporate.vouchers_button', ['count' => $m->vouchers->count()]) }}
                                             </button>
-                                            <button type="button" onclick="releaseVoucher('{{ $m->id }}')" title="Give this member extra play hours right now"
+                                            <button type="button" onclick="releaseVoucher('{{ $m->id }}')" title="{{ __('corporate.give_hours_title') }}"
                                                     class="px-2.5 py-1 rounded-lg bg-[#F7F0DB] hover:bg-[#F7F0DB] border border-[#E6DAC0] text-[#662721] text-[10px] font-bold">
-                                                🎟️ Give Hours
+                                                {{ __('corporate.give_hours') }}
                                             </button>
                                             {{-- Tidak ada Revoke (meeting 28 Okt 2026): jam karyawan tidak boleh tersangkut. Anggota lama yang terlanjur dicabut tetap bisa diaktifkan lagi. --}}
                                             @if($m->status !== 'ACTIVE')
                                                 <button type="button" onclick="reactivateMember('{{ $m->id }}')"
                                                         class="px-2.5 py-1 rounded-lg bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-700 text-[10px] font-bold">
-                                                    Activate
+                                                    {{ __('corporate.activate') }}
                                                 </button>
                                             @endif
                                         </div>
@@ -264,17 +264,17 @@ Siti Rahma,081399887766,5</pre>
                                 <tr id="vouchers-row-{{ $m->id }}" class="hidden border-b border-[#F7F0DB] bg-[#FCF8EE]">
                                     <td colspan="5" class="py-3 px-3">
                                         @if($m->vouchers->isEmpty())
-                                            <p class="text-[11px] text-[#7A5A52] italic">No vouchers issued for this member yet.</p>
+                                            <p class="text-[11px] text-[#7A5A52] italic">{{ __('corporate.no_vouchers') }}</p>
                                         @else
                                             <table class="w-full text-[11px]">
                                                 <thead>
                                                     <tr class="text-left text-[9px] uppercase font-extrabold text-[#662721]">
-                                                        <th class="py-1 pr-3">Hours Granted</th>
-                                                        <th class="py-1 pr-3">Used</th>
-                                                        <th class="py-1 pr-3">Remaining</th>
-                                                        <th class="py-1 pr-3">Expires</th>
-                                                        <th class="py-1 pr-3">Source</th>
-                                                        <th class="py-1 pr-3">Action</th>
+                                                        <th class="py-1 pr-3">{{ __('corporate.th_hours_granted') }}</th>
+                                                        <th class="py-1 pr-3">{{ __('corporate.th_used') }}</th>
+                                                        <th class="py-1 pr-3">{{ __('corporate.th_remaining') }}</th>
+                                                        <th class="py-1 pr-3">{{ __('corporate.th_expires') }}</th>
+                                                        <th class="py-1 pr-3">{{ __('corporate.th_source') }}</th>
+                                                        <th class="py-1 pr-3">{{ __('corporate.th_action') }}</th>
                                                     </tr>
                                                 </thead>
                                                 <tbody>
@@ -292,15 +292,15 @@ Siti Rahma,081399887766,5</pre>
                                                             </td>
                                                             <td class="py-1.5 pr-3">{{ number_format($v->hours_used, 1) }}</td>
                                                             <td class="py-1.5 pr-3 font-bold">{{ number_format($v->remainingHours(), 1) }}</td>
-                                                            <td class="py-1.5 pr-3">{{ \Carbon\Carbon::parse($v->expires_at)->format('d M Y') }} {{ $v->isExpired() ? '(expired)' : '' }}</td>
-                                                            <td class="py-1.5 pr-3">{{ $v->source }}</td>
+                                                            <td class="py-1.5 pr-3">{{ \Carbon\Carbon::parse($v->expires_at)->translatedFormat('d M Y') }} {{ $v->isExpired() ? __('corporate.expired_suffix') : '' }}</td>
+                                                            <td class="py-1.5 pr-3">{{ __('corporate.sources')[$v->source] ?? $v->source }}</td>
                                                             <td class="py-1.5 pr-3">
                                                                 <div class="flex items-center gap-1">
                                                                     <button type="button" onclick="saveVoucher('{{ $v->id }}')"
-                                                                            class="px-2 py-1 rounded-lg bg-[#662721] hover:bg-[#511D18] text-[#F7F0DB] text-[10px] font-bold">Save</button>
+                                                                            class="px-2 py-1 rounded-lg bg-[#662721] hover:bg-[#511D18] text-[#F7F0DB] text-[10px] font-bold">{{ __('corporate.save') }}</button>
                                                                     @if((float) $v->hours_used == 0)
                                                                         <button type="button" onclick="deleteVoucher('{{ $v->id }}')"
-                                                                                class="px-2 py-1 rounded-lg bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-600 text-[10px] font-bold">Delete</button>
+                                                                                class="px-2 py-1 rounded-lg bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-600 text-[10px] font-bold">{{ __('corporate.delete') }}</button>
                                                                     @endif
                                                                 </div>
                                                             </td>
@@ -312,7 +312,7 @@ Siti Rahma,081399887766,5</pre>
                                     </td>
                                 </tr>
                             @empty
-                                <tr><td colspan="5" class="py-6 text-center text-[#7A5A52] italic">No members registered yet.</td></tr>
+                                <tr><td colspan="5" class="py-6 text-center text-[#7A5A52] italic">{{ __('corporate.no_members') }}</td></tr>
                             @endforelse
                         </tbody>
                     </table>
@@ -329,56 +329,56 @@ Siti Rahma,081399887766,5</pre>
                                     ->first();
                             @endphp
                             <div class="rounded-lg border border-[#E6DAC0] bg-[#FCF8EE] p-4" data-member-id-mobile="{{ $m->id }}"
-                                 data-recent-release="{{ $recentReleaseMobile ? number_format((float) $recentReleaseMobile->hours_granted, 1).' hrs at '.$recentReleaseMobile->issued_at->format('H:i') : '' }}">
+                                 data-recent-release="{{ $recentReleaseMobile ? __('corporate.recent_release', ['hours' => number_format((float) $recentReleaseMobile->hours_granted, 1), 'time' => $recentReleaseMobile->issued_at->format('H:i')]) : '' }}">
                                 <div class="flex items-start justify-between gap-2">
                                     <div class="min-w-0">
                                         <div class="font-bold text-sm text-[#4F2F2A] truncate">{{ $m->user->name ?? '-' }}</div>
                                         <div class="text-[11px] text-[#7A5A52]">{{ $m->user->phone ?? '-' }}</div>
                                     </div>
                                     <span class="px-2 py-0.5 rounded-full text-[10px] font-bold shrink-0 {{ $m->status === 'ACTIVE' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-rose-50 text-rose-700 border border-rose-200' }}">
-                                        {{ $m->status }}
+                                        {{ __('corporate.statuses')[$m->status] ?? $m->status }}
                                     </span>
                                 </div>
 
                                 <div class="mt-3 pt-3 border-t border-[#E6DAC0]/50">
-                                    <div class="text-[9px] font-extrabold uppercase tracking-wider text-[#662721]">Active Hours</div>
-                                    <div class="font-bold text-sm text-[#4F2F2A]">{{ number_format($m->totalRemainingHours(), 1) }} hrs</div>
+                                    <div class="text-[9px] font-extrabold uppercase tracking-wider text-[#662721]">{{ __('corporate.th_active_hours') }}</div>
+                                    <div class="font-bold text-sm text-[#4F2F2A]">{{ __('corporate.hours_value', ['value' => number_format($m->totalRemainingHours(), 1)]) }}</div>
                                 </div>
 
                                 <div class="flex items-center gap-1.5 flex-wrap mt-3">
                                     <button type="button" onclick="toggleVouchers('{{ $m->id }}')"
                                             class="px-2.5 py-1.5 rounded-lg bg-white hover:bg-[#F7F0DB] border border-[#E6DAC0] text-[#662721] text-[10px] font-bold">
-                                        Vouchers ({{ $m->vouchers->count() }})
+                                        {{ __('corporate.vouchers_button', ['count' => $m->vouchers->count()]) }}
                                     </button>
-                                    <button type="button" onclick="releaseVoucher('{{ $m->id }}')" title="Give this member extra play hours right now"
+                                    <button type="button" onclick="releaseVoucher('{{ $m->id }}')" title="{{ __('corporate.give_hours_title') }}"
                                             class="px-2.5 py-1.5 rounded-lg bg-[#F7F0DB] hover:bg-[#F7F0DB] border border-[#E6DAC0] text-[#662721] text-[10px] font-bold">
-                                        🎟️ Give Hours
+                                        {{ __('corporate.give_hours') }}
                                     </button>
                                     @if($m->status !== 'ACTIVE')
                                         <button type="button" onclick="reactivateMember('{{ $m->id }}')"
                                                 class="px-2.5 py-1.5 rounded-lg bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-700 text-[10px] font-bold">
-                                            Activate
+                                            {{ __('corporate.activate') }}
                                         </button>
                                     @endif
                                 </div>
 
                                 <div id="vouchers-mobile-{{ $m->id }}" class="hidden mt-3 pt-3 border-t border-[#E6DAC0]/50 space-y-2">
                                     @if($m->vouchers->isEmpty())
-                                        <p class="text-[11px] text-[#7A5A52] italic">No vouchers issued for this member yet.</p>
+                                        <p class="text-[11px] text-[#7A5A52] italic">{{ __('corporate.no_vouchers') }}</p>
                                     @else
                                         @foreach($m->vouchers->sortByDesc('issued_at') as $v)
                                             <div class="rounded-xl bg-white border border-[#E6DAC0]/60 p-3 {{ $v->isExpired() ? 'opacity-50' : '' }}">
                                                 <div class="grid grid-cols-2 gap-2 text-[11px] mb-2">
                                                     <div>
-                                                        <div class="text-[9px] uppercase font-extrabold text-[#662721]">Used / Remaining</div>
-                                                        <div class="font-bold text-[#4F2F2A]">{{ number_format($v->hours_used, 1) }} / {{ number_format($v->remainingHours(), 1) }} hrs</div>
+                                                        <div class="text-[9px] uppercase font-extrabold text-[#662721]">{{ __('corporate.used_remaining') }}</div>
+                                                        <div class="font-bold text-[#4F2F2A]">{{ number_format($v->hours_used, 1) }} / {{ __('corporate.hours_value', ['value' => number_format($v->remainingHours(), 1)]) }}</div>
                                                     </div>
                                                     <div>
-                                                        <div class="text-[9px] uppercase font-extrabold text-[#662721]">Expires</div>
-                                                        <div class="font-bold text-[#4F2F2A]">{{ \Carbon\Carbon::parse($v->expires_at)->format('d M Y') }} {{ $v->isExpired() ? '(expired)' : '' }}</div>
+                                                        <div class="text-[9px] uppercase font-extrabold text-[#662721]">{{ __('corporate.th_expires') }}</div>
+                                                        <div class="font-bold text-[#4F2F2A]">{{ \Carbon\Carbon::parse($v->expires_at)->translatedFormat('d M Y') }} {{ $v->isExpired() ? __('corporate.expired_suffix') : '' }}</div>
                                                     </div>
                                                 </div>
-                                                <div class="text-[10px] text-[#7A5A52] mb-2">Source: {{ $v->source }}</div>
+                                                <div class="text-[10px] text-[#7A5A52] mb-2">{{ __('corporate.source_label', ['source' => __('corporate.sources')[$v->source] ?? $v->source]) }}</div>
                                                 <div class="flex items-center gap-1.5">
                                                     <button type="button" onclick="stepValue('voucher-hours-m-{{ $v->id }}', -0.5, 0.5)"
                                                             class="w-7 h-7 rounded-md border border-[#E6DAC0] bg-white hover:bg-[#F7F0DB] text-[#662721] font-black text-xs shrink-0">&minus;</button>
@@ -387,10 +387,10 @@ Siti Rahma,081399887766,5</pre>
                                                     <button type="button" onclick="stepValue('voucher-hours-m-{{ $v->id }}', 0.5, 0.5)"
                                                             class="w-7 h-7 rounded-md border border-[#E6DAC0] bg-white hover:bg-[#F7F0DB] text-[#662721] font-black text-xs shrink-0">+</button>
                                                     <button type="button" onclick="saveVoucher('{{ $v->id }}', 'voucher-hours-m-{{ $v->id }}')"
-                                                            class="px-2.5 py-1.5 rounded-lg bg-[#662721] hover:bg-[#511D18] text-[#F7F0DB] text-[10px] font-bold ml-auto">Save</button>
+                                                            class="px-2.5 py-1.5 rounded-lg bg-[#662721] hover:bg-[#511D18] text-[#F7F0DB] text-[10px] font-bold ml-auto">{{ __('corporate.save') }}</button>
                                                     @if((float) $v->hours_used == 0)
                                                         <button type="button" onclick="deleteVoucher('{{ $v->id }}')"
-                                                                class="px-2.5 py-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-600 text-[10px] font-bold">Delete</button>
+                                                                class="px-2.5 py-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-600 text-[10px] font-bold">{{ __('corporate.delete') }}</button>
                                                     @endif
                                                 </div>
                                             </div>
@@ -399,7 +399,7 @@ Siti Rahma,081399887766,5</pre>
                                 </div>
                             </div>
                         @empty
-                            <p class="py-6 text-center text-[#7A5A52] italic text-xs">No members registered yet.</p>
+                            <p class="py-6 text-center text-[#7A5A52] italic text-xs">{{ __('corporate.no_members') }}</p>
                         @endforelse
                     </div>
 
@@ -407,19 +407,19 @@ Siti Rahma,081399887766,5</pre>
                     @if($members->hasPages())
                         <div class="flex items-center justify-between gap-3 flex-wrap mt-5 pt-4 border-t border-[#E6DAC0]/50">
                             <p class="text-[11px] text-[#7A5A52]">
-                                Showing {{ $members->firstItem() }}&ndash;{{ $members->lastItem() }} of {{ $members->total() }} member(s)
+                                {{ __('corporate.showing', ['from' => $members->firstItem(), 'to' => $members->lastItem(), 'total' => $members->total()]) }}
                             </p>
                             <div class="flex items-center gap-1.5">
                                 @if($members->onFirstPage())
-                                    <span class="px-3 py-1.5 rounded-lg border border-[#E6DAC0]/50 text-[#A08F86] text-[11px] font-bold">&laquo; Prev</span>
+                                    <span class="px-3 py-1.5 rounded-lg border border-[#E6DAC0]/50 text-[#A08F86] text-[11px] font-bold">{{ __('corporate.prev') }}</span>
                                 @else
-                                    <a href="{{ $members->previousPageUrl() }}" class="px-3 py-1.5 rounded-lg border border-[#E6DAC0] bg-white hover:bg-[#F7F0DB] text-[#662721] text-[11px] font-bold">&laquo; Prev</a>
+                                    <a href="{{ $members->previousPageUrl() }}" class="px-3 py-1.5 rounded-lg border border-[#E6DAC0] bg-white hover:bg-[#F7F0DB] text-[#662721] text-[11px] font-bold">{{ __('corporate.prev') }}</a>
                                 @endif
-                                <span class="px-3 py-1.5 text-[11px] font-bold text-[#4F2F2A]">Page {{ $members->currentPage() }} of {{ $members->lastPage() }}</span>
+                                <span class="px-3 py-1.5 text-[11px] font-bold text-[#4F2F2A]">{{ __('corporate.page_of', ['page' => $members->currentPage(), 'last' => $members->lastPage()]) }}</span>
                                 @if($members->hasMorePages())
-                                    <a href="{{ $members->nextPageUrl() }}" class="px-3 py-1.5 rounded-lg border border-[#E6DAC0] bg-white hover:bg-[#F7F0DB] text-[#662721] text-[11px] font-bold">Next &raquo;</a>
+                                    <a href="{{ $members->nextPageUrl() }}" class="px-3 py-1.5 rounded-lg border border-[#E6DAC0] bg-white hover:bg-[#F7F0DB] text-[#662721] text-[11px] font-bold">{{ __('corporate.next') }}</a>
                                 @else
-                                    <span class="px-3 py-1.5 rounded-lg border border-[#E6DAC0]/50 text-[#A08F86] text-[11px] font-bold">Next &raquo;</span>
+                                    <span class="px-3 py-1.5 rounded-lg border border-[#E6DAC0]/50 text-[#A08F86] text-[11px] font-bold">{{ __('corporate.next') }}</span>
                                 @endif
                             </div>
                         </div>
@@ -428,7 +428,7 @@ Siti Rahma,081399887766,5</pre>
                 <!-- Custom Modal (replaces native browser prompt()/confirm()) -->
                 <div id="app-modal-overlay" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4" style="background: rgba(20,15,5,0.55);">
                     <div class="w-full max-w-sm rounded-xl bg-white border-2 border-[#662721] shadow-2xl p-6" style="background: linear-gradient(135deg, #FFFFFF 0%, #F7F0DB 100%);">
-                        <h3 id="app-modal-title" class="font-display font-black text-base text-[#4F2F2A] mb-2">Confirm</h3>
+                        <h3 id="app-modal-title" class="font-display font-black text-base text-[#4F2F2A] mb-2">{{ __('corporate.confirm') }}</h3>
                         <p id="app-modal-message" class="text-xs text-[#7A5A52] mb-4"></p>
                         <div id="app-modal-input-wrapper" class="hidden flex items-center gap-2 mb-4">
                             <button type="button" onclick="stepValue('app-modal-input', -0.5, 0)"
@@ -437,16 +437,16 @@ Siti Rahma,081399887766,5</pre>
                                    class="w-full text-center px-2 py-2.5 rounded-xl border border-[#E6DAC0] text-sm focus:outline-none focus:border-[#662721]">
                             <button type="button" onclick="stepValue('app-modal-input', 0.5, 0)"
                                     class="w-10 h-10 rounded-xl border border-[#E6DAC0] bg-white hover:bg-[#F7F0DB] text-[#662721] font-black text-base shrink-0">+</button>
-                            <span class="text-xs font-bold text-[#7A5A52] shrink-0 w-8">hrs</span>
+                            <span class="text-xs font-bold text-[#7A5A52] shrink-0 w-8">{{ __('corporate.hrs') }}</span>
                         </div>
                         <div class="flex items-center gap-2 justify-end">
                             <button type="button" onclick="closeAppModal()"
                                     class="px-4 py-2 rounded-xl bg-white hover:bg-[#F7F0DB] border border-[#E6DAC0] text-[#7A5A52] text-xs font-bold">
-                                Cancel
+                                {{ __('corporate.cancel') }}
                             </button>
                             <button type="button" id="app-modal-confirm-btn"
                                     class="px-4 py-2 rounded-xl bg-[#662721] hover:bg-[#511D18] text-[#F7F0DB] text-xs font-black uppercase tracking-wider shadow-md  active:scale-95 transition-all">
-                                Confirm
+                                {{ __('corporate.confirm') }}
                             </button>
                         </div>
                     </div>
@@ -455,10 +455,10 @@ Siti Rahma,081399887766,5</pre>
                 <!-- Bulk Release Voucher Modal -->
                 <div id="bulk-modal-overlay" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4" style="background: rgba(20,15,5,0.55);">
                     <div class="w-full max-w-lg rounded-xl bg-white border-2 border-[#662721] shadow-2xl p-6" style="background: linear-gradient(135deg, #FFFFFF 0%, #F7F0DB 100%);">
-                        <h3 class="font-display font-black text-base text-[#4F2F2A] mb-1">🎟️ Give Hours to Multiple Members</h3>
-                        <p class="text-xs text-[#7A5A52] mb-1">Release play-hour vouchers to your active team members in one go &mdash; give everyone the same amount, or set a different amount for each person.</p>
+                        <h3 class="font-display font-black text-base text-[#4F2F2A] mb-1">{{ __('corporate.bulk_title') }}</h3>
+                        <p class="text-xs text-[#7A5A52] mb-1">{{ __('corporate.bulk_hint') }}</p>
                         @if($quotaRemaining !== null)
-                            <p class="text-[11px] font-bold text-[#662721] mb-4">Quota remaining: {{ number_format($quotaRemaining, 1) }} hrs out of your {{ number_format($totalQuota, 1) }} hrs contract.</p>
+                            <p class="text-[11px] font-bold text-[#662721] mb-4">{{ __('corporate.bulk_quota', ['remaining' => number_format($quotaRemaining, 1), 'total' => number_format($totalQuota, 1)]) }}</p>
                         @else
                             <p class="text-[11px] text-[#7A5A52] mb-4">&nbsp;</p>
                         @endif
@@ -466,17 +466,17 @@ Siti Rahma,081399887766,5</pre>
                         <div class="flex items-center gap-2 mb-4">
                             <button type="button" id="bulk-mode-uniform-btn" onclick="setBulkMode('uniform')"
                                     class="flex-1 py-2.5 rounded-xl text-xs font-black uppercase tracking-wide border-2 transition-all">
-                                Same for Everyone
+                                {{ __('corporate.same_for_everyone') }}
                             </button>
                             <button type="button" id="bulk-mode-per-member-btn" onclick="setBulkMode('per_member')"
                                     class="flex-1 py-2.5 rounded-xl text-xs font-black uppercase tracking-wide border-2 transition-all">
-                                Different per Person
+                                {{ __('corporate.different_per_person') }}
                             </button>
                         </div>
 
                         <div id="bulk-uniform-panel">
                             <label class="text-[11px] font-bold text-[#7A5A52] mb-1 block">
-                                Hours per member &bull; applies to all {{ $activeMembersForBulk->count() }} active member(s)
+                                {{ __('corporate.hours_per_member', ['count' => $activeMembersForBulk->count()]) }}
                             </label>
                             <div class="flex items-center gap-2">
                                 <button type="button" onclick="stepValue('bulk-uniform-hours', -0.5, 0)"
@@ -485,7 +485,7 @@ Siti Rahma,081399887766,5</pre>
                                        class="w-full text-center px-2 py-2.5 rounded-xl border border-[#E6DAC0] text-sm focus:outline-none focus:border-[#662721]">
                                 <button type="button" onclick="stepValue('bulk-uniform-hours', 0.5, 0)"
                                         class="w-10 h-10 rounded-xl border border-[#E6DAC0] bg-white hover:bg-[#F7F0DB] text-[#662721] font-black text-base shrink-0">+</button>
-                                <span class="text-xs font-bold text-[#7A5A52] shrink-0 w-8">hrs</span>
+                                <span class="text-xs font-bold text-[#7A5A52] shrink-0 w-8">{{ __('corporate.hrs') }}</span>
                             </div>
                         </div>
 
@@ -508,11 +508,11 @@ Siti Rahma,081399887766,5</pre>
                         <div class="flex items-center gap-2 justify-end mt-5">
                             <button type="button" onclick="closeBulkModal()"
                                     class="px-4 py-2 rounded-xl bg-white hover:bg-[#F7F0DB] border border-[#E6DAC0] text-[#7A5A52] text-xs font-bold">
-                                Cancel
+                                {{ __('corporate.cancel') }}
                             </button>
                             <button type="button" onclick="submitBulkRelease()"
                                     class="px-4 py-2 rounded-xl bg-[#662721] hover:bg-[#511D18] text-[#F7F0DB] text-xs font-black uppercase tracking-wider shadow-md  active:scale-95 transition-all">
-                                Release Vouchers
+                                {{ __('corporate.release_vouchers') }}
                             </button>
                         </div>
                     </div>
@@ -526,6 +526,7 @@ Siti Rahma,081399887766,5</pre>
         <script>
             const CSRF_TOKEN = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
             const API_BASE = '/api/v1/sponsor/organization';
+            const CORP_T = @js(__('corporate.js'));
 
             function showAlert(message, isError) {
                 const el = document.getElementById('corporate-alert');
@@ -596,7 +597,7 @@ Siti Rahma,081399887766,5</pre>
                 });
                 const data = await response.json();
                 if (!response.ok || !data.success) {
-                    throw new Error(data.message || 'Something went wrong.');
+                    throw new Error(data.message || CORP_T.generic_error);
                 }
                 return data;
             }
@@ -647,8 +648,8 @@ Siti Rahma,081399887766,5</pre>
 
                 if (recentRelease) {
                     openConfirmModal(
-                        'Already Given Hours Recently',
-                        'This member was already given ' + recentRelease + ' just now. Are you sure you want to give them more hours again?',
+                        CORP_T.recent_title,
+                        CORP_T.recent_message.replace(':release', recentRelease),
                         () => openReleaseVoucherPrompt(memberId)
                     );
                 } else {
@@ -658,8 +659,8 @@ Siti Rahma,081399887766,5</pre>
 
             function openReleaseVoucherPrompt(memberId) {
                 openPromptModal(
-                    'Give Play Hours',
-                    'How many voucher hours would you like to give this member?',
+                    CORP_T.give_title,
+                    CORP_T.give_message,
                     async (hours) => {
                         try {
                             const data = await apiCall(API_BASE + '/members/' + memberId + '/release-voucher', {
@@ -678,8 +679,8 @@ Siti Rahma,081399887766,5</pre>
 
             function reactivateMember(memberId) {
                 openConfirmModal(
-                    'Reactivate Member',
-                    'Reactivate this member? Their remaining hours can be used again.',
+                    CORP_T.reactivate_title,
+                    CORP_T.reactivate_message,
                     async () => {
                         try {
                             const data = await apiCall(API_BASE + '/members/' + memberId + '/reactivate', { method: 'POST' });
@@ -719,8 +720,8 @@ Siti Rahma,081399887766,5</pre>
 
             function deleteVoucher(voucherId) {
                 openConfirmModal(
-                    'Delete Voucher',
-                    'Delete this voucher? This cannot be undone.',
+                    CORP_T.delete_title,
+                    CORP_T.delete_message,
                     async () => {
                         try {
                             const data = await apiCall(API_BASE + '/vouchers/' + voucherId, { method: 'DELETE' });
@@ -767,7 +768,7 @@ Siti Rahma,081399887766,5</pre>
                 if (bulkMode === 'uniform') {
                     const hours = document.getElementById('bulk-uniform-hours').value;
                     if (!hours || parseFloat(hours) <= 0) {
-                        showAlert('Please enter how many hours to give.', true);
+                        showAlert(CORP_T.enter_hours, true);
                         return;
                     }
                     payload = { mode: 'uniform', hours };
@@ -780,7 +781,7 @@ Siti Rahma,081399887766,5</pre>
                         }
                     });
                     if (!allocations.length) {
-                        showAlert('Please enter hours for at least one member.', true);
+                        showAlert(CORP_T.enter_hours_member, true);
                         return;
                     }
                     payload = { mode: 'per_member', allocations };

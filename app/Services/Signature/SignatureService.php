@@ -607,7 +607,7 @@ class SignatureService
         $texts = collect($payload['running_texts'] ?? []);
         $autoText = fn (string $kind) => $texts->firstWhere('kind', $kind)['text'] ?? null;
 
-        $courts = PadelCourt::where('is_active', true)->orderBy('name')->get();
+        $courts = PadelCourt::where('is_active', true)->ordered()->get();
         $bookings = PadelBooking::with('user:id,name')
             ->whereDate('booking_date', $today)
             ->whereIn('status', ['PAID', 'CHECKED_IN', 'COMPLETED'])

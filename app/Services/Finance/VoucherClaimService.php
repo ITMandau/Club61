@@ -48,7 +48,7 @@ class VoucherClaimService
     public function claim(Voucher $voucher, User $user): VoucherClaim
     {
         if (! $voucher->isClaim()) {
-            throw new HttpException(404, 'Promo tidak ditemukan.');
+            throw new HttpException(404, \App\Support\SiteLocale::text('voucher.promo_not_found'));
         }
 
         try {
@@ -56,11 +56,11 @@ class VoucherClaimService
                 $locked = Voucher::whereKey($voucher->id)->lockForUpdate()->firstOrFail();
 
                 $message = match ($this->stateFor($locked, $user)) {
-                    'CLAIMED' => 'Promo ini sudah kamu klaim — cek Voucher Saya.',
-                    'INACTIVE' => 'Promo ini sudah tidak aktif.',
-                    'ENDED' => 'Periode promo ini sudah berakhir.',
-                    'NOT_STARTED' => 'Promo ini baru bisa diklaim mulai '.$locked->valid_from->timezone(LedgerReport::TIMEZONE)->format('d M Y').'.',
-                    'SOLD_OUT' => 'Kuota klaim promo ini sudah habis.',
+                    'CLAIMED' => \App\Support\SiteLocale::text('voucher.already_claimed'),
+                    'INACTIVE' => \App\Support\SiteLocale::text('voucher.promo_inactive'),
+                    'ENDED' => \App\Support\SiteLocale::text('voucher.promo_ended'),
+                    'NOT_STARTED' => \App\Support\SiteLocale::text('voucher.claim_not_started', ['date' => $locked->valid_from->timezone(LedgerReport::TIMEZONE)->format('d M Y')]),
+                    'SOLD_OUT' => \App\Support\SiteLocale::text('voucher.claim_sold_out'),
                     default => null,
                 };
                 if ($message) {
@@ -75,7 +75,7 @@ class VoucherClaimService
                 return $claim;
             });
         } catch (UniqueConstraintViolationException) {
-            throw new HttpException(422, 'Promo ini sudah kamu klaim — cek Voucher Saya.');
+            throw new HttpException(422, \App\Support\SiteLocale::text('voucher.already_claimed'));
         }
     }
 

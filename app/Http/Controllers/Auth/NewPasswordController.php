@@ -37,11 +37,11 @@ class NewPasswordController extends Controller
             'password' => ['required', 'confirmed', Rules\Password::defaults()],
         ], [
             'token.required' => __('passwords.token'),
-            'email.required' => 'Email wajib diisi.',
-            'email.email' => 'Format email tidak valid.',
-            'password.required' => 'Kata sandi baru wajib diisi.',
-            'password.confirmed' => 'Konfirmasi kata sandi tidak sama.',
-            'password.min' => 'Kata sandi minimal :min karakter.',
+            'email.required' => __('account.reset.email_required'),
+            'email.email' => __('account.reset.email_invalid'),
+            'password.required' => __('account.reset.password_required'),
+            'password.confirmed' => __('account.reset.password_mismatch'),
+            'password.min' => __('account.reset.password_min'),
         ]);
 
         // Here we will attempt to reset the user's password. If it is successful we

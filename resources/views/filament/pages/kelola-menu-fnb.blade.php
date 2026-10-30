@@ -169,6 +169,7 @@
                             <th>Kategori</th>
                             <th>Stasiun</th>
                             <th>Harga</th>
+                            <th>HPP</th>
                             <th>Tambahan</th>
                             <th class="fnb-center">Tersedia</th>
                             <th>Aksi</th>
@@ -188,6 +189,7 @@
                                 <td><span class="c61-pill c61-pill-cream">{{ $menu->category?->name }}</span></td>
                                 <td><span class="c61-pill {{ $menu->station ? 'c61-pill-warn' : 'c61-pill-gray' }}">{{ $menu->station?->name ?? 'Kasir' }}</span></td>
                                 <td class="fnb-price">Rp {{ number_format($menu->base_price, 0, ',', '.') }}</td>
+                                <td class="fnb-mods">{{ (float) $menu->hpp > 0 ? 'Rp '.number_format($menu->hpp, 0, ',', '.') : '-' }}</td>
                                 <td class="fnb-mods">{{ $menu->modifierGroups->pluck('name')->implode(', ') ?: '-' }}</td>
                                 <td class="fnb-center">
                                     <div class="fnb-switch {{ $menu->is_available ? 'on' : '' }}"><div class="fnb-switch-knob"></div></div>
@@ -200,7 +202,7 @@
                                 </td>
                             </tr>
                         @empty
-                            <tr><td colspan="8" class="c61-empty">Belum ada menu. Klik "+ Tambah Menu".</td></tr>
+                            <tr><td colspan="9" class="c61-empty">Belum ada menu. Klik "+ Tambah Menu".</td></tr>
                         @endforelse
                     </tbody>
                 </table>
@@ -453,6 +455,41 @@
                             @error('menuStationId') <span class="fnb-error">{{ $message }}</span> @enderror
                         </div>
                     </div>
+
+                    @can('manage_fnb_hpp')
+                        <div>
+                            <div class="fnb-grid-2">
+                                <div class="c61-field">
+                                    <label class="c61-label">HPP (Harga Pokok Penjualan) per Satuan (Rp)</label>
+                                    <input type="number" min="0" wire:model="menuHpp" class="c61-input" placeholder="20000">
+                                    <span class="c61-hint">Perkiraan biaya seluruh bahan untuk satu satuan menu. Digunakan untuk menghitung laba pada Laporan F&amp;B. Perubahan HPP hanya berlaku untuk penjualan berikutnya.</span>
+                                    @error('menuHpp') <span class="fnb-error">{{ $message }}</span> @enderror
+                                </div>
+                                @if ($menuTrackStock)
+                                    <div class="c61-field">
+                                        <label class="c61-label">Stok Minimum</label>
+                                        <input type="number" min="0" wire:model="menuMinStock" class="c61-input" placeholder="Opsional, mis. 5">
+                                        <span class="c61-hint">Menu ditandai Menipis apabila stok sama dengan atau di bawah angka ini.</span>
+                                        @error('menuMinStock') <span class="fnb-error">{{ $message }}</span> @enderror
+                                    </div>
+                                @endif
+                            </div>
+                            <div class="c61-field">
+                                <label class="c61-label">Lacak Persediaan</label>
+                                <div class="fnb-radios">
+                                    <label class="fnb-choice">
+                                        <input type="radio" wire:model.live="menuTrackStock" value="1">
+                                        <span>Ya, lacak persediaan</span>
+                                    </label>
+                                    <label class="fnb-choice">
+                                        <input type="radio" wire:model.live="menuTrackStock" value="0">
+                                        <span>Tidak, dibuat sesuai pesanan</span>
+                                    </label>
+                                </div>
+                                <span class="c61-hint">Aktifkan untuk minuman kemasan, makanan ringan, atau porsi siap jual. Stok awal diisi melalui Stok F&amp;B → Stok Opname atau Penerimaan Barang.</span>
+                            </div>
+                        </div>
+                    @endcan
 
                     <div class="c61-field">
                         <label class="c61-label">Status</label>
