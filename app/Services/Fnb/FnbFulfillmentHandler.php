@@ -9,7 +9,7 @@ use Illuminate\Support\Collection;
 /** Order F&B lunas → slip pesanan untuk tiap stasiun yang punya menu di order ini (idempoten). */
 class FnbFulfillmentHandler implements DomainFulfillmentHandlerInterface
 {
-    public function __construct(private StationTicketService $tickets) {}
+    public function __construct(private StationTicketService $tickets, private FnbStockService $stock) {}
 
     public function fulfill(Order $order, Collection $items): void
     {
@@ -21,5 +21,8 @@ class FnbFulfillmentHandler implements DomainFulfillmentHandlerInterface
         }
 
         $this->tickets->createForOrder($order);
+
+        // Modul 29: stok menu yang dilacak berkurang saat lunas (sekali per pesanan, boleh minus).
+        $this->stock->deductForOrder($order);
     }
 }

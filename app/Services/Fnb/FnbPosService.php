@@ -73,6 +73,8 @@ class FnbPosService
                     'item_name' => $menu->name,
                     'quantity' => $quantity,
                     'unit_price' => $menu->base_price,
+                    // HPP saat dijual (Modul 29) — laba periode lalu tidak berubah walau HPP menu diganti.
+                    'unit_cost' => $menu->hpp,
                     'subtotal' => $lineSubtotal,
                     'notes' => $notes,
                 ];

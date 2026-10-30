@@ -114,7 +114,7 @@ class SalesImportTemplate
         }
         $writer->addRow(Row::fromValues(['Daftar dari sistem (referensi, tidak perlu diisi). Tulis nama lapangan / menu persis seperti di bawah. Harga = tarif saat ini, harga di Excel tetap mengikuti struk asli.'], $bold));
         $writer->addRow(Row::fromValues(['Nama Lapangan', 'Status', 'Tarif Reguler / Jam', 'Tarif Prime Time / Jam', '', 'Nama Menu F&B', 'Harga Menu'], $header));
-        $courts = PadelCourt::orderBy('name')->get(['name', 'is_active', 'hourly_rate_regular', 'hourly_rate_prime'])->values();
+        $courts = PadelCourt::ordered()->get(['name', 'is_active', 'hourly_rate_regular', 'hourly_rate_prime'])->values();
         $menus = FnbMenu::orderBy('name')->get(['name', 'base_price'])->values();
         for ($i = 0; $i < max($courts->count(), $menus->count()); $i++) {
             $court = $courts[$i] ?? null;

@@ -155,7 +155,7 @@ class DokuCheckoutService
             // customer bisa memilih metode lain. Kunci / tanda tangan / server DOKU bermasalah → tetap 503.
             $status = (int) ($response['status'] ?? 0);
             if ($status >= 400 && $status < 500 && ! DokuClient::isCredentialError($status, $response['error'] ?? null)) {
-                throw new \Symfony\Component\HttpKernel\Exception\HttpException(422, 'Metode pembayaran ini sedang tidak bisa dipakai. Belum ada tagihan yang dibuat — silakan pilih metode pembayaran lain.');
+                throw new \Symfony\Component\HttpKernel\Exception\HttpException(422, \App\Support\SiteLocale::text('payment.method_temporarily_unusable'));
             }
 
             throw new PaymentGatewayUnavailableException();

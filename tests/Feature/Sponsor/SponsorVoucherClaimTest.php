@@ -153,7 +153,7 @@ class SponsorVoucherClaimTest extends TestCase
         $response->assertStatus(200)
             ->assertSee('PT Voucher Claim Test')
             ->assertSee('data-voucher-kind="CORPORATE"', false)
-            ->assertSee('New')
+            ->assertSee('Baru')
             ->assertSee('7 of 10 hours left')
             ->assertSee('4 of 4 hours left');
 
@@ -176,9 +176,9 @@ class SponsorVoucherClaimTest extends TestCase
         // "hrs active" cuma dirender di dalam tile Quick Action "My Vouchers" (di-gate @if
         // Blade server-side) — beda dari teks link "View All My Vouchers" di popup modal yang
         // memang selalu ada di HTML buat semua user (cuma disembunyikan via Alpine x-show).
-        $this->actingAs($employee)->get('/dashboard')->assertSee('hrs active');
+        $this->actingAs($employee)->get('/dashboard')->assertSee('jam aktif');
 
         $regularUser = User::factory()->create();
-        $this->actingAs($regularUser)->get('/dashboard')->assertDontSee('hrs active');
+        $this->actingAs($regularUser)->get('/dashboard')->assertDontSee('jam aktif');
     }
 }

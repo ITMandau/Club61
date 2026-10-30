@@ -27,11 +27,11 @@ class KelolaMenuFnb extends Page
 
     protected static ?string $navigationLabel = 'Menu F&B';
 
-    protected static string|UnitEnum|null $navigationGroup = 'Master Data';
+    protected static string|UnitEnum|null $navigationGroup = 'F&B';
 
     protected static ?string $title = 'Kelola Menu F&B & Tambahan';
 
-    protected static ?int $navigationSort = 3;
+    protected static ?int $navigationSort = 0;
 
     protected string $view = 'filament.pages.kelola-menu-fnb';
 
@@ -75,6 +75,13 @@ class KelolaMenuFnb extends Page
     public string $menuStationId = '';
 
     public bool $menuIsAvailable = true;
+
+    // Modul 29 — hanya disimpan kalau staf punya izin manage_fnb_hpp.
+    public int|float|string $menuHpp = 0;
+
+    public bool $menuTrackStock = false;
+
+    public int|string|null $menuMinStock = null;
 
     public array $menuModifierGroupIds = [];
 
@@ -306,6 +313,9 @@ class KelolaMenuFnb extends Page
         $this->menuBasePrice = 0;
         $this->menuStationId = '';
         $this->menuIsAvailable = true;
+        $this->menuHpp = 0;
+        $this->menuTrackStock = false;
+        $this->menuMinStock = null;
         $this->menuModifierGroupIds = [];
         $this->showMenuModal = true;
     }
@@ -329,6 +339,9 @@ class KelolaMenuFnb extends Page
         $this->menuBasePrice = (float) $menu->base_price;
         $this->menuStationId = (string) $menu->station_id;
         $this->menuIsAvailable = (bool) $menu->is_available;
+        $this->menuHpp = (float) $menu->hpp;
+        $this->menuTrackStock = (bool) $menu->track_stock;
+        $this->menuMinStock = $menu->min_stock;
         $this->menuModifierGroupIds = $menu->modifierGroups()->pluck('fnb_modifier_groups.id')->all();
         $this->showMenuModal = true;
     }
@@ -357,6 +370,8 @@ class KelolaMenuFnb extends Page
             'menuBasePrice' => ['required', 'numeric', 'min:0'],
             'menuStationId' => ['nullable', 'exists:fnb_stations,id'],
             'menuPhotoUpload' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:2048'],
+            'menuHpp' => ['nullable', 'numeric', 'min:0', 'max:100000000'],
+            'menuMinStock' => ['nullable', 'integer', 'min:0', 'max:100000'],
         ], [
             'menuCategoryId.required' => 'Kategori wajib dipilih.',
             'menuName.required' => 'Nama menu wajib diisi.',
@@ -415,6 +430,17 @@ class KelolaMenuFnb extends Page
         Notification::make()->title($menu->wasRecentlyCreated ? 'Menu Ditambahkan' : 'Menu Diperbarui')->success()->send();
 
         $menu->modifierGroups()->sync($this->menuModifierGroupIds);
+
+        // HPP & lacak stok (Modul 29) — izin terpisah; tanpa izin, nilai lama tidak disentuh.
+        if (auth()->user()->can('manage_fnb_hpp')) {
+            app(\App\Services\Fnb\FnbStockService::class)->updateSettings(
+                $menu,
+                (float) ($this->menuHpp ?: 0),
+                $this->menuTrackStock,
+                $this->menuMinStock === '' || $this->menuMinStock === null ? null : (int) $this->menuMinStock,
+                auth()->user(),
+            );
+        }
 
         $this->closeMenuModal();
     }

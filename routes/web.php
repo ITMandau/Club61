@@ -14,13 +14,16 @@ Route::get('/', function () {
     return view('welcome');
 });
 
-// Toggle bahasa ID/EN untuk halaman depan — disimpan di session (lihat SetLocale
-// middleware), redirect balik ke halaman asal supaya posisi scroll/section tidak berubah.
+// Toggle bahasa ID/EN situs customer — disimpan di session + cookie 1 tahun (lihat SetLocale middleware), redirect
+// balik ke halaman asal supaya posisi halaman tidak berubah.
 Route::get('/lang/{locale}', function (string $locale) {
     abort_unless(in_array($locale, \App\Http\Middleware\SetLocale::ALLOWED_LOCALES, true), 404);
     session(['site_locale' => $locale]);
+    // Hanya kembali ke halaman situs ini — Referer dari situs lain tidak diikuti (open redirect).
+    $back = url()->previous();
+    $back = parse_url($back, PHP_URL_HOST) === request()->getHost() ? $back : url('/');
 
-    return redirect()->back();
+    return redirect()->to($back)->withCookie(cookie(\App\Http\Middleware\SetLocale::COOKIE, $locale, \App\Http\Middleware\SetLocale::COOKIE_MINUTES));
 })->name('lang.switch');
 
 // 2. Layar POS Kasir Frontdesk & KDS Dapur (Wajib Auth & Otorisasi Staf)
@@ -103,8 +106,10 @@ Route::middleware(['auth', 'verified', \App\Http\Middleware\CustomerPortalOnly::
     })->name('customer.my-club');
 
     Route::get('/membership', function (\Illuminate\Http\Request $request) {
+        // Paket "Hanya POS / Admin" (mis. kontrak corporate) tidak ditawarkan ke customer.
         $allPlans = \App\Models\Membership\MembershipPlan::with('benefits')
             ->where('is_active', true)
+            ->soldOnline()
             ->get();
         $selectedPlanId = $request->query('plan') ?? ($allPlans->firstWhere('code', 'MBR-SILVER')->id ?? $allPlans->first()?->id ?? null);
 

@@ -49,6 +49,7 @@ class AdminPanelProvider extends PanelProvider
                 'Customer & Membership',
                 'Coaching',
                 'Sponsor',
+                'F&B',
                 'Keuangan',
                 'Marketing & Event',
                 'Master Data',
@@ -150,6 +151,9 @@ class AdminPanelProvider extends PanelProvider
                 \App\Filament\Pages\ImportPenjualan::class,
                 \App\Filament\Pages\Signature::class,
                 \App\Filament\Pages\JadwalCoaching::class,
+                \App\Filament\Pages\StokFnb::class,
+                \App\Filament\Pages\BukuKasFnb::class,
+                \App\Filament\Pages\LaporanFnb::class,
             ])
             ->widgets([])
             ->middleware([

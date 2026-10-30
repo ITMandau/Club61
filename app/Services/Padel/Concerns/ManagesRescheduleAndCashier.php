@@ -196,7 +196,7 @@ trait ManagesRescheduleAndCashier
             $memberShare = 0.0;
             $dropReasons[] = $reason;
         }
-        if ($sponsorShare > 0 && ($reason = $this->sponsorBenefitInvalidReason($benefitContext, $start))) {
+        if ($sponsorShare > 0 && ($reason = $this->sponsorBenefitInvalidReason($benefitContext, $start, $end))) {
             $sponsorShare = 0.0;
             $dropReasons[] = $reason;
         }
@@ -255,17 +255,18 @@ trait ManagesRescheduleAndCashier
     /**
      * Data masa berlaku benefit booking ini (diambil sekali, dipakai untuk semua slot yang dihitung).
      *
-     * @return array{time_window: array{start: string, end: string}|null, member_end_date: ?string, member_active: bool, sponsor_expires_at: ?Carbon}
+     * @return array{time_window: array{start: string, end: string}|null, member_balance: ?\App\Models\Membership\UserMembershipBalance, member_end_date: ?string, member_active: bool, sponsor_expires_at: ?Carbon, sponsor_balance: ?\App\Models\Membership\UserMembershipBalance}
      */
     protected function rescheduleBenefitContext(PadelBooking $booking): array
     {
-        $context = ['time_window' => null, 'member_end_date' => null, 'member_active' => true, 'sponsor_expires_at' => null];
+        $context = ['time_window' => null, 'member_balance' => null, 'member_end_date' => null, 'member_active' => true, 'sponsor_expires_at' => null, 'sponsor_balance' => null];
 
         if ($booking->membership_balance_id && (float) $booking->member_discount_court > 0) {
             $balance = \App\Models\Membership\UserMembershipBalance::with('membership')->find($booking->membership_balance_id);
             if ($balance?->time_window_start && $balance->time_window_end) {
                 $context['time_window'] = ['start' => (string) $balance->time_window_start, 'end' => (string) $balance->time_window_end];
             }
+            $context['member_balance'] = $balance;
             $membership = $balance?->membership;
             $context['member_active'] = $membership !== null && $membership->status === 'ACTIVE';
             $context['member_end_date'] = $membership?->end_date?->format('Y-m-d');
@@ -273,6 +274,8 @@ trait ManagesRescheduleAndCashier
 
         if ($booking->sponsor_member_voucher_id && (float) $booking->sponsor_discount_court > 0) {
             $context['sponsor_expires_at'] = \App\Models\Sponsor\SponsorMemberVoucher::whereKey($booking->sponsor_member_voucher_id)->first()?->expires_at;
+            // Jam voucher karyawan berasal dari kuota paket perusahaan — aturan akses paket itu ikut berlaku.
+            $context['sponsor_balance'] = \App\Models\Sponsor\SponsorOrganization::find($booking->sponsor_organization_id)?->padelHourBalance();
         }
 
         return $context;
@@ -289,22 +292,25 @@ trait ManagesRescheduleAndCashier
                 .', benefit member gugur di tanggal ini — jadwal baru dihitung harga normal.';
         }
 
-        if ($window = $context['time_window']) {
-            // Rumus yang sama dengan checkout & kasir (24:00 dihitung benar).
-            if ($this->isOutsideBenefitTimeWindow($window['start'], $window['end'], $start, $end)) {
-                return 'Jadwal baru di luar jam berlaku paket membership ('.substr($window['start'], 0, 5).' - '.substr($window['end'], 0, 5)
-                    .'), benefit member gugur — jadwal baru dihitung harga normal.';
-            }
+        // Aturan akses paket (hari / jam / di luar peak) — pengecek yang sama dengan checkout & kasir.
+        if ($context['member_balance'] && \App\Services\Membership\PadelAccessRule::violation($context['member_balance'], $start, $end)) {
+            return 'Jam baru di luar ketentuan paket member (berlaku: '.\App\Services\Membership\PadelAccessRule::label($context['member_balance'])
+                .'), jadi dihitung harga normal. Jam kuota yang terpakai dikembalikan.';
         }
 
         return null;
     }
 
-    protected function sponsorBenefitInvalidReason(array $context, Carbon $start): ?string
+    protected function sponsorBenefitInvalidReason(array $context, Carbon $start, Carbon $end): ?string
     {
         $expiresAt = $context['sponsor_expires_at'];
         if ($expiresAt && $start->gte($expiresAt)) {
             return 'Voucher sponsor berakhir '.$expiresAt->translatedFormat('d M Y').', benefit sponsor gugur di tanggal ini — jadwal baru dihitung harga normal.';
+        }
+
+        if ($context['sponsor_balance'] && \App\Services\Membership\PadelAccessRule::violation($context['sponsor_balance'], $start, $end)) {
+            return 'Jam baru di luar ketentuan voucher (berlaku: '.\App\Services\Membership\PadelAccessRule::label($context['sponsor_balance'])
+                .'), jadi dihitung harga normal. Jam voucher dikembalikan.';
         }
 
         return null;

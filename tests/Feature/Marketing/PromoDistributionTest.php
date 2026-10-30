@@ -243,13 +243,13 @@ class PromoDistributionTest extends TestCase
         $this->assertStringContainsString('harus diklaim', (string) $this->resolve('KLAIM15', $this->customer)['error']);
 
         // Halaman promo publik: tamu melihat promonya dengan tombol masuk (klaim tetap wajib login).
-        $this->get(route('promo.claim', 'KLAIM15'))->assertOk()->assertSee('Klaim Diskon 15%')->assertSee('Log in to claim')->assertDontSee('Claim this promo');
+        $this->get(route('promo.claim', 'KLAIM15'))->assertOk()->assertSee('Klaim Diskon 15%')->assertSee('Masuk untuk klaim')->assertDontSee('Klaim promo ini');
         $this->post(route('promo.claim.store', 'KLAIM15'))->assertRedirect(route('login'));
 
         $this->actingAs($this->customer)->get(route('promo.claim', 'klaim15'))
-            ->assertOk()->assertSee('Klaim Diskon 15%')->assertSee('Claim this promo')->assertSee('2 of 2 claims left');
+            ->assertOk()->assertSee('Klaim Diskon 15%')->assertSee('Klaim promo ini')->assertSee('Sisa 2 dari 2 klaim');
         $this->post(route('promo.claim.store', 'KLAIM15'))->assertRedirect(route('promo.claim', 'KLAIM15'));
-        $this->get(route('promo.claim', 'KLAIM15'))->assertSee('This promo is in your vouchers.')->assertDontSee('Claim this promo');
+        $this->get(route('promo.claim', 'KLAIM15'))->assertSee('Promo ini sudah ada di voucher Anda.')->assertDontSee('Klaim promo ini');
         $this->assertSame(1, $promo->fresh()->quota);
 
         // Klik ganda: tidak dobel.
@@ -263,7 +263,7 @@ class PromoDistributionTest extends TestCase
         app(VoucherClaimService::class)->claim($promo, $this->other);
         $this->assertSame(0, $promo->fresh()->quota);
         $late = User::factory()->customer()->create();
-        $this->actingAs($late)->get(route('promo.claim', 'KLAIM15'))->assertSee('All claims for this promo are gone.');
+        $this->actingAs($late)->get(route('promo.claim', 'KLAIM15'))->assertSee('Kuota klaim promo ini sudah habis.');
         try {
             app(VoucherClaimService::class)->claim($promo->fresh(), $late);
             $this->fail('kuota klaim habis');
@@ -284,7 +284,7 @@ class PromoDistributionTest extends TestCase
         $this->get(route('promo.claim.auth', ['KLAIM15', 'masuk']))->assertRedirect(route('login'));
         $this->post('/login', ['email' => $this->customer->email, 'password' => 'password'])
             ->assertRedirect('/promo/KLAIM15');
-        $this->get('/promo/KLAIM15')->assertSee('Claim this promo');
+        $this->get('/promo/KLAIM15')->assertSee('Klaim promo ini');
         $this->post(route('promo.claim.store', 'KLAIM15'))->assertSessionHas('promo_claimed');
         auth()->logout();
 

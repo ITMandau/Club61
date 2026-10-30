@@ -15,6 +15,7 @@ use App\Services\Membership\MembershipBalanceService;
 use App\Services\Membership\MembershipOnlinePaymentService;
 use App\Services\Payment\PaymentManager;
 use App\Services\Payment\PaymentOrchestratorService;
+use App\Support\SiteLocale;
 use DomainException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -39,6 +40,7 @@ class MembershipController extends Controller
         $facilities = app(\App\Services\Membership\MembershipFacilityService::class);
         $plans = MembershipPlan::with('benefits')
             ->where('is_active', true)
+            ->soldOnline() // paket "Hanya POS / Admin" tidak ditawarkan di aplikasi
             ->get()
             // Kartu benefit siap tampil (nama & deskripsi dari Master Fasilitas) — aplikasi mobile tidak perlu
             // menulis teks benefit sendiri.
@@ -46,7 +48,7 @@ class MembershipController extends Controller
 
         return response()->json([
             'success' => true,
-            'message' => 'Daftar paket membership aktif.',
+            'message' => SiteLocale::text('membership.plans_loaded'),
             'data' => $plans,
         ]);
     }
@@ -68,7 +70,7 @@ class MembershipController extends Controller
         if (in_array(strtoupper($validated['payment_method']), ['CASH', 'TUNAI'])) {
             return response()->json([
                 'success' => false,
-                'message' => 'Pembayaran tunai (CASH) tidak diperbolehkan. Venue Club 61 beroperasi 100% Cashless.',
+                'message' => SiteLocale::text('checkout.cash_not_allowed'),
             ], 422);
         }
 
@@ -78,7 +80,15 @@ class MembershipController extends Controller
         if (! $plan->is_active) {
             return response()->json([
                 'success' => false,
-                'message' => 'Paket membership ini sedang tidak aktif.',
+                'message' => SiteLocale::text('membership.plan_inactive'),
+            ], 422);
+        }
+
+        // Dicek di server: paket kontrak (Hanya POS / Admin) tidak bisa dibeli lewat web / aplikasi walau ID-nya diketahui.
+        if (! $plan->isSoldOnline()) {
+            return response()->json([
+                'success' => false,
+                'message' => SiteLocale::text('membership.pos_only'),
             ], 422);
         }
 
@@ -228,7 +238,7 @@ class MembershipController extends Controller
 
             return response()->json([
                 'success' => true,
-                'message' => 'Pesanan membership berhasil dibuat.',
+                'message' => SiteLocale::text('membership.order_created'),
                 'data' => $result,
             ], 201);
         } catch (DomainException $e) {
@@ -242,7 +252,7 @@ class MembershipController extends Controller
 
             return response()->json([
                 'success' => false,
-                'message' => 'Pembayaran belum bisa diproses. Silakan coba lagi beberapa saat atau hubungi frontdesk.',
+                'message' => SiteLocale::text('membership.payment_unavailable'),
             ], 503);
         }
     }
@@ -256,7 +266,7 @@ class MembershipController extends Controller
         if ($pending->plan_id !== $plan->id) {
             return response()->json([
                 'success' => false,
-                'message' => 'Anda masih punya pesanan paket '.($pending->plan?->name ?? 'membership').' yang belum dibayar. Lanjutkan pembayarannya atau batalkan dulu sebelum memilih paket lain.',
+                'message' => SiteLocale::text('membership.pending_other_plan', ['plan' => $pending->plan?->name ?? 'membership']),
                 'data' => ['pending_purchase' => $this->pendingSummary($pending)],
             ], 409);
         }
@@ -266,8 +276,8 @@ class MembershipController extends Controller
         return response()->json([
             'success' => true,
             'message' => $result['already_paid']
-                ? 'Pembayaran pesanan ini sudah kami terima. Membership Anda aktif.'
-                : 'Melanjutkan pembayaran pesanan membership Anda yang sudah ada.',
+                ? SiteLocale::text('membership.already_paid_active')
+                : SiteLocale::text('membership.resuming_payment'),
             'data' => $result + ['resumed' => true],
         ]);
     }
@@ -285,8 +295,8 @@ class MembershipController extends Controller
         return response()->json([
             'success' => true,
             'message' => $result['already_paid']
-                ? 'Pembayaran pesanan ini sudah kami terima. Membership Anda aktif.'
-                : 'Sesi pembayaran baru berhasil dibuat.',
+                ? SiteLocale::text('membership.already_paid_active')
+                : SiteLocale::text('membership.new_session_created'),
             'data' => $result,
         ]);
     }
@@ -299,7 +309,7 @@ class MembershipController extends Controller
 
         return response()->json([
             'success' => true,
-            'message' => 'Pesanan membership dibatalkan. Anda bisa memilih paket lain.',
+            'message' => SiteLocale::text('membership.cancelled'),
             'data' => ['id' => $membership->id, 'status' => 'CANCELLED'],
         ]);
     }
@@ -334,7 +344,7 @@ class MembershipController extends Controller
 
         return response()->json([
             'success' => true,
-            'message' => $membership ? 'Membership aktif ditemukan.' : 'Tidak ada membership aktif.',
+            'message' => $membership ? SiteLocale::text('membership.active_found') : SiteLocale::text('membership.no_active'),
             'data' => $membership,
         ]);
     }
@@ -393,7 +403,7 @@ class MembershipController extends Controller
 
         return response()->json([
             'success' => true,
-            'message' => 'Riwayat pembelian membership saya berhasil diambil.',
+            'message' => SiteLocale::text('membership.purchases_loaded'),
             'data' => $purchases,
         ]);
     }
@@ -414,7 +424,7 @@ class MembershipController extends Controller
 
         return response()->json([
             'success' => true,
-            'message' => 'Riwayat penggunaan membership.',
+            'message' => SiteLocale::text('membership.history_loaded'),
             'data' => $logs,
         ]);
     }

@@ -10,6 +10,7 @@ use App\Models\User;
 use App\Services\Membership\MembershipBalanceService;
 use App\Support\PersonName;
 use App\Support\PhoneNumber;
+use App\Support\SiteLocale;
 use DomainException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
@@ -116,7 +117,7 @@ class SponsorOrganizationService
                 ->first();
 
             if ($existing && $existing->status === 'ACTIVE') {
-                throw new DomainException("Anggota dengan nomor HP {$user->phone} sudah aktif di roster tim ini.");
+                throw new DomainException(SiteLocale::text('corporate.member_already_active', ['phone' => $user->phone]));
             }
 
             if ($existing) {
@@ -147,7 +148,7 @@ class SponsorOrganizationService
     public function releaseVoucher(SponsorOrganizationMember $member, float $hours, string $source = 'MANUAL_RELEASE', ?User $issuedBy = null, ?string $period = null): SponsorMemberVoucher
     {
         if ($hours <= 0) {
-            throw new DomainException('Jumlah jam voucher harus lebih dari 0.');
+            throw new DomainException(SiteLocale::text('corporate.hours_must_be_positive'));
         }
 
         return DB::transaction(function () use ($member, $hours, $source, $issuedBy, $period) {
@@ -250,11 +251,11 @@ class SponsorOrganizationService
     public function updateVoucherHours(SponsorMemberVoucher $voucher, float $newHoursGranted): SponsorMemberVoucher
     {
         if ($newHoursGranted <= 0) {
-            throw new DomainException('Jumlah jam voucher harus lebih dari 0.');
+            throw new DomainException(SiteLocale::text('corporate.hours_must_be_positive'));
         }
 
         if ($newHoursGranted < (float) $voucher->hours_used) {
-            throw new DomainException("Tidak bisa diset di bawah jam yang sudah terpakai ({$voucher->hours_used} jam).");
+            throw new DomainException(SiteLocale::text('corporate.below_used_hours', ['hours' => $voucher->hours_used]));
         }
 
         // Cuma nambah jam (delta positif) yang perlu dipotong dari sisa kuota kontrak —
@@ -286,13 +287,13 @@ class SponsorOrganizationService
     private function deductFromOrganizationQuota(SponsorOrganization $organization, float $hours, string $notes, ?string $voucherId = null): void
     {
         if ($organization->isSuspended()) {
-            throw new DomainException("Organisasi {$organization->name} sedang ditangguhkan — jam voucher tidak bisa dirilis. Hubungi admin Club 61.");
+            throw new DomainException(SiteLocale::text('corporate.organization_suspended', ['organization' => $organization->name]));
         }
 
         $balance = $organization->padelHourBalance();
 
         if ($balance === null) {
-            throw new DomainException('Paket corporate organisasi ini tidak punya kuota jam Padel, jadi jam voucher tidak bisa dirilis.');
+            throw new DomainException(SiteLocale::text('corporate.no_padel_quota'));
         }
 
         $this->balanceService->adjustQuota(
@@ -335,7 +336,7 @@ class SponsorOrganizationService
     public function deleteVoucher(SponsorMemberVoucher $voucher): void
     {
         if ((float) $voucher->hours_used > 0) {
-            throw new DomainException('Voucher ini sudah pernah terpakai, tidak bisa dihapus. Gunakan koreksi jumlah jam saja.');
+            throw new DomainException(SiteLocale::text('corporate.voucher_used_cannot_delete'));
         }
 
         DB::transaction(function () use ($voucher) {
@@ -364,7 +365,7 @@ class SponsorOrganizationService
         $handle = fopen($filePath, 'r');
 
         if ($handle === false) {
-            throw new DomainException('File CSV tidak dapat dibaca.');
+            throw new DomainException(SiteLocale::text('corporate.csv_unreadable'));
         }
 
         // Periode bulan berjalan (format "YYYY-MM") — jadi kunci idempotensi CSV import (lihat
@@ -378,7 +379,7 @@ class SponsorOrganizationService
             $header = fgetcsv($handle);
 
             if ($header === false) {
-                throw new DomainException('File CSV kosong.');
+                throw new DomainException(SiteLocale::text('corporate.csv_empty'));
             }
 
             // Strip UTF-8 BOM dari sel pertama kalau ada.
@@ -387,7 +388,7 @@ class SponsorOrganizationService
             $columns = $this->mapCsvColumns($header);
 
             if ($columns === null) {
-                throw new DomainException('Format CSV tidak dikenali. Wajib ada kolom nama (name/nama) dan nomor telepon (phone/no_hp/nomor_telepon).');
+                throw new DomainException(SiteLocale::text('corporate.csv_unknown_format'));
             }
 
             $rowNumber = 1; // baris 1 = header
@@ -503,7 +504,7 @@ class SponsorOrganizationService
         $normalizedPhone = PhoneNumber::normalize($phone);
 
         if (! $normalizedPhone) {
-            throw new DomainException("Nomor HP \"{$phone}\" tidak valid.");
+            throw new DomainException(SiteLocale::text('corporate.invalid_phone', ['phone' => $phone]));
         }
 
         $user = User::where('phone', $normalizedPhone)->first();

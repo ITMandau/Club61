@@ -1,4 +1,10 @@
 <script>
+    // Teks invoice dua bahasa (lang/{id,en}/invoice.php) — placeholder :x diganti di JS.
+    const INV_T = @js(__('invoice.js'));
+    const INV_STATUS = @js(__('invoice.statuses'));
+    const INV_MONTHS = @js(__('invoice.months'));
+    const INV_DATE_LOCALE = @js(app()->getLocale() === 'id' ? 'id-ID' : 'en-US');
+
     function invoiceApp() {
         return {
             isLoading: true,
@@ -21,11 +27,11 @@
                 title: '',
                 message: '',
                 type: 'info',
-                buttonText: 'OK, Understood',
+                buttonText: INV_T.ok_understood,
                 onClose: null,
             },
 
-            showNotice(title, message, type = 'info', buttonText = 'OK, Understood', onClose = null) {
+            showNotice(title, message, type = 'info', buttonText = INV_T.ok_understood, onClose = null) {
                 this.noticeModal = {
                     show: true,
                     title,
@@ -118,7 +124,7 @@
             // catalogMethods = semua metode (termasuk nonaktif) hanya untuk menampilkan nama metode pembayaran lama.
             paymentMethods: @js(app(\App\Services\Payment\OnlinePaymentMethodService::class)->forFrontend()),
             catalogMethods: @js(app(\App\Services\Payment\OnlinePaymentMethodService::class)->catalogForDisplay()),
-            selectedMethod: (@js(app(\App\Services\Payment\OnlinePaymentMethodService::class)->forFrontend())[0]) || { id: '', code: '', name: 'Tidak ada metode tersedia', badge: '-', fee: 0, note: '' },
+            selectedMethod: (@js(app(\App\Services\Payment\OnlinePaymentMethodService::class)->forFrontend())[0]) || { id: '', code: '', name: INV_T.no_method_available, badge: '-', fee: 0, note: '' },
 
             /** Nominal yang akan dibayar sekarang: selisih reschedule yang belum lunas, atau total order. */
             get amountToPay() {
@@ -178,13 +184,13 @@
             /** Keterangan potongan voucher, mis. "Promo Pembukaan · 20% off court rental (max Rp 50.000)". */
             voucherDetail(v) {
                 if (!v) return '';
-                if (v.is_credit) return 'Credit voucher';
-                let what = 'Promo';
+                if (v.is_credit) return INV_T.credit_voucher;
+                let what = INV_T.promo;
                 if (v.type === 'PERCENT') {
-                    what = Number(v.value || 0).toLocaleString('id-ID', { maximumFractionDigits: 2 }) + '% off court rental'
-                        + (v.max_discount ? ' (max Rp ' + this.formatNumber(v.max_discount) + ')' : '');
+                    what = INV_T.percent_off.replace(':value', Number(v.value || 0).toLocaleString(INV_DATE_LOCALE, { maximumFractionDigits: 2 }))
+                        + (v.max_discount ? INV_T.max_discount.replace(':amount', this.formatNumber(v.max_discount)) : '');
                 } else if (v.type === 'FIXED') {
-                    what = 'Rp ' + this.formatNumber(v.value) + ' off court rental';
+                    what = INV_T.fixed_off.replace(':amount', this.formatNumber(v.value));
                 }
                 return (v.name ? v.name + ' · ' : '') + what;
             },
@@ -235,22 +241,22 @@
                 // Tagihan Rp0 tidak memakai metode bayar (server langsung melunasi) — jangan diblokir batas nominal metode.
                 const isFree = Number(this.amountToPay) <= 0;
                 if (! isFree && ! this.availableMethods.length) {
-                    this.showNotice('Pembayaran Online Tidak Tersedia', 'Belum ada metode pembayaran online yang bisa dipakai untuk nominal ini. Silakan hubungi frontdesk.', 'error', 'Tutup');
+                    this.showNotice(INV_T.online_unavailable_title, INV_T.online_unavailable_message, 'error', INV_T.close);
                     return;
                 }
                 // Jangan diam-diam membayar dengan metode lain — beri tahu customer dulu, biar dia yang lanjutkan.
                 if (! isFree && ! this.availableMethods.some(m => m.code === this.selectedMethod.code)) {
                     const previous = this.selectedMethod.name;
                     this.ensureSelectedMethodAvailable();
-                    this.showNotice('Metode Pembayaran Diganti', `${previous} tidak bisa dipakai untuk nominal ini. Metode diganti ke ${this.selectedMethod.name}. Periksa lagi lalu tekan bayar.`, 'info', 'Oke');
+                    this.showNotice(INV_T.method_switched_title, INV_T.method_switched_message.replace(':previous', previous).replace(':method', this.selectedMethod.name), 'info', INV_T.oke);
                     return;
                 }
                 if (['EXPIRED', 'CANCELLED', 'REFUNDED', 'REFUND_PENDING'].includes(this.currentTicket.status)) {
-                    this.showNotice('Reservation Inactive', 'This reservation has expired or has been cancelled and can no longer be processed. Please make a new booking.', 'error', 'Close');
+                    this.showNotice(INV_T.reservation_inactive_title, INV_T.reservation_inactive_message, 'error', INV_T.close);
                     return;
                 }
                 if (this.paymentWindowClosed(this.currentTicket)) {
-                    this.showNotice('Waktu Pembayaran Habis', 'Batas waktu pembayaran booking ini sudah habis dan slot sedang dilepas. Silakan buat booking baru.', 'error', 'Tutup');
+                    this.showNotice(INV_T.payment_time_up_title, INV_T.payment_time_up_message, 'error', INV_T.close);
                     return;
                 }
                 this.isSubmittingPayment = true;
@@ -280,7 +286,7 @@
                         } else if (json.is_paid) {
                             // Tagihan Rp0 (ditanggung kuota member / voucher jam corporate): lunas tanpa Midtrans.
                             await this.loadTicket(this.currentTicket.id);
-                            this.showNotice('Booking Confirmed', json.message || 'Your booking is fully covered and confirmed.', 'success', 'OK');
+                            this.showNotice(INV_T.booking_confirmed_title, json.message || INV_T.booking_confirmed_message, 'success', INV_T.ok);
                         } else if (json.checkout_mode === 'SNAP') {
                             // DOKU SNAP: QR / nomor VA tampil di kartu ini (pay_display dari server), status dicek otomatis.
                             await this.loadTicket(this.currentTicket.id);
@@ -296,11 +302,11 @@
                         // Status booking bisa sudah berubah (batas bayar habis, sudah lunas lewat sesi lain) — muat ulang
                         // kartunya supaya tampilan tidak tertahan di "Pay Now" sampai di-refresh.
                         await this.loadTicket(this.currentTicket.id);
-                        this.showNotice(res.status === 422 ? 'Pembayaran Tidak Bisa Diproses' : 'Payment Failed', json.message || 'Failed to process payment session.', 'error', 'Close');
+                        this.showNotice(res.status === 422 ? INV_T.payment_unprocessable_title : INV_T.payment_failed_title, json.message || INV_T.payment_session_failed, 'error', INV_T.close);
                     }
                 } catch(e) {
                     console.error('Error retry payment:', e);
-                    this.showNotice('Network Issue', 'Encountered a problem connecting to the payment gateway.', 'error', 'Close');
+                    this.showNotice(INV_T.network_title, INV_T.network_message, 'error', INV_T.close);
                 } finally {
                     this.isSubmittingPayment = false;
                 }
@@ -314,23 +320,23 @@
             // Modul 21: judul & keterangan tiket yang sudah tidak aktif (batal / refund / voucher saldo / hangus).
             closedTicketTitle(t) {
                 const refund = t.refund_info || null;
-                if (t.status === 'REFUND_PENDING') return 'Refund Under Review';
-                if (t.status === 'REFUNDED') return 'Reservation Refunded';
-                if (t.status === 'CANCELLED' && refund && refund.voucher_code) return 'Converted to Credit Voucher';
-                if (t.status === 'CANCELLED') return 'Reservation Cancelled';
-                return t.total_paid > 0 ? 'Match Session Expired (No-Show)' : 'Payment Window Expired';
+                if (t.status === 'REFUND_PENDING') return INV_T.refund_review_title;
+                if (t.status === 'REFUNDED') return INV_T.refunded_title;
+                if (t.status === 'CANCELLED' && refund && refund.voucher_code) return INV_T.credit_converted_title;
+                if (t.status === 'CANCELLED') return INV_T.cancelled_title;
+                return t.total_paid > 0 ? INV_T.no_show_title : INV_T.payment_window_expired_title;
             },
 
             closedTicketMessage(t) {
                 const refund = t.refund_info || null;
                 const amount = refund ? 'Rp ' + this.formatNumber(Math.round(refund.amount)) : '';
-                if (t.status === 'REFUND_PENDING') return `This reservation has been cancelled and the court slot released. Your refund of ${amount} is being reviewed by the club.`;
-                if (t.status === 'REFUNDED') return `Your refund of ${amount} has been processed and returned by the club administration.`;
+                if (t.status === 'REFUND_PENDING') return INV_T.refund_review_message.replace(':amount', amount);
+                if (t.status === 'REFUNDED') return INV_T.refunded_message.replace(':amount', amount);
                 if (t.status === 'CANCELLED' && refund && refund.voucher_code) {
-                    return `The refund could not be returned as cash, so ${amount} was saved as credit voucher ${refund.voucher_code}` + (refund.voucher_valid_until ? ` (valid until ${refund.voucher_valid_until})` : '') + '. It appears automatically at checkout for your next booking.';
+                    return INV_T.credit_converted_message.replace(':amount', amount).replace(':code', refund.voucher_code) + (refund.voucher_valid_until ? INV_T.credit_valid_until.replace(':date', refund.voucher_valid_until) : '') + INV_T.credit_converted_suffix;
                 }
-                if (t.status === 'CANCELLED') return 'This reservation was cancelled and the slot has been returned to the schedule.';
-                return t.total_paid > 0 ? 'Your scheduled match time has passed without turnstile check-in. This ticket is now closed.' : 'The 15-minute payment window for this session has ended and the court slots have been released. Please book a new schedule.';
+                if (t.status === 'CANCELLED') return INV_T.cancelled_message;
+                return t.total_paid > 0 ? INV_T.no_show_message : INV_T.payment_window_expired_message;
             },
 
             renderQr(el, text, attempt = 0, level = "H") {
@@ -370,9 +376,9 @@
             async copySnapText(text) {
                 try {
                     await navigator.clipboard.writeText(String(text || ''));
-                    this.showNotice('Copied', 'Virtual Account number copied.', 'success', 'OK');
+                    this.showNotice(INV_T.copied_title, INV_T.copied_message, 'success', INV_T.ok);
                 } catch (e) {
-                    this.showNotice('Copy Failed', 'Please copy the number manually.', 'error', 'Close');
+                    this.showNotice(INV_T.copy_failed_title, INV_T.copy_failed_message, 'error', INV_T.close);
                 }
             },
 
@@ -397,13 +403,13 @@
                 const t = this.currentTicket;
                 if (!t || !t.can_pay_online || this.isSubmittingPayment) return;
                 if (! this.availableMethods.length) {
-                    this.showNotice('Pembayaran Online Tidak Tersedia', 'Belum ada metode pembayaran online yang bisa dipakai untuk nominal ini. Silakan hubungi frontdesk.', 'error', 'Tutup');
+                    this.showNotice(INV_T.online_unavailable_title, INV_T.online_unavailable_message, 'error', INV_T.close);
                     return;
                 }
                 if (! this.availableMethods.some(m => m.code === this.selectedMethod.code)) {
                     const previous = this.selectedMethod.name;
                     this.ensureSelectedMethodAvailable();
-                    this.showNotice('Metode Pembayaran Diganti', `${previous} tidak bisa dipakai untuk nominal ini. Metode diganti ke ${this.selectedMethod.name}. Periksa lagi lalu tekan bayar.`, 'info', 'Oke');
+                    this.showNotice(INV_T.method_switched_title, INV_T.method_switched_message.replace(':previous', previous).replace(':method', this.selectedMethod.name), 'info', INV_T.oke);
                     return;
                 }
 
@@ -416,7 +422,7 @@
                     });
                     const json = await res.json();
                     if (!res.ok || !json.success) {
-                        this.showNotice('Pembayaran Gagal', json.message || 'Sesi pembayaran belum bisa dibuat.', 'error', 'Tutup');
+                        this.showNotice(INV_T.payment_failed_title, json.message || INV_T.membership_payment_failed_message, 'error', INV_T.close);
                         await this.refreshMembershipTicket(t.id);
                         return;
                     }
@@ -424,7 +430,7 @@
                     const payment = json.data.payment || {};
                     if (json.data.already_paid || payment.is_mock) {
                         await this.refreshMembershipTicket(t.id);
-                        this.showNotice('Membership Aktif', json.message, 'success', 'Oke');
+                        this.showNotice(INV_T.membership_active_title, json.message, 'success', INV_T.oke);
                     } else if (payment.checkout_mode === 'SNAP') {
                         // DOKU SNAP: QR / nomor VA tampil di kartu membership ini, status dicek otomatis.
                         await this.refreshMembershipTicket(t.id);
@@ -433,7 +439,7 @@
                         window.snap.pay(payment.snap_token, {
                             onSuccess: () => this.pollMembership(t.id),
                             onPending: () => this.pollMembership(t.id),
-                            onError: () => this.showNotice('Payment Declined', 'Payment was declined or failed to process.', 'error', 'Close'),
+                            onError: () => this.showNotice(INV_T.payment_declined_title, INV_T.payment_declined_message, 'error', INV_T.close),
                             onClose: () => this.pollMembership(t.id),
                         });
                     } else if (payment.redirect_url || payment.payment_url) {
@@ -441,7 +447,7 @@
                     }
                 } catch (e) {
                     console.error('Error membership payment:', e);
-                    this.showNotice('Network Issue', 'Encountered a problem connecting to the payment gateway.', 'error', 'Close');
+                    this.showNotice(INV_T.network_title, INV_T.network_message, 'error', INV_T.close);
                 } finally {
                     this.isSubmittingPayment = false;
                 }
@@ -459,10 +465,10 @@
                     const json = await res.json();
                     this.showCancelMembershipModal = false;
                     await this.refreshMembershipTicket(t.id);
-                    this.showNotice(json.success ? 'Pesanan Dibatalkan' : 'Tidak Bisa Dibatalkan', json.message, json.success ? 'success' : 'error', 'Oke');
+                    this.showNotice(json.success ? INV_T.order_cancelled_title : INV_T.cannot_cancel_title, json.message, json.success ? 'success' : 'error', INV_T.oke);
                 } catch (e) {
                     console.error('Error cancel membership order:', e);
-                    this.showNotice('Server Error', 'An unexpected error occurred while communicating with the server.', 'error', 'Close');
+                    this.showNotice(INV_T.server_error_title, INV_T.server_error_message, 'error', INV_T.close);
                 } finally {
                     this.isCancellingMembership = false;
                 }
@@ -503,7 +509,7 @@
                     if (!found || found.status !== 'PENDING_PAYMENT' || elapsed > 900000) {
                         this.membershipPollTimer = null;
                         if (found && found.status === 'ACTIVE') {
-                            this.showNotice('Membership Aktif', 'Pembayaran diterima. Paket membership Anda sudah aktif.', 'success', 'Oke');
+                            this.showNotice(INV_T.membership_active_title, INV_T.membership_active_message, 'success', INV_T.oke);
                         }
                         return;
                     }
@@ -524,7 +530,7 @@
 
             openCancelModal() {
                 if (!this.canCancelBooking) {
-                    this.showNotice('Access Denied', 'You do not have permission to cancel this booking.', 'error', 'Close');
+                    this.showNotice(INV_T.access_denied_title, INV_T.access_denied_message, 'error', INV_T.close);
                     return;
                 }
                 this.showCancelModal = true;
@@ -537,7 +543,7 @@
             async confirmCancelBooking() {
                 if (!this.currentTicket) return;
                 if (!this.canCancelBooking) {
-                    this.showNotice('Access Denied', 'You do not have permission to cancel this booking.', 'error', 'Close');
+                    this.showNotice(INV_T.access_denied_title, INV_T.access_denied_message, 'error', INV_T.close);
                     this.showCancelModal = false;
                     return;
                 }
@@ -572,12 +578,12 @@
 
                         window.location.href = '{{ route('customer.booking') }}';
                     } else {
-                        this.showNotice('Cancellation Failed', json.message || 'Failed to cancel booking.', 'error', 'Close');
+                        this.showNotice(INV_T.cancellation_failed_title, json.message || INV_T.cancellation_failed_message, 'error', INV_T.close);
                         this.isCancellingBooking = false;
                     }
                 } catch (e) {
                     console.error('Error cancel booking:', e);
-                    this.showNotice('Server Error', 'An unexpected error occurred while communicating with the server.', 'error', 'Close');
+                    this.showNotice(INV_T.server_error_title, INV_T.server_error_message, 'error', INV_T.close);
                     this.isCancellingBooking = false;
                 }
             },
@@ -592,7 +598,7 @@
                             await this.loadTicket(this.currentTicket.id);
                         },
                         onError: (result) => {
-                            this.showNotice('Payment Declined', 'Payment was declined or failed to process.', 'error', 'Close');
+                            this.showNotice(INV_T.payment_declined_title, INV_T.payment_declined_message, 'error', INV_T.close);
                         },
                         onClose: () => {
                             this.startAutoPolling(this.currentTicket.id);
@@ -602,7 +608,7 @@
                     // Popup Snap tidak termuat (client key kosong / snap.js diblokir) → halaman pembayaran Midtrans.
                     window.location.href = redirectUrl;
                 } else {
-                    this.showNotice('Loading Payment', 'The payment page is still loading. Please try again shortly.', 'info', 'Close');
+                    this.showNotice(INV_T.loading_payment_title, INV_T.loading_payment_message, 'info', INV_T.close);
                 }
             },
 
@@ -932,13 +938,13 @@
 
             formatDate(val) {
                 if (!val) return '-';
-                const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+                const months = INV_MONTHS;
                 const plain = String(val).match(/^(\d{4})-(\d{2})-(\d{2})$/);
                 if (plain) return `${plain[3]} ${months[Number(plain[2]) - 1]} ${plain[1]}`;
                 try {
                     const d = new Date(val);
                     if (!isNaN(d.getTime())) {
-                        const parts = Object.fromEntries(new Intl.DateTimeFormat('en-GB', { timeZone: this.appTimezone, day: '2-digit', month: 'short', year: 'numeric' })
+                        const parts = Object.fromEntries(new Intl.DateTimeFormat(INV_DATE_LOCALE, { timeZone: this.appTimezone, day: '2-digit', month: 'short', year: 'numeric' })
                             .formatToParts(d).map(p => [p.type, p.value]));
                         return `${parts.day} ${parts.month} ${parts.year}`;
                     }
@@ -961,13 +967,9 @@
             // selisihnya belum lunas tetap LOCKED di database, tapi bagi customer itu "Balance due", bukan "In checkout".
             statusLabel(status, ticket = null) {
                 if (status === 'LOCKED' && ticket && (ticket.has_pending_delta || Number(ticket.reschedule_count) > 0)) {
-                    return 'Balance due';
+                    return INV_T.balance_due;
                 }
-                const map = {
-                    PAID: 'Paid', CONFIRMED: 'Confirmed', CHECKED_IN: 'Checked in', COMPLETED: 'Completed', ACTIVE: 'Active',
-                    PENDING: 'Awaiting payment', PENDING_PAYMENT: 'Awaiting payment', UNPAID: 'Unpaid', PARTIALLY_PAID: 'Partly paid',
-                    LOCKED: 'In checkout', EXPIRED: 'Expired', CANCELLED: 'Cancelled', REFUND_PENDING: 'Refund pending', REFUNDED: 'Refunded',
-                };
+                const map = INV_STATUS;
                 return map[status] || (status ? String(status).replace(/_/g, ' ').toLowerCase().replace(/^\w/, c => c.toUpperCase()) : '-');
             },
 
@@ -994,7 +996,7 @@
                     await this.generateAndSaveTicketPng();
                 } catch (err) {
                     console.error('Download PNG failed:', err);
-                    this.showNotice('Download Failed', 'Failed to generate e-ticket image: ' + (err.message || err), 'error', 'Close');
+                    this.showNotice(INV_T.download_failed_title, INV_T.download_failed_message + (err.message || err), 'error', INV_T.close);
                 } finally {
                     this.isDownloadingPng = false;
                 }
@@ -1008,12 +1010,12 @@
                 const sumOrder = this.ticket ? this.ticket.order : null;
                 const voucher = this.orderVoucher;
                 const sumRows = [
-                    ['Padel Court Rental', 'Rp ' + this.formatNumber(this.displayCourtFee + this.totalMemberDiscount + this.totalSponsorDiscount)],
-                    this.totalMemberDiscount > 0 ? ['Membership Discount', '- Rp ' + this.formatNumber(this.totalMemberDiscount)] : null,
-                    this.totalSponsorDiscount > 0 ? ['Corporate Voucher', '- Rp ' + this.formatNumber(this.totalSponsorDiscount)] : null,
-                    ['Equipment Rental (Rackets & Balls)', 'Rp ' + this.formatNumber(this.displayEquipmentFee)],
-                    voucher ? ['Voucher ' + voucher.code + ' — ' + this.voucherDetail(voucher), '- Rp ' + this.formatNumber(voucher.discount)] : null,
-                    ['Tax & Service Fee', 'Rp ' + this.formatNumber(sumOrder ? (parseFloat(sumOrder.tax_amount) || 0) + (parseFloat(sumOrder.service_charge) || 0) : 0)],
+                    [INV_T.png_court_rental, 'Rp ' + this.formatNumber(this.displayCourtFee + this.totalMemberDiscount + this.totalSponsorDiscount)],
+                    this.totalMemberDiscount > 0 ? [INV_T.png_membership_discount, '- Rp ' + this.formatNumber(this.totalMemberDiscount)] : null,
+                    this.totalSponsorDiscount > 0 ? [INV_T.png_corporate_voucher, '- Rp ' + this.formatNumber(this.totalSponsorDiscount)] : null,
+                    [INV_T.png_equipment, 'Rp ' + this.formatNumber(this.displayEquipmentFee)],
+                    voucher ? [INV_T.png_voucher + voucher.code + ' — ' + this.voucherDetail(voucher), '- Rp ' + this.formatNumber(voucher.discount)] : null,
+                    [INV_T.png_tax_service, 'Rp ' + this.formatNumber(sumOrder ? (parseFloat(sumOrder.tax_amount) || 0) + (parseFloat(sumOrder.service_charge) || 0) : 0)],
                 ].filter(Boolean);
                 const rowGap = 34;
                 const extraH = Math.max(0, sumRows.length - 3) * rowGap;
@@ -1088,10 +1090,10 @@
                 drawRoundRect(60, 58, 270, 26, 13, true, true, 'rgba(223, 195, 135, 0.2)', '#E6DAC0', 1);
                 ctx.fillStyle = '#F7F0DB';
                 ctx.font = 'bold 11px sans-serif';
-                ctx.fillText('OFFICIAL BOARDING PASS • PADEL PASS', 72, 75);
+                ctx.fillText(INV_T.png_badge, 72, 75);
 
                 // Court Name
-                const courtName = (this.currentTicket.court && this.currentTicket.court.name) ? this.currentTicket.court.name : 'Court Arena';
+                const courtName = (this.currentTicket.court && this.currentTicket.court.name) ? this.currentTicket.court.name : INV_T.png_court_fallback;
                 ctx.fillStyle = '#FFFFFF';
                 ctx.font = 'bold 26px serif';
                 ctx.fillText(courtName, 60, 118);
@@ -1102,11 +1104,11 @@
                 const duration = this.calculateDuration(this.currentTicket.start_time, this.currentTicket.end_time);
                 ctx.fillStyle = '#A7F3D0';
                 ctx.font = '14px sans-serif';
-                ctx.fillText(`${bookingDateStr} • ${bookingTimeStr} (${duration} ${duration > 1 ? 'Hours' : 'Hour'})`, 60, 145);
+                ctx.fillText(`${bookingDateStr} • ${bookingTimeStr} (${duration} ${duration > 1 ? INV_T.png_hours : INV_T.png_hour})`, 60, 145);
 
                 // Right-side Status Badge
                 const isPaid = (this.currentTicket.status === 'PAID' || this.currentTicket.status === 'CONFIRMED' || this.currentTicket.status === 'CHECKED_IN');
-                const statusText = isPaid ? (this.currentTicket.status === 'CHECKED_IN' ? 'CHECKED IN' : 'PAID') : 'PENDING';
+                const statusText = isPaid ? (this.currentTicket.status === 'CHECKED_IN' ? INV_T.png_checked_in : INV_T.png_paid) : INV_T.png_pending;
                 const statusBg = isPaid ? '#10B981' : '#F59E0B';
                 const badgeW = 140;
                 drawRoundRect(width - 60 - badgeW, 62, badgeW, 30, 15, true, false, statusBg);
@@ -1120,7 +1122,7 @@
                 ctx.fillStyle = '#E6DAC0';
                 ctx.font = 'bold 13px monospace';
                 ctx.textAlign = 'right';
-                ctx.fillText('Code: #' + bookingCode, width - 60, 125);
+                ctx.fillText(INV_T.png_code + bookingCode, width - 60, 125);
                 ctx.textAlign = 'left';
 
                 // 3. Perforated Divider Bar
@@ -1163,7 +1165,7 @@
                 ctx.fillStyle = '#662721';
                 ctx.font = 'bold 11px sans-serif';
                 ctx.textAlign = 'center';
-                ctx.fillText(`STATUS: ${isPaid ? 'VALID ENTRY PASS' : 'AWAITING PAYMENT'} • GATE: FRONTDESK`, width / 2, divY + 25);
+                ctx.fillText(isPaid ? INV_T.png_status_valid : INV_T.png_status_awaiting, width / 2, divY + 25);
                 ctx.textAlign = 'left';
 
                 // 4. QR Code Hero Section
@@ -1208,9 +1210,9 @@
                     ctx.fillStyle = '#662721';
                     ctx.font = 'bold 14px monospace';
                     ctx.textAlign = 'center';
-                    ctx.fillText('QR NOT AVAILABLE', width / 2, qrSectionY + 130);
+                    ctx.fillText(INV_T.png_qr_unavailable, width / 2, qrSectionY + 130);
                     ctx.font = '11px sans-serif';
-                    ctx.fillText('Show booking code at frontdesk', width / 2, qrSectionY + 155);
+                    ctx.fillText(INV_T.png_show_code, width / 2, qrSectionY + 155);
                     ctx.textAlign = 'left';
                 }
 
@@ -1221,7 +1223,7 @@
 
                 ctx.fillStyle = '#7A5A52';
                 ctx.font = '12px sans-serif';
-                ctx.fillText('Present this QR Code to frontdesk staff / turnstile gate upon arrival', width / 2, qrSectionY + qrBoxH + 48);
+                ctx.fillText(INV_T.png_present_qr, width / 2, qrSectionY + qrBoxH + 48);
                 ctx.textAlign = 'left';
 
                 // 5. Reservation Details Section
@@ -1229,7 +1231,7 @@
                 drawRoundRect(45, detailY, 6, 20, 3, true, false, '#662721');
                 ctx.fillStyle = '#4F2F2A';
                 ctx.font = 'bold 15px sans-serif';
-                ctx.fillText('MATCH RESERVATION DETAILS', 58, detailY + 15);
+                ctx.fillText(INV_T.png_details, 58, detailY + 15);
 
                 const detailBoxH = 175;
                 drawRoundRect(45, detailY + 28, width - 90, detailBoxH, 16, true, true, '#FFFFFF', '#E6DAC0', 1.5);
@@ -1254,17 +1256,17 @@
                 }
 
                 const custName = (this.customerName || 'Customer VIP');
-                drawRow(detailY + 60, 'Ticket Holder Name', custName + ' (VIP Member)', true);
-                drawRow(detailY + 98, 'Booking Schedule', `${bookingTimeStr} (${duration} ${duration > 1 ? 'Hours' : 'Hour'})`, true);
-                drawRow(detailY + 136, 'Court & Venue', `${courtName} • Club 61 Padel & Wellness`, true);
-                drawRow(detailY + 174, 'Check-In Status', isPaid ? 'READY FOR ENTRY (VALID)' : 'AWAITING PAYMENT', true, isPaid);
+                drawRow(detailY + 60, INV_T.png_holder, custName + INV_T.png_vip_member, true);
+                drawRow(detailY + 98, INV_T.png_schedule, `${bookingTimeStr} (${duration} ${duration > 1 ? INV_T.png_hours : INV_T.png_hour})`, true);
+                drawRow(detailY + 136, INV_T.png_court_venue, `${courtName} • Club 61 Padel & Wellness`, true);
+                drawRow(detailY + 174, INV_T.png_checkin_status, isPaid ? INV_T.png_ready : INV_T.png_awaiting, true, isPaid);
 
                 // 6. Payment & Fee Summary Section
                 const summaryY = 885;
                 drawRoundRect(45, summaryY, 6, 20, 3, true, false, '#662721');
                 ctx.fillStyle = '#4F2F2A';
                 ctx.font = 'bold 15px sans-serif';
-                ctx.fillText('PAYMENT & FEE SUMMARY', 58, summaryY + 15);
+                ctx.fillText(INV_T.png_summary, 58, summaryY + 15);
 
                 const sumBoxH = 245 + extraH;
                 drawRoundRect(45, summaryY + 28, width - 90, sumBoxH, 16, true, true, '#FFFFFF', '#E6DAC0', 1.5);
@@ -1311,10 +1313,10 @@
                 drawRoundRect(60, bannerY, width - 120, 68, 12, true, true, '#F7F0DB', '#E6DAC0', 1.5);
                 ctx.fillStyle = '#4F2F2A';
                 ctx.font = 'bold 14px sans-serif';
-                ctx.fillText('TOTAL AMOUNT', 80, bannerY + 32);
+                ctx.fillText(INV_T.png_total, 80, bannerY + 32);
                 ctx.fillStyle = '#7A5A52';
                 ctx.font = '11px sans-serif';
-                ctx.fillText('Paid via ' + payMethod, 80, bannerY + 52);
+                ctx.fillText(INV_T.png_paid_via + payMethod, 80, bannerY + 52);
 
                 ctx.fillStyle = '#662721';
                 ctx.font = 'bold 22px monospace';
@@ -1338,14 +1340,14 @@
 
                 ctx.fillStyle = '#7A5A52';
                 ctx.font = '11px sans-serif';
-                ctx.fillText('Save this digital e-ticket to your device as official proof of reservation.', width / 2, footerY + 50);
+                ctx.fillText(INV_T.png_save_note, width / 2, footerY + 50);
 
                 const now = new Date();
-                const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+                const months = INV_MONTHS;
                 const timeStampStr = `${now.getDate()} ${months[now.getMonth()]} ${now.getFullYear()} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')} WIB`;
                 ctx.fillStyle = '#A08F86';
                 ctx.font = '10px monospace';
-                ctx.fillText(`Downloaded: ${timeStampStr} • Ref: #${bookingCode}`, width / 2, footerY + 70);
+                ctx.fillText(`${INV_T.png_downloaded}${timeStampStr} • Ref: #${bookingCode}`, width / 2, footerY + 70);
                 ctx.textAlign = 'left';
 
                 // 8. Download PNG

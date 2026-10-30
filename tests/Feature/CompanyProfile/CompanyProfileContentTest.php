@@ -82,7 +82,7 @@ class CompanyProfileContentTest extends TestCase
 
         // Angka jumlah lapangan tampil di kedua halaman (beda kalimat, sumber sama).
         $welcome->assertSee('5 Lapangan Padel');
-        $login->assertSee('5 COURTS OPEN', false);
+        $login->assertSee('5 LAPANGAN BUKA', false);
 
         // Daftar kartu fasilitas identik di kedua halaman.
         $welcome->assertSee('Regression Guard Card');
@@ -255,9 +255,9 @@ class CompanyProfileContentTest extends TestCase
             ->assertSee('club61.id')
             ->assertDontSee('Gedung Indosat Medan');
 
-        // Home customer (hero, kartu Courts, menu navigasi) memakai alamat yang sama.
+        // Home customer (hero, kartu Courts, menu navigasi) memakai alamat yang sama — dicek di versi Inggris.
         $this->actingAs(User::factory()->customer()->create());
-        $this->get('/dashboard')->assertOk()
+        $this->withCookie('site_locale', 'en')->get('/dashboard')->assertOk()
             ->assertSee('Padel courts at Jl. Alamat Baru No. 9, Medan, plus wellness')
             ->assertSee('padel courts at Jl. Alamat Baru No. 9, Medan, complete with')
             ->assertDontSee('Gedung Indosat Medan')
@@ -269,6 +269,10 @@ class CompanyProfileContentTest extends TestCase
         $settings = CompanyProfileSetting::current();
         $settings->update(['address_line' => 'Jl. Uji Alamat No. 7, Medan', 'operating_hours_text' => 'Buka 08:00 – 22:00', 'operating_hours_text_en' => 'Open 08:00 – 22:00']);
         $this->actingAs(User::factory()->customer()->create());
+
+        // Bahasa Indonesia (default): Home memakai teks jam versi ID.
+        $this->get('/dashboard')->assertOk()->assertSee('Buka 08:00 – 22:00')->assertDontSee('Open 08:00 – 22:00');
+        $this->withCookie('site_locale', 'en');
 
         foreach (['/dashboard', '/my-club'] as $url) {
             $this->get($url)->assertOk()

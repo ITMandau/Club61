@@ -103,6 +103,9 @@ class MembershipBalanceService
                     'booking_priority_days' => $benefit->booking_priority_days,
                     'time_window_start' => $benefit->time_window_start,
                     'time_window_end' => $benefit->time_window_end,
+                    'access_days' => $benefit->access_days,
+                    'off_peak_only' => (bool) $benefit->off_peak_only,
+                    'peak_only' => (bool) $benefit->peak_only,
                     'extra_benefits' => $benefit->extra_benefits,
                 ]);
             }
@@ -200,6 +203,9 @@ class MembershipBalanceService
                             'booking_priority_days' => $renewalBalance->booking_priority_days,
                             'time_window_start' => $renewalBalance->time_window_start,
                             'time_window_end' => $renewalBalance->time_window_end,
+                            'access_days' => $renewalBalance->access_days,
+                            'off_peak_only' => (bool) $renewalBalance->off_peak_only,
+                            'peak_only' => (bool) $renewalBalance->peak_only,
                             'extra_benefits' => $renewalBalance->extra_benefits,
                         ]);
                     }
@@ -281,6 +287,59 @@ class MembershipBalanceService
             }
 
             return $newMembership->fresh(['balances', 'plan']);
+        });
+    }
+
+    /** Kartu yang ikut berubah kalau aturan paket ini diterapkan ke membership aktif (aktif / menunggu bayar). */
+    public function membershipsFollowingPlan(MembershipPlan $plan): int
+    {
+        return UserMembership::where('plan_id', $plan->id)->whereIn('status', MembershipPlan::IN_USE_STATUSES)->count();
+    }
+
+    /**
+     * Terapkan aturan akses paket terbaru (jam akses, hari berlaku, di luar peak) ke kartu yang sudah terjual. Kartu
+     * menyimpan salinan aturan saat dibeli supaya edit paket tidak diam-diam mengubah kartu yang berjalan — tombol ini
+     * (izin apply_membership_plan_rules) yang menyamakannya dengan sengaja. Kuota, diskon & masa aktif TIDAK disentuh;
+     * booking yang sudah terjadi juga tidak — aturan hanya dicek saat booking baru / reschedule / Jadwal Tetap.
+     *
+     * @return array{memberships: int, balances: int}
+     */
+    public function applyPlanAccessRules(MembershipPlan $plan, User $by): array
+    {
+        return DB::transaction(function () use ($plan, $by) {
+            $plan->load('benefits');
+            $membershipIds = UserMembership::where('plan_id', $plan->id)->whereIn('status', MembershipPlan::IN_USE_STATUSES)
+                ->lockForUpdate()->pluck('id');
+
+            $balances = 0;
+            foreach ($plan->benefits as $benefit) {
+                $balances += UserMembershipBalance::whereIn('user_membership_id', $membershipIds)
+                    ->where('facility', $benefit->facility)
+                    ->update([
+                        'time_window_start' => $benefit->time_window_start,
+                        'time_window_end' => $benefit->time_window_end,
+                        'access_days' => $benefit->access_days === null ? null : json_encode(array_values($benefit->access_days)),
+                        'off_peak_only' => (bool) $benefit->off_peak_only,
+                        'peak_only' => (bool) $benefit->peak_only,
+                        'updated_at' => now(),
+                    ]);
+            }
+
+            \App\Services\Audit\ActivityLogger::record(
+                module: 'MEMBERSHIP',
+                event: 'membership_plan.rules_applied',
+                description: "Aturan akses paket {$plan->name} diterapkan ke {$membershipIds->count()} membership aktif",
+                subject: $plan,
+                meta: array_filter([
+                    'paket' => $plan->name,
+                    'membership_aktif' => $membershipIds->count(),
+                    'aturan' => $plan->benefits->mapWithKeys(fn ($b) => [$b->facility => PadelAccessRule::label($b) ?? 'tanpa batas'])->all(),
+                ]),
+                severity: \App\Services\Audit\ActivityLogger::WARNING,
+                causer: $by,
+            );
+
+            return ['memberships' => $membershipIds->count(), 'balances' => $balances];
         });
     }
 

@@ -18,7 +18,7 @@ class VenueCopyAndLoginTest extends TestCase
         $this->seed();
 
         $this->assertSame(
-            [['Court BCA', 'INDOOR'], ['Court Iforte', 'OUTDOOR'], ['Court Indosat', 'INDOOR']],
+            [['Court BCA', 'INDOOR'], ['Court IM3 Platinum', 'INDOOR'], ['Court Protelindo', 'INDOOR']],
             PadelCourt::orderBy('name')->get()->map(fn ($c) => [$c->name, $c->type])->all()
         );
         $this->assertTrue(PadelCourt::all()->every(fn ($c) => (float) $c->hourly_rate_regular === 200000.0 && (float) $c->hourly_rate_prime === 300000.0 && $c->open_time === '06:00' && $c->close_time === '23:00'));

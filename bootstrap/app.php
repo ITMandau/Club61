@@ -30,7 +30,8 @@ return Application::configure(basePath: dirname(__DIR__))
         // AuthenticateSession: sesi web di perangkat lain otomatis keluar setelah password diganti / direset lewat email
         // (dulu hanya panel admin yang begini — HP customer yang hilang tetap login walau password sudah direset).
         $middleware->web(append: [\App\Http\Middleware\SetLocale::class, \Illuminate\Session\Middleware\AuthenticateSession::class, \App\Http\Middleware\EnsureUserIsActive::class]);
-        $middleware->api(append: [\App\Http\Middleware\EnsureUserIsActive::class]);
+        // SetApiLocale: pesan API mengikuti pilihan bahasa customer (session / cookie); tanpa pilihan, locale tidak diubah.
+        $middleware->api(append: [\App\Http\Middleware\SetApiLocale::class, \App\Http\Middleware\EnsureUserIsActive::class]);
     })
     ->withExceptions(function (Exceptions $exceptions) {
         // Enforce JSON responses for all /api/* requests
@@ -43,7 +44,7 @@ return Application::configure(basePath: dirname(__DIR__))
             if ($request->is('api/*') || $request->expectsJson()) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'Validasi data gagal.',
+                    'message' => \App\Support\SiteLocale::text('common.validation_failed'),
                     'errors' => $e->errors(),
                 ], 422);
             }
@@ -54,7 +55,7 @@ return Application::configure(basePath: dirname(__DIR__))
             if ($request->is('api/*') || $request->expectsJson()) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'Unauthenticated. Token tidak valid atau sesi telah berakhir.',
+                    'message' => \App\Support\SiteLocale::text('common.unauthenticated'),
                     'errors' => null,
                 ], 401);
             }
@@ -65,7 +66,7 @@ return Application::configure(basePath: dirname(__DIR__))
             if ($request->is('api/*') || $request->expectsJson()) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'Data resource tidak ditemukan.',
+                    'message' => \App\Support\SiteLocale::text('common.not_found'),
                     'errors' => null,
                 ], 404);
             }
@@ -76,7 +77,7 @@ return Application::configure(basePath: dirname(__DIR__))
             if ($request->is('api/*') || $request->expectsJson()) {
                 return response()->json([
                     'success' => false,
-                    'message' => $e->getMessage() ?: 'Terjadi kesalahan pada request.',
+                    'message' => $e->getMessage() ?: \App\Support\SiteLocale::text('common.request_error'),
                     'errors' => null,
                 ], $e->getStatusCode());
             }

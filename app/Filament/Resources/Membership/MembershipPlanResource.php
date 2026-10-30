@@ -7,12 +7,18 @@ use App\Filament\Resources\Membership\Pages\EditMembershipPlan;
 use App\Filament\Resources\Membership\Pages\ListMembershipPlans;
 use App\Models\Membership\MembershipFacility;
 use App\Models\Membership\MembershipPlan;
+use App\Services\Membership\MembershipBalanceService;
 use App\Services\Membership\MembershipFacilityService;
+use App\Services\Membership\PadelAccessRule;
 use BackedEnum;
+use Filament\Actions\Action;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\EditAction;
+use Filament\Forms\Components\CheckboxList;
+use Filament\Forms\Components\Hidden;
+use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\Repeater;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
@@ -134,6 +140,14 @@ class MembershipPlanResource extends Resource
                                 ->label('Status Aktif')
                                 ->helperText('Paket dapat dibeli oleh customer jika aktif')
                                 ->default(true),
+
+                            Select::make('sales_channel')
+                                ->label('Saluran Penjualan')
+                                ->options(MembershipPlan::SALES_CHANNELS)
+                                ->default(MembershipPlan::SALES_ALL)
+                                ->selectablePlaceholder(false)
+                                ->required()
+                                ->helperText('Pilih "Khusus Front Desk / Admin" untuk paket kontrak (mis. corporate): paket tidak ditampilkan dan tidak dapat dibeli melalui web maupun aplikasi. Membership yang sudah terjual tidak terpengaruh.'),
                         ]),
 
                         Textarea::make('description')
@@ -215,17 +229,74 @@ class MembershipPlanResource extends Resource
                                     ->dehydratedWhenHidden()
                                     ->dehydrateStateUsing(fn ($state, Get $get) => in_array(self::mode($get), [MembershipFacility::MODE_PADEL_BOOKING, MembershipFacility::MODE_WELLNESS_BOOKING], true) ? (int) ($state ?: 0) : 0),
 
+                                // Aturan akses jam padel (Modul 28) — satu pilihan "Waktu Berlaku"; yang disimpan tetap kolom
+                                // access_days / time_window / off_peak_only / peak_only, dicek lewat PadelAccessRule di checkout,
+                                // kasir, voucher corporate, reschedule & Jadwal Tetap. Fasilitas lain tetap memakai jam akses biasa.
+                                Select::make('access_mode')
+                                    ->label('Waktu Berlaku')
+                                    ->options(self::ACCESS_MODES)
+                                    ->default('ANY')
+                                    ->selectablePlaceholder(false)
+                                    ->live()
+                                    ->dehydrated(false)
+                                    ->afterStateHydrated(fn (Select $component, Get $get) => $component->state(self::accessMode($get)))
+                                    ->helperText('Jam peak dan tanggal merah mengikuti pengaturan pada Master Data.')
+                                    ->rule(fn (Get $get) => function (string $attribute, $value, \Closure $fail) use ($get) {
+                                        if (self::isPadel($get) && ! array_filter(PadelAccessRule::usableHours(self::formRule($get), ...self::courtHours()))) {
+                                            $fail('Aturan ini membuat paket tidak dapat digunakan pada jam mana pun. Ubah Waktu Berlaku atau hari dan jamnya.');
+                                        }
+                                    })
+                                    ->visible(fn (Get $get) => self::isPadel($get)),
+
+                                Placeholder::make('access_summary')
+                                    ->label('Paket Dapat Digunakan')
+                                    ->content(fn (Get $get) => self::accessSummary($get))
+                                    ->visible(fn (Get $get) => self::isPadel($get))
+                                    ->columnSpan(['default' => 1, 'md' => 2]),
+
+                                CheckboxList::make('access_days')
+                                    ->label('Hari Berlaku')
+                                    ->options(PadelAccessRule::DAYS)
+                                    ->columns(7)
+                                    ->bulkToggleable()
+                                    ->live()
+                                    ->required(fn (Get $get) => self::isCustomPadel($get))
+                                    ->validationMessages(['required' => 'Pilih minimal satu hari.'])
+                                    ->visible(fn (Get $get) => self::isCustomPadel($get))
+                                    ->dehydratedWhenHidden()
+                                    ->dehydrateStateUsing(fn ($state, Get $get) => self::isCustomPadel($get) && filled($state)
+                                        ? array_values(array_map('intval', (array) $state)) : null)
+                                    ->columnSpanFull(),
+
+                                // Format 24 jam tanpa detik (input bawaan browser menampilkan AM/PM & detik). Untuk padel hanya
+                                // pada "Atur manual"; gym & wellness tetap seperti sebelumnya.
                                 TimePicker::make('time_window_start')
                                     ->label('Jam Akses Mulai (Opsional)')
-                                    ->visible(fn (Get $get) => ! self::isInfo($get))
+                                    ->native(false)
+                                    ->seconds(false)
+                                    ->displayFormat('H:i')
+                                    ->live()
+                                    ->helperText('Batas jam penggunaan paket, misalnya 06:00–12:00. Kosongkan apabila tidak diperlukan.')
+                                    ->visible(fn (Get $get) => self::usesTimeWindow($get))
                                     ->dehydratedWhenHidden()
-                                    ->dehydrateStateUsing(fn ($state, Get $get) => self::isInfo($get) ? null : $state),
+                                    ->dehydrateStateUsing(fn ($state, Get $get) => self::usesTimeWindow($get) ? $state : null),
 
                                 TimePicker::make('time_window_end')
                                     ->label('Jam Akses Selesai (Opsional)')
-                                    ->visible(fn (Get $get) => ! self::isInfo($get))
+                                    ->native(false)
+                                    ->seconds(false)
+                                    ->displayFormat('H:i')
+                                    ->live()
+                                    ->helperText('Isi 00:00 untuk batas hingga tengah malam.')
+                                    ->visible(fn (Get $get) => self::usesTimeWindow($get))
                                     ->dehydratedWhenHidden()
-                                    ->dehydrateStateUsing(fn ($state, Get $get) => self::isInfo($get) ? null : $state),
+                                    ->dehydrateStateUsing(fn ($state, Get $get) => self::usesTimeWindow($get) ? $state : null),
+
+                                Hidden::make('off_peak_only')
+                                    ->dehydrateStateUsing(fn ($state, Get $get) => self::isPadel($get) && $get('access_mode') === 'OFF_PEAK'),
+
+                                Hidden::make('peak_only')
+                                    ->dehydrateStateUsing(fn ($state, Get $get) => self::isPadel($get) && $get('access_mode') === 'PEAK'),
 
                                 TextInput::make('extra_benefits.note')
                                     ->label('Catatan untuk Customer (opsional)')
@@ -251,6 +322,81 @@ class MembershipPlanResource extends Resource
     private static function isInfo(Get $get): bool
     {
         return self::mode($get) === MembershipFacility::MODE_INFO;
+    }
+
+    private static function isPadel(Get $get): bool
+    {
+        return self::mode($get) === MembershipFacility::MODE_PADEL_BOOKING;
+    }
+
+    private const ACCESS_MODES = [
+        'ANY' => 'Kapan saja',
+        'OFF_PEAK' => 'Hanya di luar jam peak',
+        'PEAK' => 'Hanya di jam peak',
+        'CUSTOM' => 'Atur manual (hari & jam tertentu)',
+    ];
+
+    private static function isCustomPadel(Get $get): bool
+    {
+        return self::isPadel($get) && $get('access_mode') === 'CUSTOM';
+    }
+
+    /** Jam akses dipakai gym / wellness seperti biasa; untuk padel hanya pada "Atur manual". */
+    private static function usesTimeWindow(Get $get): bool
+    {
+        return ! self::isInfo($get) && (! self::isPadel($get) || $get('access_mode') === 'CUSTOM');
+    }
+
+    /** Pilihan Waktu Berlaku yang cocok dengan aturan tersimpan (paket dengan hari / jam akses → "Atur manual"). */
+    private static function accessMode(Get $get): string
+    {
+        return match (true) {
+            (bool) $get('peak_only') => 'PEAK',
+            (bool) $get('off_peak_only') => 'OFF_PEAK',
+            filled($get('access_days')) || ($get('time_window_start') && $get('time_window_end')) => 'CUSTOM',
+            default => 'ANY',
+        };
+    }
+
+    /** Aturan sesuai isian form saat ini (belum disimpan) — untuk ringkasan & cek "nol jam". */
+    private static function formRule(Get $get): \App\Models\Membership\MembershipPlanBenefit
+    {
+        $mode = $get('access_mode') ?? 'ANY';
+
+        return (new \App\Models\Membership\MembershipPlanBenefit)->forceFill([
+            'access_days' => $mode === 'CUSTOM' ? array_map('intval', (array) $get('access_days')) : null,
+            'time_window_start' => $mode === 'CUSTOM' ? $get('time_window_start') : null,
+            'time_window_end' => $mode === 'CUSTOM' ? $get('time_window_end') : null,
+            'off_peak_only' => $mode === 'OFF_PEAK',
+            'peak_only' => $mode === 'PEAK',
+        ]);
+    }
+
+    /** @return array{0: int, 1: int} jam buka paling awal & tutup paling akhir lapangan aktif (00:00 = 24) */
+    private static function courtHours(): array
+    {
+        $courts = \App\Models\Padel\PadelCourt::where('is_active', true)->get(['open_time', 'close_time']);
+        if ($courts->isEmpty()) {
+            return [6, 24];
+        }
+        $close = fn (?string $t) => in_array(substr((string) ($t ?: '23:00'), 0, 5), ['00:00', '24:00'], true) ? 24 : (int) substr((string) ($t ?: '23:00'), 0, 2);
+
+        return [(int) $courts->min(fn ($c) => (int) substr((string) ($c->open_time ?: '06:00'), 0, 2)), (int) $courts->max(fn ($c) => $close($c->close_time))];
+    }
+
+    private static function accessSummary(Get $get): \Illuminate\Support\HtmlString
+    {
+        $usable = PadelAccessRule::usableHours(self::formRule($get), ...self::courtHours());
+        if (! array_filter($usable)) {
+            return new \Illuminate\Support\HtmlString('<span style="color:#B42318; font-weight:600;">Tidak ada jam yang dapat digunakan. Ubah Waktu Berlaku atau hari dan jamnya.</span>');
+        }
+
+        $rows = collect(PadelAccessRule::summary($usable))->map(fn (array $row) => '<div style="display:flex; gap:0.75rem;">'
+            .'<span style="min-width:6.5rem; font-weight:600;">'.e($row[0]).'</span>'
+            .'<span style="'.($row[1] === 'Tidak berlaku' ? 'color:#8A7A72;' : '').'">'.e($row[1]).'</span></div>')->implode('');
+
+        return new \Illuminate\Support\HtmlString('<div style="font-size:0.85rem; line-height:1.6;">'.$rows
+            .'<div style="margin-top:0.35rem; font-size:0.75rem; color:#8A7A72;">Sesuai jam peak pada Master Data saat ini. Tanggal merah mengikuti aturan hari Minggu.</div></div>');
     }
 
     /** @return array<string, string> */
@@ -297,9 +443,16 @@ class MembershipPlanResource extends Resource
                 IconColumn::make('is_active')
                     ->label('Aktif')
                     ->boolean(),
+
+                TextColumn::make('sales_channel')
+                    ->label('Saluran Penjualan')
+                    ->badge()
+                    ->formatStateUsing(fn (?string $state) => MembershipPlan::SALES_CHANNELS[$state ?? MembershipPlan::SALES_ALL] ?? $state)
+                    ->color(fn (?string $state) => $state === MembershipPlan::SALES_POS_ONLY ? 'warning' : 'gray'),
             ])
             ->recordActions([
                 EditAction::make(),
+                self::applyRulesAction(),
                 self::guardedDeleteAction(),
             ])
             ->toolbarActions([
@@ -314,6 +467,32 @@ class MembershipPlanResource extends Resource
                         }),
                 ]),
             ]);
+    }
+
+    /**
+     * Kartu yang sudah terjual memegang salinan aturan akses saat dibeli; tombol ini (izin apply_membership_plan_rules,
+     * bawaan hanya super admin) menyamakannya dengan aturan paket terbaru. Kuota & masa aktif tidak disentuh.
+     */
+    public static function applyRulesAction(): Action
+    {
+        return Action::make('applyRules')
+            ->label('Terapkan Aturan')
+            ->icon('heroicon-o-arrow-path')
+            ->color('warning')
+            ->visible(fn () => (bool) auth()->user()?->can('apply_membership_plan_rules'))
+            ->authorize(fn () => (bool) auth()->user()?->can('apply_membership_plan_rules'))
+            ->requiresConfirmation()
+            ->modalHeading(fn (MembershipPlan $record) => 'Terapkan aturan '.$record->name.' ke membership aktif?')
+            ->modalDescription(fn (MembershipPlan $record) => 'Aturan akses paket saat ini (jam akses, hari berlaku, dan jam peak) akan diterapkan pada '
+                .app(MembershipBalanceService::class)->membershipsFollowingPlan($record).' membership yang aktif atau menunggu pembayaran. '
+                .'Kuota, diskon, masa aktif, serta booking yang sudah dibuat tidak berubah.')
+            ->modalSubmitActionLabel('Ya, terapkan')
+            ->action(function (MembershipPlan $record) {
+                $result = app(MembershipBalanceService::class)->applyPlanAccessRules($record, auth()->user());
+                Notification::make()->title('Aturan paket diterapkan')
+                    ->body("{$result['memberships']} membership kini mengikuti aturan terbaru paket {$record->name}.")
+                    ->success()->send();
+            });
     }
 
     /**

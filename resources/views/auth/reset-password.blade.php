@@ -9,10 +9,15 @@
         <div class="p-6 sm:p-9 relative overflow-hidden"
              style="background: #FCF8EE; border: 1px solid #E6DAC0; border-radius: 12px; box-shadow: 0 24px 60px -28px rgba(79,47,42,0.45);">
 
+            {{-- Tombol bahasa ID / EN di pojok kanan atas kartu. --}}
+            <div style="position: absolute; top: 16px; right: 16px; z-index: 1;">
+                <x-lang-switch variant="light" />
+            </div>
+
             <div class="text-center mb-6">
                 <img src="{{ asset('images/identity/monogram-terracotta.png') }}" alt="Club 61 Padel &amp; Wellness" class="h-14 w-auto mx-auto mb-3">
-                <h1 class="font-display text-2xl font-black text-[#4F2F2A] tracking-wide">Buat Kata Sandi Baru</h1>
-                <p class="text-xs sm:text-sm text-[#7A5A52] mt-1.5 font-medium">Minimal 8 karakter. Setelah disimpan, Anda bisa langsung masuk.</p>
+                <h1 class="font-display text-2xl font-black text-[#4F2F2A] tracking-wide">{{ __('account.reset.title') }}</h1>
+                <p class="text-xs sm:text-sm text-[#7A5A52] mt-1.5 font-medium">{{ __('account.reset.subtitle') }}</p>
             </div>
 
             <form method="POST" action="{{ route('password.store') }}" class="space-y-4">
@@ -20,7 +25,7 @@
                 <input type="hidden" name="token" value="{{ $request->route('token') }}">
 
                 <div>
-                    <label for="email" class="block text-xs font-bold uppercase tracking-wider text-[#662721] mb-1.5">Email Akun</label>
+                    <label for="email" class="block text-xs font-bold uppercase tracking-wider text-[#662721] mb-1.5">{{ __('account.reset.email') }}</label>
                     <div class="relative rounded-xl shadow-sm">
                         <div class="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-[#662721]">
                             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -33,7 +38,7 @@
                     <x-input-error :messages="$errors->get('email')" class="mt-1.5 text-xs text-rose-600 font-medium" />
                 </div>
 
-                @foreach (['password' => ['Kata Sandi Baru', 'Minimal 8 karakter...'], 'password_confirmation' => ['Ulangi Kata Sandi Baru', 'Ketik ulang kata sandi...']] as $field => [$label, $placeholder])
+                @foreach (['password' => [__('account.reset.password'), __('account.reset.password_placeholder')], 'password_confirmation' => [__('account.reset.password_confirmation'), __('account.reset.password_confirmation_placeholder')]] as $field => [$label, $placeholder])
                     <div>
                         <label for="{{ $field }}" class="block text-xs font-bold uppercase tracking-wider text-[#662721] mb-1.5">{{ $label }}</label>
                         <div class="relative rounded-xl shadow-sm">
@@ -46,7 +51,7 @@
                                    @if ($field === 'password') autofocus @endif
                                    placeholder="{{ $placeholder }}"
                                    class="{{ $inputClass }}" style="{{ $inputStyle }}" onfocus="{{ $focus }}" onblur="{{ $blur }}" />
-                            <button type="button" onclick="togglePwd('{{ $field }}', this)" title="Lihat / sembunyikan"
+                            <button type="button" onclick="togglePwd('{{ $field }}', this)" title="{{ __('account.reset.toggle') }}"
                                     class="absolute inset-y-0 right-0 pr-3.5 flex items-center text-[#662721] hover:text-[#662721] cursor-pointer">
                                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
@@ -62,14 +67,14 @@
                     <button type="submit"
                             class="w-full py-3.5 px-6 rounded-xl text-sm font-black uppercase tracking-wider transition-all duration-200 transform active:scale-95 hover:brightness-105 shadow-xl flex items-center justify-center gap-2 cursor-pointer"
                             style="background: #662721; border: 1.5px solid #662721; color: #F7F0DB; box-shadow: 0 10px 24px -12px rgba(79,47,42,0.55);">
-                        <span>Simpan Kata Sandi</span>
+                        <span>{{ __('account.reset.submit') }}</span>
                     </button>
                 </div>
             </form>
 
             <div class="mt-5 pt-5 border-t border-[#E6DAC0]/60 text-center text-xs text-[#7A5A52]">
-                Link kedaluwarsa?
-                <a href="{{ route('password.request') }}" class="font-bold text-[#662721] hover:text-[#662721] underline ml-1">Minta link baru</a>
+                {{ __('account.reset.expired') }}
+                <a href="{{ route('password.request') }}" class="font-bold text-[#662721] hover:text-[#662721] underline ml-1">{{ __('account.reset.request_new') }}</a>
             </div>
         </div>
     </div>

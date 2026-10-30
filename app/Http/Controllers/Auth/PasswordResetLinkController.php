@@ -16,9 +16,10 @@ use Illuminate\View\View;
 
 class PasswordResetLinkController extends Controller
 {
-    public const GENERIC_STATUS = 'Jika akun tersebut terdaftar dan punya email, link atur ulang kata sandi sudah dikirim. Cek juga folder Spam / Promosi.';
+    /** Kunci terjemahan (lang/{id,en}/account.php) — ikut bahasa situs yang dipilih customer. */
+    public const GENERIC_STATUS = 'account.forgot.generic_status';
 
-    public const MAIL_FAILED = 'Email belum bisa dikirim saat ini. Coba lagi beberapa menit lagi atau hubungi frontdesk Club 61.';
+    public const MAIL_FAILED = 'account.forgot.mail_failed';
 
     /**
      * Display the password reset link request view.
@@ -40,7 +41,7 @@ class PasswordResetLinkController extends Controller
         $request->validate([
             'email' => ['required', 'string', 'max:150'],
         ], [
-            'email.required' => 'Isi email atau nomor HP yang terdaftar.',
+            'email.required' => __('account.forgot.identifier_required'),
         ]);
 
         $email = $this->resolveEmail((string) $request->input('email'));
@@ -49,7 +50,7 @@ class PasswordResetLinkController extends Controller
         // akun walk-in tanpa email) — kalau pesannya beda-beda, orang luar bisa menebak akun mana saja
         // yang terdaftar (account enumeration).
         if ($email === null || PlaceholderEmail::is($email)) {
-            return back()->with('status', self::GENERIC_STATUS);
+            return back()->with('status', __(self::GENERIC_STATUS));
         }
 
         try {
@@ -66,12 +67,12 @@ class PasswordResetLinkController extends Controller
                 asSystem: true,
             );
 
-            return back()->withInput($request->only('email'))->withErrors(['email' => self::MAIL_FAILED]);
+            return back()->withInput($request->only('email'))->withErrors(['email' => __(self::MAIL_FAILED)]);
         }
 
         // Jeda 1 menit per akun (RESET_THROTTLED) juga dibalas pesan generik — dulu muncul "tunggu 1 menit" HANYA untuk
         // akun yang terdaftar, jadi mengirim nomor HP dua kali cukup untuk menebak nomor mana yang punya akun.
-        return back()->with('status', self::GENERIC_STATUS);
+        return back()->with('status', __(self::GENERIC_STATUS));
     }
 
     private function resolveEmail(string $login): ?string

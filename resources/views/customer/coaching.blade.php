@@ -8,24 +8,24 @@
             <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white/95 p-5 rounded-xl border border-[#E6DAC0] shadow-sm">
                 <div>
                     <div class="flex items-center gap-2 flex-wrap">
-                        <h1 class="font-display font-black text-xl sm:text-2xl text-[#4F2F2A]">Coaching at Club 61</h1>
+                        <h1 class="font-display font-black text-xl sm:text-2xl text-[#4F2F2A]">{{ __('coaching.title') }}</h1>
                         <span class="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase bg-[#F7F0DB] text-[#662721] border border-[#E6DAC0]">Padel</span>
                     </div>
-                    <p class="text-xs sm:text-sm text-[#7A5A52] mt-1 max-w-2xl">Meet our coaches. To book a session or ask about coaching packages, chat with our coaching admin &mdash; we will arrange the court and schedule for you.</p>
+                    <p class="text-xs sm:text-sm text-[#7A5A52] mt-1 max-w-2xl">{{ __('coaching.subtitle') }}</p>
                 </div>
                 @if ($adminWhatsappUrl)
                     <a href="{{ $adminWhatsappUrl }}" target="_blank" rel="noopener noreferrer" data-coaching-admin-wa
                        class="shrink-0 inline-flex items-center justify-center gap-2 px-5 py-3 rounded-lg bg-[#662721] hover:bg-[#511D18] text-[#F7F0DB] font-black text-xs uppercase tracking-wider shadow-md transition-colors">
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" /></svg>
-                        Chat Admin Coaching
+                        {{ __('coaching.chat_admin') }}
                     </a>
                 @endif
             </div>
 
             @if (empty($coaches))
                 <div class="bg-white/95 p-8 rounded-xl border border-[#E6DAC0] shadow-sm text-center space-y-2">
-                    <h2 class="font-display font-black text-lg text-[#4F2F2A]">Coach profiles are coming soon</h2>
-                    <p class="text-sm text-[#7A5A52]">{{ $adminWhatsappUrl ? 'In the meantime, chat with our coaching admin for schedules and packages.' : 'Please ask our frontdesk for coaching schedules and packages.' }}</p>
+                    <h2 class="font-display font-black text-lg text-[#4F2F2A]">{{ __('coaching.empty_title') }}</h2>
+                    <p class="text-sm text-[#7A5A52]">{{ $adminWhatsappUrl ? __('coaching.empty_with_wa') : __('coaching.empty_without_wa') }}</p>
                 </div>
             @else
                 <div class="grid gap-4 sm:gap-5" style="grid-template-columns: repeat(auto-fill, minmax(min(100%, 250px), 1fr));">
@@ -71,7 +71,7 @@
                                     <a href="{{ $coachWa }}" target="_blank" rel="noopener noreferrer"
                                        class="mt-auto pt-4">
                                         <span class="flex items-center justify-center gap-2 w-full px-4 py-2.5 rounded-lg bg-[#F7F0DB] hover:bg-[#662721] hover:text-[#F7F0DB] border border-[#E6DAC0] text-[#662721] font-bold text-xs transition-colors">
-                                            Ask about {{ $coach['name'] }}
+                                            {{ __('coaching.ask_about', ['name' => $coach['name']]) }}
                                         </span>
                                     </a>
                                 @endif

@@ -359,7 +359,7 @@ class OnlineGatewayRouter
             $bill = DokuSessionGuard::findBill($prepared['session_id']);
             $session = $bill ? (DokuSessionGuard::session($bill, $prepared['session_id']) ?? []) : [];
             if (! app(DokuReconciliationService::class)->amountMatches($prepared['status'] ?? null, $session, $prepared['session_id'])) {
-                throw new HttpException(409, 'Pembayaran sebelumnya sedang dicek oleh tim Club 61. Jangan membayar lagi — hubungi front desk.');
+                throw new HttpException(409, \App\Support\SiteLocale::text('payment.under_review'));
             }
             app(DokuReconciliationService::class)->settle($order, $prepared['session_id'], $prepared['status'] ?? [], 'DOKU_STATUS_API');
 
@@ -367,7 +367,7 @@ class OnlineGatewayRouter
         }
 
         if (! app(MidtransReconciliationService::class)->settle($order, $prepared['session_id'], $prepared['status'] ?? [])) {
-            throw new HttpException(409, 'Pembayaran sebelumnya sedang dicek oleh tim Club 61. Jangan membayar lagi — hubungi front desk.');
+            throw new HttpException(409, \App\Support\SiteLocale::text('payment.under_review'));
         }
     }
 

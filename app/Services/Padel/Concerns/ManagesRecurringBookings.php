@@ -178,9 +178,8 @@ trait ManagesRecurringBookings
                 $keptDuration = true;
             }
 
-            if ($balance->time_window_start && $balance->time_window_end
-                && $this->isOutsideBenefitTimeWindow((string) $balance->time_window_start, (string) $balance->time_window_end, $start, $end)) {
-                throw new HttpException(422, 'Jam tujuan di luar jam akses paket membership.');
+            if (\App\Services\Membership\PadelAccessRule::violation($balance, $start, $end)) {
+                throw new HttpException(422, 'Jam tujuan di luar ketentuan paket member (berlaku: '.\App\Services\Membership\PadelAccessRule::label($balance).').');
             }
 
             $open = (int) substr($court->open_time ?: '06:00', 0, 2);

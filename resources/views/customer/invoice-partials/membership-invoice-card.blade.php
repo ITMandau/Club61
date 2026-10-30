@@ -4,24 +4,24 @@
     <div class="p-4 sm:p-6 bg-[#662721] text-white">
         <div class="flex flex-wrap items-center gap-2">
             <span class="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wider bg-[#E6DAC0]/20 text-[#F7F0DB] border border-[#E6DAC0]/40">
-                Membership · <span x-text="currentTicket.owner_type === 'ORGANIZATIONAL' ? 'Corporate' : 'Individual'"></span>
+                {{ __('invoice.membership') }} · <span x-text="currentTicket.owner_type === 'ORGANIZATIONAL' ? @js(__('invoice.corporate')) : @js(__('invoice.individual'))"></span>
             </span>
             <span :class="statusTone(currentTicket.status) === 'ok' ? 'bg-emerald-500 text-white' : (statusTone(currentTicket.status) === 'bad' ? 'bg-rose-500 text-white' : 'bg-amber-400 text-[#4F2F2A]')"
                   class="px-2.5 py-0.5 rounded-full text-[11px] font-black whitespace-nowrap shadow-sm"
                   x-text="statusLabel(currentTicket.status)"></span>
         </div>
         <h2 class="mt-2 font-display font-black text-xl sm:text-2xl leading-tight break-words" x-text="currentTicket.plan_name"></h2>
-        <div class="mt-1.5 text-[11px] text-[#F7F0DB]/70 font-mono truncate" x-text="'Code #' + currentTicket.membership_code"></div>
+        <div class="mt-1.5 text-[11px] text-[#F7F0DB]/70 font-mono truncate" x-text="@js(__('invoice.code_prefix')) + currentTicket.membership_code"></div>
     </div>
 
     <!-- Strip info -->
     <div class="grid grid-cols-2 divide-x divide-[#E6DAC0] bg-[#F7F0DB] border-y border-dashed border-[#E6DAC0] text-center">
         <div class="py-2.5 px-2 min-w-0">
-            <div class="text-[9px] font-extrabold uppercase tracking-wider text-[#7A5A52]">Membership</div>
+            <div class="text-[9px] font-extrabold uppercase tracking-wider text-[#7A5A52]">{{ __('invoice.membership') }}</div>
             <div class="text-xs font-bold text-[#4F2F2A] truncate" x-text="statusLabel(currentTicket.status)"></div>
         </div>
         <div class="py-2.5 px-2 min-w-0">
-            <div class="text-[9px] font-extrabold uppercase tracking-wider text-[#7A5A52]">Payment</div>
+            <div class="text-[9px] font-extrabold uppercase tracking-wider text-[#7A5A52]">{{ __('invoice.payment') }}</div>
             <div class="text-xs font-bold text-[#4F2F2A] truncate" x-text="statusLabel(currentTicket.payment_status)"></div>
         </div>
     </div>
@@ -33,13 +33,13 @@
             <div class="w-full text-center">
                 <div class="inline-block p-3.5 bg-white rounded-xl border-2 border-dashed border-[#E6DAC0] shadow-inner">
                     {{-- QR dibuat di browser (renderQr) — kode kartu member tidak pernah dikirim ke layanan QR luar. --}}
-                    <div x-effect="renderQr($el, currentTicket.qr_pass_hash)" role="img" aria-label="Membership Card QR"
+                    <div x-effect="renderQr($el, currentTicket.qr_pass_hash)" role="img" aria-label="{{ __('invoice.card_qr_aria') }}"
                          class="w-48 h-48 mx-auto rounded-xl overflow-hidden bg-white"></div>
                     <div class="mt-2.5 max-w-[12rem] mx-auto font-mono font-bold text-[10px] text-[#662721] tracking-wider break-all leading-snug" x-text="currentTicket.qr_pass_hash"></div>
                 </div>
                 <div class="max-w-sm mx-auto mt-3">
-                    <h4 class="font-bold text-sm">Your digital membership card</h4>
-                    <p class="text-xs text-[#7A5A52] mt-1 leading-relaxed">Show this QR code at the front desk for verification and facility access.</p>
+                    <h4 class="font-bold text-sm">{{ __('invoice.digital_card') }}</h4>
+                    <p class="text-xs text-[#7A5A52] mt-1 leading-relaxed">{{ __('invoice.digital_card_hint') }}</p>
                 </div>
             </div>
         </template>
@@ -52,14 +52,14 @@
                         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-4a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
                     </div>
                     <div class="min-w-0">
-                        <h4 class="font-bold text-sm leading-tight">Payment not confirmed yet</h4>
+                        <h4 class="font-bold text-sm leading-tight">{{ __('invoice.not_confirmed') }}</h4>
                         <p class="text-[11px] text-[#7A5A52] leading-snug mt-0.5"
                            x-text="currentTicket.can_pay_online
-                                ? 'Finish payment to activate this membership. The package and price stay the same.'
-                                : 'Not activated yet because payment hasn\'t been confirmed. Already paid? Contact our front desk with the order code below.'"></p>
+                                ? @js(__('invoice.finish_payment'))
+                                : @js(__('invoice.not_activated'))"></p>
                     </div>
                 </div>
-                <div class="text-[11px] font-mono font-bold text-amber-900 truncate">Order <span x-text="'#' + (currentTicket.order_number || currentTicket.membership_code)"></span></div>
+                <div class="text-[11px] font-mono font-bold text-amber-900 truncate">{{ __('invoice.order') }} <span x-text="'#' + (currentTicket.order_number || currentTicket.membership_code)"></span></div>
 
                 {{-- Pesanan online yang belum dibayar: lanjutkan bayar (order yang sama) atau batalkan untuk ganti paket. --}}
                 <template x-if="currentTicket.can_pay_online">
@@ -74,18 +74,18 @@
                             </div>
                             <button type="button" @click="showPaymentModal = true"
                                     class="bk-tap shrink-0 h-8 px-3 rounded-xl bg-[#F7F0DB] hover:bg-[#F7F0DB] border border-[#E6DAC0] text-[#662721] text-xs font-bold whitespace-nowrap transition-colors">
-                                Change
+                                {{ __('invoice.change') }}
                             </button>
                         </div>
 
                         <button type="button" x-show="! (currentTicket.pay_display && currentTicket.pay_display.method === selectedMethod.code)" @click="payMembership()" :disabled="isSubmittingPayment"
                                 class="bk-tap w-full h-12 rounded-lg flex items-center justify-center gap-2 text-xs font-black uppercase tracking-wider bg-[#662721] hover:bg-[#511D18] text-[#F7F0DB] shadow-md active:scale-[0.98] transition-transform disabled:opacity-60 disabled:cursor-not-allowed">
-                            <span class="whitespace-nowrap" x-text="isSubmittingPayment ? 'Processing…' : ('Pay Rp ' + formatNumber(currentTicket.grand_total))"></span>
+                            <span class="whitespace-nowrap" x-text="isSubmittingPayment ? @js(__('invoice.processing')) : (@js(__('invoice.pay_rp')) + formatNumber(currentTicket.grand_total))"></span>
                         </button>
 
                         <button type="button" @click="showCancelMembershipModal = true" :disabled="isSubmittingPayment || isCancellingMembership"
                                 class="bk-tap w-full h-10 rounded-lg text-xs font-bold text-[#9A3412] hover:bg-rose-50 transition-colors disabled:opacity-50">
-                            Cancel this order
+                            {{ __('invoice.cancel_this_order') }}
                         </button>
                     </div>
                 </template>
@@ -93,7 +93,7 @@
                 {{-- Dulu tombol "Contact the front desk" (WhatsApp) — kontak sekarang lewat tombol WhatsApp melayang. --}}
                 <template x-if="! currentTicket.can_pay_online">
                     <p class="text-[11px] text-center text-[#7A5A52] leading-snug px-2">
-                        This order can't be paid online. Please pay at the front desk, or chat with us using the WhatsApp button at the bottom right.
+                        {{ __('invoice.cant_pay_online') }}
                     </p>
                 </template>
             </div>
@@ -105,10 +105,10 @@
                 <div class="w-12 h-12 rounded-lg bg-rose-100 border border-rose-300 flex items-center justify-center mx-auto text-rose-600">
                     <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
                 </div>
-                <h4 class="font-bold text-sm" x-text="currentTicket.status === 'CANCELLED' ? 'Membership cancelled' : 'Membership expired'"></h4>
+                <h4 class="font-bold text-sm" x-text="currentTicket.status === 'CANCELLED' ? @js(__('invoice.membership_cancelled')) : @js(__('invoice.membership_expired'))"></h4>
                 <a href="{{ route('customer.membership') }}"
                    class="bk-tap w-full h-12 rounded-lg flex items-center justify-center text-xs font-black uppercase tracking-wider bg-[#662721] hover:bg-[#511D18] text-[#F7F0DB] shadow-md active:scale-[0.98] transition-transform">
-                    Renew or buy a package
+                    {{ __('invoice.renew_or_buy') }}
                 </a>
             </div>
         </template>
@@ -116,16 +116,16 @@
         <!-- Rincian -->
         <div class="bg-[#F7F0DB] p-4 rounded-lg border border-[#E6DAC0] text-xs space-y-2.5">
             <div class="flex items-start justify-between gap-3">
-                <span class="shrink-0 text-[#7A5A52]">Card holder</span>
+                <span class="shrink-0 text-[#7A5A52]">{{ __('invoice.card_holder') }}</span>
                 <span class="min-w-0 text-right font-bold text-[#4F2F2A] break-words leading-snug">{{ Auth::user()->name }}</span>
             </div>
             <div class="flex items-start justify-between gap-3">
-                <span class="shrink-0 text-[#7A5A52]">Valid</span>
+                <span class="shrink-0 text-[#7A5A52]">{{ __('invoice.valid_period') }}</span>
                 <span class="min-w-0 text-right font-bold text-[#4F2F2A]"
-                      x-text="currentTicket.start_date ? (formatDate(currentTicket.start_date) + ' – ' + formatDate(currentTicket.end_date)) : 'Not activated yet'"></span>
+                      x-text="currentTicket.start_date ? (formatDate(currentTicket.start_date) + ' – ' + formatDate(currentTicket.end_date)) : @js(__('invoice.not_activated_yet'))"></span>
             </div>
             <div class="pt-2.5 border-t border-[#E6DAC0] flex items-center justify-between gap-3">
-                <span class="font-bold text-sm text-[#4F2F2A]">Package price</span>
+                <span class="font-bold text-sm text-[#4F2F2A]">{{ __('invoice.package_price') }}</span>
                 <span class="shrink-0 font-black text-lg tabular-nums whitespace-nowrap text-[#4F2F2A]" x-text="'Rp ' + formatNumber(currentTicket.grand_total)"></span>
             </div>
         </div>

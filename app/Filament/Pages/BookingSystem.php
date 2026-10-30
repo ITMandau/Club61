@@ -6,6 +6,7 @@ use App\Models\Padel\PadelBooking;
 use App\Models\Padel\PadelCourt;
 use App\Services\Coaching\CoachingReminder;
 use App\Services\Padel\PadelBookingService;
+use App\Services\Padel\ScheduleOverview;
 use BackedEnum;
 use BezhanSalleh\FilamentShield\Traits\HasPageShield;
 use Carbon\Carbon;
@@ -32,9 +33,19 @@ class BookingSystem extends Page
     // Filter & Kalender Navigasi
     public string $selectedDate;
 
-    public string $courtFilter = 'all'; // 'all', 'indoor', 'outdoor'
+    public string $courtFilter = 'all'; // 'all' atau id lapangan
 
     public string $statusFilter = 'all'; // 'all', 'playing', 'paid', 'available'
+
+    // Tampilan: harian (matriks lapangan × jam) / mingguan / bulanan (Modul 28 Batch 3, hanya baca).
+    public string $viewMode = 'day';
+
+    public string $typeFilter = 'all'; // 'all' atau kunci ScheduleOverview::TYPES
+
+    public string $search = '';
+
+    /** Tanggal yang dibuka daftarnya di kalender bulanan. */
+    public ?string $monthDay = null;
 
     // Check-In Modal State
     public bool $showCheckInModal = false;
@@ -75,6 +86,36 @@ class BookingSystem extends Page
     {
         $this->selectedDate = now()->format('Y-m-d');
         $this->closeInspector();
+    }
+
+    public function setViewMode(string $mode): void
+    {
+        $this->viewMode = in_array($mode, ['day', 'week', 'month'], true) ? $mode : 'day';
+        $this->monthDay = null;
+        $this->closeInspector();
+    }
+
+    /** Mundur / maju satu minggu atau satu bulan (tanggal acuan = selectedDate). */
+    public function shiftPeriod(int $direction): void
+    {
+        $date = Carbon::parse($this->selectedDate);
+        $this->selectedDate = ($this->viewMode === 'month'
+            ? $date->startOfMonth()->addMonthsNoOverflow($direction > 0 ? 1 : -1)
+            : $date->addWeeks($direction > 0 ? 1 : -1))->format('Y-m-d');
+        $this->monthDay = null;
+        $this->closeInspector();
+    }
+
+    public function selectMonthDay(string $date): void
+    {
+        $this->monthDay = Carbon::parse($date)->format('Y-m-d');
+    }
+
+    /** Dari kalender bulanan / mingguan ke tampilan harian tanggal itu. */
+    public function openDay(string $date): void
+    {
+        $this->selectedDate = Carbon::parse($date)->format('Y-m-d');
+        $this->setViewMode('day');
     }
 
     public function openCheckInModal(?string $code = null): void
@@ -318,6 +359,11 @@ class BookingSystem extends Page
     {
         app(PadelBookingService::class)->syncExpiredAndCompletedBookings();
 
+        $courtOptions = PadelCourt::where('is_active', true)->ordered()->pluck('name', 'id');
+        if ($this->viewMode !== 'day') {
+            return ['courtOptions' => $courtOptions] + $this->overviewData();
+        }
+
         $now = now();
         $targetDate = Carbon::parse($this->selectedDate);
         $isToday = $this->selectedDate === $now->format('Y-m-d');
@@ -325,12 +371,10 @@ class BookingSystem extends Page
 
         // Query Lapangan
         $courtQuery = PadelCourt::where('is_active', true);
-        if ($this->courtFilter === 'indoor') {
-            $courtQuery->where('type', 'INDOOR');
-        } elseif ($this->courtFilter === 'outdoor') {
-            $courtQuery->where('type', 'OUTDOOR');
+        if ($this->courtFilter !== 'all') {
+            $courtQuery->whereKey($this->courtFilter);
         }
-        $courts = $courtQuery->orderBy('name')->get();
+        $courts = $courtQuery->ordered()->get();
 
         // Jam Operasional Dinamis (Mengikuti konfigurasi lapangan di Master Data)
         $minOpenHour = 6;
@@ -451,6 +495,12 @@ class BookingSystem extends Page
             $matrix[] = $courtRow;
         }
 
+        // Jam yang sudah lewat / tutup di semua lapangan (tanpa booking) dikecilkan seperti POS Walk-In, supaya jadwal muat tanpa geser.
+        $operationalHours = array_map(fn ($opHour) => $opHour + ['is_dead' => $matrix !== [] && collect($matrix)->every(
+            fn ($row) => $row['slots'][$opHour['hour']]['type'] !== 'booked'
+                && ($row['slots'][$opHour['hour']]['type'] === 'closed' || $row['slots'][$opHour['hour']]['is_past'])
+        )], $operationalHours);
+
         $freeSlotsCount = max(0, $totalSlotsCount - $occupiedSlotsCount);
         $occupancyRate = $totalSlotsCount > 0 ? round(($occupiedSlotsCount / $totalSlotsCount) * 100, 1) : 0;
 
@@ -465,6 +515,7 @@ class BookingSystem extends Page
         }
 
         return [
+            'courtOptions' => $courtOptions,
             'matrix' => $matrix,
             'operationalHours' => $operationalHours,
             'isToday' => $isToday,
@@ -478,6 +529,39 @@ class BookingSystem extends Page
             'paidUpcomingCount' => $paidUpcomingCount,
             'completedCount' => $completedCount,
             'totalCourtsCount' => count($courts),
+        ];
+    }
+
+    /** Data tampilan Mingguan / Bulanan (ScheduleOverview) + ringkasan periode & Rekap Pemain. */
+    private function overviewData(): array
+    {
+        $overview = app(ScheduleOverview::class);
+        $date = Carbon::parse($this->selectedDate);
+        $filters = ['court' => $this->courtFilter, 'type' => $this->typeFilter, 'search' => $this->search];
+
+        if ($this->viewMode === 'month') {
+            $data = $overview->month($date, $filters);
+            $periodLabel = $date->translatedFormat('F Y');
+            $isCurrent = $date->isSameMonth(now());
+            $dayList = $this->monthDay ? $overview->dayList(Carbon::parse($this->monthDay), $filters) : null;
+        } else {
+            $data = $overview->week($date, $filters);
+            $start = $date->copy()->startOfWeek(Carbon::MONDAY);
+            $periodLabel = $start->translatedFormat('d M').' – '.$start->copy()->addDays(6)->translatedFormat('d M Y');
+            $isCurrent = $start->isSameDay(now()->startOfWeek(Carbon::MONDAY));
+            $dayList = null;
+        }
+
+        $bookings = $data['bookings'];
+
+        return $data + [
+            'periodLabel' => $periodLabel,
+            'isCurrentPeriod' => $isCurrent,
+            'dayList' => $dayList,
+            'players' => $overview->players($bookings),
+            'periodBookings' => $bookings->count(),
+            'periodHours' => round((float) $bookings->sum(fn (PadelBooking $b) => $b->start_time->diffInMinutes($b->end_time) / 60), 1),
+            'periodPending' => $bookings->whereIn('status', ScheduleOverview::PENDING_STATUSES)->count(),
         ];
     }
 }

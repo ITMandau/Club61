@@ -13,7 +13,7 @@
     <div class="flex flex-col md:flex-row gap-5 md:items-center">
         @if($membership->qr_pass_hash)
             <div class="shrink-0 self-center md:self-auto p-2 bg-white rounded-lg border border-[#E6DAC0] shadow-sm">
-                <div class="w-36 h-36" data-member-qr="{{ $membership->qr_pass_hash }}" aria-label="Member pass QR code"></div>
+                <div class="w-36 h-36" data-member-qr="{{ $membership->qr_pass_hash }}" aria-label="{{ __('membership.pass.qr_label') }}"></div>
             </div>
         @endif
 
@@ -21,18 +21,18 @@
             <div>
                 <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full text-[10px] font-extrabold uppercase bg-[#F7F0DB] text-[#662721] border border-[#E6DAC0]">
                     <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                    Digital Member Pass
+                    {{ __('membership.pass.title') }}
                 </div>
                 <div class="font-display font-black text-2xl text-[#4F2F2A] mt-2">{{ $membership->plan?->name ?? 'Membership' }}</div>
-                <div class="text-xs font-mono font-bold text-[#662721] mt-0.5">CODE: {{ $membership->membership_code }}</div>
+                <div class="text-xs font-mono font-bold text-[#662721] mt-0.5">{{ __('membership.pass.code', ['code' => $membership->membership_code]) }}</div>
                 <div class="text-xs text-[#7A5A52] mt-1">
-                    Active
-                    @if($membership->start_date) from <strong>{{ \Carbon\Carbon::parse($membership->start_date)->format('d M Y') }}</strong> @endif
+                    {{ __('membership.pass.active') }}
+                    @if($membership->start_date) {{ __('membership.pass.from') }} <strong>{{ \Carbon\Carbon::parse($membership->start_date)->translatedFormat('d M Y') }}</strong> @endif
                     @if($endDate)
-                        until <strong>{{ $endDate->format('d M Y') }}</strong>
-                        <span class="{{ $daysLeft !== null && $daysLeft <= 7 ? 'text-rose-700 font-bold' : '' }}">({{ max(0, $daysLeft) }} {{ $daysLeft === 1 ? 'day' : 'days' }} left)</span>
+                        {{ __('membership.pass.until') }} <strong>{{ $endDate->translatedFormat('d M Y') }}</strong>
+                        <span class="{{ $daysLeft !== null && $daysLeft <= 7 ? 'text-rose-700 font-bold' : '' }}">{{ trans_choice('membership.pass.days_left', max(0, $daysLeft)) }}</span>
                     @else
-                        · no end date
+                        {{ __('membership.pass.no_end_date') }}
                     @endif
                 </div>
             </div>
@@ -44,22 +44,22 @@
                             <div class="text-[10px] font-extrabold uppercase tracking-wider text-[#662721] truncate">{{ $facilityService->name($bal->facility) }}</div>
                             <div class="font-display font-black text-lg text-[#4F2F2A] mt-0.5 truncate">
                                 @if($bal->quota_type === 'HOURS')
-                                    {{ (float) $bal->remaining_quota }} hrs
+                                    {{ __('membership.pass.hours', ['value' => (float) $bal->remaining_quota]) }}
                                 @elseif($bal->quota_type === 'VISITS')
-                                    {{ $bal->initial_quota ? ((float) $bal->remaining_quota.' visits') : 'Unlimited' }}
+                                    {{ $bal->initial_quota ? __('membership.pass.visits', ['value' => (float) $bal->remaining_quota]) : __('membership.pass.unlimited') }}
                                 @elseif((float) $bal->discount_percent > 0)
-                                    {{ (float) $bal->discount_percent }}% off
+                                    {{ __('membership.pass.percent_off', ['value' => (float) $bal->discount_percent]) }}
                                 @else
-                                    Included
+                                    {{ __('membership.pass.included') }}
                                 @endif
                             </div>
                             <div class="text-[10px] text-[#7A5A52] mt-0.5 truncate">
                                 @if((float) $bal->discount_percent > 0 && $bal->quota_type !== 'NONE')
-                                    + {{ (float) $bal->discount_percent }}% off
+                                    {{ __('membership.pass.plus_percent_off', ['value' => (float) $bal->discount_percent]) }}
                                 @elseif($bal->booking_priority_days > 0)
-                                    Priority booking D-{{ $bal->booking_priority_days }}
+                                    {{ __('membership.pass.priority_booking', ['days' => $bal->booking_priority_days]) }}
                                 @else
-                                    Active benefit
+                                    {{ __('membership.pass.active_benefit') }}
                                 @endif
                             </div>
                         </div>

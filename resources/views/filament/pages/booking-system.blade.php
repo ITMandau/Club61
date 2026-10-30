@@ -17,17 +17,27 @@
         .cmd-legend i { width: 12px; height: 12px; border-radius: 4px; display: inline-block; }
 
         .cmd-matrix-scroll { overflow-x: auto; position: relative; }
-        .cmd-table { table-layout: fixed; width: max-content; min-width: 100%; border-collapse: separate; border-spacing: 0; }
+        /* Kolom jam berbagi lebar layar; jam yang sudah lewat dikecilkan (min-width tabel diatur inline). */
+        .cmd-table { --cmd-court-w: 200px; table-layout: fixed; width: 100%; border-collapse: separate; border-spacing: 0; }
         .cmd-th-court, .cmd-th-hour { background: var(--c-paper); border-bottom: 1px solid var(--c-line); font-size: 0.6875rem; font-weight: 800; color: var(--c-muted); text-transform: uppercase; letter-spacing: 0.06em; }
-        .cmd-th-court { position: sticky; left: 0; z-index: 20; text-align: left; padding: 0.75rem 1rem; width: 200px; min-width: 200px; max-width: 200px; border-right: 1px solid var(--c-line); }
-        .cmd-th-hour { padding: 0.6rem 0.4rem; text-align: center; width: 112px; min-width: 112px; max-width: 112px; border-right: 1px solid var(--c-line-soft); font-variant-numeric: tabular-nums; }
+        .cmd-th-court { position: sticky; left: 0; z-index: 20; text-align: left; padding: 0.75rem 1rem; width: var(--cmd-court-w); min-width: var(--cmd-court-w); max-width: var(--cmd-court-w); border-right: 1px solid var(--c-line); }
+        .cmd-th-hour { padding: 0.6rem 0.4rem; text-align: center; border-right: 1px solid var(--c-line-soft); font-variant-numeric: tabular-nums; }
+        .cmd-th-hour.is-dead { width: 34px; padding: 0.6rem 0; }
         .cmd-th-hour.is-live { background: var(--c-terra); color: var(--c-cream); border-bottom-color: var(--c-terra); }
         .cmd-th-hour .live-tag { font-size: 0.5625rem; font-weight: 800; letter-spacing: 0.08em; margin-top: 0.1rem; color: rgba(247, 240, 219, 0.85); }
-        .cmd-td-court { position: sticky; left: 0; z-index: 10; background: #FFFFFF; padding: 0.75rem 1rem; width: 200px; min-width: 200px; max-width: 200px; border-right: 1px solid var(--c-line); border-bottom: 1px solid var(--c-line-soft); }
+        .cmd-td-court { position: sticky; left: 0; z-index: 10; background: #FFFFFF; padding: 0.75rem 1rem; width: var(--cmd-court-w); min-width: var(--cmd-court-w); max-width: var(--cmd-court-w); border-right: 1px solid var(--c-line); border-bottom: 1px solid var(--c-line-soft); }
+        /* Laptop kecil / tablet: kolom lapangan dirampingkan supaya muat lebih banyak jam (tipe lapangan tetap di baris keterangan). */
+        @media (max-width: 1100px) {
+            .cmd-table { --cmd-court-w: 140px; }
+            .cmd-th-court, .cmd-td-court { padding-left: 0.75rem; padding-right: 0.75rem; }
+            .cmd-court-type-pill { display: none; }
+        }
         .cmd-court-name { font-family: var(--font-serif); font-size: 1rem; font-weight: 600; color: var(--c-brown); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .cmd-court-meta { font-size: 0.6875rem; color: var(--c-muted); font-weight: 600; margin-top: 0.15rem; }
-        .cmd-td-slot { padding: 0.35rem; height: 92px; vertical-align: top; background: #FFFFFF; width: 112px; min-width: 112px; max-width: 112px; border-right: 1px solid var(--c-line-soft); border-bottom: 1px solid var(--c-line-soft); }
+        .cmd-td-slot { padding: 0.35rem; height: 92px; vertical-align: top; background: #FFFFFF; border-right: 1px solid var(--c-line-soft); border-bottom: 1px solid var(--c-line-soft); }
         .cmd-td-slot.is-live-col { background: rgba(102, 39, 33, 0.035); }
+        .cmd-td-slot.is-dead { padding: 0.35rem 0.15rem; }
+        .cmd-td-slot.is-dead .cmd-slot-past > * { display: none; }
 
         .cmd-slot-box { width: 100%; height: 100%; border-radius: 10px; padding: 0.45rem 0.5rem; display: flex; flex-direction: column; justify-content: space-between; font-size: 0.6875rem; cursor: pointer; overflow: hidden; transition: transform 0.15s ease, box-shadow 0.15s ease; }
         .cmd-slot-box:hover { transform: translateY(-1px); box-shadow: 0 8px 18px -10px rgba(79, 47, 42, 0.45); }
@@ -58,6 +68,70 @@
         .cmd-slot-past:hover { transform: none; box-shadow: none; }
         .cmd-slot-past b { font-size: 0.75rem; }
         .cmd-slot-past span { font-size: 0.5625rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; }
+
+        /* Pilihan tampilan Harian / Mingguan / Bulanan. */
+        .cmd-modes { display: inline-flex; border: 1px solid var(--c-line); border-radius: 10px; overflow: hidden; background: #FFFFFF; }
+        .cmd-modes button { height: 40px; padding: 0 0.95rem; font-size: 0.8125rem; font-weight: 700; color: var(--c-brown); background: transparent; border: 0; cursor: pointer; }
+        .cmd-modes button + button { border-left: 1px solid var(--c-line); }
+        .cmd-modes button.is-active { background: var(--c-terra); color: var(--c-cream); }
+        .cmd-search { width: 220px; height: 40px; }
+
+        /* Jenis booking (tampilan mingguan / bulanan): warna latar + garis kiri. */
+        .cmd-chip { display: block; width: 100%; text-align: left; font-size: 0.6875rem; font-weight: 700; line-height: 1.3; padding: 0.2rem 0.4rem; margin-bottom: 0.2rem; border: 0; border-left: 3px solid; border-radius: 6px; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .cmd-chip small { font-size: 0.5625rem; font-weight: 800; text-transform: uppercase; opacity: 0.75; margin-right: 0.15rem; }
+        .cmd-chip.is-cont { opacity: 0.5; }
+        .cmd-chip.is-pending { border: 1px dashed; border-left: 3px solid; }
+        .cmd-chip.is-done { opacity: 0.65; }
+        .t-MEMBER { background: #F6EAE7; border-color: #662721; color: #4F2F2A; }
+        .t-CORPORATE { background: #E8EEFB; border-color: #1E40AF; color: #1E3A8A; }
+        .t-COACHING { background: #E7F6EF; border-color: #047857; color: #065F46; }
+        .t-RECURRING { background: #F1EBFB; border-color: #6D28D9; color: #5B21B6; }
+        .t-ONLINE { background: #FDF3E4; border-color: #B45309; color: #92400E; }
+        .t-WALK_IN { background: #F1F0EE; border-color: #57534E; color: #44403C; }
+        /* Legenda: kotak penuh berwarna jenis (garis kiri selebar kotak). */
+        .cmd-legend i[class^="t-"] { border-left: 12px solid; background: transparent; }
+
+        /* Mingguan: baris jam × kolom hari. */
+        /* Kolom hari berbagi lebar layar (min. 105px) supaya Senin–Minggu muat di laptop 14" / tablet landscape. */
+        .cmd-week { table-layout: fixed; width: 100%; min-width: calc(64px + 7 * 105px); border-collapse: separate; border-spacing: 0; }
+        .cmd-week th, .cmd-week td { border-right: 1px solid var(--c-line-soft); border-bottom: 1px solid var(--c-line-soft); }
+        .cmd-week-hr { position: sticky; left: 0; z-index: 10; width: 64px; min-width: 64px; background: var(--c-paper); font-size: 0.6875rem; font-weight: 800; color: var(--c-muted); text-align: center; font-variant-numeric: tabular-nums; padding: 0.45rem 0.3rem; vertical-align: top; }
+        .cmd-week-day { background: var(--c-paper); padding: 0.5rem 0.4rem; }
+        .cmd-week-day button { font-size: 0.75rem; font-weight: 800; color: var(--c-brown); background: none; border: 0; cursor: pointer; text-transform: uppercase; letter-spacing: 0.04em; }
+        .cmd-week-day.is-today { background: var(--c-terra); }
+        .cmd-week-day.is-today button { color: var(--c-cream); }
+        .cmd-week-cell { padding: 0.25rem; vertical-align: top; height: 40px; background: #FFFFFF; }
+        .cmd-week-cell.is-today { background: rgba(102, 39, 33, 0.035); }
+
+        /* Bulanan: kalender. */
+        .cmd-month { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 0.4rem; }
+        .cmd-month-dow { font-size: 0.6875rem; font-weight: 800; color: var(--c-muted); text-transform: uppercase; letter-spacing: 0.06em; text-align: center; padding-bottom: 0.2rem; }
+        .cmd-mday { display: flex; flex-direction: column; gap: 0.2rem; min-height: 86px; padding: 0.5rem; text-align: left; background: #FFFFFF; border: 1px solid var(--c-line-soft); border-radius: 10px; cursor: pointer; color: var(--c-brown); }
+        .cmd-mday:hover { border-color: var(--c-terra); }
+        .cmd-mday.is-out { opacity: 0.45; }
+        .cmd-mday.is-today { border: 1.5px solid var(--c-terra); }
+        .cmd-mday.is-selected { background: var(--c-paper); border: 1.5px solid var(--c-terra); }
+        .cmd-mday-num { font-size: 0.875rem; font-weight: 800; }
+        .cmd-mday-count { font-size: 0.6875rem; font-weight: 700; }
+        .cmd-mday-bar { display: block; height: 5px; border-radius: 999px; background: var(--c-line-soft); overflow: hidden; }
+        .cmd-mday-bar i { display: block; height: 100%; background: var(--c-terra); }
+        .cmd-mday-rate, .cmd-mday-empty { font-size: 0.625rem; color: var(--c-muted); }
+        .cmd-daylist { margin-top: 1rem; border: 1px solid var(--c-line); border-radius: 12px; overflow: hidden; }
+        .cmd-daylist-head { display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap; padding: 0.65rem 0.9rem; background: var(--c-paper); border-bottom: 1px solid var(--c-line); font-size: 0.8125rem; color: var(--c-brown); }
+        .cmd-daylist-head span { color: var(--c-muted); font-size: 0.75rem; }
+        .cmd-daylist-head .c61-btn { margin-left: auto; }
+        .cmd-daylist-row { display: grid; grid-template-columns: 96px 90px minmax(0, 1fr) auto 110px; gap: 0.75rem; align-items: center; width: 100%; padding: 0.55rem 0.9rem; background: #FFFFFF; border: 0; border-bottom: 1px solid var(--c-line-soft); text-align: left; font-size: 0.8125rem; color: var(--c-brown); cursor: pointer; }
+        .cmd-daylist-row:hover { background: var(--c-paper); }
+        .cmd-daylist-name { font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .cmd-daylist-status { font-size: 0.6875rem; color: var(--c-muted); text-align: right; }
+        @media (max-width: 720px) {
+            .cmd-month { gap: 0.2rem; }
+            .cmd-mday { min-height: 64px; padding: 0.35rem; }
+            .cmd-mday-rate, .cmd-mday-bar { display: none; }
+            .cmd-daylist-row { grid-template-columns: 80px minmax(0, 1fr) auto; }
+            .cmd-daylist-row > span:nth-child(2), .cmd-daylist-status { display: none; }
+            .cmd-search { width: 100%; }
+        }
     </style>
 
     <!-- 1. Header -->
@@ -93,6 +167,30 @@
     </div>
 
     <!-- 2. KPI -->
+    @if ($viewMode !== 'day')
+        <div class="c61-kpis">
+            <div class="c61-kpi">
+                <div class="c61-kpi-top"><div class="c61-kpi-label">Total Booking {{ $viewMode === 'month' ? 'Bulan Ini' : 'Minggu Ini' }}</div></div>
+                <div class="c61-kpi-value is-terra">{{ $periodBookings }} <small>Booking</small></div>
+                <div class="c61-kpi-foot"><span>{{ $periodLabel }}</span></div>
+            </div>
+            <div class="c61-kpi">
+                <div class="c61-kpi-top"><div class="c61-kpi-label">Total Jam Terisi</div></div>
+                <div class="c61-kpi-value">{{ rtrim(rtrim(number_format($periodHours, 1, ',', '.'), '0'), ',') }} <small>Jam</small></div>
+                <div class="c61-kpi-foot"><span>Semua lapangan sesuai filter</span></div>
+            </div>
+            <div class="c61-kpi">
+                <div class="c61-kpi-top"><div class="c61-kpi-label">Pemain</div></div>
+                <div class="c61-kpi-value is-ok">{{ count($players) }} <small>Orang</small></div>
+                <div class="c61-kpi-foot"><span class="ok">Lihat Rekap Pemain di bawah</span></div>
+            </div>
+            <div class="c61-kpi">
+                <div class="c61-kpi-top"><div class="c61-kpi-label">Menunggu Bayar</div></div>
+                <div class="c61-kpi-value">{{ $periodPending }} <small>Booking</small></div>
+                <div class="c61-kpi-foot"><span>Ditandai garis putus-putus</span></div>
+            </div>
+        </div>
+    @else
     <div class="c61-kpis">
         <div class="c61-kpi">
             <div class="c61-kpi-top">
@@ -130,10 +228,18 @@
             <div class="c61-kpi-foot"><span class="ok">Siap dipesan / walk-in</span></div>
         </div>
     </div>
+    @endif
 
     <!-- 3. Navigasi tanggal & filter -->
     <div class="c61-toolbar">
         <div class="cmd-datebar">
+            <div class="cmd-modes" role="tablist" aria-label="Tampilan jadwal">
+                @foreach (['day' => 'Harian', 'week' => 'Mingguan', 'month' => 'Bulanan'] as $mode => $modeLabel)
+                    <button type="button" wire:click="setViewMode('{{ $mode }}')" class="{{ $viewMode === $mode ? 'is-active' : '' }}">{{ $modeLabel }}</button>
+                @endforeach
+            </div>
+
+            @if ($viewMode === 'day')
             <button type="button" wire:click="prevDay()" class="c61-btn c61-btn-ghost" title="Hari Sebelumnya">
                 <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M15 19l-7-7 7-7"></path></svg>
                 <span>Kemarin</span>
@@ -147,15 +253,45 @@
             </button>
             <input type="date" wire:model.live="selectedDate" class="c61-input cmd-date-input">
             <span class="cmd-date-label">{{ \Carbon\Carbon::parse($selectedDate)->translatedFormat('l, d F Y') }}</span>
+            @else
+            <button type="button" wire:click="shiftPeriod(-1)" class="c61-btn c61-btn-ghost" title="Sebelumnya">
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M15 19l-7-7 7-7"></path></svg>
+            </button>
+            <button type="button" wire:click="today()" class="c61-btn c61-btn-ghost cmd-nav-btn {{ $isCurrentPeriod ? 'is-active' : '' }}">
+                <span>{{ $viewMode === 'month' ? 'Bulan Ini' : 'Minggu Ini' }}</span>
+            </button>
+            <button type="button" wire:click="shiftPeriod(1)" class="c61-btn c61-btn-ghost" title="Berikutnya">
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M9 5l7 7-7 7"></path></svg>
+            </button>
+            <input type="date" wire:model.live="selectedDate" class="c61-input cmd-date-input" title="Pilih tanggal di minggu / bulan yang ingin dilihat">
+            <span class="cmd-date-label">{{ $periodLabel }}</span>
+            @endif
         </div>
 
-        <div class="c61-row" style="gap: 1rem;">
+        <div class="c61-row" style="gap: 1rem; flex-wrap: wrap;">
             <select wire:model.live="courtFilter" class="c61-select" style="width: auto;">
-                <option value="all">Semua Lapangan (4 Court)</option>
-                <option value="indoor">Indoor Only</option>
-                <option value="outdoor">Outdoor Only</option>
+                <option value="all">Semua Lapangan ({{ $courtOptions->count() }} Court)</option>
+                @foreach ($courtOptions as $courtId => $courtName)
+                    <option value="{{ $courtId }}">{{ $courtName }}</option>
+                @endforeach
             </select>
 
+            @if ($viewMode !== 'day')
+            <select wire:model.live="typeFilter" class="c61-select" style="width: auto;">
+                <option value="all">Semua Jenis</option>
+                @foreach (\App\Services\Padel\ScheduleOverview::TYPES as $typeKey => $typeName)
+                    <option value="{{ $typeKey }}">{{ $typeName }}</option>
+                @endforeach
+            </select>
+            <input type="search" wire:model.live.debounce.400ms="search" class="c61-input cmd-search" placeholder="Cari nama / no. HP / kode">
+
+            <div class="cmd-legend">
+                @foreach (\App\Services\Padel\ScheduleOverview::TYPES as $typeKey => $typeName)
+                    <span><i class="t-{{ $typeKey }}"></i>{{ $typeName }}</span>
+                @endforeach
+                <span><i style="border: 1px dashed #7A5A52; background: #FFFFFF;"></i>Menunggu Bayar</span>
+            </div>
+            @else
             <div class="cmd-legend">
                 <span><i style="background: #10B981;"></i>Sedang Main</span>
                 <span><i style="background: #662721;"></i>Terjadwal Lunas</span>
@@ -163,10 +299,14 @@
                 <span><i style="border: 1.5px dashed #E6DAC0; background: #FFFFFF;"></i>Slot Kosong (+)</span>
                 <span><i style="background: repeating-linear-gradient(135deg, #FAF8F3 0 3px, #E8E1D4 3px 4px);"></i>Lewat (-)</span>
             </div>
+            @endif
         </div>
     </div>
 
-    <!-- 4. Matriks jadwal -->
+    <!-- 4. Matriks jadwal (harian) / tampilan mingguan & bulanan -->
+    @if ($viewMode !== 'day')
+        @include('filament.pages.partials.monitoring-overview')
+    @else
     <div class="c61-card">
         <div class="c61-card-head">
             <div>
@@ -174,18 +314,22 @@
                     Timetable Jadwal Lapangan Padel
                     ({{ !empty($operationalHours) ? $operationalHours[0]['label'] . ' - ' . end($operationalHours)['next_label'] . ' WIB' : '06:00 - 23:00 WIB' }})
                 </div>
-                <div class="c61-card-sub">Klik blok slot untuk melihat detail pemain, check-in gate, atau booking instan.</div>
+                <div class="c61-card-sub">Klik blok slot untuk melihat detail pemain, check-in gate, atau booking instan. Kolom jam yang sudah lewat dikecilkan.</div>
             </div>
         </div>
 
-        <div class="cmd-matrix-scroll">
-            <table class="cmd-table">
+        @php $deadCount = collect($operationalHours)->where('is_dead', true)->count(); @endphp
+        {{-- Saat dibuka (atau ganti tanggal / lapangan), tabel langsung digeser ke kolom LIVE NOW; refresh otomatis tidak mengubah posisi geser. --}}
+        <div class="cmd-matrix-scroll" wire:key="matrix-{{ $selectedDate }}-{{ $courtFilter }}"
+            x-data x-init="$nextTick(() => { const live = $el.querySelector('th.is-live'), court = $el.querySelector('.cmd-th-court'); if (live && court) $el.scrollLeft = live.offsetLeft - court.offsetWidth; })">
+            <table class="cmd-table" style="min-width: calc(var(--cmd-court-w) + {{ $deadCount * 34 + (count($operationalHours) - $deadCount) * 90 }}px);">
                 <thead>
                     <tr>
                         <th class="cmd-th-court">Lapangan Padel</th>
                         @foreach ($operationalHours as $opHour)
-                            <th class="cmd-th-hour {{ $opHour['is_current'] ? 'is-live' : '' }}">
-                                <div>{{ $opHour['label'] }}</div>
+                            <th class="cmd-th-hour {{ $opHour['is_current'] ? 'is-live' : '' }} {{ $opHour['is_dead'] ? 'is-dead' : '' }}"
+                                title="{{ $opHour['label'] }} – {{ $opHour['next_label'] }}">
+                                <div>{{ $opHour['is_dead'] ? substr($opHour['label'], 0, 2) : $opHour['label'] }}</div>
                                 @if ($opHour['is_current'])
                                     <div class="live-tag">LIVE NOW</div>
                                 @endif
@@ -206,8 +350,8 @@
                                             {{ number_format($court->hourly_rate_regular, 0, ',', '.') }}/jam
                                         </div>
                                     </div>
-                                    <span class="c61-pill c61-pill-cream" style="height: 20px; font-size: 0.5625rem; padding: 0 0.45rem;">
-                                        {{ $court->type === 'INDOOR' ? 'INDOOR' : 'OUTDOOR' }}
+                                    <span class="c61-pill c61-pill-cream cmd-court-type-pill" style="height: 20px; font-size: 0.5625rem; padding: 0 0.45rem;">
+                                        INDOOR
                                     </span>
                                 </div>
                             </td>
@@ -218,7 +362,7 @@
                                     $slot = $row['slots'][$h];
                                     $isLiveCol = $opHour['is_current'];
                                 @endphp
-                                <td class="cmd-td-slot {{ $isLiveCol ? 'is-live-col' : '' }}">
+                                <td class="cmd-td-slot {{ $isLiveCol ? 'is-live-col' : '' }} {{ $opHour['is_dead'] ? 'is-dead' : '' }}">
                                     @if ($slot['type'] === 'booked')
                                         @php
                                             $booking = $slot['booking'];
@@ -292,6 +436,7 @@
             </table>
         </div>
     </div>
+    @endif
 
     <!-- 5. Inspector detail slot -->
     @if ($showInspectorDrawer && $inspectData)

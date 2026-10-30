@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api\V1\Padel;
 use App\Http\Controllers\Controller;
 use App\Models\Pos\ClubFinanceSetting;
 use App\Services\Padel\PadelBookingService;
+use App\Support\SiteLocale;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpKernel\Exception\HttpException;
@@ -35,7 +36,7 @@ class PadelBookingController extends Controller
 
         return response()->json([
             'success' => true,
-            'message' => 'Jadwal lapangan padel berhasil diambil.',
+            'message' => SiteLocale::text('booking.schedule_loaded'),
             'data' => $matrix,
         ]);
     }
@@ -49,7 +50,7 @@ class PadelBookingController extends Controller
 
         return response()->json([
             'success' => true,
-            'message' => 'Katalog alat dan add-on padel berhasil diambil.',
+            'message' => SiteLocale::text('booking.equipments_loaded'),
             'data' => $equipments,
         ]);
     }
@@ -63,7 +64,7 @@ class PadelBookingController extends Controller
 
         return response()->json([
             'success' => true,
-            'message' => 'Pengaturan finansial berhasil diambil.',
+            'message' => SiteLocale::text('booking.finance_settings_loaded'),
             'data' => [
                 'is_tax_enabled' => (bool) $settings->is_tax_enabled,
                 'tax_name' => (string) ($settings->tax_name ?: 'PB1 Pajak Daerah / PPh'),
@@ -92,7 +93,7 @@ class PadelBookingController extends Controller
             'slots.*.start_time' => ['required', 'date_format:H:i'],
             'slots.*.end_time' => ['required', 'date_format:H:i'],
         ], [
-            'booking_date.before_or_equal' => 'Booking paling jauh '.PadelBookingService::MAX_DAYS_AHEAD.' hari dari hari ini.',
+            'booking_date.before_or_equal' => SiteLocale::text('booking.max_days_ahead', ['days' => PadelBookingService::MAX_DAYS_AHEAD]),
         ]);
 
         // Batas jam per pemesanan & per akun (audit G17) — kasir walk-in memakai holdBatchSlots langsung, tidak dibatasi.
@@ -107,7 +108,7 @@ class PadelBookingController extends Controller
 
         return response()->json([
             'success' => true,
-            'message' => "{$slotCount} slot lapangan berhasil di-hold selama 10 menit. Silakan selesaikan checkout.",
+            'message' => SiteLocale::text('booking.hold_success', ['count' => $slotCount]),
             'data' => $holdData,
         ], 201);
     }
@@ -136,6 +137,7 @@ class PadelBookingController extends Controller
                 ->exists();
 
             if ($hasPendingBooking) {
+                // 403 sengaja tidak diterjemahkan: pesannya juga dicatat di Log Aktivitas admin (bootstrap/app.php).
                 throw new HttpException(403, 'Akses Ditolak: Peran Anda tidak memiliki izin untuk membatalkan pesanan ini.');
             }
         }
@@ -144,7 +146,7 @@ class PadelBookingController extends Controller
 
         return response()->json([
             'success' => true,
-            'message' => "{$releasedCount} slot booking berhasil dibatalkan dan dilepas kembali ke publik.",
+            'message' => SiteLocale::text('booking.release_success', ['count' => $releasedCount]),
         ]);
     }
 
@@ -171,7 +173,7 @@ class PadelBookingController extends Controller
 
         return response()->json([
             'success' => true,
-            'message' => 'Preview benefit membership berhasil dihitung.',
+            'message' => SiteLocale::text('booking.preview_loaded'),
             'data' => $preview,
         ]);
     }
@@ -183,7 +185,7 @@ class PadelBookingController extends Controller
     {
         $idempotencyKey = $request->header('X-Idempotency-Key');
         if (! $idempotencyKey) {
-            throw new HttpException(400, 'Header X-Idempotency-Key (UUID) wajib disertakan untuk mencegah debit ganda.');
+            throw new HttpException(400, SiteLocale::text('checkout.idempotency_required'));
         }
 
         $validated = $request->validate([
@@ -248,7 +250,7 @@ class PadelBookingController extends Controller
 
         return response()->json([
             'success' => true,
-            'message' => 'Riwayat booking padel saya berhasil diambil.',
+            'message' => SiteLocale::text('booking.my_bookings_loaded'),
             'data' => $bookings,
         ]);
     }
@@ -284,7 +286,7 @@ class PadelBookingController extends Controller
 
         return response()->json([
             'success' => true,
-            'message' => 'Detail e-tiket berhasil diambil.',
+            'message' => SiteLocale::text('booking.ticket_loaded'),
             'data' => $booking,
         ]);
     }
@@ -334,14 +336,14 @@ class PadelBookingController extends Controller
         $claims = app(\App\Services\Finance\VoucherClaimService::class);
         $voucher = $claims->findClaimable($validated['code']);
         if (! $voucher) {
-            return response()->json(['success' => false, 'message' => 'Promo tidak ditemukan.'], 404);
+            return response()->json(['success' => false, 'message' => SiteLocale::text('voucher.promo_not_found')], 404);
         }
 
         $claims->claim($voucher, $request->user());
 
         return response()->json([
             'success' => true,
-            'message' => 'Promo berhasil diklaim — sudah ada di Voucher Saya.',
+            'message' => SiteLocale::text('voucher.claimed'),
             'data' => collect($claims->usableForApi($request->user()))->firstWhere('code', $voucher->code),
         ]);
     }

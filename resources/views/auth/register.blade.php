@@ -4,18 +4,23 @@
         <div class="p-6 sm:p-10 relative overflow-hidden"
              style="background: #FCF8EE; border: 1px solid #E6DAC0; border-radius: 12px; box-shadow: 0 24px 60px -28px rgba(79,47,42,0.45);">
 
+            {{-- Tombol bahasa ID / EN di pojok kanan atas kartu. --}}
+            <div style="position: absolute; top: 16px; right: 16px; z-index: 1;">
+                <x-lang-switch variant="light" />
+            </div>
+
             <!-- Top Header & Crest -->
             <div class="text-center mb-8">
                 <img src="{{ asset('images/identity/monogram-terracotta.png') }}" alt="Club 61 Padel &amp; Wellness" class="h-14 w-auto mx-auto mb-3">
                 <div class="inline-block px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider mb-2 shadow-sm"
                      style="background: #F7F0DB; border: 1px solid #E6DAC0; color: #662721;">
-                    Club 61 Registration
+                    {{ __('account.register.badge') }}
                 </div>
                 <h1 class="font-display text-2xl sm:text-3xl font-black text-[#4F2F2A] tracking-wide">
-                    Bergabung ke Club 61 Padel &amp; Wellness
+                    {{ __('account.register.title') }}
                 </h1>
                 <p class="text-xs sm:text-sm text-[#7A5A52] mt-1 font-medium">
-                    Daftarkan akun member eksklusif Anda untuk menikmati seluruh fasilitas venue.
+                    {{ __('account.register.subtitle') }}
                 </p>
             </div>
 
@@ -26,7 +31,7 @@
                 <!-- Name Input -->
                 <div>
                     <label for="name" class="block text-xs font-bold uppercase tracking-wider text-[#662721] mb-1.5">
-                        Nama Lengkap
+                        {{ __('account.register.name') }}
                     </label>
                     <div class="relative rounded-xl shadow-sm">
                         <div class="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-[#662721]">
@@ -35,7 +40,7 @@
                             </svg>
                         </div>
                         <input id="name" type="text" name="name" value="{{ old('name') }}" required autofocus
-                               placeholder="Nama lengkap member..."
+                               placeholder="{{ __('account.register.name_placeholder') }}"
                                class="w-full pl-10 pr-4 py-3 rounded-xl text-sm font-semibold text-[#4F2F2A] placeholder-[#7A5A52] transition-all duration-200 outline-none"
                                style="background: rgba(255, 255, 255, 0.9); border: 1.5px solid #E6DAC0; box-shadow: inset 0 2px 4px rgba(0,0,0,0.03);"
                                onfocus="this.style.borderColor='#511D18'; this.style.boxShadow='0 0 0 3px rgba(102,39,33,0.25)';"
@@ -47,7 +52,7 @@
                 <!-- Email Input -->
                 <div>
                     <label for="email" class="block text-xs font-bold uppercase tracking-wider text-[#662721] mb-1.5">
-                        Email Member
+                        {{ __('account.register.email') }}
                     </label>
                     <div class="relative rounded-xl shadow-sm">
                         <div class="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-[#662721]">
@@ -56,7 +61,7 @@
                             </svg>
                         </div>
                         <input id="email" type="email" name="email" value="{{ old('email') }}" required
-                               placeholder="nama@email.com"
+                               placeholder="{{ __('account.register.email_placeholder') }}"
                                class="w-full pl-10 pr-4 py-3 rounded-xl text-sm font-semibold text-[#4F2F2A] placeholder-[#7A5A52] transition-all duration-200 outline-none"
                                style="background: rgba(255, 255, 255, 0.9); border: 1.5px solid #E6DAC0; box-shadow: inset 0 2px 4px rgba(0,0,0,0.03);"
                                onfocus="this.style.borderColor='#511D18'; this.style.boxShadow='0 0 0 3px rgba(102,39,33,0.25)';"
@@ -68,7 +73,7 @@
                 <!-- Password Input -->
                 <div>
                     <label for="password" class="block text-xs font-bold uppercase tracking-wider text-[#662721] mb-1.5">
-                        Password
+                        {{ __('account.register.password') }}
                     </label>
                     <div class="relative rounded-xl shadow-sm">
                         <div class="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-[#662721]">
@@ -77,7 +82,7 @@
                             </svg>
                         </div>
                         <input id="password" type="password" name="password" required autocomplete="new-password"
-                               placeholder="Minimal 8 karakter..."
+                               placeholder="{{ __('account.register.password_placeholder') }}"
                                class="w-full pl-10 pr-4 py-3 rounded-xl text-sm font-semibold text-[#4F2F2A] placeholder-[#7A5A52] transition-all duration-200 outline-none"
                                style="background: rgba(255, 255, 255, 0.9); border: 1.5px solid #E6DAC0; box-shadow: inset 0 2px 4px rgba(0,0,0,0.03);"
                                onfocus="this.style.borderColor='#511D18'; this.style.boxShadow='0 0 0 3px rgba(102,39,33,0.25)';"
@@ -89,7 +94,7 @@
                 <!-- Confirm Password -->
                 <div>
                     <label for="password_confirmation" class="block text-xs font-bold uppercase tracking-wider text-[#662721] mb-1.5">
-                        Konfirmasi Password
+                        {{ __('account.register.password_confirmation') }}
                     </label>
                     <div class="relative rounded-xl shadow-sm">
                         <div class="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-[#662721]">
@@ -98,7 +103,7 @@
                             </svg>
                         </div>
                         <input id="password_confirmation" type="password" name="password_confirmation" required autocomplete="new-password"
-                               placeholder="Ketik ulang password..."
+                               placeholder="{{ __('account.register.password_confirmation_placeholder') }}"
                                class="w-full pl-10 pr-4 py-3 rounded-xl text-sm font-semibold text-[#4F2F2A] placeholder-[#7A5A52] transition-all duration-200 outline-none"
                                style="background: rgba(255, 255, 255, 0.9); border: 1.5px solid #E6DAC0; box-shadow: inset 0 2px 4px rgba(0,0,0,0.03);"
                                onfocus="this.style.borderColor='#511D18'; this.style.boxShadow='0 0 0 3px rgba(102,39,33,0.25)';"
@@ -112,7 +117,7 @@
                     <button type="submit"
                             class="w-full py-3.5 px-6 rounded-xl text-sm font-black uppercase tracking-wider transition-all duration-200 transform active:scale-95 hover:brightness-105 shadow-xl flex items-center justify-center gap-2 cursor-pointer"
                             style="background: #662721; border: 1.5px solid #662721; color: #F7F0DB; box-shadow: 0 10px 24px -12px rgba(79,47,42,0.55);">
-                        <span>Daftar Akun Sekarang</span>
+                        <span>{{ __('account.register.submit') }}</span>
                         <svg class="w-4 h-4 stroke-[3]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" d="M14 5l7 7m0 0l-7 7m7-7H3" />
                         </svg>
@@ -123,9 +128,9 @@
             <!-- Bottom Prompt -->
             <div class="mt-6 pt-6 border-t border-[#E6DAC0]/60 text-center">
                 <p class="text-xs text-[#7A5A52]">
-                    Sudah memiliki akun member?
+                    {{ __('account.register.have_account') }}
                     <a href="{{ route('login') }}" class="font-bold text-[#662721] hover:text-[#662721] underline ml-1">
-                        Masuk di sini
+                        {{ __('account.register.login_here') }}
                     </a>
                 </p>
             </div>

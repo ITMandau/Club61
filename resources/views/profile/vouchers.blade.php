@@ -3,40 +3,40 @@
 <x-app-layout>
     @php
         $stubs = [
-            'CREDIT' => ['bg' => '#14532D', 'label' => 'CREDIT'],
-            'CORPORATE' => ['bg' => '#A16207', 'label' => 'CORPORATE'],
-            'PROMO' => ['bg' => '#B91C1C', 'label' => 'PROMO'],
+            'CREDIT' => ['bg' => '#14532D', 'label' => __('account.vouchers.kind_credit')],
+            'CORPORATE' => ['bg' => '#A16207', 'label' => __('account.vouchers.kind_corporate')],
+            'PROMO' => ['bg' => '#B91C1C', 'label' => __('account.vouchers.kind_promo')],
         ];
         $statusLabels = [
-            \App\Services\Customer\CustomerAccountService::USED => 'Used up',
-            \App\Services\Customer\CustomerAccountService::EXPIRED => 'Expired',
-            \App\Services\Customer\CustomerAccountService::INACTIVE => 'Deactivated',
+            \App\Services\Customer\CustomerAccountService::USED => __('account.vouchers.status_used'),
+            \App\Services\Customer\CustomerAccountService::EXPIRED => __('account.vouchers.status_expired'),
+            \App\Services\Customer\CustomerAccountService::INACTIVE => __('account.vouchers.status_inactive'),
         ];
         $list = $tab === 'history' ? $history : $available;
         $tabClass = fn (bool $on) => 'flex-1 sm:flex-none inline-flex items-center justify-center gap-2 h-11 px-5 rounded-lg text-xs font-black uppercase tracking-wider transition-colors '
             .($on ? 'bg-[#662721] text-[#F7F0DB] shadow-md' : 'text-[#662721] hover:bg-[#F7F0DB]');
     @endphp
 
-    <div class="py-6 sm:py-8 text-[#4F2F2A]" x-data="{ toast: '', copy(code) { navigator.clipboard && navigator.clipboard.writeText(code); this.toast = 'Code copied'; clearTimeout(this.t); this.t = setTimeout(() => this.toast = '', 1800); } }">
+    <div class="py-6 sm:py-8 text-[#4F2F2A]" x-data="{ toast: '', copy(code) { navigator.clipboard && navigator.clipboard.writeText(code); this.toast = @js(__('account.vouchers.copied')); clearTimeout(this.t); this.t = setTimeout(() => this.toast = '', 1800); } }">
         <div class="w-full px-4 sm:px-8 lg:px-12 2xl:px-16 space-y-5">
 
             <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-5 rounded-xl bg-white/95 border border-[#E6DAC0] shadow-sm">
                 <div class="flex items-center gap-3.5">
-                    <a href="{{ route('profile.edit') }}" class="p-2.5 rounded-lg bg-[#F7F0DB] border border-[#E6DAC0] text-[#662721]" title="Back to Profile">
+                    <a href="{{ route('profile.edit') }}" class="p-2.5 rounded-lg bg-[#F7F0DB] border border-[#E6DAC0] text-[#662721]" title="{{ __('account.vouchers.back') }}">
                         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M15 19l-7-7 7-7" /></svg>
                     </a>
                     <div>
-                        <h1 class="font-display font-black text-xl sm:text-2xl">My Vouchers</h1>
-                        <p class="text-xs text-[#7A5A52] mt-0.5">Your vouchers appear automatically at checkout — or show the code at the front desk.</p>
+                        <h1 class="font-display font-black text-xl sm:text-2xl">{{ __('account.vouchers.title') }}</h1>
+                        <p class="text-xs text-[#7A5A52] mt-0.5">{{ __('account.vouchers.subtitle') }}</p>
                     </div>
                 </div>
                 <div class="flex gap-1.5 p-1 rounded-xl bg-white border border-[#E6DAC0]" role="tablist">
                     <a href="{{ route('profile.vouchers') }}" role="tab" aria-selected="{{ $tab === 'available' ? 'true' : 'false' }}" class="{{ $tabClass($tab === 'available') }}">
-                        Available
+                        {{ __('account.vouchers.tab_available') }}
                         <span class="min-w-[20px] h-5 px-1.5 rounded-full text-[10px] flex items-center justify-center {{ $tab === 'available' ? 'bg-[#F7F0DB] text-[#662721]' : 'bg-[#F7F0DB] text-[#662721]' }}">{{ $available->count() }}</span>
                     </a>
                     <a href="{{ route('profile.vouchers', ['tab' => 'history']) }}" role="tab" aria-selected="{{ $tab === 'history' ? 'true' : 'false' }}" class="{{ $tabClass($tab === 'history') }}">
-                        History
+                        {{ __('account.vouchers.tab_history') }}
                         <span class="min-w-[20px] h-5 px-1.5 rounded-full text-[10px] flex items-center justify-center bg-[#F7F0DB] text-[#662721]">{{ $history->count() }}</span>
                     </a>
                 </div>
@@ -47,10 +47,10 @@
                     <div class="w-16 h-16 rounded-full bg-[#F7F0DB] border border-[#E6DAC0] text-[#662721] flex items-center justify-center">
                         <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M15 5v2m0 4v2m0 4v2M5 5a2 2 0 00-2 2v3a2 2 0 110 4v3a2 2 0 002 2h14a2 2 0 002-2v-3a2 2 0 110-4V7a2 2 0 00-2-2H5z" /></svg>
                     </div>
-                    <div class="font-display font-black text-lg">{{ $tab === 'history' ? 'No voucher history yet' : 'No vouchers yet' }}</div>
-                    <p class="text-xs text-[#7A5A52] max-w-sm">{{ $tab === 'history' ? 'Vouchers you have used up, or that have expired, will show up here.' : 'Vouchers you receive will show up here and at checkout.' }}</p>
+                    <div class="font-display font-black text-lg">{{ $tab === 'history' ? __('account.vouchers.empty_history_title') : __('account.vouchers.empty_title') }}</div>
+                    <p class="text-xs text-[#7A5A52] max-w-sm">{{ $tab === 'history' ? __('account.vouchers.empty_history_body') : __('account.vouchers.empty_body') }}</p>
                     @if($tab !== 'history')
-                        <a href="{{ route('customer.booking') }}" class="bk-tap mt-1 inline-flex items-center justify-center h-11 px-6 rounded-lg bg-[#662721] hover:bg-[#511D18] text-[#F7F0DB] text-xs font-black uppercase tracking-wider shadow-md">Book a Court</a>
+                        <a href="{{ route('customer.booking') }}" class="bk-tap mt-1 inline-flex items-center justify-center h-11 px-6 rounded-lg bg-[#662721] hover:bg-[#511D18] text-[#F7F0DB] text-xs font-black uppercase tracking-wider shadow-md">{{ __('account.vouchers.book') }}</a>
                     @endif
                 </div>
             @else
@@ -76,14 +76,14 @@
                                 <div class="flex items-start justify-between gap-2">
                                     <h2 class="text-sm font-extrabold leading-snug">{{ $v['title'] }}</h2>
                                     @if($v['is_new'])
-                                        <span class="shrink-0 px-2 py-0.5 rounded-full text-[9px] font-black uppercase bg-amber-100 text-amber-800 border border-amber-200">New</span>
+                                        <span class="shrink-0 px-2 py-0.5 rounded-full text-[9px] font-black uppercase bg-amber-100 text-amber-800 border border-amber-200">{{ __('account.vouchers.new') }}</span>
                                     @elseif(! $usable)
                                         <span class="shrink-0 px-2 py-0.5 rounded-full text-[9px] font-black uppercase bg-gray-100 text-gray-600 border border-gray-300">{{ $statusLabels[$v['status']] ?? $v['status'] }}</span>
                                     @endif
                                 </div>
 
                                 @if($v['code'])
-                                    <button type="button" @click="copy(@js($v['code']))" class="self-start inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-[#F7F0DB] border border-dashed border-[#C9B99A] font-mono text-xs font-black text-[#662721] hover:bg-[#F0E4C6] transition-colors cursor-pointer" title="Copy code">
+                                    <button type="button" @click="copy(@js($v['code']))" class="self-start inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-[#F7F0DB] border border-dashed border-[#C9B99A] font-mono text-xs font-black text-[#662721] hover:bg-[#F0E4C6] transition-colors cursor-pointer" title="{{ __('account.vouchers.copy') }}">
                                         {{ $v['code'] }}
                                         <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
                                     </button>
@@ -98,15 +98,15 @@
                                 <div class="mt-auto pt-1 flex items-center justify-between gap-3">
                                     <div class="text-[11px] font-bold {{ $v['expiring_soon'] ? 'text-rose-700' : 'text-[#7A5A52]' }}">
                                         @if($v['expiring_soon'])
-                                            {{ $v['days_left'] <= 0 ? 'Ends today' : 'Ends in '.$v['days_left'].' '.($v['days_left'] === 1 ? 'day' : 'days') }}
+                                            {{ $v['days_left'] <= 0 ? __('account.vouchers.ends_today') : trans_choice('account.vouchers.ends_in', $v['days_left'], ['count' => $v['days_left']]) }}
                                         @elseif($v['expires_at'])
-                                            {{ $usable ? 'Valid until' : ($v['status'] === \App\Services\Customer\CustomerAccountService::EXPIRED ? 'Expired on' : 'Valid until') }} {{ $v['expires_at']->timezone('Asia/Jakarta')->format('d M Y') }}
+                                            {{ $usable ? __('account.vouchers.valid_until') : ($v['status'] === \App\Services\Customer\CustomerAccountService::EXPIRED ? __('account.vouchers.expired_on') : __('account.vouchers.valid_until')) }} {{ $v['expires_at']->timezone('Asia/Jakarta')->translatedFormat('d M Y') }}
                                         @else
-                                            No expiry date
+                                            {{ __('account.vouchers.no_expiry') }}
                                         @endif
                                     </div>
                                     @if($usable)
-                                        <a href="{{ route('customer.booking') }}" class="bk-tap shrink-0 inline-flex items-center h-9 px-4 rounded-lg bg-[#662721] hover:bg-[#511D18] text-[#F7F0DB] text-[11px] font-black uppercase tracking-wider shadow-sm">Use</a>
+                                        <a href="{{ route('customer.booking') }}" class="bk-tap shrink-0 inline-flex items-center h-9 px-4 rounded-lg bg-[#662721] hover:bg-[#511D18] text-[#F7F0DB] text-[11px] font-black uppercase tracking-wider shadow-sm">{{ __('account.vouchers.use') }}</a>
                                     @endif
                                 </div>
                             </div>

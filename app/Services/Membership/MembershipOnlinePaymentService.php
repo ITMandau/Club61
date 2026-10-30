@@ -64,7 +64,7 @@ class MembershipOnlinePaymentService
                 return $this->alreadyPaid($membership);
             }
             if ($order->payment_status !== 'UNPAID' || $membership->status !== 'PENDING_PAYMENT') {
-                throw new HttpException(422, 'Pesanan ini sudah dibatalkan atau kedaluwarsa. Silakan pilih paket lagi.');
+                throw new HttpException(422, \App\Support\SiteLocale::text('membership.order_closed'));
             }
 
             $grandTotal = (float) $order->grand_total;
@@ -157,10 +157,10 @@ class MembershipOnlinePaymentService
 
         $result = $this->reconciler->reconcileOrder($order);
         if ($result === OnlineGatewayRouter::PAID) {
-            throw new HttpException(409, 'Pembayaran pesanan ini ternyata sudah masuk, membership Anda sudah aktif. Muat ulang halaman.');
+            throw new HttpException(409, \App\Support\SiteLocale::text('membership.paid_meanwhile'));
         }
         if ($result === OnlineGatewayRouter::ERROR) {
-            throw new HttpException(503, 'Status pembayaran belum bisa dicek ke '.$this->reconciler->gatewayLabel($order).'. Coba lagi beberapa saat.');
+            throw new HttpException(503, \App\Support\SiteLocale::text('membership.status_check_failed', ['gateway' => $this->reconciler->gatewayLabel($order)]));
         }
 
         $sessions = $this->close($membership, 'CUSTOMER_CANCELLED');
@@ -251,13 +251,13 @@ class MembershipOnlinePaymentService
         $order = $membership->order;
 
         if ($membership->sold_by_admin_id || ! $order || $order->order_type !== 'MEMBERSHIP') {
-            throw new HttpException(422, 'Pesanan ini tidak dibayar online. Silakan hubungi frontdesk.');
+            throw new HttpException(422, \App\Support\SiteLocale::text('membership.not_online'));
         }
         if ($order->payment_status === 'PAID') {
-            throw new HttpException(409, 'Pesanan ini sudah lunas, membership Anda sudah aktif. Muat ulang halaman.');
+            throw new HttpException(409, \App\Support\SiteLocale::text('membership.already_paid_reload'));
         }
         if ($order->payment_status !== 'UNPAID' || $membership->status !== 'PENDING_PAYMENT') {
-            throw new HttpException(422, 'Pesanan ini sudah dibatalkan atau kedaluwarsa. Silakan pilih paket lagi.');
+            throw new HttpException(422, \App\Support\SiteLocale::text('membership.order_closed'));
         }
 
         return $order;

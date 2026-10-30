@@ -70,8 +70,8 @@ class ComingSoonPagesTest extends TestCase
         $this->actingAs(User::factory()->customer()->create())->get('/dashboard')->assertOk()
             ->assertSee('data-coming-soon="value-pack"', false)
             ->assertSee('data-coming-soon="tournaments"', false)
-            ->assertSee('Value Pack — coming soon')
-            ->assertSee('Tournaments — coming soon')
+            ->assertSee('Value Pack — segera hadir')
+            ->assertSee('Turnamen — segera hadir')
             ->assertDontSee('Prize pool Rp 50.000.000')
             ->assertDontSee('2 Hours complimentary Sauna')
             ->assertDontSee('Diamond Club');

@@ -2428,7 +2428,7 @@ class BookOfflineCourt extends Page
             app(PadelBookingService::class)->syncExpiredAndCompletedBookings();
         }
 
-        $courts = PadelCourt::where('is_active', true)->orderBy('name')->get();
+        $courts = PadelCourt::where('is_active', true)->ordered()->get();
         $peakHours = app(\App\Services\Padel\PeakHourService::class); // jam peak diatur di Master Data
         $isToday = $this->bookingDate === now()->format('Y-m-d');
 

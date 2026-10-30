@@ -8,6 +8,7 @@ use App\Models\Sponsor\SponsorOrganization;
 use App\Models\Sponsor\SponsorOrganizationMember;
 use App\Services\Sponsor\SponsorOrganizationService;
 use App\Support\PersonName;
+use App\Support\SiteLocale;
 use DomainException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -33,7 +34,7 @@ class SponsorOrganizationController extends Controller
 
         return response()->json([
             'success' => true,
-            'message' => 'Ringkasan akun corporate.',
+            'message' => SiteLocale::text('corporate.summary_loaded'),
             'data' => [
                 'organization' => $organization,
                 'active_member_count' => $activeMemberCount,
@@ -64,7 +65,7 @@ class SponsorOrganizationController extends Controller
 
         return response()->json([
             'success' => true,
-            'message' => 'Daftar anggota tim.',
+            'message' => SiteLocale::text('corporate.members_loaded'),
             'data' => $members,
         ]);
     }
@@ -97,7 +98,7 @@ class SponsorOrganizationController extends Controller
 
         return response()->json([
             'success' => true,
-            'message' => 'Anggota tim berhasil ditambahkan.',
+            'message' => SiteLocale::text('corporate.member_added'),
             'data' => $member->load(['user:id,name,phone,email', 'vouchers']),
         ], 201);
     }
@@ -126,7 +127,7 @@ class SponsorOrganizationController extends Controller
 
         return response()->json([
             'success' => true,
-            'message' => 'Voucher jam berhasil diterbitkan.',
+            'message' => SiteLocale::text('corporate.voucher_released'),
             'data' => $voucher,
         ], 201);
     }
@@ -163,7 +164,7 @@ class SponsorOrganizationController extends Controller
 
         return response()->json([
             'success' => true,
-            'message' => "Bulk release selesai: {$result['released']} voucher diterbitkan, ".count($result['failed']).' gagal.',
+            'message' => SiteLocale::text('corporate.bulk_released', ['released' => $result['released'], 'failed' => count($result['failed'])]),
             'data' => $result,
         ]);
     }
@@ -192,7 +193,7 @@ class SponsorOrganizationController extends Controller
 
         return response()->json([
             'success' => true,
-            'message' => 'Jumlah jam voucher berhasil dikoreksi.',
+            'message' => SiteLocale::text('corporate.voucher_corrected'),
             'data' => $voucherModel,
         ]);
     }
@@ -215,7 +216,7 @@ class SponsorOrganizationController extends Controller
 
         return response()->json([
             'success' => true,
-            'message' => 'Voucher berhasil dihapus.',
+            'message' => SiteLocale::text('corporate.voucher_deleted'),
         ]);
     }
 
@@ -228,7 +229,7 @@ class SponsorOrganizationController extends Controller
 
         return response()->json([
             'success' => true,
-            'message' => 'Akses anggota berhasil diaktifkan kembali.',
+            'message' => SiteLocale::text('corporate.member_reactivated'),
             'data' => $memberModel,
         ]);
     }
@@ -247,7 +248,7 @@ class SponsorOrganizationController extends Controller
                 'file' => 'required|file|mimes:csv,txt|max:2048',
             ]);
         } catch (ValidationException $e) {
-            return response()->json(['success' => false, 'message' => 'File CSV wajib diunggah (maks 2MB, format .csv).'], 422);
+            return response()->json(['success' => false, 'message' => SiteLocale::text('corporate.csv_required')], 422);
         }
 
         try {
@@ -258,7 +259,14 @@ class SponsorOrganizationController extends Controller
 
         return response()->json([
             'success' => true,
-            'message' => "Import selesai: {$result['imported']} anggota baru, {$result['reactivated']} diaktifkan kembali, {$result['skipped_duplicate']} duplikat dilewati, {$result['vouchers_issued']} voucher baru diterbitkan, {$result['vouchers_updated']} voucher periode ini dikoreksi, ".count($result['failed_rows']).' baris gagal.',
+            'message' => SiteLocale::text('corporate.import_done', [
+                'imported' => $result['imported'],
+                'reactivated' => $result['reactivated'],
+                'skipped' => $result['skipped_duplicate'],
+                'issued' => $result['vouchers_issued'],
+                'updated' => $result['vouchers_updated'],
+                'failed' => count($result['failed_rows']),
+            ]),
             'data' => $result,
         ]);
     }
@@ -274,7 +282,7 @@ class SponsorOrganizationController extends Controller
         $organization = SponsorOrganization::where('sponsor_admin_user_id', $request->user()->id)->first();
 
         if (! $organization) {
-            abort(404, 'Anda tidak terdaftar sebagai PIC akun corporate manapun.');
+            abort(404, SiteLocale::text('corporate.not_pic'));
         }
 
         return $organization;
@@ -287,7 +295,7 @@ class SponsorOrganizationController extends Controller
             ->first();
 
         if (! $member) {
-            abort(404, 'Anggota tidak ditemukan di roster tim Anda.');
+            abort(404, SiteLocale::text('corporate.member_not_found'));
         }
 
         return $member;
@@ -300,7 +308,7 @@ class SponsorOrganizationController extends Controller
             ->first();
 
         if (! $voucher) {
-            abort(404, 'Voucher tidak ditemukan di tim Anda.');
+            abort(404, SiteLocale::text('corporate.team_voucher_not_found'));
         }
 
         return $voucher;

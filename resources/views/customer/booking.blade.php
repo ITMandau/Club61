@@ -14,18 +14,18 @@
 
             {{-- Header --}}
             <div class="flex items-center gap-3 min-w-0">
-                <a href="{{ route('dashboard') }}" title="Back to Home"
+                <a href="{{ route('dashboard') }}" title="{{ __('booking.back_home') }}"
                    class="bk-tap hidden sm:flex w-10 h-10 shrink-0 items-center justify-center rounded-lg bg-white/90 border border-[#E6DAC0] text-[#662721] hover:bg-[#F7F0DB] transition-colors">
                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M15 19l-7-7 7-7" /></svg>
                 </a>
                 <div class="min-w-0">
                     <div class="flex items-center gap-2">
-                        <h1 class="font-display font-black text-xl sm:text-2xl">Book Court</h1>
+                        <h1 class="font-display font-black text-xl sm:text-2xl">{{ __('booking.title') }}</h1>
                         <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                            <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 motion-safe:animate-pulse"></span>Live
+                            <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 motion-safe:animate-pulse"></span>{{ __('booking.live') }}
                         </span>
                     </div>
-                    <p class="hidden sm:block text-xs text-[#7A5A52] mt-0.5">Pick a date, then tap the hours you want to play — each box is one hour.</p>
+                    <p class="hidden sm:block text-xs text-[#7A5A52] mt-0.5">{{ __('booking.subtitle') }}</p>
                 </div>
             </div>
 
@@ -35,7 +35,7 @@
 
                     {{-- Tanggal --}}
                     <div class="flex items-stretch gap-2 p-2.5 sm:p-3 border-b border-[#E6DAC0]">
-                        <button type="button" @click="openCalendarPicker()" title="Pick any date (up to 2 months ahead)" aria-label="Open calendar"
+                        <button type="button" @click="openCalendarPicker()" title="{{ __('booking.calendar_title') }}" aria-label="{{ __('booking.calendar_open') }}"
                                 class="bk-tap relative shrink-0 w-11 sm:w-12 rounded-lg bg-[#F7F0DB] text-[#662721] hover:bg-[#F7F0DB] flex items-center justify-center transition-colors">
                             <svg class="w-5 h-5 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
                             <input type="date" x-ref="calendarInput" :min="minDate" :max="maxDate" :value="activeDate" tabindex="-1" aria-hidden="true"
@@ -57,11 +57,11 @@
 
                     {{-- Legenda --}}
                     <div class="flex flex-wrap items-center gap-x-4 gap-y-1.5 px-4 py-2.5 border-b border-[#E6DAC0] text-[11px] text-[#7A5A52]">
-                        <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-md bg-white border border-[#CDBB9C]"></span>Available</span>
-                        <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-md bg-[#662721]"></span>Selected</span>
-                        <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-md bg-amber-100 border border-amber-300"></span>In checkout</span>
-                        <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-md bg-[#EEE5D3]"></span>Booked / closed</span>
-                        <span class="flex items-center gap-1.5"><span class="w-1.5 h-1.5 rounded-full bg-[#662721] hover:bg-[#511D18]"></span>Prime time</span>
+                        <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-md bg-white border border-[#CDBB9C]"></span>{{ __('booking.legend_available') }}</span>
+                        <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-md bg-[#662721]"></span>{{ __('booking.legend_selected') }}</span>
+                        <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-md bg-amber-100 border border-amber-300"></span>{{ __('booking.legend_locked') }}</span>
+                        <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-md bg-[#EEE5D3]"></span>{{ __('booking.legend_booked') }}</span>
+                        <span class="flex items-center gap-1.5"><span class="w-1.5 h-1.5 rounded-full bg-[#662721] hover:bg-[#511D18]"></span>{{ __('booking.legend_prime') }}</span>
                     </div>
 
                     {{-- Loading --}}
@@ -73,7 +73,7 @@
 
                     {{-- Kosong --}}
                     <div x-show="!isLoading && courts.length === 0" class="p-8 text-center text-sm text-[#7A5A52]">
-                        No courts are available for booking right now.
+                        {{ __('booking.no_courts') }}
                     </div>
 
                     {{-- Grid lapangan x jam --}}
@@ -86,16 +86,16 @@
                                     <div class="bk-col relative px-1.5 py-2.5 text-center border-r border-[#E6DAC0] last:border-r-0" x-data="{ info: false }">
                                         <button type="button" @click="info = !info" @click.outside="info = false"
                                                 class="bk-tap inline-flex items-center justify-center gap-1 max-w-full text-xs sm:text-[13px] font-extrabold text-[#4F2F2A] leading-tight"
-                                                :aria-label="court.court_name + ' details'">
+                                                :aria-label="t('court_details', { court: court.court_name })">
                                             <span class="line-clamp-2 break-words" x-text="court.court_name"></span>
                                             <svg class="w-3.5 h-3.5 shrink-0 text-[#A08F86]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" stroke-width="2" /><path stroke-linecap="round" stroke-width="2" d="M12 11v5m0-8h.01" /></svg>
                                         </button>
                                         <div class="text-[10px] font-bold" :class="availableCount(court) > 0 ? 'text-emerald-700' : 'text-rose-600'"
-                                             x-text="availableCount(court) > 0 ? availableCount(court) + ' open' : 'Full'"></div>
+                                             x-text="availableCount(court) > 0 ? t('open_count', { count: availableCount(court) }) : T.full"></div>
                                         <div x-show="info" x-transition.opacity style="display: none;"
                                              class="absolute left-1/2 -translate-x-1/2 top-full mt-1 z-30 w-52 p-3 rounded-lg bg-white border border-[#E6DAC0] shadow-[0_12px_30px_rgba(79,47,42,0.18)] text-left">
                                             <div class="text-xs font-extrabold" x-text="court.court_name"></div>
-                                            <div class="text-[11px] text-[#7A5A52] mt-1 leading-relaxed" x-text="court.description || 'Padel court'"></div>
+                                            <div class="text-[11px] text-[#7A5A52] mt-1 leading-relaxed" x-text="court.description || T.court_fallback_desc"></div>
                                         </div>
                                     </div>
                                 </template>
@@ -139,7 +139,7 @@
                                     </template>
                                 </div>
                             </template>
-                            <div x-show="rowGroups.length === 0" class="py-8 text-center text-sm text-[#7A5A52]">No open hours on this date — pick another date.</div>
+                            <div x-show="rowGroups.length === 0" class="py-8 text-center text-sm text-[#7A5A52]">{{ __('booking.no_open_hours') }}</div>
                         </div>
                     </div>
                 </section>
@@ -153,8 +153,8 @@
                 <div class="flex-1 min-w-0">
                     <template x-if="selectedSlots.length === 0">
                         <div>
-                            <div class="text-sm font-bold text-[#4F2F2A]">Tap the hours you want</div>
-                            <div class="text-[11px] text-[#7A5A52] truncate" x-text="dateLabel(activeDate) + ' · 1 box = 1 hour'"></div>
+                            <div class="text-sm font-bold text-[#4F2F2A]">{{ __('booking.bar_empty_title') }}</div>
+                            <div class="text-[11px] text-[#7A5A52] truncate" x-text="dateLabel(activeDate) + ' · ' + T.box_hint"></div>
                         </div>
                     </template>
                     <template x-if="selectedSlots.length > 0">
@@ -165,7 +165,7 @@
                         </div>
                     </template>
                 </div>
-                <button type="button" x-show="selectedSlots.length > 0" @click="selectedSlots = []" title="Clear selection" aria-label="Clear selection"
+                <button type="button" x-show="selectedSlots.length > 0" @click="selectedSlots = []" title="{{ __('booking.clear_selection') }}" aria-label="{{ __('booking.clear_selection') }}"
                         class="bk-tap shrink-0 w-10 h-10 rounded-lg border border-[#E6DAC0] text-[#9A3412] hover:bg-rose-50 flex items-center justify-center transition-colors">
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M6 18L18 6M6 6l12 12" /></svg>
                 </button>
@@ -175,7 +175,7 @@
                             : 'bg-[#EEE5D3] text-[#A08F86] cursor-not-allowed'"
                         class="bk-tap shrink-0 h-12 px-5 sm:px-7 rounded-lg text-xs sm:text-sm font-black uppercase tracking-wider transition-all flex items-center gap-2">
                     <svg x-show="isHolding" class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" class="opacity-25"></circle><path fill="currentColor" class="opacity-75" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg>
-                    <span x-text="isHolding ? 'Reserving…' : 'Continue'"></span>
+                    <span x-text="isHolding ? T.reserving : T.continue"></span>
                     <svg x-show="!isHolding" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M13 7l5 5m0 0l-5 5m5-5H6" /></svg>
                 </button>
             </div>
@@ -217,12 +217,21 @@
     @endif
     <script>
         function bookingCourtApp() {
+            // Teks terjemahan (lang/{id,en}/booking.php kunci "js") + locale tanggal untuk Intl.
+            const T = Object.assign(@js(__('booking.js')), { got_it: @js(__('common.got_it')), close: @js(__('common.close')) });
+            const LOCALE = @js(app()->getLocale() === 'id' ? 'id-ID' : 'en-US');
+            const t = (key, params = {}) => Object.keys(params).reduce((s, k) => s.split(':' + k).join(params[k]), T[key] || key);
+            const dayName = (d) => d.toLocaleDateString(LOCALE, { weekday: 'short' });
+            const monthName = (d) => d.toLocaleDateString(LOCALE, { month: 'short' });
+
             // Di luar state Alpine (tidak perlu reaktif).
             let live = null;
             let liveRefreshTimer = null;
             let fetchSeq = 0;
 
             return {
+                T,
+                t,
                 courts: [],
                 dateTabs: [],
                 activeDate: '{{ now()->format("Y-m-d") }}',
@@ -236,9 +245,9 @@
                 // HP: kolom lebih sempit supaya 3 lapangan kelihatan sekaligus; ikut berubah saat layar diputar.
                 narrow: !window.matchMedia('(min-width: 640px)').matches,
 
-                noticeModal: { show: false, title: '', message: '', type: 'info', buttonText: 'Got It', onClose: null },
+                noticeModal: { show: false, title: '', message: '', type: 'info', buttonText: T.got_it, onClose: null },
 
-                showNotice(title, message, type = 'info', buttonText = 'Got It', onClose = null) {
+                showNotice(title, message, type = 'info', buttonText = T.got_it, onClose = null) {
                     this.noticeModal = { show: true, title, message, type, buttonText, onClose };
                 },
 
@@ -293,7 +302,7 @@
                 get pastNote() {
                     if (!this.matrixRows.some(row => row.cells.some(cell => cell && cell.status === 'PAST'))) return '';
                     const firstOpen = this.visibleMatrixRows[0];
-                    return firstOpen ? `Hours before ${firstOpen.time} today have passed` : 'All hours today have passed — pick another date';
+                    return firstOpen ? t('past_before', { time: firstOpen.time }) : T.past_all;
                 },
 
                 availableCount(court) {
@@ -301,7 +310,7 @@
                 },
 
                 statusLabel(status) {
-                    return { BOOKED: 'Booked', LOCKED: 'In checkout', CLOSED: 'Closed', PAST: 'Passed' }[status] || status;
+                    return { BOOKED: T.status_booked, LOCKED: T.status_locked, CLOSED: T.status_closed, PAST: T.status_past }[status] || status;
                 },
 
                 slotButtonClass(courtId, startTime) {
@@ -312,17 +321,15 @@
                 },
 
                 generateDateTabs() {
-                    const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-                    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
                     const today = new Date();
                     this.dateTabs = [];
                     for (let i = 0; i < 14; i++) {
                         const d = new Date();
                         d.setDate(today.getDate() + i);
                         this.dateTabs.push({
-                            day: i === 0 ? 'Today' : days[d.getDay()],
+                            day: i === 0 ? T.today : dayName(d),
                             dayNum: d.getDate(),
-                            month: months[d.getMonth()],
+                            month: monthName(d),
                             date: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`,
                         });
                     }
@@ -344,12 +351,10 @@
 
                 onCalendarSelect(val) {
                     if (!val) return;
-                    const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-                    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
                     if (!this.dateTabs.some(t => t.date === val)) {
                         const d = new Date(val + 'T00:00:00');
                         this.dateTabs = this.dateTabs.filter(t => !t.isCustom);
-                        this.dateTabs.push({ day: days[d.getDay()], dayNum: d.getDate(), month: months[d.getMonth()], date: val, isCustom: true });
+                        this.dateTabs.push({ day: dayName(d), dayNum: d.getDate(), month: monthName(d), date: val, isCustom: true });
                     }
                     this.selectDate(val);
                 },
@@ -395,7 +400,7 @@
                     });
                     if (taken.length === 0) return;
                     this.selectedSlots = this.selectedSlots.filter(sel => !taken.includes(sel));
-                    this.showNotice('Slot just taken', `${taken.map(s => `${s.court} ${s.time}`).join(', ')} was just booked by someone else and has been removed from your selection.`, 'info');
+                    this.showNotice(T.taken_title, t('taken_message', { slots: taken.map(s => `${s.court} ${s.time}`).join(', ') }), 'info');
                 },
 
                 /** Realtime (Reverb) kalau tersedia; kalau tidak / koneksi putus → ambil ulang tiap 60 dtk selama tab terlihat. */
@@ -489,7 +494,7 @@
                                 current.end_time = slot.end_time;
                                 current.price += slot.price;
                                 current.duration_hours += (slot.duration_hours || 1);
-                                current.time = `${current.start_time} - ${current.end_time} (${current.duration_hours} ${current.duration_hours === 1 ? 'Hour' : 'Hours'})`;
+                                current.time = `${current.start_time} - ${current.end_time} (${current.duration_hours} ${current.duration_hours === 1 ? T.hour : T.hours})`;
                             } else {
                                 consolidated.push(current);
                                 current = { ...slot, duration_hours: slot.duration_hours || 1 };
@@ -506,7 +511,7 @@
                     const consolidated = this.consolidateContiguousSlots(this.selectedSlots);
                     if (consolidated.length === 1) return consolidated[0].court;
                     const totalHours = consolidated.reduce((sum, s) => sum + s.duration_hours, 0);
-                    return `${consolidated.length} sessions · ${totalHours} hours`;
+                    return t('sessions_hours', { sessions: consolidated.length, hours: totalHours });
                 },
 
                 get selectionDetail() {
@@ -564,11 +569,11 @@
                             window.dispatchEvent(new CustomEvent('cart-updated'));
                             window.location.href = "{{ route('customer.cart') }}";
                         } else {
-                            this.showNotice('Slot Reservation Failed', json.message || 'Failed to hold selected court slots. Please try another time.', 'error', 'Close');
+                            this.showNotice(T.hold_failed_title, json.message || T.hold_failed_message, 'error', T.close);
                             this.fetchSchedule();
                         }
                     } catch (e) {
-                        this.showNotice('Network Error', 'A network error occurred while holding court slots. Please check your connection.', 'error', 'Close');
+                        this.showNotice(T.network_title, T.network_message, 'error', T.close);
                     } finally {
                         this.isHolding = false;
                     }

@@ -326,7 +326,7 @@ class MembershipSeeder extends Seeder
                 'balance_id' => $rezaPadel->id,
                 'change_type' => 'DECREMENT',
                 'quantity' => -4.00,
-                'notes' => 'Reservasi Court Indosat (4 Jam)',
+                'notes' => 'Reservasi Court IM3 Platinum (4 Jam)',
             ]);
 
             UserMembershipBalance::create([
@@ -437,8 +437,8 @@ class MembershipSeeder extends Seeder
                 'allocated_hours' => 15,
                 'used_hours' => 4,
                 'remaining_hours' => 11,
-                'last_played' => now()->subDays(5)->format('d M Y').', 17:00 WIB (Court Indosat)',
-                'next_schedule' => now()->addDays(4)->format('d M Y').', 17:00 - 19:00 WIB (Court Indosat)',
+                'last_played' => now()->subDays(5)->format('d M Y').', 17:00 WIB (Court IM3 Platinum)',
+                'next_schedule' => now()->addDays(4)->format('d M Y').', 17:00 - 19:00 WIB (Court IM3 Platinum)',
                 'status' => 'ACTIVE',
                 'notes' => 'Sesi sore santai + sauna',
             ],
@@ -450,8 +450,8 @@ class MembershipSeeder extends Seeder
                 'allocated_hours' => 15,
                 'used_hours' => 2,
                 'remaining_hours' => 13,
-                'last_played' => now()->subDays(8)->format('d M Y').', 08:00 WIB (Court Iforte)',
-                'next_schedule' => now()->addDays(5)->format('d M Y').', 08:00 - 10:00 WIB (Court Iforte)',
+                'last_played' => now()->subDays(8)->format('d M Y').', 08:00 WIB (Court Protelindo)',
+                'next_schedule' => now()->addDays(5)->format('d M Y').', 08:00 - 10:00 WIB (Court Protelindo)',
                 'status' => 'ACTIVE',
                 'notes' => 'Sesi akhir pekan pagi',
             ],

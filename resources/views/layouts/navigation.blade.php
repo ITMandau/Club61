@@ -19,34 +19,34 @@
                 <div class="hidden md:flex space-x-4 lg:space-x-5 -my-px ms-2 lg:ms-6">
                     <a href="{{ route('dashboard') }}" 
                        class="inline-flex items-center px-1 pt-1 border-b-2 {{ request()->routeIs('dashboard') ? 'border-[#F7F0DB] text-[#F7F0DB]' : 'border-transparent text-[#F7F0DB]/70 hover:text-[#F7F0DB] hover:border-[#F7F0DB]/40' }} text-xs font-bold uppercase tracking-wider whitespace-nowrap transition-colors">
-                        Home
+                        {{ __('nav.home') }}
                     </a>
                     <a href="{{ route('customer.booking') }}" 
                        class="inline-flex items-center px-1 pt-1 border-b-2 {{ request()->routeIs('customer.booking') ? 'border-[#F7F0DB] text-[#F7F0DB]' : 'border-transparent text-[#F7F0DB]/70 hover:text-[#F7F0DB] hover:border-[#F7F0DB]/40' }} text-xs font-bold uppercase tracking-wider whitespace-nowrap transition-colors">
-                        Book Court
+                        {{ __('nav.book_court') }}
                     </a>
                     {{-- Modul 23: My Club = profil klub, Membership = beli paket (menu sendiri). Kartu member &
                          voucher milik customer ada di Profile / Voucher Saya (dropdown akun). --}}
                     <a href="{{ route('customer.my-club') }}"
                        class="inline-flex items-center px-1 pt-1 border-b-2 {{ request()->routeIs('customer.my-club') ? 'border-[#F7F0DB] text-[#F7F0DB]' : 'border-transparent text-[#F7F0DB]/70 hover:text-[#F7F0DB] hover:border-[#F7F0DB]/40' }} text-xs font-bold uppercase tracking-wider whitespace-nowrap transition-colors">
-                        My Club
+                        {{ __('nav.my_club') }}
                     </a>
                     <a href="{{ route('customer.membership') }}"
                        class="inline-flex items-center px-1 pt-1 border-b-2 {{ request()->routeIs('customer.membership') ? 'border-[#F7F0DB] text-[#F7F0DB]' : 'border-transparent text-[#F7F0DB]/70 hover:text-[#F7F0DB] hover:border-[#F7F0DB]/40' }} text-xs font-bold uppercase tracking-wider whitespace-nowrap transition-colors">
-                        Membership
+                        {{ __('nav.membership') }}
                     </a>
                     <a href="{{ route('customer.coaching') }}"
                        class="hidden xl:inline-flex items-center px-1 pt-1 border-b-2 {{ request()->routeIs('customer.coaching') ? 'border-[#F7F0DB] text-[#F7F0DB]' : 'border-transparent text-[#F7F0DB]/70 hover:text-[#F7F0DB] hover:border-[#F7F0DB]/40' }} text-xs font-bold uppercase tracking-wider whitespace-nowrap transition-colors">
-                        Coaching
+                        {{ __('nav.coaching') }}
                     </a>
                     <a href="{{ route('customer.invoice') }}"
                        class="inline-flex items-center px-1 pt-1 border-b-2 {{ request()->routeIs('customer.invoice') ? 'border-[#F7F0DB] text-[#F7F0DB]' : 'border-transparent text-[#F7F0DB]/70 hover:text-[#F7F0DB] hover:border-[#F7F0DB]/40' }} text-xs font-bold uppercase tracking-wider whitespace-nowrap transition-colors">
-                        Invoice
+                        {{ __('nav.invoice') }}
                     </a>
                     @if(Auth::check() && \App\Models\Sponsor\SponsorOrganization::where('sponsor_admin_user_id', Auth::id())->exists())
                         <a href="{{ route('customer.corporate') }}"
                            class="inline-flex items-center px-1 pt-1 border-b-2 {{ request()->routeIs('customer.corporate') ? 'border-[#F7F0DB] text-[#F7F0DB]' : 'border-transparent text-[#F7F0DB]/70 hover:text-[#F7F0DB] hover:border-[#F7F0DB]/40' }} text-xs font-bold uppercase tracking-wider whitespace-nowrap transition-colors">
-                            Sponsor Team
+                            {{ __('nav.sponsor_team') }}
                         </a>
                     @endif
                 </div>
@@ -60,7 +60,7 @@
                     <button type="button" 
                             @click="toggleNotif()"
                             class="p-2 rounded-xl text-[#F7F0DB] hover:text-white hover:bg-white/10 relative transition-colors focus:outline-none cursor-pointer"
-                            title="Notifications & Activity">
+                            title="{{ __('nav.notif.title') }}">
                         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
                         </svg>
@@ -85,13 +85,13 @@
                         <!-- Panel Header -->
                         <div class="flex items-center justify-between border-b border-[#E6DAC0]/50 pb-2.5 px-1">
                             <div>
-                                <h4 class="font-display font-black text-sm text-[#4F2F2A]">Notifications &amp; Activity</h4>
-                                <span class="text-[10px] text-[#662721] font-bold uppercase tracking-wider">Club 61 Concierge</span>
+                                <h4 class="font-display font-black text-sm text-[#4F2F2A]">{{ __('nav.notif.title') }}</h4>
+                                <span class="text-[10px] text-[#662721] font-bold uppercase tracking-wider">{{ __('nav.notif.concierge') }}</span>
                             </div>
                             <button type="button" 
                                     @click="markAllRead()"
                                     class="text-[10px] font-bold text-[#662721] hover:text-[#4F2F2A] hover:underline px-2 py-1 rounded-lg hover:bg-[#F7F0DB] transition-colors cursor-pointer">
-                                Mark as Read
+                                {{ __('nav.notif.mark_read') }}
                             </button>
                         </div>
 
@@ -110,15 +110,15 @@
                                         </div>
                                         <div class="flex-1 min-w-0">
                                             <div class="flex items-center justify-between">
-                                                <span class="text-xs font-black text-emerald-900">Confirmed Match Schedule</span>
-                                                <span class="text-[9px] font-mono font-bold text-emerald-700 bg-emerald-200/70 px-1.5 py-0.5 rounded">Confirmed</span>
+                                                <span class="text-xs font-black text-emerald-900">{{ __('nav.notif.match_title') }}</span>
+                                                <span class="text-[9px] font-mono font-bold text-emerald-700 bg-emerald-200/70 px-1.5 py-0.5 rounded">{{ __('nav.notif.confirmed') }}</span>
                                             </div>
                                             <p class="text-[11px] text-emerald-800 mt-1 leading-snug">
-                                                <span class="font-bold" x-text="activeBooking.court_name || 'Padel Court'"></span>
+                                                <span class="font-bold" x-text="activeBooking.court_name || @js(__('nav.notif.default_court'))"></span>
                                                 &bull; <span x-text="formatDate(activeBooking.booking_date)"></span>
                                                 (<span x-text="formatTime(activeBooking.start_time)"></span> WIB)
                                             </p>
-                                            <span class="text-[10px] font-bold text-emerald-700 underline mt-1 inline-block">View E-Ticket &amp; QR Code &rarr;</span>
+                                            <span class="text-[10px] font-bold text-emerald-700 underline mt-1 inline-block">{{ __('nav.notif.view_ticket') }} &rarr;</span>
                                         </div>
                                     </div>
                                 </a>
@@ -136,13 +136,13 @@
                                         </div>
                                         <div class="flex-1 min-w-0">
                                             <div class="flex items-center justify-between">
-                                                <span class="text-xs font-black text-[#662721]">Reserved Court Slots</span>
-                                                <span class="text-[9px] font-bold text-amber-800 bg-amber-200/80 px-1.5 py-0.5 rounded animate-pulse">Hold 10 Mins</span>
+                                                <span class="text-xs font-black text-[#662721]">{{ __('nav.notif.cart_title') }}</span>
+                                                <span class="text-[9px] font-bold text-amber-800 bg-amber-200/80 px-1.5 py-0.5 rounded animate-pulse">{{ __('nav.notif.hold') }}</span>
                                             </div>
                                             <p class="text-[11px] text-[#7A5A52] mt-1 leading-snug">
-                                                You have <strong class="text-[#4F2F2A]" x-text="cartCount"></strong> slot(s) reserved in your cart. Complete checkout before reservation expires!
+                                                {{ __('nav.notif.cart_body_before') }} <strong class="text-[#4F2F2A]" x-text="cartCount"></strong> {{ __('nav.notif.cart_body_after') }}
                                             </p>
-                                            <span class="text-[10px] font-bold text-[#662721] underline mt-1 inline-block">View Booking Cart &rarr;</span>
+                                            <span class="text-[10px] font-bold text-[#662721] underline mt-1 inline-block">{{ __('nav.notif.view_cart') }} &rarr;</span>
                                         </div>
                                     </div>
                                 </a>
@@ -156,10 +156,10 @@
                                     </div>
                                     <div class="flex-1 min-w-0">
                                         <div class="flex items-center justify-between">
-                                            <span class="text-xs font-black text-[#4F2F2A]">Welcome to Club 61</span>
+                                            <span class="text-xs font-black text-[#4F2F2A]">{{ __('nav.notif.welcome_title') }}</span>
                                         </div>
                                         <p class="text-[11px] text-[#7A5A52] mt-1 leading-snug">
-                                            Play on 3 international-standard padel courts at {{ \App\Models\Setting\CompanyProfileSetting::receiptAddress() }}, complete with a lounge &amp; cafe.
+                                            {{ __('nav.notif.welcome_body', ['address' => \App\Models\Setting\CompanyProfileSetting::receiptAddress()]) }}
                                         </p>
                                     </div>
                                 </div>
@@ -175,11 +175,11 @@
                                     </div>
                                     <div class="flex-1 min-w-0">
                                         <div class="flex items-center justify-between">
-                                            <span class="text-xs font-black text-[#4F2F2A]">Wellness &amp; Recovery Suite</span>
-                                            <span class="text-[9px] font-mono text-emerald-700 font-bold bg-emerald-100 px-1 py-0.5 rounded">VIP Plat</span>
+                                            <span class="text-xs font-black text-[#4F2F2A]">{{ __('nav.notif.wellness_title') }}</span>
+                                            <span class="text-[9px] font-mono text-emerald-700 font-bold bg-emerald-100 px-1 py-0.5 rounded">{{ __('nav.notif.wellness_badge') }}</span>
                                         </div>
                                         <p class="text-[11px] text-[#7A5A52] mt-1 leading-snug">
-                                            Wellness facilities available complimentarily for Platinum members post-match.
+                                            {{ __('nav.notif.wellness_body') }}
                                         </p>
                                     </div>
                                 </div>
@@ -194,7 +194,7 @@
                 <!-- Cart Button with Dynamic Counter Badge (Screen 2 & 3) -->
                 <a href="{{ route('customer.cart') }}" 
                    class="p-2 rounded-xl text-[#F7F0DB] hover:text-white hover:bg-white/10 relative transition-colors"
-                   title="Booking Cart">
+                   title="{{ __('nav.cart') }}">
                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
                     </svg>
@@ -213,9 +213,15 @@
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                         </svg>
-                        Admin
+                        {{ __('nav.admin') }}
                     </a>
                 @endif
+
+                {{-- Tombol bahasa ID / EN di navbar: hanya layar lebar (>=1280px) supaya menu tidak berdesakan di tablet;
+                     di layar lebih kecil tombolnya ada di menu akun. --}}
+                <div class="c61-nav-lang items-center">
+                    <x-lang-switch />
+                </div>
 
                 <!-- Akun: satu tombol (avatar + nama + status member) → dropdown Profile / Voucher Saya / Logout (Modul 23) -->
                 @php
@@ -224,8 +230,10 @@
                     $navVoucherCount = $navAccount->availableVoucherCount(Auth::user());
                     $navInitial = mb_strtoupper(mb_substr(Auth::user()->name, 0, 1));
                     $navMemberLabel = $navActiveMembership && $navActiveMembership->plan
-                        ? $navActiveMembership->plan->name.($navActiveMembership->end_date ? ' · until '.\Carbon\Carbon::parse($navActiveMembership->end_date)->format('d M Y') : '')
-                        : 'Not a member yet';
+                        ? ($navActiveMembership->end_date
+                            ? __('nav.member_until', ['plan' => $navActiveMembership->plan->name, 'date' => \Carbon\Carbon::parse($navActiveMembership->end_date)->translatedFormat('d M Y')])
+                            : $navActiveMembership->plan->name)
+                        : __('nav.not_member');
                 @endphp
                 <div class="relative" @click.outside="accountOpen = false" @keydown.escape.window="accountOpen = false">
                     <button type="button" @click="accountOpen = ! accountOpen" :aria-expanded="accountOpen.toString()" aria-haspopup="menu"
@@ -239,7 +247,7 @@
                         </span>
                         <span class="hidden lg:block text-left whitespace-nowrap max-w-[170px]">
                             <span class="block text-xs font-bold text-[#F7F0DB] truncate">{{ Auth::user()->name }}</span>
-                            <span class="block text-[9px] font-mono uppercase truncate {{ $navActiveMembership ? 'text-[#E6DAC0]' : 'text-[#F7F0DB]/60' }}">{{ $navActiveMembership?->plan?->name ?? 'Not a member yet' }}</span>
+                            <span class="block text-[9px] font-mono uppercase truncate {{ $navActiveMembership ? 'text-[#E6DAC0]' : 'text-[#F7F0DB]/60' }}">{{ $navActiveMembership?->plan?->name ?? __('nav.not_member') }}</span>
                         </span>
                         <svg class="hidden lg:block w-3.5 h-3.5 text-[#F7F0DB]/70 transition-transform" :class="accountOpen && 'rotate-180'" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M19 9l-7 7-7-7" /></svg>
                     </button>
@@ -265,14 +273,18 @@
                                 </div>
                             </div>
                         </div>
+                        <div class="flex items-center justify-between gap-3 px-4 py-2 border-b border-[#E6DAC0]">
+                            <span class="text-xs font-bold text-[#7A5A52]">{{ __('common.language') }}</span>
+                            <x-lang-switch variant="light" />
+                        </div>
                         <div class="p-2">
                             <a href="{{ route('profile.edit') }}" role="menuitem" class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-bold hover:bg-[#F7F0DB] transition-colors">
                                 <svg class="w-4 h-4 text-[#662721]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
-                                Profile
+                                {{ __('nav.profile') }}
                             </a>
                             <a href="{{ route('profile.vouchers') }}" role="menuitem" class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-bold hover:bg-[#F7F0DB] transition-colors">
                                 <svg class="w-4 h-4 text-[#662721]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 5v2m0 4v2m0 4v2M5 5a2 2 0 00-2 2v3a2 2 0 110 4v3a2 2 0 002 2h14a2 2 0 002-2v-3a2 2 0 110-4V7a2 2 0 00-2-2H5z" /></svg>
-                                <span class="flex-1">My Vouchers</span>
+                                <span class="flex-1">{{ __('nav.my_vouchers') }}</span>
                                 @if($navVoucherCount > 0)
                                     <span class="min-w-[22px] h-[22px] px-1.5 rounded-full bg-[#662721] text-[#F7F0DB] text-[11px] font-black flex items-center justify-center">{{ $navVoucherCount }}</span>
                                 @endif
@@ -280,12 +292,12 @@
                             {{-- Bottom nav HP penuh (5 menu) & navbar tab (768–1279px) tidak muat → Coaching lewat dropdown akun di bawah 1280px. --}}
                             <a href="{{ route('customer.coaching') }}" role="menuitem" class="xl:hidden flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-bold hover:bg-[#F7F0DB] transition-colors">
                                 <svg class="w-4 h-4 text-[#662721]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
-                                Coaching
+                                {{ __('nav.coaching') }}
                             </a>
                             @if(Auth::user()->canAccessPanel(\Filament\Facades\Filament::getPanel('admin')))
                                 <a href="/admin" role="menuitem" class="sm:hidden flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-bold hover:bg-[#F7F0DB] transition-colors">
                                     <svg class="w-4 h-4 text-[#662721]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
-                                    Admin Panel
+                                    {{ __('nav.admin_panel') }}
                                 </a>
                             @endif
                         </div>
@@ -293,7 +305,7 @@
                             @csrf
                             <button type="submit" role="menuitem" class="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-bold text-rose-700 hover:bg-rose-50 transition-colors cursor-pointer">
                                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" /></svg>
-                                Log Out
+                                {{ __('nav.logout') }}
                             </button>
                         </form>
                     </div>
@@ -303,6 +315,11 @@
         </div>
     </div>
 </nav>
+
+<style>
+    .c61-nav-lang { display: none; }
+    @media (min-width: 1280px) { .c61-nav-lang { display: flex; } }
+</style>
 
 <script>
     function customerNav() {
@@ -384,7 +401,9 @@
                 try {
                     const d = new Date(val);
                     if (!isNaN(d.getTime())) {
-                        const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+                        const months = @js(app()->getLocale() === 'id'
+                            ? ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des']
+                            : ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']);
                         return `${String(d.getDate()).padStart(2, '0')} ${months[d.getMonth()]} ${d.getFullYear()}`;
                     }
                 } catch(e) {}

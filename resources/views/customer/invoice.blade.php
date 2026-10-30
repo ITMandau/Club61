@@ -7,13 +7,13 @@
             {{-- Header --}}
             <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div class="flex items-center gap-3 min-w-0">
-                    <a href="{{ route('dashboard') }}" title="Back to Home"
+                    <a href="{{ route('dashboard') }}" title="{{ __('invoice.back_home') }}"
                        class="bk-tap w-10 h-10 shrink-0 flex items-center justify-center rounded-lg bg-white/90 border border-[#E6DAC0] text-[#662721] hover:bg-[#F7F0DB] transition-colors">
                         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M15 19l-7-7 7-7" /></svg>
                     </a>
                     <div class="min-w-0">
-                        <h1 class="font-display font-black text-xl sm:text-2xl leading-tight">Invoice &amp; Booking Code </h1>
-                        <p class="hidden sm:block text-xs text-[#7A5A52] mt-0.5">Show the QR code at the front desk when you arrive.</p>
+                        <h1 class="font-display font-black text-xl sm:text-2xl leading-tight">{{ __('invoice.title') }} </h1>
+                        <p class="hidden sm:block text-xs text-[#7A5A52] mt-0.5">{{ __('invoice.subtitle') }}</p>
                     </div>
                 </div>
 
@@ -25,13 +25,13 @@
                             class="bk-tap h-10 px-4 rounded-lg bg-white/90 hover:bg-[#F7F0DB] border border-[#E6DAC0] text-[#662721] text-xs font-bold whitespace-nowrap flex items-center justify-center gap-2 transition-colors disabled:opacity-50">
                         <span x-show="isDownloadingPng" class="w-3.5 h-3.5 border-2 border-[#662721] border-t-transparent rounded-full animate-spin"></span>
                         <svg x-show="!isDownloadingPng" class="w-4 h-4 text-[#662721]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
-                        <span x-text="isDownloadingPng ? 'Saving…' : 'Save ticket'"></span>
+                        <span x-text="isDownloadingPng ? @js(__('invoice.saving')) : @js(__('invoice.save_ticket'))"></span>
                     </button>
                     <a href="{{ route('customer.booking') }}"
                        :class="isMembershipTicket ? 'col-span-2' : ''"
                        class="bk-tap h-10 px-5 rounded-lg bg-[#662721] hover:bg-[#511D18] text-[#F7F0DB] text-xs font-black uppercase tracking-wider whitespace-nowrap flex items-center justify-center gap-1.5 shadow-[0_8px_20px_rgba(79,47,42,0.18)] active:scale-95 transition-transform">
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 5v14M5 12h14" /></svg>
-                        New booking
+                        {{ __('invoice.new_booking') }}
                     </a>
                 </div>
             </div>
@@ -41,8 +41,8 @@
                  class="flex items-center gap-3 p-3.5 rounded-lg bg-amber-50 border border-amber-300 text-amber-900">
                 <div class="w-5 h-5 border-2 border-amber-600 border-t-transparent rounded-full animate-spin shrink-0"></div>
                 <div class="min-w-0">
-                    <div class="text-sm font-bold leading-tight">Waiting for payment confirmation</div>
-                    <div class="text-[11px] text-amber-800 leading-snug mt-0.5">We check automatically — no need to refresh this page.</div>
+                    <div class="text-sm font-bold leading-tight">{{ __('invoice.waiting_confirmation') }}</div>
+                    <div class="text-[11px] text-amber-800 leading-snug mt-0.5">{{ __('invoice.auto_check') }}</div>
                 </div>
             </div>
 
@@ -88,14 +88,14 @@
                             <div class="w-14 h-14 rounded-lg bg-[#F7F0DB] border border-[#E6DAC0] flex items-center justify-center mx-auto text-[#662721]">
                                 <svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
                             </div>
-                            <h3 class="font-display font-black text-lg">No invoices yet</h3>
-                            <p class="text-xs text-[#7A5A52] max-w-xs mx-auto">Book a court or buy a membership package — your invoice and e-ticket will show up here.</p>
+                            <h3 class="font-display font-black text-lg">{{ __('invoice.empty_title') }}</h3>
+                            <p class="text-xs text-[#7A5A52] max-w-xs mx-auto">{{ __('invoice.empty_body') }}</p>
                             <div class="flex flex-col sm:flex-row items-stretch sm:items-center justify-center gap-2 pt-2">
                                 <a href="{{ route('customer.booking') }}" class="bk-tap h-11 px-5 rounded-lg bg-[#662721] hover:bg-[#511D18] text-[#F7F0DB] text-xs font-black uppercase tracking-wider whitespace-nowrap flex items-center justify-center shadow-md active:scale-95 transition-transform">
-                                    Book a Court
+                                    {{ __('invoice.book_court') }}
                                 </a>
                                 <a href="{{ route('customer.membership') }}" class="bk-tap h-11 px-5 rounded-lg bg-[#F7F0DB] hover:bg-[#F7F0DB] border border-[#E6DAC0] text-[#662721] text-xs font-bold whitespace-nowrap flex items-center justify-center transition-colors">
-                                    View Membership Packages
+                                    {{ __('invoice.view_packages') }}
                                 </a>
                             </div>
                         </div>

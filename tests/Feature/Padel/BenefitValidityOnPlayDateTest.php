@@ -237,6 +237,6 @@ class BenefitValidityOnPlayDateTest extends TestCase
         $this->assertFalse($quote['sponsor']['applies']);
 
         // Customer melihat vouchernya tidak aktif, bukan "Applied automatically at checkout".
-        $this->actingAs($employee)->get('/profile/vouchers?tab=history')->assertOk()->assertSee('Deactivated');
+        $this->actingAs($employee)->get('/profile/vouchers?tab=history')->assertOk()->assertSee('Dinonaktifkan');
     }
 }

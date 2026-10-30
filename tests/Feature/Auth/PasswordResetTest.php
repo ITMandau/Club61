@@ -24,7 +24,7 @@ class PasswordResetTest extends TestCase
         $this->post("/forgot-password", ["email" => "081355556666"])->assertSessionHasNoErrors();
         $this->post("/forgot-password", ["email" => "081355556666"])
             ->assertSessionHasNoErrors()
-            ->assertSessionHas("status", PasswordResetLinkController::GENERIC_STATUS);
+            ->assertSessionHas("status", __(PasswordResetLinkController::GENERIC_STATUS));
     }
 
     public function test_reset_password_link_screen_can_be_rendered(): void
@@ -42,7 +42,7 @@ class PasswordResetTest extends TestCase
         $user = User::factory()->create();
 
         $this->post('/forgot-password', ['email' => $user->email])
-            ->assertSessionHas('status', PasswordResetLinkController::GENERIC_STATUS);
+            ->assertSessionHas('status', __(PasswordResetLinkController::GENERIC_STATUS));
 
         Notification::assertSentTo($user, ResetPasswordNotification::class);
     }
@@ -54,7 +54,7 @@ class PasswordResetTest extends TestCase
         $user = User::factory()->create(['phone' => '081234567890']);
 
         $this->post('/forgot-password', ['email' => '+62 812-3456-7890'])
-            ->assertSessionHas('status', PasswordResetLinkController::GENERIC_STATUS);
+            ->assertSessionHas('status', __(PasswordResetLinkController::GENERIC_STATUS));
 
         Notification::assertSentTo($user, ResetPasswordNotification::class);
     }
@@ -65,10 +65,10 @@ class PasswordResetTest extends TestCase
 
         $this->post('/forgot-password', ['email' => 'tidak-ada@example.com'])
             ->assertSessionHasNoErrors()
-            ->assertSessionHas('status', PasswordResetLinkController::GENERIC_STATUS);
+            ->assertSessionHas('status', __(PasswordResetLinkController::GENERIC_STATUS));
         $this->post('/forgot-password', ['email' => '089999999999'])
             ->assertSessionHasNoErrors()
-            ->assertSessionHas('status', PasswordResetLinkController::GENERIC_STATUS);
+            ->assertSessionHas('status', __(PasswordResetLinkController::GENERIC_STATUS));
 
         Notification::assertNothingSent();
     }
@@ -80,7 +80,7 @@ class PasswordResetTest extends TestCase
         $user = User::factory()->create(['phone' => '081311112222', 'email' => 'walkin-01abc@walkin.club61.internal']);
 
         $this->post('/forgot-password', ['email' => '081311112222'])
-            ->assertSessionHas('status', PasswordResetLinkController::GENERIC_STATUS);
+            ->assertSessionHas('status', __(PasswordResetLinkController::GENERIC_STATUS));
 
         Notification::assertNotSentTo($user, ResetPasswordNotification::class);
         $this->assertSame(0, DB::table('password_reset_tokens')->count());
@@ -136,7 +136,7 @@ class PasswordResetTest extends TestCase
 
         $this->from('/forgot-password')->post('/forgot-password', ['email' => $user->email])
             ->assertRedirect('/forgot-password')
-            ->assertSessionHasErrors(['email' => PasswordResetLinkController::MAIL_FAILED]);
+            ->assertSessionHasErrors(['email' => __(PasswordResetLinkController::MAIL_FAILED)]);
 
         $this->assertSame(0, DB::table('password_reset_tokens')->count());
         $this->assertTrue(ActivityLog::where('event', 'auth.password_reset_mail_failed')->exists());

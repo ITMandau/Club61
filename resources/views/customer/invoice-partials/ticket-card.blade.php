@@ -1,7 +1,7 @@
 <!-- Pilihan sesi kalau satu order berisi beberapa lapangan / jam -->
 <template x-if="ticket.order_bookings && ticket.order_bookings.length > 1">
     <div class="bg-white/90 rounded-lg border border-[#E6DAC0] p-2.5">
-        <div class="px-1 pb-1.5 text-[10px] font-extrabold uppercase tracking-wider text-[#662721]">Sessions in this order</div>
+        <div class="px-1 pb-1.5 text-[10px] font-extrabold uppercase tracking-wider text-[#662721]">{{ __('invoice.sessions_in_order') }}</div>
         <div class="bk-scroll flex items-center gap-2 overflow-x-auto">
             <template x-for="(sBooking, sIdx) in ticket.order_bookings" :key="sBooking.id">
                 <button type="button" @click="switchSession(sBooking)"
@@ -20,35 +20,35 @@
     <!-- Kepala tiket -->
     <div class="p-4 sm:p-6 bg-[#662721] text-white">
         <div class="flex flex-wrap items-center gap-2">
-            <span class="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wider bg-[#E6DAC0]/20 text-[#F7F0DB] border border-[#E6DAC0]/40">E-Ticket · Padel</span>
+            <span class="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wider bg-[#E6DAC0]/20 text-[#F7F0DB] border border-[#E6DAC0]/40">{{ __('invoice.eticket_badge') }}</span>
             <span :class="statusTone(currentTicket.status) === 'ok' ? 'bg-emerald-500 text-white' : (statusTone(currentTicket.status) === 'bad' ? 'bg-rose-500 text-white' : 'bg-amber-400 text-[#4F2F2A]')"
                   class="px-2.5 py-0.5 rounded-full text-[11px] font-black whitespace-nowrap shadow-sm"
                   x-text="statusLabel(currentTicket.status, currentTicket)"></span>
         </div>
-        <h2 class="mt-2 font-display font-black text-xl sm:text-2xl leading-tight break-words" x-text="currentTicket.court ? currentTicket.court.name : 'Court'"></h2>
+        <h2 class="mt-2 font-display font-black text-xl sm:text-2xl leading-tight break-words" x-text="currentTicket.court ? currentTicket.court.name : @js(__('invoice.court'))"></h2>
         <div class="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-[#F7F0DB]/90">
             <span class="font-semibold whitespace-nowrap" x-text="formatDate(currentTicket.booking_date)"></span>
             <span class="text-[#F7F0DB]/50">•</span>
             <span class="font-semibold tabular-nums whitespace-nowrap" x-text="formatTime(currentTicket.start_time) + '–' + formatTime(currentTicket.end_time) + ' WIB'"></span>
         </div>
-        <div class="mt-1 text-[11px] text-[#F7F0DB]/70 font-mono truncate" x-text="'Code #' + (currentTicket.booking_code || currentTicket.id.substring(0, 10))"></div>
+        <div class="mt-1 text-[11px] text-[#F7F0DB]/70 font-mono truncate" x-text="@js(__('invoice.code_prefix')) + (currentTicket.booking_code || currentTicket.id.substring(0, 10))"></div>
     </div>
 
     <!-- Strip info -->
     <div class="grid grid-cols-3 divide-x divide-[#E6DAC0] bg-[#F7F0DB] border-y border-dashed border-[#E6DAC0] text-center">
         <div class="py-2.5 px-2 min-w-0">
-            <div class="text-[9px] font-extrabold uppercase tracking-wider text-[#7A5A52]">Pass</div>
+            <div class="text-[9px] font-extrabold uppercase tracking-wider text-[#7A5A52]">{{ __('invoice.pass') }}</div>
             <div class="text-xs font-bold text-[#4F2F2A] truncate"
-                 x-text="currentTicket.status === 'PAID' || currentTicket.status === 'CHECKED_IN' ? 'Valid' : (statusTone(currentTicket.status) === 'bad' ? 'Inactive' : 'Locked')"></div>
+                 x-text="currentTicket.status === 'PAID' || currentTicket.status === 'CHECKED_IN' ? @js(__('invoice.valid')) : (statusTone(currentTicket.status) === 'bad' ? @js(__('invoice.inactive')) : @js(__('invoice.locked')))"></div>
         </div>
         <div class="py-2.5 px-2 min-w-0">
-            <div class="text-[9px] font-extrabold uppercase tracking-wider text-[#7A5A52]">Check-in</div>
-            <div class="text-xs font-bold text-[#4F2F2A] truncate">Front desk</div>
+            <div class="text-[9px] font-extrabold uppercase tracking-wider text-[#7A5A52]">{{ __('invoice.check_in') }}</div>
+            <div class="text-xs font-bold text-[#4F2F2A] truncate">{{ __('invoice.front_desk') }}</div>
         </div>
         <div class="py-2.5 px-2 min-w-0">
-            <div class="text-[9px] font-extrabold uppercase tracking-wider text-[#7A5A52]">Duration</div>
+            <div class="text-[9px] font-extrabold uppercase tracking-wider text-[#7A5A52]">{{ __('invoice.duration') }}</div>
             <div class="text-xs font-bold text-[#4F2F2A] truncate"
-                 x-text="calculateDuration(currentTicket.start_time, currentTicket.end_time) + (calculateDuration(currentTicket.start_time, currentTicket.end_time) > 1 ? ' hrs' : ' hr')"></div>
+                 x-text="calculateDuration(currentTicket.start_time, currentTicket.end_time) + (calculateDuration(currentTicket.start_time, currentTicket.end_time) > 1 ? @js(__('invoice.hrs')) : @js(__('invoice.hr')))"></div>
         </div>
     </div>
 
@@ -65,15 +65,15 @@
                     </template>
                     <template x-if="!currentTicket.qr_code_hash">
                         <div class="w-48 h-48 mx-auto rounded-xl bg-[#FCF8EE] border border-[#E6DAC0] flex items-center justify-center p-4 text-center text-[11px] font-bold text-[#662721] leading-snug">
-                            QR code not available yet. Show your booking code to the front desk.
+                            {{ __('invoice.qr_not_available') }}
                         </div>
                     </template>
                     <div class="mt-2.5 max-w-[12rem] mx-auto font-mono font-bold text-[10px] text-[#662721] tracking-wider break-all leading-snug"
                          x-text="currentTicket.qr_code_hash || currentTicket.booking_code"></div>
                 </div>
                 <div class="max-w-sm mx-auto mt-3">
-                    <h4 class="font-bold text-sm">Show this at the front desk</h4>
-                    <p class="text-xs text-[#7A5A52] mt-1 leading-relaxed">Staff will scan it for court access and equipment pick-up.</p>
+                    <h4 class="font-bold text-sm">{{ __('invoice.show_front_desk') }}</h4>
+                    <p class="text-xs text-[#7A5A52] mt-1 leading-relaxed">{{ __('invoice.staff_scan') }}</p>
                 </div>
             </div>
         </template>
@@ -91,7 +91,7 @@
                 <span class="inline-block px-2.5 py-0.5 rounded-full text-[11px] font-bold border" :class="statusPillClass(currentTicket.status)" x-text="statusLabel(currentTicket.status, currentTicket)"></span>
                 <a href="{{ route('customer.booking') }}"
                    class="bk-tap w-full h-12 rounded-lg flex items-center justify-center gap-2 text-xs font-black uppercase tracking-wider bg-[#662721] hover:bg-[#511D18] text-[#F7F0DB] shadow-md active:scale-[0.98] transition-transform">
-                    Book again
+                    {{ __('invoice.book_again') }}
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M13 7l5 5m0 0l-5 5m5-5H6" /></svg>
                 </a>
             </div>
@@ -105,8 +105,8 @@
                         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-4a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
                     </div>
                     <div class="min-w-0">
-                        <h4 class="font-bold text-sm leading-tight">QR ticket locked</h4>
-                        <p class="text-[11px] text-[#7A5A52] leading-snug mt-0.5">Finish payment — the QR code unlocks automatically once it's confirmed.</p>
+                        <h4 class="font-bold text-sm leading-tight">{{ __('invoice.qr_locked') }}</h4>
+                        <p class="text-[11px] text-[#7A5A52] leading-snug mt-0.5">{{ __('invoice.qr_locked_hint') }}</p>
                     </div>
                 </div>
 
@@ -114,8 +114,8 @@
                 <div x-show="paymentWindowClosed(currentTicket)" class="p-3 rounded-lg bg-rose-50 border border-rose-200 flex items-start gap-3">
                     <span class="w-4 h-4 mt-0.5 shrink-0 border-2 border-rose-500 border-t-transparent rounded-full animate-spin"></span>
                     <div class="min-w-0">
-                        <div class="text-xs font-bold text-rose-800">Batas waktu pembayaran habis</div>
-                        <p class="text-[11px] text-rose-700 leading-snug mt-0.5">Slot sedang dilepas, jangan melakukan transaksi dengan QR / VA sebelumnya.</p>
+                        <div class="text-xs font-bold text-rose-800">{{ __('invoice.window_closed_title') }}</div>
+                        <p class="text-[11px] text-rose-700 leading-snug mt-0.5">{{ __('invoice.window_closed_body') }}</p>
                     </div>
                 </div>
 
@@ -133,7 +133,7 @@
                     </div>
                     <button type="button" @click="showPaymentModal = true"
                             class="bk-tap shrink-0 h-8 px-3 rounded-xl bg-[#F7F0DB] hover:bg-[#F7F0DB] border border-[#E6DAC0] text-[#662721] text-xs font-bold whitespace-nowrap transition-colors">
-                        Change
+                        {{ __('invoice.change') }}
                     </button>
                 </div>
 
@@ -141,20 +141,20 @@
                 <template x-if="currentTicket.has_pending_delta">
                     <div class="p-3 rounded-lg bg-amber-100/90 border border-amber-300 space-y-1">
                         <div class="flex items-center justify-between gap-3 text-xs font-bold text-amber-900">
-                            <span class="min-w-0">Reschedule balance due</span>
+                            <span class="min-w-0">{{ __('invoice.balance_due') }}</span>
                             <span class="shrink-0 tabular-nums font-black text-sm text-red-700 whitespace-nowrap" x-text="'Rp ' + formatNumber(currentTicket.unpaid_delta)"></span>
                         </div>
-                        <p class="text-[11px] text-amber-800 leading-snug">Pay the remaining balance (online or at the front desk) to activate your pass.</p>
+                        <p class="text-[11px] text-amber-800 leading-snug">{{ __('invoice.balance_hint') }}</p>
                     </div>
                 </template>
 
                 <!-- Instruksi bayar tunai -->
                 <div x-show="selectedMethod.code === 'CASH' || isCashNotice || (currentTicket.order && currentTicket.order.payment_method === 'CASH')"
                      class="p-3 rounded-lg bg-[#FCF8EE] border border-[#E6DAC0] space-y-1">
-                    <div class="text-xs font-bold text-[#662721]">Paying in cash</div>
+                    <div class="text-xs font-bold text-[#662721]">{{ __('invoice.paying_cash') }}</div>
                     <p class="text-[11px] text-[#662721] leading-snug">
-                        Show booking code <strong class="font-mono text-[#4F2F2A]" x-text="'#' + (currentTicket.booking_code || currentTicket.id.substring(0, 8))"></strong>
-                        at the front desk to pay and activate your e-ticket.
+                        {{ __('invoice.cash_before') }} <strong class="font-mono text-[#4F2F2A]" x-text="'#' + (currentTicket.booking_code || currentTicket.id.substring(0, 8))"></strong>
+                        {{ __('invoice.cash_after') }}
                     </p>
                 </div>
 
@@ -163,7 +163,7 @@
                 <button type="button" x-show="! paymentWindowClosed(currentTicket) && ! (ticket && ticket.pay_display && ticket.pay_display.method === selectedMethod.code)" @click="payNow()" :disabled="isSubmittingPayment"
                         class="bk-tap w-full h-12 rounded-lg flex items-center justify-center gap-2 text-xs font-black uppercase tracking-wider bg-[#662721] hover:bg-[#511D18] text-[#F7F0DB] shadow-md active:scale-[0.98] transition-transform disabled:opacity-60 disabled:cursor-not-allowed">
                     <span x-show="isSubmittingPayment" class="w-4 h-4 border-2 border-[#4F2F2A] border-t-transparent rounded-full animate-spin"></span>
-                    <span class="whitespace-nowrap" x-text="isSubmittingPayment ? 'Processing…' : (selectedMethod.code === 'CASH' ? 'Confirm with front desk' : (currentTicket.has_pending_delta ? ('Pay balance Rp ' + formatNumber(currentTicket.unpaid_delta)) : 'Pay Now'))"></span>
+                    <span class="whitespace-nowrap" x-text="isSubmittingPayment ? @js(__('invoice.processing')) : (selectedMethod.code === 'CASH' ? @js(__('invoice.confirm_front_desk')) : (currentTicket.has_pending_delta ? (@js(__('invoice.pay_balance')) + formatNumber(currentTicket.unpaid_delta)) : @js(__('invoice.pay_now'))))"></span>
                     <svg x-show="!isSubmittingPayment && selectedMethod.code !== 'CASH'" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
                 </button>
 
@@ -171,7 +171,7 @@
                     <button type="button" @click="openCancelModal()" :disabled="isCancellingBooking"
                             class="bk-tap w-full h-10 rounded-lg text-xs font-bold text-[#9A3412] hover:bg-rose-50 transition-colors flex items-center justify-center gap-2 disabled:opacity-50">
                         <span x-show="isCancellingBooking" class="w-3.5 h-3.5 border-2 border-rose-600 border-t-transparent rounded-full animate-spin"></span>
-                        <span x-text="isCancellingBooking ? 'Cancelling…' : 'Cancel this booking'"></span>
+                        <span x-text="isCancellingBooking ? @js(__('invoice.cancelling')) : @js(__('invoice.cancel_this_booking'))"></span>
                     </button>
                 </template>
             </div>
@@ -192,27 +192,27 @@
                     : null;
             @endphp
             <div class="flex items-start justify-between gap-3">
-                <span class="shrink-0 text-[#7A5A52]">Ticket holder</span>
+                <span class="shrink-0 text-[#7A5A52]">{{ __('invoice.ticket_holder') }}</span>
                 <span class="min-w-0 text-right font-bold text-[#4F2F2A] break-words leading-snug">{{ Auth::user()->name }}@if($ticketHolderMembership && $ticketHolderMembership->plan) <span class="font-semibold text-[#662721]">· {{ $ticketHolderMembership->plan->name }}</span>@endif</span>
             </div>
             <div class="flex items-start justify-between gap-3">
-                <span class="shrink-0 text-[#7A5A52]">Schedule</span>
+                <span class="shrink-0 text-[#7A5A52]">{{ __('invoice.schedule') }}</span>
                 <span class="min-w-0 text-right font-bold text-[#4F2F2A] tabular-nums"
                       x-text="formatTime(currentTicket.start_time) + '–' + formatTime(currentTicket.end_time) + ' WIB'"></span>
             </div>
             <div class="flex items-start justify-between gap-3">
-                <span class="shrink-0 text-[#7A5A52]">Court</span>
-                <span class="min-w-0 text-right font-bold text-[#4F2F2A] leading-snug" x-text="currentTicket.court ? currentTicket.court.name : 'Court'"></span>
+                <span class="shrink-0 text-[#7A5A52]">{{ __('invoice.court') }}</span>
+                <span class="min-w-0 text-right font-bold text-[#4F2F2A] leading-snug" x-text="currentTicket.court ? currentTicket.court.name : @js(__('invoice.court'))"></span>
             </div>
 
             <div class="pt-2.5 border-t border-[#E6DAC0] flex items-start justify-between gap-3">
-                <span class="min-w-0 text-[#7A5A52]">Court rental</span>
+                <span class="min-w-0 text-[#7A5A52]">{{ __('invoice.court_rental') }}</span>
                 {{-- Harga normal (court_fee tersimpan sudah dipotong benefit; potongannya ditulis di baris bawah). --}}
                 <span class="shrink-0 font-bold tabular-nums whitespace-nowrap"
                       x-text="'Rp ' + formatNumber((parseFloat(currentTicket.court_fee) || 0) + (parseFloat(currentTicket.member_discount_court) || 0) + (parseFloat(currentTicket.sponsor_discount_court) || 0))"></span>
             </div>
             <div class="flex items-start justify-between gap-3" x-show="currentTicket.equipment_fee > 0">
-                <span class="min-w-0 text-[#7A5A52]">Equipment add-ons</span>
+                <span class="min-w-0 text-[#7A5A52]">{{ __('invoice.equipment_addons') }}</span>
                 <span class="shrink-0 font-bold tabular-nums whitespace-nowrap" x-text="'Rp ' + formatNumber(currentTicket.equipment_fee)"></span>
             </div>
 
@@ -221,20 +221,20 @@
                  dari Pengaturan Biaya & Pajak tidak pernah muncul dan totalnya lebih kecil dari invoice. --}}
             <template x-if="totalMemberDiscount > 0">
                 <div class="flex items-start justify-between gap-3 font-bold text-[#662721]">
-                    <span class="min-w-0">Membership discount</span>
+                    <span class="min-w-0">{{ __('invoice.membership_discount') }}</span>
                     <span class="shrink-0 tabular-nums whitespace-nowrap" x-text="'- Rp ' + formatNumber(totalMemberDiscount)"></span>
                 </div>
             </template>
             <template x-if="totalSponsorDiscount > 0">
                 <div class="flex items-start justify-between gap-3 font-bold text-[#4F2F2A]">
-                    <span class="min-w-0">Corporate voucher</span>
+                    <span class="min-w-0">{{ __('invoice.corporate_voucher') }}</span>
                     <span class="shrink-0 tabular-nums whitespace-nowrap" x-text="'- Rp ' + formatNumber(totalSponsorDiscount)"></span>
                 </div>
             </template>
             <template x-if="orderVoucher">
                 <div class="flex items-start justify-between gap-3 font-bold text-emerald-700">
                     <span class="min-w-0">
-                        <span x-text="'Voucher ' + orderVoucher.code"></span>
+                        <span x-text="@js(__('invoice.voucher_prefix')) + orderVoucher.code"></span>
                         <span class="block font-medium text-[11px] leading-snug text-emerald-800/80" x-text="voucherDetail(orderVoucher)"></span>
                     </span>
                     <span class="shrink-0 tabular-nums whitespace-nowrap" x-text="'- Rp ' + formatNumber(orderVoucher.discount)"></span>
@@ -242,13 +242,13 @@
             </template>
             <template x-if="ticket && ticket.order && ticket.order.tax_amount > 0">
                 <div class="flex items-start justify-between gap-3">
-                    <span class="min-w-0 text-[#7A5A52]">Tax</span>
+                    <span class="min-w-0 text-[#7A5A52]">{{ __('invoice.tax') }}</span>
                     <span class="shrink-0 font-bold tabular-nums whitespace-nowrap" x-text="'Rp ' + formatNumber(ticket.order.tax_amount)"></span>
                 </div>
             </template>
             <template x-if="ticket && ticket.order && ticket.order.service_charge > 0">
                 <div class="flex items-start justify-between gap-3">
-                    <span class="min-w-0 text-[#7A5A52]">Service fee</span>
+                    <span class="min-w-0 text-[#7A5A52]">{{ __('invoice.service_fee') }}</span>
                     <span class="shrink-0 font-bold tabular-nums whitespace-nowrap" x-text="'Rp ' + formatNumber(ticket.order.service_charge)"></span>
                 </div>
             </template>
@@ -260,36 +260,36 @@
                     <template x-for="(rc, idx) in ticket.reschedule_charges" :key="idx">
                         <div class="flex items-start justify-between gap-3">
                             <span class="min-w-0 text-[#662721] font-semibold">
-                                Reschedule difference
+                                {{ __('invoice.reschedule_difference') }}
                                 <span class="font-bold" :class="rc.status === 'SUCCESS' ? 'text-[#662721]' : 'text-red-700'"
-                                      x-text="rc.status === 'SUCCESS' ? '(paid · ' + (rc.method_label || '-') + ')' : '(unpaid)'"></span>
+                                      x-text="rc.status === 'SUCCESS' ? @js(__('invoice.paid_open')) + (rc.method_label || '-') + ')' : @js(__('invoice.unpaid'))"></span>
                             </span>
                             <span class="shrink-0 font-bold tabular-nums whitespace-nowrap" x-text="'Rp ' + formatNumber(rc.amount)"></span>
                         </div>
                     </template>
                     <p class="text-[11px] text-[#7A5A52] leading-snug">
-                        <span x-show="ticket.reschedule_charges[0].schedule_before">Moved from <span class="font-semibold" x-text="ticket.reschedule_charges[0].schedule_before"></span>. </span>
-                        Already included in the new schedule's rental, tax &amp; service fee above.
+                        <span x-show="ticket.reschedule_charges[0].schedule_before">{{ __('invoice.moved_from') }} <span class="font-semibold" x-text="ticket.reschedule_charges[0].schedule_before"></span>. </span>
+                        {{ __('invoice.included_note') }}
                     </p>
                 </div>
             </template>
             <template x-if="ticket && ticket.order_reschedule_forfeited > 0">
                 <div class="rounded-xl border border-amber-300 bg-amber-50 px-3 py-2">
                     <div class="flex items-start justify-between gap-3 text-amber-900 font-semibold">
-                        <span class="min-w-0">Reschedule difference forfeited</span>
+                        <span class="min-w-0">{{ __('invoice.forfeited') }}</span>
                         <span class="shrink-0 font-bold tabular-nums whitespace-nowrap" x-text="'Rp ' + formatNumber(ticket.order_reschedule_forfeited)"></span>
                     </div>
-                    <p class="text-[11px] text-amber-800 leading-snug">Moved to a cheaper time. Per venue policy, the difference isn't refunded.</p>
+                    <p class="text-[11px] text-amber-800 leading-snug">{{ __('invoice.forfeited_note') }}</p>
                 </div>
             </template>
 
             <div class="pt-2.5 border-t border-[#E6DAC0] flex items-center justify-between gap-3">
-                <span class="font-bold text-sm text-[#4F2F2A]">Total ticket amount</span>
+                <span class="font-bold text-sm text-[#4F2F2A]">{{ __('invoice.total_ticket') }}</span>
                 <span class="shrink-0 font-black text-lg tabular-nums whitespace-nowrap text-[#4F2F2A]" x-text="'Rp ' + formatNumber(displayGrandTotal)"></span>
             </div>
             <template x-if="ticket && ticket.order_bookings && ticket.order_bookings.length > 1">
                 <p class="text-[11px] text-[#7A5A52] leading-snug">
-                    Discounts, tax, service fee &amp; total cover all <span x-text="ticket.order_bookings.length"></span> courts in this order.
+                    {{ __('invoice.covers_all_before') }} <span x-text="ticket.order_bookings.length"></span> {{ __('invoice.covers_all_after') }}
                 </p>
             </template>
         </div>

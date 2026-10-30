@@ -30,6 +30,8 @@ class Club61PermissionMatrix
         'manage_court_pricing',
         // Tarif setoran coaching & biaya coach tambahan (Modul 24 Opsi B) — harga, sama seperti tarif lapangan.
         'manage_coaching_rates',
+        // Mengubah aturan akses (hari / jam / peak) kartu member yang sudah terjual sekaligus (Modul 28).
+        'apply_membership_plan_rules',
         'View:RoleResource',
         'view_roles',
         'create_roles',
@@ -219,6 +221,25 @@ class Club61PermissionMatrix
                             'manage_fnb_menu' => 'Kelola Menu, Varian & Harga Jual',
                             'manage_recipe_bom' => 'Kelola Formula Resep & Bill of Materials',
                             'manage_raw_materials' => 'Kelola Stok Bahan Baku & Inventaris Dapur',
+                            // Modul 29: HPP = dasar perhitungan laba F&B.
+                            'manage_fnb_hpp' => 'Kelola HPP, Lacak Stok & Stok Minimum Menu',
+                        ],
+                    ],
+                    'fnb_stock' => [
+                        'label' => 'Stok F&B (Mini Inventory)',
+                        'actions' => [
+                            'View:StokFnb' => 'Akses Halaman Stok F&B & Kartu Stok',
+                            'restock_fnb_stock' => 'Catat Penerimaan Barang F&B (Input Manual & Impor Excel)',
+                            'adjust_fnb_stock' => 'Penyesuaian Stok F&B & Batalkan Penerimaan Barang',
+                            'opname_fnb_stock' => 'Simpan Hasil Stok Opname F&B',
+                        ],
+                    ],
+                    'fnb_finance' => [
+                        'label' => 'Pengeluaran & Laporan Keuangan F&B',
+                        'actions' => [
+                            'View:BukuKasFnb' => 'Akses Halaman Pengeluaran F&B',
+                            'manage_fnb_cashbook' => 'Catat & Batalkan Pengeluaran F&B, Kelola Kategori',
+                            'View:LaporanFnb' => 'Akses Halaman Laporan Keuangan F&B (Laba, Arus Kas, Dashboard)',
                         ],
                     ],
                 ],
@@ -433,6 +454,7 @@ class Club61PermissionMatrix
                         'actions' => [
                             'view_membership_plans' => 'Lihat Daftar Paket Membership',
                             'manage_membership_plans' => 'Kelola Paket, Harga & Benefit Membership',
+                            'apply_membership_plan_rules' => 'Terapkan Aturan Akses Paket (Hari / Jam / Peak) ke Membership yang Sudah Aktif',
                             'manage_membership_facilities' => 'Kelola Master Fasilitas Membership (tambah fasilitas, nama & deskripsi benefit)',
                         ],
                     ],

@@ -19,6 +19,9 @@ class MembershipPlanBenefit extends Model
         'booking_priority_days',
         'time_window_start',
         'time_window_end',
+        'access_days',
+        'off_peak_only',
+        'peak_only',
         'extra_benefits',
     ];
 
@@ -27,6 +30,9 @@ class MembershipPlanBenefit extends Model
         'discount_percent' => 'decimal:2',
         'booking_priority_days' => 'integer',
         'extra_benefits' => 'array',
+        'access_days' => 'array',
+        'off_peak_only' => 'boolean',
+        'peak_only' => 'boolean',
     ];
 
     public function plan(): BelongsTo

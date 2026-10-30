@@ -464,7 +464,7 @@ PRD: [`PRD_MODUL_24_COACHING_OPSI_B_SEWA_LAPANGAN_ACADEMY.md`](PRD_MODUL_24_COAC
 ---
 ## MODUL 28: HASIL MEETING TRAINING (28 OKT 2026)
 
-### Status: Batch 1 dibangun 28 Okt 2026 (belum di-commit); batch 2–5 menunggu keputusan
+### Status: Batch 1 (28 Okt) & Batch 2 (29 Okt 2026) dibangun, belum di-commit; batch 3–5 menunggu keputusan
 
 PRD: [`PRD_MODUL_28_HASIL_MEETING_TRAINING_28_OKT_2026.md`](PRD_MODUL_28_HASIL_MEETING_TRAINING_28_OKT_2026.md) (berisi daftar pertanyaan terbuka).
 
@@ -473,7 +473,89 @@ PRD: [`PRD_MODUL_28_HASIL_MEETING_TRAINING_28_OKT_2026.md`](PRD_MODUL_28_HASIL_M
 - [x] **Sauna → Wellness** di teks tampilan (portal customer termasuk My Club, admin, label izin). Kode internal `SAUNA` tetap. Nama fasilitas yang tersimpan di database diganti admin di tiap server.
 - [x] **Revoke dihapus** dari portal corporate (tombol & endpoint API). Anggota lama berstatus REVOKED tetap bisa diaktifkan lagi.
 - [~] ~~Selisih prime → regular jadi voucher~~ — batal (28 Okt 2026); selisih tetap HANGUS.
-- [ ] Batch 2 aturan akses paket (hari + jam / di luar peak), Batch 3 tampilan mingguan & bulanan, Batch 4 coaching kontrak, Batch 5 Indosat dua kantong jam.
+- [x] **Batch 2 — aturan akses paket** (migrasi `2026_10_29_100001`): benefit Padel paket punya satu pilihan **Waktu Berlaku** (Kapan saja / Hanya di luar jam peak / Hanya di jam peak / Atur manual hari + jam 24 jam) dengan ringkasan "Paket Dapat Digunakan" dan tolak simpan kalau nol jam; satu pengecek `PadelAccessRule` dipakai checkout online, kasir Walk-In, **voucher jam karyawan corporate** (dulu tidak dicek), reschedule & Jadwal Tetap. Di luar aturan = harga normal + alasan di layar. Kartu memegang salinan aturan saat dibeli; tombol **Terapkan Aturan** (izin `apply_membership_plan_rules`, super admin) menyamakan kartu aktif dengan paket terbaru.
+- [x] **Saluran Penjualan paket**: *Khusus Front Desk / Admin* tidak tampil & tidak bisa dibeli di web / aplikasi (dicek di server); bawaan *Online (Web & Aplikasi) dan Front Desk* = perilaku lama.
+- [ ] Waktu Berlaku untuk gym & wellness; menu Jadwal Akses Sponsor (dibiarkan dulu). Master Data Jam Peak tiap server disesuaikan proposal harga (peak hanya Sen–Jum 17–24).
+- [x] **Batch 3 — Monitoring Lapangan Harian / Mingguan / Bulanan** (`ScheduleOverview`): grid jam × hari dengan warna jenis booking, kalender bulanan dengan jumlah booking & persen terisi (klik tanggal → daftar / Buka Harian), Rekap Pemain, filter lapangan / jenis / cari. Hanya baca; export ditunda.
+- [x] **Kelola Pemesanan tidak menumpuk** (29 Okt 2026, migrasi `2026_10_29_100002` index `booking_date + status`): filter Periode (bawaan *Bulan Ini & Mendatang*; Harian / Mingguan / Bulanan dengan ‹ ›, rentang tanggal, Semua Data), angka tab ikut periode, tab *Semua Aktif* tanpa batal / refund / expired, pencarian tetap mencakup semua periode. Data tidak dihapus. Monitoring: filter Indoor / Outdoor dihapus (cukup pilih per lapangan); tampilan Harian mengecilkan kolom jam yang sudah lewat / tutup di semua lapangan tanpa booking (seperti POS Walk-In), kolom lain berbagi lebar layar, tabel otomatis digeser ke kolom LIVE NOW saat dibuka, dan kolom lapangan dirampingkan di layar ≤1100px. Mingguan: kolom hari berbagi lebar (min. 105px) supaya Senin–Minggu muat di laptop 14" / tablet landscape.
+- [ ] Batch 4 coaching kontrak, Batch 5 Indosat dua kantong jam (ditahan — Modul 29 didahulukan).
+
+---
+## MODUL 29: MINI INVENTORY & KEUANGAN F&B
+**Status:** Tahap 1–3 dibangun 29 Okt 2026 (belum di-commit). PRD: `docs/PRD_MODUL_29_MINI_INVENTORY_DAN_KEUANGAN_FNB.md`.
+
+Migrasi `2026_10_29_100003_create_fnb_stock_and_cashbook_tables`. Sidebar mendapat grup baru **F&B**.
+
+- [x] **Tahap 1 — Stok per menu, tanpa bahan baku**
+  - HPP manual dan Lacak Stok per menu, diatur di halaman Stok F&B dan di form Kelola Menu F&B.
+  - Stok berkurang saat pesanan kasir F&B lunas: sekali per pesanan, boleh minus, HPP disimpan per item.
+  - Stok Masuk otomatis tercatat di Buku Kas sebagai Belanja Stok, dan bisa dibatalkan dengan alasan.
+  - Penyesuaian wajib alasan + catatan.
+  - Stok Opname hanya mencatat selisih.
+  - Kartu Stok tidak dapat diubah atau dihapus.
+  - Penanda "Sisa N / Stok minus" di kasir F&B.
+  - Izin per aksi dan Log Aktivitas.
+- [x] **Tahap 2 — Buku Kas F&B**
+  - Pengeluaran dan pemasukan lain berkategori, dengan kategori yang bisa diatur.
+  - Foto nota disimpan privat.
+  - Catatan dibatalkan dengan alasan, tidak dihapus.
+- [x] **Tahap 3 — Laporan F&B**
+  - Laba: penjualan − HPP + pemasukan lain − kerugian stok − biaya operasional.
+  - Arus Kas, tren 6 bulan, menu terlaris / paling untung, stok menipis.
+- [x] **Revisi 30 Okt 2026 (PRD v0.3.0)**
+  - HPP, Lacak Persediaan, dan Stok Minimum hanya diatur di data menu.
+  - **Penerimaan Barang** banyak menu per nota, dengan supplier dan no. nota. Buku Kas mencatat satu pengeluaran Pembelian Persediaan. Pembatalan dilakukan per penerimaan.
+  - **Impor Excel**: templat berisi menu yang dilacak, pratinjau per baris, dan disimpan semua atau tidak sama sekali.
+  - Istilah dibuat formal; Supplier dan Nilai Stok (HPP) tetap.
+  - Migrasi `100003` diubah, jadi di lokal perlu rollback lalu migrate ulang.
+- [x] **Revisi PRD v0.4.0 (30 Okt 2026)**
+  - **Templat impor** memuat semua menu. Isian per baris: Stok Fisik, Jumlah Diterima, Harga Beli per Satuan, Supplier, dan No. Nota.
+  - **Saat impor, sistem otomatis:**
+    - mengaktifkan Lacak Persediaan;
+    - mencatat Stok Opname dari stok fisik;
+    - membuat satu Penerimaan Barang per supplier + nota;
+    - memperbarui HPP bila dipilih.
+  - **Form manual** memakai harga per satuan.
+  - **Tombol halaman:** satu tombol utama + dropdown Lainnya, di Stok F&B dan Buku Kas.
+  - **Menu F&B** dipindah ke grup F&B.
+- [x] **Revisi PRD v0.5.0 (30 Okt 2026), hasil evaluasi alur**
+  - Aksi stok cuma dari tombol atas; klik nama menu membuka Kartu Stok.
+  - Penyesuaian Stok bisa banyak menu sekaligus, ditambah alasan "Dikembalikan ke Penitip" yang bukan kerugian.
+  - Penerimaan manual otomatis mengaktifkan Lacak Persediaan.
+  - Pemasukan hanya dari penjualan kasir; Buku Kas F&B diganti nama jadi **Pengeluaran F&B**.
+  - Migrasi `100003` diubah lagi.
+- [x] **Revisi PRD v0.6.0 (30 Okt 2026)**
+  - Catatan per menu di Stok Opname.
+  - **Unduh Laporan F&B:** Excel 5 sheet dan PDF ringkas, izin `export_reports`.
+  - **Cetak Lembar Opname:** PDF hitung buta dengan tanda tangan.
+  - **Unduh Laporan Pengeluaran F&B** (Excel / PDF), mengikuti filter halaman.
+- [ ] Ditunda: arti "stock bulatan" (tanya PM), HPP varian / tambahan, pengeluaran di luar F&B. Pemasukan Lain dihapus, Setoran Modal tidak diperlukan (pemasukan hanya dari kasir).
+
+---
+## MODUL 30: SITUS CUSTOMER DUA BAHASA (ID / EN)
+**Status:** dibangun 30 Okt 2026, belum di-commit. Tanpa migrasi; data production tidak tersentuh.
+
+- [x] **Fondasi**
+  - Pilihan bahasa disimpan di session + cookie `site_locale` (1 tahun), default **Bahasa Indonesia**. Tidak ada kolom database.
+  - Format tanggal (Carbon) ikut bahasa yang dipilih.
+  - Komponen `<x-lang-switch />` (variant dark / light).
+  - Test `LocaleParityTest`: setiap kunci wajib ada di `lang/id` dan `lang/en`.
+- [x] **Tahap A:** tombol ID/EN di navbar (≥1280px) dan menu akun (HP), login/register/lupa & reset password/verifikasi, coming-soon, dashboard, profil, voucher saya. File lang: `nav`, `account`, `dashboard`.
+- [x] **Tahap B:** booking, keranjang, checkout. Termasuk teks JS (objek i18n `@js`), popup akses member/voucher, dan format tanggal JS. File lang: `booking`, `cart`, `checkout`.
+- [x] **Tahap C:** membership, My Club, coaching, portal corporate, klaim promo, invoice web + e-ticket, Member Pass. Template PDF/email invoice tetap Indonesia. File lang: `membership`, `myclub`, `coaching`, `corporate`, `promo`, `invoice`.
+- [x] **Tahap D:** pesan server (API/JSON) ke customer, lewat `App\Support\SiteLocale::text()` + `lang/{id,en}/messages.php`.
+  - Pesan berbahasa Inggris **hanya** bila customer memilih EN (session/cookie). Middleware `SetApiLocale` di grup api hanya mengubah locale bila ada pilihan.
+  - Aplikasi mobile/bearer token, panel admin, kasir (Livewire), dan console tetap mendapat teks Indonesia yang sama persis dengan sebelumnya. Header `Accept-Language` diabaikan.
+- **Tidak diterjemahkan:** data yang diinput admin (nama/deskripsi paket, fasilitas, konten company profile, nama menu/lapangan/coach/perusahaan), nama merek, pesan 403 (tercatat di Log Aktivitas), dan jalur POS/walk-in.
+- **Lapangan (catatan meeting 30 Okt):**
+  - Pilihan Outdoor dihapus di Master Data; lapangan lama bertipe OUTDOOR menjadi INDOOR saat disimpan.
+  - Seeder memakai Court BCA / Court Protelindo / Court IM3 Platinum.
+  - **Production:** ganti nama lewat Master Data (Iforte → Protelindo, Indosat → IM3 Platinum). Jangan membuat lapangan baru, supaya riwayat booking tetap terhubung.
+  - **Urutan tampil lapangan** (migrasi `2026_10_30_100001`, hanya menambah kolom `padel_courts.sort_order` default 0): isian "Urutan Tampil" di Master Data → Edit Lapangan. Semua daftar lapangan (Monitoring, POS, Kelola Pemesanan, Jadwal Tetap, booking customer, signage, template impor, API) diurutkan `sort_order` lalu nama (scope `PadelCourt::ordered()`). Sebelum diisi semua 0 sehingga tetap abjad. **Production:** setelah `php artisan migrate`, isi BCA = 1, Protelindo = 2, IM3 Platinum = 3.
+- **Perbaikan hasil review keamanan (30 Okt 2026, tanpa migrasi baru):**
+  - Dua bahasa: `lang/en/passwords.php` memakai satu pesan untuk email terdaftar / tidak (anti tebak akun); request Livewire, `/pos`, `/kitchen` selalu Bahasa Indonesia walau browser pernah memilih EN; `lang.switch` hanya kembali ke halaman situs sendiri; pesan lupa / reset password ikut bahasa.
+  - Modul 29: tanggal pengeluaran memakai WIB; pelunasan F&B mengunci menu berurutan id (anti deadlock), impor Excel mengunci semua menunya di awal; HPP Rp0 dihitung "belum memiliki HPP" + nama menunya ditampilkan; mengaktifkan ulang Lacak Persediaan menolkan stok lama lewat Kartu Stok (nilai 0, bukan kerugian); batal penerimaan tidak mengubah stok menu yang tidak dilacak; jenis kategori pengeluaran terkunci bila sudah ada catatan; batas angka (qty 100.000, harga Rp100 jt) di service, impor & opname; migrasi `2026_10_29_100003` aman dijalankan ulang bila sempat berhenti.
+  - Lapangan: dropdown lapangan Kelola Pemesanan langsung diperbarui saat lapangan diubah; scope `ordered()` memakai nama kolom berprefix tabel.
 
 ---
 ## MODUL 20: HALAMAN ADMIN PENDUKUNG

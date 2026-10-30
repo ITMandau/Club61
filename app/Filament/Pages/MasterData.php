@@ -47,6 +47,8 @@ class MasterData extends Page
     public string $courtOpenTime = '06:00';
     public string $courtCloseTime = '23:00';
     public bool $courtIsActive = true;
+    // Urutan tampil lapangan di seluruh sistem (kecil dulu; sama → abjad nama).
+    public int $courtSortOrder = 0;
 
     // State Modal Atur Jam Operasional Massal (Seluruh Lapangan Sekaligus)
     public bool $showOperatingHoursModal = false;
@@ -99,6 +101,8 @@ class MasterData extends Page
         $this->courtOpenTime = '06:00';
         $this->courtCloseTime = '23:00';
         $this->courtIsActive = true;
+        // Lapangan baru tampil paling akhir.
+        $this->courtSortOrder = min(999, (int) PadelCourt::max('sort_order') + 1);
         $this->showCourtModal = true;
     }
 
@@ -114,13 +118,15 @@ class MasterData extends Page
 
         $this->editingCourtId = $court->id;
         $this->courtName = (string) $court->name;
-        $this->courtType = (string) ($court->type ?: 'INDOOR');
-        $this->courtDescription = (string) ($court->description ?: ($court->type === 'INDOOR' ? 'Indoor' : 'Outdoor'));
+        // Semua lapangan Club 61 indoor (30 Okt 2026) — lapangan lama bertipe OUTDOOR ikut jadi INDOOR saat disimpan.
+        $this->courtType = 'INDOOR';
+        $this->courtDescription = (string) ($court->description ?: 'Indoor');
         $this->hourlyRateRegular = (float) $court->hourly_rate_regular;
         $this->hourlyRatePrime = (float) $court->hourly_rate_prime;
         $this->courtOpenTime = (string) ($court->open_time ?: '06:00');
         $this->courtCloseTime = (string) ($court->close_time ?: '23:00');
         $this->courtIsActive = (bool) $court->is_active;
+        $this->courtSortOrder = (int) $court->sort_order;
         $this->showCourtModal = true;
     }
 
@@ -186,18 +192,23 @@ class MasterData extends Page
 
         $this->validate([
             'courtName' => ['required', 'string', 'max:50'],
-            'courtType' => ['required', 'in:INDOOR,OUTDOOR'],
+            'courtType' => ['required', 'in:INDOOR'],
             'courtDescription' => ['nullable', 'string', 'max:100'],
             'hourlyRateRegular' => ['required', 'numeric', 'min:0'],
             'hourlyRatePrime' => ['required', 'numeric', 'min:0'],
             'courtOpenTime' => ['required', 'string'],
             'courtCloseTime' => ['required', 'string'],
+            'courtSortOrder' => ['required', 'integer', 'min:0', 'max:999'],
         ], [
             'courtName.required' => 'Nama lapangan wajib diisi.',
             'hourlyRateRegular.required' => 'Tarif reguler wajib diisi.',
             'hourlyRatePrime.required' => 'Tarif prime time wajib diisi.',
             'courtOpenTime.required' => 'Jam buka lapangan wajib diisi.',
             'courtCloseTime.required' => 'Jam tutup lapangan wajib diisi.',
+            'courtSortOrder.required' => 'Urutan tampil wajib diisi.',
+            'courtSortOrder.integer' => 'Urutan tampil harus berupa angka bulat.',
+            'courtSortOrder.min' => 'Urutan tampil minimal 0.',
+            'courtSortOrder.max' => 'Urutan tampil maksimal 999.',
         ]);
 
         $openHour = (int) substr($this->courtOpenTime, 0, 2);
@@ -227,6 +238,7 @@ class MasterData extends Page
                 'open_time' => $this->courtOpenTime,
                 'close_time' => $this->courtCloseTime,
                 'is_active' => $this->courtIsActive,
+                'sort_order' => $this->courtSortOrder,
             ]);
 
             Notification::make()
@@ -244,6 +256,7 @@ class MasterData extends Page
                 'open_time' => $this->courtOpenTime,
                 'close_time' => $this->courtCloseTime,
                 'is_active' => $this->courtIsActive,
+                'sort_order' => $this->courtSortOrder,
             ]);
 
             Notification::make()
@@ -643,7 +656,7 @@ class MasterData extends Page
 
     public function getCourtsProperty(): Collection
     {
-        return PadelCourt::orderBy('name')->get();
+        return PadelCourt::ordered()->get();
     }
 
     public function getEquipmentsProperty(): Collection
