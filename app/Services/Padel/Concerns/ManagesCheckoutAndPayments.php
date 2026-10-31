@@ -1059,6 +1059,9 @@ trait ManagesCheckoutAndPayments
             throw new HttpException(422, 'Pembayaran tunai (CASH) tidak diperbolehkan. Venue Club 61 beroperasi 100% Cashless.');
         }
 
+        // Tanggal tutup / tanggal main yang belum dibuka (App\Support\BookingWindow) — berlaku juga untuk super admin.
+        \App\Support\BookingWindow::assertBookable($bookingDate);
+
         if ($coaching !== null) {
             if (! $cashier->can('book_coaching')) {
                 throw new HttpException(403, 'Akses ditolak: Anda tidak memiliki izin [book_coaching] untuk membuat booking coaching.');

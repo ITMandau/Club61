@@ -7,6 +7,20 @@ Artisan::command('inspire', function () {
     $this->comment(Inspiring::quote());
 })->purpose('Display an inspiring quote')->hourly();
 
+// Cek BOOKING_OPEN_UNTIL / BOOKING_CLOSED_DATES setelah mengubah .env + `php artisan config:cache` di server.
+Artisan::command('booking:window', function () {
+    $until = \App\Support\BookingWindow::openUntil();
+    $closed = \App\Support\BookingWindow::closedDates();
+    $rawUntil = trim((string) config('booking_window.open_until', ''));
+
+    $this->line('Booking dibuka sampai tanggal main : '.($until ? \App\Support\BookingWindow::label($until) : 'tanpa batas'));
+    if ($rawUntil !== '' && ! $until) {
+        $this->error("BOOKING_OPEN_UNTIL \"{$rawUntil}\" tidak valid (format Y-m-d, mis. 2026-11-25) — batas TIDAK aktif.");
+    }
+    $this->line('Tanggal tutup sehari penuh         : '.($closed ? implode(', ', array_map(fn ($d) => \App\Support\BookingWindow::label($d), $closed)) : '-'));
+    $this->line('Keterangan tutup                   : '.(\App\Support\BookingWindow::closedReason() ?? '-'));
+})->purpose('Tampilkan batas tanggal booking & tanggal tutup yang sedang berlaku');
+
 // Tugas yang memanggil Midtrans / DOKU jalan di latar (runInBackground): kalau gateway lambat, tugas lain di menit yang
 // sama tidak ikut menunggu. withoutOverlapping: satu proses per tugas walau jalan sebelumnya belum selesai.
 \Illuminate\Support\Facades\Schedule::command('padel:release-expired-slots')->everyMinute()->withoutOverlapping(5)->runInBackground();

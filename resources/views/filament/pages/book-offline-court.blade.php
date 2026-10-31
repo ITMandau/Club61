@@ -261,6 +261,8 @@
 
                 @if ($bookingDate < now()->format('Y-m-d'))
                     <div class="pos-past-note">Tanggal sudah lewat &mdash; hanya untuk melihat riwayat booking, tidak bisa input booking baru.</div>
+                @elseif ($bookingWindowNotice)
+                    <div class="pos-past-note" style="color:#991B1B; background:#FEF2F2; font-weight:700;">{{ $bookingWindowNotice }}</div>
                 @endif
                 @if (empty($gridData))
                     <div class="pos-past-note">Belum ada lapangan aktif.</div>
@@ -329,7 +331,7 @@
                                             <span class="lbl">Hold</span>
                                         </div>
                                     @elseif($st === 'CLOSED')
-                                        <div class="slot-btn slot-past" title="Di luar jam operasional lapangan"></div>
+                                        <div class="slot-btn slot-past" title="{{ $bookingWindowNotice ?: 'Di luar jam operasional lapangan' }}"></div>
                                     @else
                                         <div class="slot-btn slot-past" title="Jam sudah lewat"></div>
                                     @endif

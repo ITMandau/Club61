@@ -32,6 +32,9 @@ return [
         'court_not_found' => 'Lapangan ID :court tidak ditemukan.',
         'outside_operating_hours' => 'Slot :court pada jam :start - :end berada di luar jam operasional (:open - :close WIB).',
         'slot_taken' => 'Slot :court pada jam :start - :end sudah terisi atau terkunci. Transaksi multi-slot di-rollback.',
+        // App\Support\BookingWindow (BOOKING_CLOSED_DATES / BOOKING_OPEN_UNTIL).
+        'date_closed' => 'Club 61 tutup pada :date:reason. Silakan pilih tanggal lain.',
+        'date_not_open' => 'Booking untuk tanggal main setelah :date belum dibuka. Silakan pilih tanggal main sampai :date.',
     ],
 
     'checkout' => [

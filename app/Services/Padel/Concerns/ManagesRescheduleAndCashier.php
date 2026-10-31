@@ -32,6 +32,7 @@ trait ManagesRescheduleAndCashier
         if ($parsedDate->isPast() && ! $parsedDate->isToday()) {
             throw new HttpException(422, 'Tanggal reschedule tidak boleh di masa lampau.');
         }
+        \App\Support\BookingWindow::assertBookable($parsedDate->format('Y-m-d'));
 
         $booking = PadelBooking::with('court')->findOrFail($bookingId);
         $durationHours = (int) $booking->start_time->diffInHours($booking->end_time);
@@ -352,6 +353,8 @@ trait ManagesRescheduleAndCashier
         if ($parsedDate->isPast() && ! $parsedDate->isToday()) {
             throw new HttpException(422, 'Tanggal reschedule tidak boleh di masa lampau.');
         }
+        // Tanggal tutup / tanggal main yang belum dibuka — selisih harga reschedule dihitung dari harga lapangan saat ini.
+        \App\Support\BookingWindow::assertBookable($newDate);
 
         return DB::transaction(function () use (
             $bookingId, $newCourtId, $newStartTimeStr, $reason,

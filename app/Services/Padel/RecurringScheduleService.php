@@ -181,6 +181,16 @@ class RecurringScheduleService
                         continue;
                     }
 
+                    // Tanggal tutup (BOOKING_CLOSED_DATES): minggu ini dilewati, booking tidak dibuat & kuota tidak dipotong.
+                    if (\App\Support\BookingWindow::isClosed($date)) {
+                        $reason = \App\Support\BookingWindow::closedReason();
+                        PadelRecurringOccurrence::whereKey($occurrence->id)
+                            ->whereIn('status', [PadelRecurringOccurrence::STATUS_PENDING, PadelRecurringOccurrence::STATUS_FAILED])
+                            ->update(['status' => PadelRecurringOccurrence::STATUS_SKIPPED, 'note' => mb_substr('Club 61 tutup'.($reason ? " ({$reason})" : '').' — minggu ini dilewati, kuota jam tidak dipotong', 0, 255)]);
+
+                        continue;
+                    }
+
                     $label = $date->translatedFormat('d M Y').' · '.($courts[$courtId]->name ?? 'Lapangan');
                     try {
                         $this->bookings->createRecurringBooking($schedule, $courtId, $date->toDateString(), $actor);

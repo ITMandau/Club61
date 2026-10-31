@@ -46,6 +46,11 @@
         <env name="DOKU_NOTIFICATION_URL" value="" force="true"/>
         <env name="DOKU_SNAP_DEBUG_INBOUND" value="false" force="true"/>
         <env name="DOKU_SNAP_VERIFY_VA_SIGNATURE" value="false" force="true"/>
+        <!-- Batas booking & mode Coming Soon dari .env tidak pernah dipakai; test yang butuh set sendiri via config(). -->
+        <env name="BOOKING_OPEN_UNTIL" value="" force="true"/>
+        <env name="BOOKING_CLOSED_DATES" value="" force="true"/>
+        <env name="BOOKING_CLOSED_REASON" value="" force="true"/>
+        <env name="COMING_SOON_UNTIL" value="" force="true"/>
         <env name="PULSE_ENABLED" value="false"/>
         <env name="QUEUE_CONNECTION" value="sync"/>
         <env name="SESSION_DRIVER" value="array"/>

@@ -64,6 +64,9 @@
                         <span class="flex items-center gap-1.5"><span class="w-1.5 h-1.5 rounded-full bg-[#662721] hover:bg-[#511D18]"></span>{{ __('booking.legend_prime') }}</span>
                     </div>
 
+                    {{-- Tanggal tutup / belum dibuka (App\Support\BookingWindow) --}}
+                    <div x-show="!isLoading && notice" style="display:none; padding:0.75rem 1rem; border-bottom:1px solid #FECACA; background:#FEF2F2; color:#991B1B; font-size:13px; font-weight:600;" x-text="notice"></div>
+
                     {{-- Loading --}}
                     <div x-show="isLoading" class="p-4">
                         <div class="grid grid-cols-4 gap-2">
@@ -240,6 +243,7 @@
                 // Tiap kotak = 1 jam; jam berurutan di lapangan yang sama digabung jadi satu sesi saat lanjut.
                 selectedSlots: [],
                 matrixRows: [],
+                notice: '',
                 isLoading: true,
                 isHolding: false,
                 // HP: kolom lebih sempit supaya 3 lapangan kelihatan sekaligus; ikut berubah saat layar diputar.
@@ -380,6 +384,7 @@
                         // Jawaban lama (tanggal sudah diganti / ada permintaan yang lebih baru) diabaikan.
                         if (seq !== fetchSeq || date !== this.activeDate) return;
                         if (json.success) {
+                            this.notice = json.data.notice || '';
                             this.courts = json.data.courts || [];
                             this.buildMatrixRows(this.courts);
                             if (silent) this.dropTakenSelections();

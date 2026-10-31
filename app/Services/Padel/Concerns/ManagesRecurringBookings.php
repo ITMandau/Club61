@@ -28,6 +28,9 @@ trait ManagesRecurringBookings
             throw new HttpException(422, 'Membership jadwal ini tidak punya kuota jam PADEL.');
         }
 
+        // Dibayar kuota jam (bukan harga lapangan) → hanya tanggal tutup yang berlaku, bukan batas tanggal dibuka.
+        \App\Support\BookingWindow::assertBookable($date, closedOnly: true);
+
         $slots = [['court_id' => $courtId, 'start_time' => $schedule->start_time, 'end_time' => $schedule->end_time]];
         $hold = $this->holdBatchSlots($slots, $date, $owner);
         $bookingIds = collect($hold['bookings'])->pluck('id')->all();
@@ -158,6 +161,7 @@ trait ManagesRecurringBookings
             if ($start->lte(now())) {
                 throw new HttpException(422, 'Jam main tujuan sudah lewat.');
             }
+            \App\Support\BookingWindow::assertBookable($date, closedOnly: true);
 
             $balance = \App\Models\Membership\UserMembershipBalance::whereKey($b->membership_balance_id)->lockForUpdate()->first();
             $membership = $balance?->membership;
