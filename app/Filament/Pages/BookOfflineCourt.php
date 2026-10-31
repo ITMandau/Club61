@@ -463,6 +463,12 @@ class BookOfflineCourt extends Page
                 return;
             }
 
+            if ($reason = \App\Support\BookingWindow::blockedReason($this->bookingDate)) {
+                Notification::make()->title('Tanggal Tidak Bisa Dibooking')->body($reason)->warning()->send();
+
+                return;
+            }
+
             $court = PadelCourt::find($courtId);
             if ($court) {
                 $cOpen = (int) substr($court->open_time ?: '06:00', 0, 2);
@@ -1517,6 +1523,13 @@ class BookOfflineCourt extends Page
 
         $this->releaseHeldSlots();
 
+        // Tanggal tutup / belum dibuka: jangan menahan slot (checkout juga menolak di server).
+        if ($reason = \App\Support\BookingWindow::blockedReason($this->bookingDate)) {
+            Notification::make()->title('Tanggal Tidak Bisa Dibooking')->body($reason)->danger()->send();
+
+            return false;
+        }
+
         try {
             $hold = $service->holdBatchSlots($this->slotsPayload(), $this->bookingDate, auth()->user());
         } catch (SlotConflictException $e) {
@@ -2431,6 +2444,8 @@ class BookOfflineCourt extends Page
         $courts = PadelCourt::where('is_active', true)->ordered()->get();
         $peakHours = app(\App\Services\Padel\PeakHourService::class); // jam peak diatur di Master Data
         $isToday = $this->bookingDate === now()->format('Y-m-d');
+        // Tanggal tutup / belum dibuka (App\Support\BookingWindow): slot kosong tampil Tutup + banner pesannya.
+        $bookingWindowNotice = \App\Support\BookingWindow::blockedReason($this->bookingDate);
 
         // Tarik seluruh booking pada tanggal aktif untuk evaluasi cepat
         $existingBookings = PadelBooking::with(['court', 'user'])
@@ -2566,6 +2581,8 @@ class BookOfflineCourt extends Page
                 if (in_array($status, ['AVAILABLE', 'LOCKED'], true) && $this->isPastSlot($startTimeStr)) {
                     $status = 'PAST';
                     $bookingDetail = null;
+                } elseif ($status === 'AVAILABLE' && $bookingWindowNotice !== null) {
+                    $status = 'CLOSED';
                 }
 
                 $courtRow['slots'][] = [
@@ -2650,6 +2667,7 @@ class BookOfflineCourt extends Page
             'equipments' => $equipments,
             'searchResults' => $searchResults,
             'isToday' => $isToday,
+            'bookingWindowNotice' => $bookingWindowNotice,
             'totalSlotsAll' => $totalSlotsAll,
             'bookedSlotsAll' => $bookedSlotsAll,
             'walkInStatsToday' => $walkInStatsToday,

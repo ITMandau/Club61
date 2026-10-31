@@ -385,6 +385,11 @@ class KelolaPemesanan extends Page
             $this->rescheduleStartTime = null;
             $this->rescheduleEstimatedFee = 0.0;
             $this->rescheduleDelta = 0.0;
+
+            // Tanggal tutup / belum dibuka (App\Support\BookingWindow): beri tahu alasannya, bukan daftar slot kosong.
+            if ($reason = \App\Support\BookingWindow::blockedReason($this->rescheduleDate)) {
+                Notification::make()->title('Tanggal Tidak Bisa Dibooking')->body($reason)->warning()->send();
+            }
         }
     }
 

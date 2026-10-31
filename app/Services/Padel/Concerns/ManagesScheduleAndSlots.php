@@ -28,6 +28,8 @@ trait ManagesScheduleAndSlots
         $parsedDate = Carbon::parse($date, $timezone);
         $dateStr = $parsedDate->format('Y-m-d');
         $peakHours = app(\App\Services\Padel\PeakHourService::class);
+        // Tanggal tutup / belum dibuka: slot kosong tampil Tutup + pesannya (booking yang sudah ada tetap tampil).
+        $windowNotice = \App\Support\BookingWindow::blockedReason($dateStr);
 
         // Aturan "jam lewat" SAMA dengan POS Walk-In (BookOfflineCourt): jam sebelum jam berjalan
         // hari ini = PAST, jam yang sedang berjalan masih boleh dipesan. Tanggal lampau = semua PAST.
@@ -118,6 +120,8 @@ trait ManagesScheduleAndSlots
                     $status = ! $isRescheduleBalance && in_array($collidingBooking->status, ['LOCKED', 'PENDING_PAYMENT', 'PENDING']) ? 'LOCKED' : 'BOOKED';
                 } elseif ($isCacheLocked) {
                     $status = 'LOCKED';
+                } elseif ($windowNotice !== null) {
+                    $status = 'CLOSED';
                 } else {
                     $status = 'AVAILABLE';
                 }
@@ -155,6 +159,7 @@ trait ManagesScheduleAndSlots
             'timezone' => $timezone,
             'open_hour' => sprintf('%02d:00', $minOpenHour),
             'close_hour' => sprintf('%02d:00', $maxCloseHour),
+            'notice' => $windowNotice,
             'courts' => $resultCourts,
         ];
     }
@@ -177,6 +182,9 @@ trait ManagesScheduleAndSlots
      */
     public function holdForCustomer(array $slots, string $bookingDate, User $user, ?string $coachId = null): array
     {
+        // Tanggal tutup / tanggal main yang belum dibuka (App\Support\BookingWindow).
+        \App\Support\BookingWindow::assertBookable($bookingDate);
+
         $hours = fn (iterable $ranges) => collect($ranges)->sum(function ($r) use ($bookingDate) {
             $start = $r['start_time'] instanceof Carbon ? $r['start_time'] : Carbon::parse("{$bookingDate} {$r['start_time']}");
             $end = $r['end_time'] instanceof Carbon ? $r['end_time'] : Carbon::parse("{$bookingDate} {$r['end_time']}");

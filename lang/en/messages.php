@@ -32,6 +32,9 @@ return [
         'court_not_found' => 'Court ID :court was not found.',
         'outside_operating_hours' => ':court at :start - :end is outside opening hours (:open - :close WIB).',
         'slot_taken' => ':court at :start - :end is already booked or held. None of your selected slots were booked.',
+        // App\Support\BookingWindow (BOOKING_CLOSED_DATES / BOOKING_OPEN_UNTIL).
+        'date_closed' => 'Club 61 is closed on :date:reason. Please choose another date.',
+        'date_not_open' => 'Bookings for play dates after :date are not open yet. Please choose a play date up to :date.',
     ],
 
     'checkout' => [
